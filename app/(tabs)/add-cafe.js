@@ -1,26 +1,27 @@
-import React, { useState, useEffect, useRef } from "react";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
+import { addDoc, collection, doc, setDoc } from "firebase/firestore";
+import { useEffect, useRef, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Animated,
+  Image,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  ScrollView,
-  Animated,
-  Image,
+  View,
 } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { addDoc, collection, doc, setDoc } from "firebase/firestore";
+import MapView, { Marker } from "react-native-maps";
 import { db } from "../../config/firebase";
 import { useAuth } from "../../context/AuthContext";
-import MapView, { Marker } from "react-native-maps";
-import * as Location from "expo-location";
-import * as ImagePicker from "expo-image-picker";
 
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
+import { app } from "../../config/firebase"; // adjust the path if needed
+const storage = getStorage(app);
 
-const storage = getStorage();
 
 async function uploadPhotoAsync(uri, cafeId) {
   const response = await fetch(uri);
@@ -150,14 +151,20 @@ export default function AddCafeScreen() {
     try {
       setSaving(true);
 // Upload selected photos (if any)
-let uploadedUrls = [];
-if (photos.length > 0) {
-  uploadedUrls = await Promise.all(
-    photos.map((uri) => uploadPhotoAsync(uri, user.uid))
-  );
-}
+// let uploadedUrls = [];
+// if (photos.length > 0) {
+//   uploadedUrls = await Promise.all(
+//     photos.map((uri) => uploadPhotoAsync(uri, user.uid))
+//   );
+// }
+const uploadedUrls = ["https://placehold.co/400x300"];
+
+console.log("Current user UID:", user?.uid);
+console.log("DB instance app name:", db.app.name);
+console.log("User UID at write:", user?.uid);
 
 const cafeRef = await addDoc(collection(db, "cafes"), {
+  
   name: name.trim(),
   location: locationText?.trim() || "No description",
   coords: {

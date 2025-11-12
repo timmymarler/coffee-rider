@@ -1,72 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function signedIn() {
-      return request.auth != null;
-    }
-
-    function userRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-    }
-
-    function hasAnyRole(roles) {
-      return signedIn() && roles.has(userRole());
-    }
-
-    // -------------------------------
-    // CAFES
-    // -------------------------------
-    match /cafes/{cafeId} {
-      allow read: if true;
-
-      // Allow adding cafés for logged-in User, Pro, or Admin
-      allow create: if hasAnyRole(["user", "pro", "admin"]);
-
-      // Only Admins can update or delete cafés
-      allow update, delete: if hasAnyRole(["admin"]);
-
-      // COMMENTS SUBCOLLECTION
-      match /comments/{commentId} {
-        // Anyone logged in (User, Pro, Admin) can read comments
-        allow read: if hasAnyRole(["user", "pro", "admin"]);
-
-        // Only Pro and Admin can create comments
-        allow create: if hasAnyRole(["pro", "admin"]);
-
-        // Only comment owner or Admin can update/delete
-        allow update, delete: if resource.data.userId == request.auth.uid || userRole() == "admin";
-      }
-
-      // RATINGS SUBCOLLECTION
-      match /ratings/{userId} {
-        allow read: if true;
-        allow write: if hasAnyRole(["user", "pro", "admin"]) && request.auth.uid == userId;
-      }
-    }
-
-    // -------------------------------
-    // USERS
-    // -------------------------------
-    match /users/{userId} {
-      allow read: if request.auth.uid == userId || userRole() == "admin";
-      allow write: if request.auth.uid == userId || userRole() == "admin";
-
-      // FAVOURITE ROUTES SUBCOLLECTION
-      match /favouriteRoutes/{routeId} {
-        allow read: if request.auth.uid == userId;
-        allow create, update, delete: if hasAnyRole(["pro", "admin"]) && request.auth.uid == userId;
-      }
-    }
-
-    // -------------------------------
-    // ROUTES (shared/global routes)
-    // -------------------------------
-    match /routes/{routeId} {
-      allow read: if hasAnyRole(["pro", "admin"]);
-      allow create: if hasAnyRole(["pro", "admin"]);
-      allow delete: if resource.data.userId == request.auth.uid || userRole() == "admin";
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }
-

@@ -1,63 +1,48 @@
-import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import AppHeader from "../../components/AppHeader";
+import { Tabs } from "expo-router";
 import { useAuth } from "../../context/AuthContext";
-import { View, TouchableOpacity } from "react-native";
-import { useFonts } from "expo-font";
 
 export default function TabsLayout() {
-  const { user } = useAuth(); // ✅ get user here
-  return (
-    <>
-      <AppHeader />
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: "#007aff",
-        }}
-      >
-        <Tabs.Screen
-          name="map"
-          options={{
-            title: "Map",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="map-outline" color={color} size={size} />
-            ),
-          }}
-        />
+  const { user, can } = useAuth();
 
+  return (
+    <Tabs
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: "#6b4f1d",
+        tabBarInactiveTintColor: "#999",
+        tabBarIcon: ({ color, size }) => {
+          let iconName;
+          if (route.name === "map") iconName = "map";
+          else if (route.name === "add-cafe") iconName = "add-circle";
+          else if (route.name === "profile") iconName = "person-circle";
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+      })}
+    >
+      {/* Map tab always visible */}
+      <Tabs.Screen name="map" options={{ title: "Map" }} />
+
+      {/* Add Café tab only visible to allowed roles */}
+      {can?.addCafe ? (
+        <Tabs.Screen name="add-cafe" options={{ title: "Add Café" }} />
+      ) : (
         <Tabs.Screen
           name="add-cafe"
           options={{
-            title: "Add Café",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="add-circle-outline" color={color} size={size} />
-            ),
-            tabBarStyle: {},
-
-            // ✅ Disable the tab when not logged in
-            tabBarButton: (props) => (
-	    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-              <TouchableOpacity
-                {...props}
-                disabled={!user}
-                style={{ opacity: user ? 1 : 0.4 }}
-              />
-	    </View>
-            ),
+            // This hides it completely without breaking Expo Router
+            tabBarButton: () => null,
           }}
         />
+      )}
 
-        <Tabs.Screen
-          name="profile"
-          options={{
-            title: "Profile",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="person-outline" color={color} size={size} />
-            ),
-          }}
-        />
-      </Tabs>
-    </>
+      {/* Profile/Login tab */}
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: user ? "Profile" : "Login",
+        }}
+      />
+    </Tabs>
   );
 }

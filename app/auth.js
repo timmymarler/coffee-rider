@@ -19,14 +19,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../config/firebase";
 import { useBanner } from "../context/BannerContext";
 
+
 export default function AuthScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [registerMode, setRegisterMode] = useState(false);
+  const [role, setRole] = useState("guest");
   const router = useRouter();
   const { showBanner } = useBanner();
-  const [role, setRole] = useState("guest");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -57,7 +58,7 @@ export default function AuthScreen() {
 
   const handleAuth = async () => {
     if (!email || !password) {
-      showBanner("Please enter email and password", "#FF3B30", "alert-circle");
+      showBanner("Please enter email and password", "error");
       return;
     }
 
@@ -70,18 +71,22 @@ export default function AuthScreen() {
           role: "user",
           createdAt: new Date().toISOString(),
         });
-        showBanner("Account created!", "#34C759", "checkmark-circle");
+        showBanner("Account created!", "success");
         router.replace("/(tabs)/profile");
       } else {
+        console.log("LOGIN SUCCESS: showing banner...");
+
         await signInWithEmailAndPassword(auth, email, password);
         const role = await getUserRole(auth.currentUser.uid);
         setRole(role);
-        showBanner("Welcome back!", "#34C759", "checkmark-circle");
+        showBanner("Welcome back!", "success");
         router.replace("/(tabs)/profile");
       }
     } catch (err) {
+      console.log("LOGIN ERROR:", error.message);
+
       console.error(err);
-      showBanner("Invalid email or password", "#FF3B30", "alert-circle");
+      showBanner("Invalid email or password", "error");
     } finally {
       setLoading(false);
     }
@@ -91,7 +96,7 @@ export default function AuthScreen() {
     try {
       await signOut(auth);
       setRole("guest");
-      showBanner("Signed out", "#007AFF", "log-out-outline");
+      showBanner("Signed out", "info");
       router.replace("/auth");
     } catch (err) {
       console.error("Logout error:", err);
@@ -104,6 +109,7 @@ export default function AuthScreen() {
   };
 
   return (
+
     <SafeAreaView
       style={{
         flex: 1,

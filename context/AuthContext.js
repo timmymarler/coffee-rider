@@ -1,49 +1,56 @@
-import { createContext, useEffect, useState, useContext } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
+import { createContext, useContext, useEffect, useState } from "react";
 import { auth, db } from "../config/firebase";
 
-const AuthContext = createContext({ user: null });
+const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [role, setRole] = useState("guest");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (usr) => {
-      if (usr) {
-        setUser(usr);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      try {
+        if (firebaseUser) {
+          setUser(firebaseUser);
 
-        try {
-          // reference to the user document in Firestore
-          const userRef = doc(db, "users", usr.uid);
-          const snap = await getDoc(userRef);
+          const ref = doc(db, "users", firebaseUser.uid);
+          const snap = await getDoc(ref);
 
-          // if it doesn't exist, create it
-          if (!snap.exists()) {
-            await setDoc(userRef, {
-              displayName: usr.displayName || "New Rider",
-              email: usr.email,
-              avatarURL: usr.photoURL || null,
-              friends: [],
-              friendRequests: [],
-              sentRequests: [],
-              createdAt: new Date().toISOString(),
-            });
-            console.log("New user profile created:", usr.uid);
+          if (snap.exists()) {
+            const data = snap.data();
+            setRole(data.role || "user");
+            console.log("User signed in, role:", data.role || "user");
+          } else {
+            console.warn("No Firestore user doc found, defaulting to 'user'");
+            setRole("user");
           }
-        } catch (err) {
-          console.error("Error checking/creating user profile:", err);
+        } else {
+          setUser(null);
+          setRole("guest");
+          console.log("No user signed in, role set to guest");
         }
-      } else {
-        setUser(null);
+      } catch (err) {
+        console.error("Auth context error:", err);
+        setRole("guest");
+      } finally {
+        setLoading(false);
       }
     });
 
-    return () => unsub();
+    return unsubscribe;
   }, []);
 
+  // Role-based permissions helper
+  const can = {
+    addCafe: ["user", "pro", "admin"].includes(role),
+    manageCafes: ["admin"].includes(role),
+  };
+
   return (
-    <AuthContext.Provider value={{ user }}>
+    <AuthContext.Provider value={{ user, role, can, loading }}>
       {children}
     </AuthContext.Provider>
   );

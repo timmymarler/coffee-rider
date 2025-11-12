@@ -1,53 +1,81 @@
-import { Ionicons } from "@expo/vector-icons";
-import { createContext, useContext, useRef, useState } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+// context/BannerContext.js
+import { createContext, useContext, useState } from "react";
+import { Animated, StyleSheet, Text } from "react-native";
 
 const BannerContext = createContext();
 
-export function BannerProvider({ children }) {
-  const [banner, setBanner] = useState(null);
-  const opacity = useRef(new Animated.Value(0)).current;
+export const BannerProvider = ({ children }) => {
+  const [visible, setVisible] = useState(false);
+  const [message, setMessage] = useState("");
+  const [color, setColor] = useState("#007AFF"); // iOS blue
+  const slideAnim = useState(new Animated.Value(-120))[0];
 
-  const showBanner = (message, color = "#007AFF", icon = "information-circle") => {
-    setBanner({ message, color, icon });
-    Animated.sequence([
-      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.delay(2500),
-      Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start(() => setBanner(null));
+  const showBanner = (msg, type = "info") => {
+    console.log("showBanner called:", { message, type });
+
+    setMessage(msg);
+    // Set banner colour
+    if (type === "success") setColor("#37ac10ff");
+    else if (type === "error") setColor("#FF3B30");
+    else setColor("#333");
+
+    setVisible(true);
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setTimeout(hideBanner, 2500);
+    });
   };
 
+  const hideBanner = () => {
+    Animated.timing(slideAnim, {
+      toValue: -120,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => setVisible(false));
+  };
+
+
   return (
-    <BannerContext.Provider value={{ showBanner }}>
+    <BannerContext.Provider value={{ showBanner, hideBanner }}>
       {children}
-      {banner && (
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <Animated.View style={[styles.banner, { backgroundColor: banner.color, opacity }]}>
-            <Ionicons name={banner.icon} size={20} color="white" style={styles.icon} />
-            <Text style={styles.text}>{banner.message}</Text>
-          </Animated.View>
-        </View>
+      {visible && (
+        <Animated.View
+          style={[
+            styles.banner,
+            {
+              backgroundColor: color,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
+          <Text style={styles.text}>{message || "Coffee Rider"}</Text>
+        </Animated.View>
       )}
     </BannerContext.Provider>
   );
-}
+};
+
+export const useBanner = () => useContext(BannerContext);
 
 const styles = StyleSheet.create({
-  banner: {
-    position: "absolute",
-    top: 50,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    zIndex: 9999,
-  },
-  text: { color: "white", fontSize: 16 },
-  icon: { marginRight: 8 },
-});
+banner: {
+  position: "absolute",
+  top: 100,
+  left: 0,
+  right: 0,
+  paddingVertical: 16,
+  alignItems: "center",
+  zIndex: 99999,
+  elevation: 20,
+  backgroundColor: "red", // just for visibility
+},
 
-export function useBanner() {
-  return useContext(BannerContext);
-}
+  text: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+});

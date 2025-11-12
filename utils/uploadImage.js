@@ -1,9 +1,9 @@
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import * as FileSystem from "expo-file-system/legacy";
+import { getStorage, ref, uploadBytes } from "firebase/storage";
+import { app } from "../config/firebase"; // adjust the path if needed
+const storage = getStorage(app); // must use the same app
 
 export async function uploadImageAsync(uri, path) {
   try {
-    const storage = getStorage();
     const imageRef = ref(storage, path);
 
     // Convert file to blob (this works across Expo iOS/Android)
@@ -11,7 +11,7 @@ export async function uploadImageAsync(uri, path) {
     const blob = await response.blob();
 
     await uploadBytes(imageRef, blob, { contentType: "image/jpeg" });
-    const downloadURL = await getDownloadURL(imageRef);
+    const downloadURL = await uploadImageAsync(uri, `cafes/${user.uid}/${Date.now()}.jpg`);
 
     return downloadURL;
   } catch (err) {

@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 export default function AppHeader() {
   return (
     <View style={styles.header}>
-      <Text style={styles.title}>☕ Café Rider</Text>
+      <Text style={styles.title}>Coffee Rider</Text>
     </View>
   );
 }

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { getAuth, signOut, updateProfile } from "firebase/auth";
+import { signOut, updateProfile } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
@@ -43,7 +43,7 @@ export default function ProfilePage() {
   // Fetch user and profile data
   useEffect(() => {
     const loadProfile = async () => {
-      const u = getAuth().currentUser;
+      const u = auth.currentUser;
       console.log("Current user in profile:", u?.email);
 
       if (!u) {
@@ -105,7 +105,7 @@ export default function ProfilePage() {
   };
 
   const handleSave = async () => {
-    const u = getAuth().currentUser;
+    const u = auth.currentUser;
     if (!u) return;
     try {
       setSaving(true);
@@ -136,7 +136,7 @@ export default function ProfilePage() {
     );
   }
 
-  const user = getAuth().currentUser;
+  const user = auth.currentUser;
 
   // 👇 ADD THIS GUEST CHECK
   if (!user) {
