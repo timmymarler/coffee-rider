@@ -1,0 +1,57 @@
+type User @table {
+  displayName: String!
+  createdAt: Timestamp!
+  email: String
+  photoUrl: String
+  bio: String
+  ridingInterests: [String]
+  coffeePreferences: [String]
+}
+
+type CoffeeShop @table {
+  name: String!
+  address: String!
+  latitude: Float!
+  longitude: Float!
+  createdAt: Timestamp!
+  description: String
+  website: String
+  phoneNumber: String
+  photoUrl: String
+}
+
+type Ride @table {
+  organizer: User!
+  title: String!
+  date: Date!
+  time: String!
+  routeDescription: String!
+  startLatitude: Float!
+  startLongitude: Float!
+  endLatitude: Float!
+  endLongitude: Float!
+  createdAt: Timestamp!
+  description: String
+  difficultyLevel: String
+  distance: Float
+  expectedDuration: String
+  startCoffeeShop: CoffeeShop
+  endCoffeeShop: CoffeeShop
+}
+
+type RideParticipant @table(key: ["user", "ride"]) {
+  user: User!
+  ride: Ride!
+  status: String!
+  joinedAt: Timestamp!
+  notes: String
+}
+
+type Review @table {
+  user: User!
+  coffeeShop: CoffeeShop!
+  rating: Int!
+  createdAt: Timestamp!
+  comment: String
+  photoUrl: String
+}

@@ -1,0 +1,32 @@
+mutation CreateRide($organizerId: UUID!, $date: Date!, $startLatitude: Float!, $startLongitude: Float!, $endLatitude: Float!, $endLongitude: Float!, $routeDescription: String!, $time: String!, $title: String!) @auth(level: USER) {
+  ride_insert(data: {organizerId: $organizerId, date: $date, startLatitude: $startLatitude, startLongitude: $startLongitude, endLatitude: $endLatitude, endLongitude: $endLongitude, routeDescription: $routeDescription, time: $time, title: $title})
+}
+
+query ListCoffeeShops @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public") {
+  coffeeShops {
+    id
+    name
+    address
+    latitude
+    longitude
+  }
+}
+
+mutation JoinRide($rideId: UUID!, $userId: UUID!, $status: String!) @auth(level: USER) {
+  rideParticipant_insert(data: {rideId: $rideId, userId: $userId, joinedAt_expr: "request.time", status: $status})
+}
+
+query GetRidesForUser($userId: UUID!) @auth(level: USER) {
+  user(id: $userId) {
+    rides_via_RideParticipant {
+      id
+      title
+      date
+      time
+      startLatitude
+      startLongitude
+      endLatitude
+      endLongitude
+    }
+  }
+}

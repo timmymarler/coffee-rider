@@ -1,0 +1,9 @@
+connectorId: example
+location: europe-west2
+backend:
+  sqlDatabase:
+    engine: POSTGRESQL
+    connector:
+      database: placeholder
+schema:
+  file: schema/schema.graphql

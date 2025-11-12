@@ -1,0 +1,44 @@
+mutation CreateSeedData @auth(level: PUBLIC, insecureReason: "This mutation is safe to expose to the public, because it is only used to populate the database with seed data.") @transaction {
+  rider_insertMany(data: [
+    {
+      id: "rider1",
+      name: "Bob Rider",
+      email: "bob@example.com",
+      phone: "555-1212"
+    },
+    {
+      id: "rider2",
+      name: "Alice Rider",
+      email: "alice@example.com",
+      phone: "555-1313"
+    }
+  ])
+  coffeeShop_insertMany(data: [
+    {
+      id: "shop1",
+      name: "Coffee Delight",
+      address: "123 Main St"
+    },
+    {
+      id: "shop2",
+      name: "Brew & Bites",
+      address: "456 Oak Ave"
+    }
+  ])
+  order_insertMany(data: [
+    {
+      id: "order1",
+      riderId: "rider1",
+      shopId: "shop1",
+      orderTime: "2024-01-01T08:00:00Z",
+      status: "PLACED"
+    },
+    {
+      id: "order2",
+      riderId: "rider2",
+      shopId: "shop2",
+      orderTime: "2024-01-01T09:00:00Z",
+      status: "DELIVERED"
+    }
+  ])
+}

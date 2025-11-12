@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "coffee-rider-bea88"
+  },
+  "targets": {
+    "coffee-rider-bea88": {
+      "hosting": {
+        "coffee-rider": [
+          "coffee-rider-bea88"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
