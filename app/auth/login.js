@@ -16,9 +16,8 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { auth, db } from "../config/firebase";
-import { useBanner } from "../context/BannerContext";
-
+import { auth, db } from "../../config/firebase";
+import { useBanner } from "../../context/BannerContext";
 
 export default function AuthScreen() {
   const [email, setEmail] = useState("");
@@ -51,7 +50,7 @@ export default function AuthScreen() {
       }
       return "guest";
     } catch (err) {
-      console.error("Error fetching role:", err);
+      console.log("Error fetching role:", err?.message || err);
       return "guest";
     }
   }
@@ -63,30 +62,42 @@ export default function AuthScreen() {
     }
 
     setLoading(true);
+
     try {
       if (registerMode) {
+        // REGISTER
         const cred = await createUserWithEmailAndPassword(auth, email, password);
+
         await setDoc(doc(db, "users", cred.user.uid), {
           email,
           role: "user",
           createdAt: new Date().toISOString(),
         });
+
         showBanner("Account created!", "success");
         router.replace("/(tabs)/profile");
-      } else {
-        console.log("LOGIN SUCCESS: showing banner...");
-
-        await signInWithEmailAndPassword(auth, email, password);
-        const role = await getUserRole(auth.currentUser.uid);
-        setRole(role);
-        showBanner("Welcome back!", "success");
-        router.replace("/(tabs)/profile");
+        return;
       }
-    } catch (err) {
-      console.log("LOGIN ERROR:", error.message);
 
-      console.error(err);
+      // LOGIN
+      await signInWithEmailAndPassword(auth, email, password);
+
+      const userRole = await getUserRole(auth.currentUser.uid);
+      setRole(userRole);
+
+      showBanner("Welcome back!", "success");
+      router.replace("/(tabs)/profile");
+      return;
+
+    } catch (err) {
+      // This logs safely WITHOUT triggering the big red error screen
+      console.log("LOGIN ERROR:", err?.message || err);
+
+      // Friendly UI message for user
       showBanner("Invalid email or password", "error");
+
+      // IMPORTANT: stop here
+      return;
     } finally {
       setLoading(false);
     }
@@ -97,9 +108,9 @@ export default function AuthScreen() {
       await signOut(auth);
       setRole("guest");
       showBanner("Signed out", "info");
-      router.replace("/auth");
+      router.replace("/auth/login");
     } catch (err) {
-      console.error("Logout error:", err);
+      console.log("Logout error:", err?.message || err);
       Alert.alert("Error", "Failed to sign out. Please try again.");
     }
   };
@@ -109,7 +120,6 @@ export default function AuthScreen() {
   };
 
   return (
-
     <SafeAreaView
       style={{
         flex: 1,
@@ -196,9 +206,7 @@ export default function AuthScreen() {
           style={{ marginRight: 5 }}
         />
         <Text style={{ color: "#007AFF" }}>
-          {registerMode
-            ? "Already have an account? Login"
-            : "No account? Register"}
+          {registerMode ? "Already have an account? Login" : "No account? Register"}
         </Text>
       </TouchableOpacity>
 

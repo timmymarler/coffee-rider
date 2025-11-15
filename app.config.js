@@ -1,5 +1,6 @@
 export default {
   expo: {
+    owner: "timmy.marler",
     name: "Coffee Rider",
     slug: "coffee-rider-V2",
     version: "1.0.0",
@@ -16,5 +17,9 @@ export default {
     runtimeVersion: {
       policy: "appVersion"
     },
+    android: {
+      package: "com.coffeerider.app"
+    }
+
   },
 };

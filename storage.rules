@@ -1,0 +1,24 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // PROFILE PHOTOS
+    match /profiles/{uid}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // CAFE PHOTOS (no Firestore checks allowed here)
+    // Restrict logic to: only signed-in users can upload
+    // Detailed permissions enforced by Firestore (owner/admin)
+    match /cafes/{cafeId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+  }
+}

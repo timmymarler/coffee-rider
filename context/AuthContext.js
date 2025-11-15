@@ -3,51 +3,54 @@ import { doc, getDoc } from "firebase/firestore";
 import { createContext, useContext, useEffect, useState } from "react";
 import { auth, db } from "../config/firebase";
 
-const AuthContext = createContext();
+export const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState("guest");
+  const [can, setCan] = useState(getPermissions("guest"));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      try {
-        if (firebaseUser) {
-          setUser(firebaseUser);
-
-          const ref = doc(db, "users", firebaseUser.uid);
-          const snap = await getDoc(ref);
-
-          if (snap.exists()) {
-            const data = snap.data();
-            setRole(data.role || "user");
-            console.log("User signed in, role:", data.role || "user");
-          } else {
-            console.warn("No Firestore user doc found, defaulting to 'user'");
-            setRole("user");
-          }
-        } else {
-          setUser(null);
-          setRole("guest");
-          console.log("No user signed in, role set to guest");
-        }
-      } catch (err) {
-        console.error("Auth context error:", err);
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        // ----------- GUEST -----------
+        setUser(null);
         setRole("guest");
+        setCan(getPermissions("guest"));
+        setLoading(false);
+        return;
+      }
+
+      // ----------- LOGGED IN -----------
+      setUser(firebaseUser);
+
+      try {
+        const ref = doc(db, "users", firebaseUser.uid);
+        const snap = await getDoc(ref);
+
+        // IMPORTANT: default to guest, not user
+        let roleValue = "guest";
+
+        if (snap.exists()) {
+          const data = snap.data();
+          roleValue = data.role || "user";  // only upgrade to user if doc says so
+        }
+
+        setRole(roleValue);
+        setCan(getPermissions(roleValue));
+
+      } catch (e) {
+        console.error("Error loading role:", e);
+        setRole("guest");
+        setCan(getPermissions("guest"));
       } finally {
         setLoading(false);
       }
     });
 
-    return unsubscribe;
+    return () => unsub();
   }, []);
-
-  // Role-based permissions helper
-  const can = {
-    addCafe: ["user", "pro", "admin"].includes(role),
-    manageCafes: ["admin"].includes(role),
-  };
 
   return (
     <AuthContext.Provider value={{ user, role, can, loading }}>
@@ -56,6 +59,22 @@ export function AuthProvider({ children }) {
   );
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
+export const useAuth = () => useContext(AuthContext);
+
+// ======================================================================
+// Permissions
+// ======================================================================
+
+function getPermissions(role) {
+  return {
+    addCafe: role === "user" || role === "pro" || role === "admin",
+    addPhoto: role === "user" || role === "pro" || role === "admin",
+    comment: role === "pro" || role === "admin",
+    editComment: role === "pro" || role === "admin",
+    navigation: role === "user" || role === "pro" || role === "admin",
+    waypoints: role === "pro" || role === "admin",
+    saveRoutes: role === "pro" || role === "admin",
+    viewRoutes: role === "pro" || role === "admin",
+    admin: role === "admin",
+  };
 }

@@ -27,10 +27,13 @@ export default function ProfilePage() {
   const [role, setRole] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [banner, setBanner] = useState({ text: "", color: "#34C759", icon: "checkmark-circle" });
+  const [banner, setBanner] = useState({
+    text: "",
+    color: "#34C759",
+    icon: "checkmark-circle",
+  });
   const bannerAnim = useState(new Animated.Value(0))[0];
 
-  // Simple banner animation
   const showBanner = (message, color = "#34C759", icon = "checkmark-circle") => {
     setBanner({ text: message, color, icon });
     Animated.sequence([
@@ -40,7 +43,7 @@ export default function ProfilePage() {
     ]).start();
   };
 
-  // Fetch user and profile data
+  // Fetch user & profile data
   useEffect(() => {
     const loadProfile = async () => {
       const u = auth.currentUser;
@@ -56,6 +59,7 @@ export default function ProfilePage() {
       try {
         const ref = doc(db, "users", u.uid);
         const snap = await getDoc(ref);
+
         if (snap.exists()) {
           const data = snap.data();
           setDisplayName(data.displayName || "");
@@ -63,10 +67,16 @@ export default function ProfilePage() {
           setPhotoURL(data.photoURL || u.photoURL || null);
           setRole(data.role || "user");
         } else {
-          // if doc missing, make a basic one
-          await setDoc(ref, { email: u.email, role: "user" });
+          // Minimal doc creation (role always user)
+          await setDoc(ref, {
+            email: u.email,
+            role: "user",
+            displayName: "",
+            bio: "",
+          });
           setRole("user");
         }
+
       } catch (err) {
         console.error("Profile load error:", err);
         showBanner("Error loading profile", "#FF3B30", "alert-circle");
@@ -90,36 +100,49 @@ export default function ProfilePage() {
       if (result.canceled) return;
 
       const localUri = result.assets[0].uri;
-      const path = `profiles/${auth.currentUser.uid}.jpg`;
+
+      // FIXED: matches your Storage rules
+      const path = `profiles/${auth.currentUser.uid}/profile.jpg`;
+
       const downloadURL = await uploadImageAsync(localUri, path);
 
       await updateProfile(auth.currentUser, { photoURL: downloadURL });
-      await setDoc(doc(db, "users", auth.currentUser.uid), { photoURL: downloadURL }, { merge: true });
+
+      await setDoc(
+        doc(db, "users", auth.currentUser.uid),
+        { photoURL: downloadURL },
+        { merge: true }
+      );
 
       setPhotoURL(downloadURL);
       showBanner("Photo updated", "#34C759", "checkmark-circle");
+
     } catch (err) {
       console.error("Photo upload error:", err);
       Alert.alert("Photo upload failed", "Please try again");
     }
   };
 
+  // Save profile (safe fields only)
   const handleSave = async () => {
     const u = auth.currentUser;
     if (!u) return;
+
     try {
       setSaving(true);
+
       await setDoc(
         doc(db, "users", u.uid),
         {
           displayName,
           bio,
-          email: u.email,
           photoURL,
         },
         { merge: true }
       );
+
       showBanner("Profile updated", "#34C759", "checkmark-circle");
+
     } catch (err) {
       console.error("Save error:", err);
       showBanner("Error saving profile", "#FF3B30", "alert-circle");
@@ -130,17 +153,20 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
+      <>
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#007aff" />
       </View>
+      </>
     );
   }
 
   const user = auth.currentUser;
 
-  // 👇 ADD THIS GUEST CHECK
+  // Guest check
   if (!user) {
     return (
+      <>
       <View style={[styles.center, { padding: 24, backgroundColor: "#fff" }]}>
         <Ionicons name="person-circle-outline" size={100} color="#ccc" />
         <Text style={{ fontSize: 18, fontWeight: "600", marginVertical: 10 }}>
@@ -150,7 +176,7 @@ export default function ProfilePage() {
           Sign in to manage your profile, add cafés, and save routes.
         </Text>
         <TouchableOpacity
-          onPress={() => router.replace("/auth")}
+          onPress={() => router.replace("/auth/login")}
           style={{
             backgroundColor: "#007aff",
             paddingVertical: 14,
@@ -163,11 +189,12 @@ export default function ProfilePage() {
           </Text>
         </TouchableOpacity>
       </View>
+      </>
     );
   }
 
-
   return (
+    <>
     <ScrollView style={styles.container}>
       {/* Banner */}
       <Animated.View
@@ -175,14 +202,12 @@ export default function ProfilePage() {
           styles.banner,
           {
             opacity: bannerAnim,
-            transform: [
-              {
-                translateY: bannerAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-60, 0],
-                }),
-              },
-            ],
+            transform: [{
+              translateY: bannerAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-60, 0],
+              }),
+            }],
             backgroundColor: banner.color,
           },
         ]}
@@ -206,7 +231,7 @@ export default function ProfilePage() {
         </TouchableOpacity>
       </View>
 
-      {/* Display name */}
+      {/* Display Name */}
       <View style={styles.profileRow}>
         <Ionicons name="person-outline" size={20} color="#007aff" style={styles.profileIcon} />
         <TextInput
@@ -235,30 +260,35 @@ export default function ProfilePage() {
         />
       </View>
 
-      {/* Role display */}
+      {/* Role */}
       <View style={styles.profileRow}>
         <Ionicons name="key-outline" size={20} color="#007aff" style={styles.profileIcon} />
         <Text style={styles.profileText}>Role: {role}</Text>
       </View>
 
       {/* Save */}
-      <TouchableOpacity onPress={handleSave} disabled={saving} style={[styles.saveButton, { opacity: saving ? 0.6 : 1 }]}>
-        {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveButtonText}>Save Profile</Text>}
+      <TouchableOpacity
+        onPress={handleSave}
+        disabled={saving}
+        style={[styles.saveButton, { opacity: saving ? 0.6 : 1 }]}
+      >
+        {saving
+          ? <ActivityIndicator size="small" color="#fff" />
+          : <Text style={styles.saveButtonText}>Save Profile</Text>}
       </TouchableOpacity>
 
       {/* Sign out */}
-      {user && (
-        <TouchableOpacity
-          onPress={async () => {
-            await signOut(auth);
-            router.replace("/auth");
-          }}
-          style={[styles.saveButton, { backgroundColor: "#ff3b30", marginTop: 10 }]}
-        >
-          <Text style={styles.saveButtonText}>Sign Out</Text>
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        onPress={async () => {
+          await signOut(auth);
+          router.replace("/auth/login");
+        }}
+        style={[styles.saveButton, { backgroundColor: "#ff3b30", marginTop: 10 }]}
+      >
+        <Text style={styles.saveButtonText}>Sign Out</Text>
+      </TouchableOpacity>
     </ScrollView>
+    </>
   );
 }
 

@@ -2,6 +2,7 @@
 import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AppHeader from "../components/AppHeader";
+import Banner from "../components/Banner";
 import { AuthProvider } from "../context/AuthContext";
 import { BannerProvider } from "../context/BannerContext";
 
@@ -11,18 +12,13 @@ export default function RootLayout() {
       <AuthProvider>
         <BannerProvider>
           <AppHeader />
-          <RootStack />
+          <Banner />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="auth/login" />
+          </Stack>
         </BannerProvider>
       </AuthProvider>
     </SafeAreaProvider>
-  );
-}
-
-function RootStack() {
-  return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="auth" />
-    </Stack>
   );
 }

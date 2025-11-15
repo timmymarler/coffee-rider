@@ -1,8 +1,79 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+
+    // Helper: Load user's role safely from Firestore
+    function userRole() {
+      let d = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return d.data != null && d.data.role != null ? d.data.role : "guest";
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == "admin";
+    }
+
+    function isPro() {
+      return isSignedIn() && userRole() == "pro";
+    }
+
+    function isUser() {
+      return isSignedIn() && userRole() == "user";
+    }
+
+    // CAFES
+    match /cafes/{cafeId} {
+      allow read: if true;
+      allow create: if isUser() || isPro() || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // PHOTOS for a CAFE
+    match /cafes/{cafeId}/photos/{photoId} {
+      allow read: if true;
+      allow create: if
+        isAdmin() ||
+        isPro() ||
+        (isUser() &&
+         get(/databases/$(database)/documents/cafes/$(cafeId)).data.createdBy == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // Ratings
+    match /cafes/{cafeId}/ratings/{ratingId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // COMMENTS
+    match /cafes/{cafeId}/comments/{commentId} {
+      allow read: if true;
+      allow create: if isPro() || isAdmin();
+      allow update: if isAdmin() ||
+                    (isPro() && request.auth.uid == resource.data.userId);
+      allow delete: if isAdmin();
+    }
+
+    // SAVED ROUTES
+    match /users/{userId}/favouriteRoutes/{routeId} {
+      allow read: if isSignedIn() && (userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && userId == request.auth.uid && (isPro() || isAdmin());
+      allow update, delete: if isSignedIn() &&
+        ((userId == request.auth.uid && isPro()) || isAdmin());
+    }
+
+    // USERS COLLECTION
+    match /users/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() &&
+                    request.auth.uid == userId &&
+                    !("role" in request.resource.data);
+      allow update: if isAdmin();
     }
   }
 }

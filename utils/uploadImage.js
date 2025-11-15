@@ -1,18 +1,27 @@
-import { getStorage, ref, uploadBytes } from "firebase/storage";
-import { app } from "../config/firebase"; // adjust the path if needed
-const storage = getStorage(app); // must use the same app
+import { getAuth } from "firebase/auth";
+import { getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
+import { app } from "../config/firebase";
+
+const storage = getStorage(app);
 
 export async function uploadImageAsync(uri, path) {
   try {
-    const imageRef = ref(storage, path);
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) throw new Error("No authenticated user found");
 
-    // Convert file to blob (this works across Expo iOS/Android)
+    const imagePath = path || `profiles/${user.uid}.jpg`;
+    const imageRef = ref(storage, imagePath);
+
+    // ✅ Convert local file URI → Blob via fetch
     const response = await fetch(uri);
     const blob = await response.blob();
 
+    // ✅ Upload the blob directly
     await uploadBytes(imageRef, blob, { contentType: "image/jpeg" });
-    const downloadURL = await uploadImageAsync(uri, `cafes/${user.uid}/${Date.now()}.jpg`);
 
+    // ✅ Get the download URL
+    const downloadURL = await getDownloadURL(imageRef);
     return downloadURL;
   } catch (err) {
     console.error("Upload failed:", err);

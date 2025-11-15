@@ -2,7 +2,6 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import polyline from "@mapbox/polyline";
 import Constants from "expo-constants";
 import * as Location from "expo-location";
-import { collection, doc, getDoc, onSnapshot } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,19 +17,22 @@ import {
   View,
 } from "react-native";
 
-import MapView, { Marker, Polyline } from "react-native-maps";
+import ClusteredMapView from "react-native-map-clustering";
+import { Marker, Polyline } from "react-native-maps";
 
 import { onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
+  collection,
+  doc,
   getDocs,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
-  setDoc
+  setDoc,
 } from "firebase/firestore";
 import { auth, db } from "../../config/firebase.js";
-import { useAuth } from "../../context/AuthContext";
 import { saveFavouriteRoute } from "../../utils/favouriteRoutes";
 import { getRoute } from "../../utils/getRoute";
 
@@ -81,7 +83,6 @@ export default function MapPage() {
   const [loading, setLoading] = useState(true);
   const [userRegion, setUserRegion] = useState(null);
   const [user, setUser] = useState(null);
-  const [loginToastVisible, setLoginToastVisible] = useState(false);
   const [filter, setFilter] = useState({ overall: 0, service: 0, value: 0 });
   const [suppressAvgUpdate, setSuppressAvgUpdate] = useState(false);
   const [comments, setComments] = useState([]);
@@ -100,8 +101,6 @@ export default function MapPage() {
   const [waypoints, setWaypoints] = useState([]);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [routeName, setRouteName] = useState("");
-  const [userRole, setUserRole] = useState(null);
-  const {can } = useAuth();
 
   // Refs
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -116,38 +115,10 @@ const handleClearRoute = () => {
   lastSelectedCafeRef.current = null; // reset stored café
 };
 
-const requireLogin = () => {
-  if (!auth.currentUser) {
-    setLoginToastVisible(true);
-
-    // Auto-hide after 2 seconds
-    setTimeout(() => {
-      setLoginToastVisible(false);
-    }, 2000);
-
-    return false;
-  }
-  return true;
-};
-
-
-const recenterMap = () => {
-  if (!userRegion || !mapRef.current) return;
-
-  mapRef.current.animateToRegion(
-    {
-      ...userRegion,
-      latitudeDelta: 0.05,
-      longitudeDelta: 0.05,
-    },
-    400 // ms
-  );
-};
-
   // ROUTING -----------------------------------------------------------------
 async function handleRoutePress() {
-  if (!requireLogin()) 
-      return;
+  console.log("Route button pressed");
+
   if (!userRegion) {
     console.warn("userRegion missing");
     return;
@@ -161,7 +132,12 @@ async function handleRoutePress() {
   const startLng = userRegion.longitude;
   const endLat = selectedCafe.coords.latitude;
   const endLng = selectedCafe.coords.longitude;
+
+  console.log("Start:", startLat, startLng, "End:", endLat, endLng);
+
   const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${startLat},${startLng}&destination=${endLat},${endLng}&key=${apiKey}`;
+
+  console.log("Directions URL:", url);
 
  try {
   const response = await fetch(url);
@@ -203,11 +179,9 @@ async function handleRoutePress() {
 }
 
   async function showRoute(cafe) {
-    if (!requireLogin()) return;
     if (!userRegion || !cafe?.coords) return;
     const coords = await getRoute(userRegion, cafe.coords);
     setRouteCoords(coords);
-
   }
 
 async function recalcRouteWithWaypoints(waypoints) {
@@ -225,6 +199,7 @@ async function recalcRouteWithWaypoints(waypoints) {
     .join("|");
 
   const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${start}&destination=${end}&waypoints=${wpString}&key=${apiKey}`;
+  console.log("Recalc URL:", url);
 
   try {
     const response = await fetch(url);
@@ -322,7 +297,6 @@ async function handleMapPress(e) {
 
 // Get the user's favourite routes
 function handleSaveRoute() {
-  if (!requireLogin()) return;
   if (!userRegion || !lastSelectedCafeRef.current) return;
   setShowSaveModal(true);
 }
@@ -394,20 +368,6 @@ function handleSaveRoute() {
       });
     })();
   }, []);
-
-  useEffect(() => {
-  const u = auth.currentUser;
-  if (!u) return;
-
-  const loadRole = async () => {
-    const ref = doc(db, "users", u.uid);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      setUserRole(snap.data().role);
-    }
-  };
-  loadRole();
-}, []);
 
   // COMMENTS ---------------------------------------------------------------
   useEffect(() => {
@@ -640,44 +600,27 @@ function handleSaveRoute() {
       </View>
 
       {/* MAP */}
-      {/* MAP */}
-<MapView
+<ClusteredMapView
   ref={mapRef}
   style={{ flex: 1 }}
   region={userRegion}
   showsUserLocation
+  clusterColor="#007aff"
+  clusterTextColor="#fff"
+  clusterFontSize={13}
+
+  radius={45}
+  extent={512}
+  minZoom={2}
+  maxZoom={18}
+
+  preserveClusterPressBehavior={true}
+  preserveMarkerPressBehavior={true}
+
+  spiralEnabled={true}
   onPress={handleMapPress}
   onTouchStart={handleTouchStart}
 >
-{loginToastVisible && (
-  <View
-    style={{
-      position: "absolute",
-      top: 70,                   // Higher up the screen
-      left: 0,
-      right: 0,
-      alignItems: "center",
-      zIndex: 9999
-    }}
-  >
-    <View
-      style={{
-        backgroundColor: "#FF9500",   // Orange banner
-        paddingHorizontal: 18,
-        paddingVertical: 10,
-        borderRadius: 12,
-        shadowColor: "#000",
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-        elevation: 5
-      }}
-    >
-      <Text style={{ color: "#fff", fontWeight: "600" }}>
-        You must be logged in to use this feature.
-      </Text>
-    </View>
-  </View>
-)}
 
         {/* Toast for empty filter results */}
         {Array.isArray(filteredCafes) && filteredCafes.length === 0 && (
@@ -706,56 +649,17 @@ function handleSaveRoute() {
 
 
         {Array.isArray(filteredCafes) && filteredCafes.length > 0 && filteredCafes.map((cafe) => (
-  <Marker
-    key={cafe.id}
-    coordinate={{
-      latitude: cafe.coords?.latitude,
-      longitude: cafe.coords?.longitude,
-    }}
-    title={cafe.name}
-    description={cafe.location}
-    onPress={() => openCard(cafe)}
-  />
-))}
-{filteredCafes.map((cafe) => (
-  <Marker
-    key={cafe.id}
-    coordinate={{
-      latitude: cafe.coords?.latitude,
-      longitude: cafe.coords?.longitude,
-    }}
-    onPress={() => openCard(cafe)}
-  >
-    <View style={{ alignItems: "center" }}>
-      
-      {/* Bubble name label */}
-      <View
-        style={{
-          backgroundColor: "#007aff",
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 10,
-          borderColor: "#fff",
-          borderWidth: 1,
-          marginBottom: 2,
-        }}
-      >
-        <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
-          {cafe.name}
-        </Text>
-      </View>
-
-      {/* Pin icon */}
-      <Ionicons
-        name="location-sharp"
-        size={22}
-        color="#d9534f"
-        style={{ marginTop: -4 }}
-      />
-
-    </View>
-  </Marker>
-))}
+          <Marker
+            key={cafe.id}
+            coordinate={{
+              latitude: cafe.coords?.latitude,
+              longitude: cafe.coords?.longitude,
+            }}
+            title={cafe.name}
+            description={cafe.location}
+            onPress={() => openCard(cafe)}
+          />
+        ))}
 
 {waypoints.map((wp, i) => (
   <Marker
@@ -771,7 +675,6 @@ function handleSaveRoute() {
       if (routeVisible && lastSelectedCafeRef.current) {
         const newCoords = await recalcRouteWithWaypoints(updated);
         setRouteCoords(newCoords);
-
       }
     }}
   />
@@ -781,23 +684,23 @@ function handleSaveRoute() {
         {routeCoords.length > 0 && (
           <Polyline coordinates={routeCoords} strokeColor="#007aff" strokeWidth={4} />
         )}
-      </MapView>
+      </ClusteredMapView>
 
-      {/* Floating Navigate Button */}      
+      {/* Floating Navigate Button */}
 {routeVisible && (
   <View style={styles.floatingButtonGroup}>
     {/* Save Route Button */}
-    {can.saveRoutes && (
-      <TouchableOpacity onPress={handleSaveRoute} style={styles.floatingButtonGrey}>
-        <Text style={styles.navigateText}>Save Route</Text>
-      </TouchableOpacity>
-    )}
+    <TouchableOpacity
+      style={styles.floatingButton}
+      onPress={handleSaveRoute}
+    >
+      <Text style={styles.navigateText}>Save Route</Text>
+    </TouchableOpacity>
 
     {/* Navigate Button (existing full logic untouched) */}
     <TouchableOpacity
-      style={styles.floatingButtonBlue}
+      style={styles.floatingButton}
       onPress={() => {
-        if (!requireLogin()) return;
         if (!userRegion || !lastSelectedCafeRef.current?.coords) {
           console.warn("Missing location or destination");
           return;
@@ -828,23 +731,6 @@ function handleSaveRoute() {
     </TouchableOpacity>
   </View>
 )}
-<TouchableOpacity
-  onPress={recenterMap}
-  style={{
-    position: "absolute",
-    bottom: 15,
-    right: 15,
-    backgroundColor: "#007aff",
-    padding: 14,
-    borderRadius: 30,
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 4
-  }}
->
-  <Ionicons name="locate" size={22} color="#fff" />
-</TouchableOpacity>
 
 
       {/* Bottom Card */}
@@ -963,20 +849,17 @@ function handleSaveRoute() {
 
             {/* Buttons */}
             <View style={styles.buttonRow}>
-              <TouchableOpacity
-                onPress={routeCoords.length > 0 ? handleClearRoute : handleRoutePress}
-                style={styles.clearRouteButton}
-              >
-                <Text style={styles.buttonText}>
-                  {routeCoords.length > 0 ? "Clear Route" : "Route"}
-                </Text>
-              </TouchableOpacity>
+<TouchableOpacity
+  onPress={routeCoords.length > 0 ? handleClearRoute : handleRoutePress}
+  style={styles.clearRouteButton}
+>
+  <Text style={styles.buttonText}>
+    {routeCoords.length > 0 ? "Clear Route" : "Route"}
+  </Text>
+</TouchableOpacity>
 
               <TouchableOpacity
                 onPress={() => {
-                  if (!requireLogin()) 
-                    return;
-
                   const url = Platform.select({
                     ios: `maps:0,0?q=${selectedCafe.name}@${selectedCafe.coords?.latitude},${selectedCafe.coords?.longitude}`,
                     android: `geo:0,0?q=${selectedCafe.coords?.latitude},${selectedCafe.coords?.longitude}(${selectedCafe.name})`,
@@ -1057,6 +940,7 @@ function handleSaveRoute() {
 
       await saveFavouriteRoute(user, routeData);
 
+      console.log("Snapped route saved!");
       setShowSaveModal(false);
       setRouteName("");
     } catch (err) {
@@ -1111,7 +995,6 @@ const styles = StyleSheet.create({
   },
   navigateText: { color: "#fff", fontWeight: "600", fontSize: 15 },
   buttonRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 10 },
-
   clearRouteButton: {
     flex: 1,
     backgroundColor: "#555",
@@ -1120,7 +1003,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 8,
   },
-
   navigateBtn: {
     flex: 1,
     backgroundColor: "#007aff",
@@ -1130,37 +1012,24 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   buttonText: { color: "#fff", fontWeight: "600", fontSize: 15 },
-
-  floatingButtonGroup: {
-    position: "absolute",
-    bottom: 40,
-    right: 20,
-    flexDirection: "column",
-    alignItems: "flex-end",
-    gap: 12,
-  },
-
-  floatingButtonBlue: {
-    backgroundColor: "#007aff",
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 50,
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 5,
-  },
-  floatingButtonGrey: {
-    backgroundColor: "#555",
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 50,
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 5,
-  },
-
+floatingButtonGroup: {
+  position: "absolute",
+  bottom: 40,
+  right: 20,
+  flexDirection: "column",
+  alignItems: "flex-end",
+  gap: 12,
+},
+floatingButton: {
+  backgroundColor: "#007aff",
+  paddingVertical: 14,
+  paddingHorizontal: 18,
+  borderRadius: 50,
+  shadowColor: "#000",
+  shadowOpacity: 0.25,
+  shadowRadius: 5,
+  elevation: 5,
+},
 modalOverlay: {
   position: "absolute",
   top: 0,
