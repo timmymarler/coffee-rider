@@ -1,20 +1,52 @@
 {
   "cli": {
-    "version": ">= 16.27.0",
-    "appVersionSource": "remote"
+    "version": ">= 3.0.0",
+    "appVersionSource": "local"
   },
   "build": {
-    "development": {
+    "rider": {
+      "env": {
+        "APP_NAME": "rider"
+      }
+    },
+    "rider-dev": {
       "developmentClient": true,
-      "distribution": "internal"
+      "env": {
+        "APP_NAME": "rider"
+      }
     },
-    "preview": {
-      "distribution": "internal"
+
+    "driver": {
+      "env": {
+        "APP_NAME": "driver"
+      }
     },
+    "driver-dev": {
+      "developmentClient": true,
+      "env": {
+        "APP_NAME": "driver"
+      }
+    },
+
+    "strider": {
+      "env": {
+        "APP_NAME": "strider"
+      }
+    },
+    "strider-dev": {
+      "developmentClient": true,
+      "env": {
+        "APP_NAME": "strider"
+      }
+    },
+
     "production": {
-      "autoIncrement": true
+      "env": {
+        "APP_NAME": "rider"
+      }
     }
   },
+
   "submit": {
     "production": {}
   }
