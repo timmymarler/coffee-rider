@@ -42,6 +42,8 @@ export default {
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
 
+    plugins: ["expo-maps"],
+    
     icon: `${brandFolder}/icon.png`,
     splash: {
       image: `${brandFolder}/splash.png`,
@@ -77,6 +79,10 @@ export default {
 
     android: {
       package: ANDROID_PACKAGE[APP_NAME],
+      permissions: [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ],
       config: {
         googleMaps: {
           apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY

@@ -1,5 +1,5 @@
+import { theme } from "@config/theme";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity } from "react-native";
-import { theme } from "../../config/theme";
 
 export function PrimaryButton({ title, onPress, loading, disabled, style, textStyle }) {
   const isDisabled = disabled || loading;

@@ -1,5 +1,5 @@
+import { theme } from "@config/theme";
 import { StyleSheet, Text } from "react-native";
-import { theme } from "../../config/theme";
 
 export function LinkText({ children, style, ...props }) {
   return (

@@ -1,15 +1,15 @@
+import logo from "@assets/logo.png";
 import { PrimaryButton } from "@components/ui/Button";
 import { Input } from "@components/ui/Input";
 import { LinkText } from "@components/ui/Text";
 import { H1, H3 } from "@components/ui/Typography";
+import { globalStyles } from "@config/globalStyles";
+import { theme } from "@config/theme";
+import { AuthContext } from "@context/AuthContext";
+import { loginWithEmail } from "@firebaseLocal/auth";
 import { useRouter } from "expo-router";
 import { useContext, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
-import logo from "../../assets/logo.png";
-import { globalStyles } from "../../config/globalStyles";
-import { theme } from "../../config/theme";
-import { AuthContext } from "../../context/AuthContext";
-import { loginWithEmail } from "../../services/firebase/auth";
 
 
 export default function LoginScreen() {
@@ -27,7 +27,7 @@ export default function LoginScreen() {
 
     try {
       await loginWithEmail(email, password);
-      router.replace("/(tabs)/map"); // go to map after login
+      router.replace("/map");
     } catch (err) {
       setError(err.message);
     }

@@ -13,9 +13,9 @@
       "developmentClient": true,
       "env": {
         "APP_NAME": "rider"
-      }
+      },
+      "environment": "development"
     },
-
     "driver": {
       "env": {
         "APP_NAME": "driver"

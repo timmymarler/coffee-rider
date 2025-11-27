@@ -1,5 +1,5 @@
+import { theme } from "@config/theme";
 import { StyleSheet, TextInput, View } from "react-native";
-import { theme } from "../../config/theme";
 
 export function Input({
   value,

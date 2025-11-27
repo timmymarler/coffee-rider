@@ -1,0 +1,240 @@
+env: load .env
+env: export EXPO_PUBLIC_GOOGLE_MAPS_API_KEY EXPO_PUBLIC_GOOGLE_PLACES_API_KEY EXPO_PUBLIC_FIREBASE_API_KEY APP_NAME
+
+{
+  name: [32m'Coffee Rider'[39m,
+  slug: [32m'coffee-rider-v2'[39m,
+  scheme: [32m'coffee-rider-v2'[39m,
+  plugins: [
+    [32m'expo-maps'[39m
+  ],
+  icon: [32m'assets/rider/icon.png'[39m,
+  assetBundlePatterns: [
+    [32m'**/*'[39m
+  ],
+  version: [32m'1.0.0'[39m,
+  description: [90mundefined[39m,
+  sdkVersion: [32m'54.0.0'[39m,
+  platforms: [
+    [32m'ios'[39m,
+    [32m'android'[39m,
+    [32m'web'[39m
+  ],
+  splash: {
+    image: [32m'assets/rider/splash.png'[39m,
+    resizeMode: [32m'contain'[39m,
+    backgroundColor: [32m'#ffffff'[39m
+  },
+  extra: {
+    appName: [32m'rider'[39m,
+    googleMapsApiKey: [32m'AIzaSyCJwgXEMFnD39fSiDkYVj4Falu9IpUGNO0'[39m,
+    googlePlacesApiKey: [32m'AIzaSyCreZstfHnXYWJx5QfaZdcWvoxNCMyLDHg'[39m,
+    eas: {
+      projectId: [32m'93932a29-f9a5-4f08-8b1d-6c9030e8bc59'[39m
+    },
+    firebase: {
+      apiKey: [32m'AIzaSyCreZstfHnXYWJx5QfaZdcWvoxNCMyLDHg'[39m,
+      authDomain: [32m'coffee-rider-bea88.firebaseapp.com'[39m,
+      projectId: [32m'coffee-rider-bea88'[39m,
+      storageBucket: [32m'coffee-rider-bea88.firebasestorage.app'[39m,
+      messagingSenderId: [32m'1001945286149'[39m,
+      appId: [32m'1:1001945286149:web:93cae68a7354a0dd1e7e6c'[39m
+    }
+  },
+  ios: {
+    bundleIdentifier: [32m'com.timmy.marler.coffeerider'[39m
+  },
+  android: {
+    package: [32m'com.timmy.marler.coffeerider'[39m,
+    permissions: [
+      [32m'android.permission.ACCESS_FINE_LOCATION'[39m,
+      [32m'android.permission.ACCESS_COARSE_LOCATION'[39m,
+      [32m'android.permission.RECORD_AUDIO'[39m,
+      [32m'android.permission.READ_EXTERNAL_STORAGE'[39m,
+      [32m'android.permission.WRITE_EXTERNAL_STORAGE'[39m,
+      [32m'android.permission.INTERNET'[39m
+    ],
+    config: {
+      googleMaps: {
+        apiKey: [32m'AIzaSyCJwgXEMFnD39fSiDkYVj4Falu9IpUGNO0'[39m
+      }
+    },
+    adaptiveIcon: {
+      foregroundImage: [32m'assets/rider/adaptive-icon.png'[39m,
+      backgroundColor: [32m'#FFFFFF'[39m
+    }
+  },
+  _internal: {
+    isDebug: [33mfalse[39m,
+    projectRoot: [32m'C:\\Users\\Tim Marler\\coffee-rider-v2'[39m,
+    dynamicConfigPath: [32m'C:\\Users\\Tim Marler\\coffee-rider-v2\\app.config.js'[39m,
+    packageJsonPath: [32m'C:\\Users\\Tim Marler\\coffee-rider-v2\\package.json'[39m,
+    autolinkedModules: [
+      [32m'expo'[39m,
+      [32m'expo-asset'[39m,
+      [32m'expo-blur'[39m,
+      [32m'expo-constants'[39m,
+      [32m'expo-dev-client'[39m,
+      [32m'expo-dev-launcher'[39m,
+      [32m'expo-dev-menu'[39m,
+      [32m'expo-dev-menu-interface'[39m,
+      [32m'expo-file-system'[39m,
+      [32m'expo-font'[39m,
+      [32m'expo-haptics'[39m,
+      [32m'expo-image'[39m,
+      [32m'expo-image-loader'[39m,
+      [32m'expo-image-picker'[39m,
+      [32m'expo-json-utils'[39m,
+      [32m'expo-keep-awake'[39m,
+      [32m'expo-linking'[39m,
+      [32m'expo-location'[39m,
+      [32m'expo-manifests'[39m,
+      [32m'expo-maps'[39m,
+      [32m'expo-modules-core'[39m,
+      [32m'expo-router'[39m,
+      [32m'expo-splash-screen'[39m,
+      [32m'expo-symbols'[39m,
+      [32m'expo-system-ui'[39m,
+      [32m'expo-updates-interface'[39m,
+      [32m'expo-web-browser'[39m
+    ],
+    staticConfigPath: {},
+    pluginHistory: {
+      [32m'expo-maps'[39m: {
+        name: [32m'expo-maps'[39m,
+        version: [32m'0.12.8'[39m
+      },
+      [32m'react-native-maps'[39m: {
+        name: [32m'react-native-maps'[39m,
+        version: [32m'UNVERSIONED'[39m
+      },
+      [32m'expo-ads-admob'[39m: {
+        name: [32m'expo-ads-admob'[39m,
+        version: [32m'UNVERSIONED'[39m
+      },
+      [32m'expo-apple-authentication'[39m: {
+        name: [32m'expo-apple-authentication'[39m,
+        version: [32m'UNVERSIONED'[39m
+      },
+      [32m'expo-contacts'[39m: {
+        name: [32m'expo-contacts'[39m,
+        version: [32m'UNVERSIONED'[39m
+      },
+      [32m'expo-notifications'[39m: {
+        name: [32m'expo-notifications'[39m,
+        version: [32m'UNVERSIONED'[39m
+      },
+      [32m'expo-updates'[39m: {
+        name: [32m'expo-updates'[39m,
+        version: [32m'UNVERSIONED'[39m
+      },
+      [32m'expo-document-picker'[39m: {
+        name: [32m'expo-document-picker'[39m,
+        version: [32m'UNVERSIONED'[39m
+      },
+      [32m'expo-system-ui'[39m: {
+        name: [32m'expo-system-ui'[39m,
+        version: [32m'6.0.8'[39m
+      },
+      [32m'expo-splash-screen'[39m: {
+        name: [32m'expo-splash-screen'[39m,
+        version: [32m'31.0.11'[39m
+      },
+      [32m'expo-navigation-bar'[39m: {
+        name: [32m'expo-navigation-bar'[39m,
+        version: [32m'UNVERSIONED'[39m
+      },
+      [32m'expo-dev-menu'[39m: {
+        name: [32m'expo-dev-menu'[39m,
+        version: [32m'7.0.17'[39m
+      },
+      [32m'expo-dev-client'[39m: {
+        name: [32m'expo-dev-client'[39m,
+        version: [32m'6.0.18'[39m
+      },
+      [32m'expo-image-picker'[39m: {
+        name: [32m'expo-image-picker'[39m,
+        version: [32m'17.0.8'[39m
+      },
+      [32m'expo-file-system'[39m: {
+        name: [32m'expo-file-system'[39m,
+        version: [32m'19.0.19'[39m
+      },
+      [32m'expo-location'[39m: {
+        name: [32m'expo-location'[39m,
+        version: [32m'19.0.7'[39m
+      }
+    }
+  },
+  mods: {
+    android: {
+      manifest: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      colors: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      dangerous: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      strings: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      gradleProperties: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      styles: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      mainActivity: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      colorsNight: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      settingsGradle: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      projectBuildGradle: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      appBuildGradle: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      }
+    },
+    ios: {
+      infoPlist: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      podfile: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      appDelegate: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      entitlements: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      expoPlist: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      podfileProperties: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      dangerous: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      },
+      splashScreenStoryboard: [AsyncFunction: interceptingMod] {
+        isProvider: [33mtrue[39m,
+        isIntrospective: [33mtrue[39m
+      },
+      xcodeproj: [AsyncFunction: interceptingMod] {
+        isProvider: [33mfalse[39m
+      }
+    }
+  },
+  androidStatusBar: {
+    backgroundColor: [32m'#ffffff'[39m
+  }
+}
+
