@@ -15,6 +15,7 @@ import { theme } from "@/config/theme";
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { getPlaceLabel } from "@core/lib/geocode";
+import { openGoogleMapsRoute } from "@lib/maps";
 
 export default function SavedRoutesScreen() {
   const { user, loading } = useContext(AuthContext);
@@ -206,20 +207,14 @@ export default function SavedRoutesScreen() {
         <View style={styles.cardActions}>
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => {
-              // TODO: Wire this to your actual "navigate route" logic
-              console.log("Navigate route", id);
-            }}
+            onPress={() => openGoogleMapsRoute(item)}
           >
             <Text style={styles.primaryButtonText}>Navigate</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => {
-              // TODO: Wire this to show route on map, passing snappedCoords/waypoints
-              console.log("View on map", id);
-            }}
+            onPress={() => openGoogleMapsRoute(item)}
           >
             <Text style={styles.secondaryButtonText}>View on map</Text>
           </TouchableOpacity>

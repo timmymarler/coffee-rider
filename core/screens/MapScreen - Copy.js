@@ -1,7 +1,7 @@
 import { Header } from "@components/layout/Header";
+import PlaceCard from "@components/place/PlaceCard";
 import { theme } from "@config/theme";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
 import { GoogleMaps } from "expo-maps";
 import { Stack } from "expo-router";
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   FlatList,
   Keyboard,
+  Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -17,6 +19,7 @@ import {
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 
 // Debounce helper
 function debounce(fn, delay) {
@@ -27,17 +30,33 @@ function debounce(fn, delay) {
   };
 }
 
+// Simple distance helper (km)
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  if (
+    typeof lat1 !== "number" ||
+    typeof lon1 !== "number" ||
+    typeof lat2 !== "number" ||
+    typeof lon2 !== "number"
+  ) {
+    return null;
+  }
+
+  const toRad = (v) => (v * Math.PI) / 180;
+  const R = 6371; // km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export default function MapScreen() {
-  const [reloadKey, setReloadKey] = useState(0);
-  const [searchFocused, setSearchFocused] = useState(false);
-
-
-  // Force reload when returning to this tab
-  useFocusEffect(
-    useCallback(() => {
-      setReloadKey((k) => k + 1);
-    }, [])
-  );
+  // Removed reloadKey + forced remount logic
 
   const [location, setLocation] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -45,6 +64,11 @@ export default function MapScreen() {
   // Search
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
+
+  // Selected place / card state
+  const [placeDetails, setPlaceDetails] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [isCardVisible, setIsCardVisible] = useState(false);
 
   const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
   const mapRef = useRef(null);
@@ -82,26 +106,41 @@ export default function MapScreen() {
     debouncedFetch(text);
   };
 
+  const handleAddWaypoint = () => {
+    console.log("Add waypoint not implemented yet");
+  };
+
   // ------------------------------------------------------------
-  // Handle selecting a place
+  // Fetch full place details (for card + centering)
   // ------------------------------------------------------------
-  const handleSelectPlace = async (placeId, description) => {
-    Keyboard.dismiss();
-    setQuery(description);
-    setSuggestions([]);
+  const openPlaceFromId = useCallback(
+    async (placeId, descriptionOverride) => {
+      if (!placeId) return;
 
-    try {
-      const url =
-        `https://maps.googleapis.com/maps/api/place/details/json` +
-        `?place_id=${placeId}` +
-        `&fields=geometry,name` +
-        `&key=${PLACES_KEY}`;
+      try {
+        setDetailsLoading(true);
 
-      const res = await fetch(url);
-      const data = await res.json();
+        const url =
+          `https://maps.googleapis.com/maps/api/place/details/json` +
+          `?place_id=${placeId}` +
+          `&fields=geometry,name,rating,formatted_address,opening_hours,photos` +
+          `&key=${PLACES_KEY}`;
 
-      if (data.status === "OK") {
-        const { lat, lng } = data.result.geometry.location;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.status !== "OK") {
+          console.log("Place details error:", data.status);
+          setDetailsLoading(false);
+          return;
+        }
+
+        const result = data.result;
+        setPlaceDetails(result);
+        setIsCardVisible(true);
+        setQuery(descriptionOverride || result.name || "");
+
+        const { lat, lng } = result.geometry.location;
 
         if (mapRef.current) {
           mapRef.current.setCameraPosition({
@@ -109,14 +148,32 @@ export default function MapScreen() {
             zoom: 16
           });
         }
+      } catch (err) {
+        console.log("Place details error:", err);
+      } finally {
+        setDetailsLoading(false);
       }
-    } catch (err) {
-      console.log("Place details error:", err);
+    },
+    [PLACES_KEY]
+  );
+
+  const handleSelectPlace = async (placeId, description) => {
+    Keyboard.dismiss();
+    setSuggestions([]);
+    await openPlaceFromId(placeId, description);
+  };
+
+  const handleMapPress = async (e) => {
+    const native = e?.nativeEvent;
+    if (native?.placeId) {
+      Keyboard.dismiss();
+      setSuggestions([]);
+      await openPlaceFromId(native.placeId);
     }
   };
 
   // ------------------------------------------------------------
-  // Get device location
+  // Get device location — FIXED (runs once)
   // ------------------------------------------------------------
   useEffect(() => {
     let mounted = true;
@@ -146,7 +203,7 @@ export default function MapScreen() {
     return () => {
       mounted = false;
     };
-  }, [reloadKey]);
+  }, []);
 
   // ------------------------------------------------------------
   // Initial camera
@@ -169,13 +226,13 @@ export default function MapScreen() {
   }, [location]);
 
   // ------------------------------------------------------------
-  // Recenter only
+  // Recenter
   // ------------------------------------------------------------
   const recenter = () => {
     if (mapRef.current && location) {
-      setQuery("");           // clear search bar
-      setSuggestions([]);     // close dropdown
-      Keyboard.dismiss();     // hide keyboard
+      setQuery("");
+      setSuggestions([]);
+      Keyboard.dismiss();
 
       mapRef.current.setCameraPosition({
         coordinates: {
@@ -187,14 +244,62 @@ export default function MapScreen() {
     }
   };
 
-  // ------------------------------------------------------------
-  // Close autocomplete + keyboard
-  // ------------------------------------------------------------
   const closeSearchUI = () => {
     Keyboard.dismiss();
     setSuggestions([]);
-    setQuery("");     // ALWAYS clear if user dismisses manually
+    setQuery("");
   };
+
+  const handleNavigate = () => {
+    const loc = placeDetails?.geometry?.location;
+    if (!loc) return;
+
+    const { lat, lng } = loc;
+    const label = encodeURIComponent(placeDetails.name || "Destination");
+
+    let url;
+    if (Platform.OS === "ios") {
+      url = `http://maps.apple.com/?daddr=${lat},${lng}&dirflg=d&q=${label}`;
+    } else {
+      url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+    }
+
+    Linking.openURL(url).catch((err) =>
+      console.log("Navigation error:", err)
+    );
+  };
+
+  // ------------------------------------------------------------
+  // Derived hero photo + distance
+  // ------------------------------------------------------------
+  const heroPhotoUrl = useMemo(() => {
+    const ref = placeDetails?.photos?.[0]?.photo_reference;
+    if (!ref) return null;
+
+    return (
+      `https://maps.googleapis.com/maps/api/place/photo` +
+      `?maxwidth=800&photo_reference=${ref}&key=${PLACES_KEY}`
+    );
+  }, [placeDetails, PLACES_KEY]);
+
+  const distanceText = useMemo(() => {
+    if (!location || !placeDetails?.geometry?.location) return null;
+
+    const { lat, lng } = placeDetails.geometry.location;
+    const d = getDistanceKm(location.latitude, location.longitude, lat, lng);
+    if (d == null) return null;
+
+    if (d < 1) {
+      return `${Math.round(d * 1000)} m`;
+    }
+    return `${d.toFixed(1)} km`;
+  }, [location, placeDetails]);
+
+  const openNow =
+    placeDetails?.opening_hours &&
+    typeof placeDetails.opening_hours.open_now === "boolean"
+      ? placeDetails.opening_hours.open_now
+      : null;
 
   // ------------------------------------------------------------
   // UI
@@ -204,7 +309,7 @@ export default function MapScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <Header mode="logo-title" title="Map" />
 
-      <View key={reloadKey} style={styles.mapContainer}>
+      <View style={styles.mapContainer}>
         {loading ? (
           <View style={styles.loading}>
             <ActivityIndicator size="large" color={theme.colors.primaryLight} />
@@ -216,7 +321,8 @@ export default function MapScreen() {
             cameraPosition={cameraForLocation}
             properties={{
               isMyLocationEnabled: true,
-              isTrafficEnabled: false
+              isTrafficEnabled: false,
+              isPoiEnabled: true
             }}
             uiSettings={{
               myLocationButtonEnabled: false,
@@ -224,19 +330,18 @@ export default function MapScreen() {
               mapToolbarEnabled: false,
               zoomControlsEnabled: false
             }}
+            onPress={handleMapPress}
           />
         )}
 
-        {/* Tap-Anywhere Overlay (above map, below search bar) */}
         {suggestions.length > 0 && (
           <Pressable style={styles.tapOverlay} onPress={closeSearchUI} />
         )}
 
-        {/* Search bar */}
         <View
           style={[
             styles.topRow,
-            { top: 20 + insets.top }
+            { top: 5 }
           ]}
         >
           <View style={styles.searchContainer}>
@@ -246,15 +351,6 @@ export default function MapScreen() {
               placeholder="Search places…"
               placeholderTextColor="#888"
               style={styles.searchInput}
-
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-              onTouchStart={() => {
-                // If already focused + tapped again → hide keyboard
-                if (searchFocused) {
-                  Keyboard.dismiss();
-                }
-              }}
             />
           </View>
 
@@ -266,7 +362,6 @@ export default function MapScreen() {
           </Pressable>
         </View>
 
-        {/* Autocomplete list */}
         {suggestions.length > 0 && (
           <View style={styles.suggestionsBox}>
             <FlatList
@@ -274,11 +369,9 @@ export default function MapScreen() {
               keyExtractor={(item) => item.place_id}
               renderItem={({ item }) => (
                 <Pressable
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    setSuggestions([]); // close dropdown immediately
-                    handleSelectPlace(item.place_id, item.description);
-                  }}
+                  onPress={() =>
+                    handleSelectPlace(item.place_id, item.description)
+                  }
                   style={styles.suggestionItem}
                 >
                   <Text style={styles.suggestionText}>
@@ -290,11 +383,10 @@ export default function MapScreen() {
           </View>
         )}
 
-        {/* Recenter button */}
         <Pressable
           style={[
             styles.recenterButton,
-            { bottom: 75 + insets.bottom }
+            { bottom: 55 + insets.bottom }
           ]}
           onPress={recenter}
         >
@@ -304,6 +396,22 @@ export default function MapScreen() {
             color={theme.colors.primary}
           />
         </Pressable>
+
+        {isCardVisible && placeDetails && (
+          <PlaceCard
+            google={placeDetails}
+            coffeeRider={null}            // or match with DB entry when ready
+            onClose={() => setIsCardVisible(false)}
+            onNavigate={handleNavigate}
+            onAddWaypoint={handleAddWaypoint}
+          />
+        )}
+
+        {detailsLoading && (
+          <View style={styles.detailsLoadingOverlay}>
+            <ActivityIndicator size="small" color={theme.colors.accent} />
+          </View>
+        )}
       </View>
     </View>
   );
@@ -325,7 +433,6 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
 
-  // Fullscreen tap overlay (to dismiss autocomplete)
   tapOverlay: {
     position: "absolute",
     top: 0,
@@ -335,7 +442,6 @@ const styles = StyleSheet.create({
     zIndex: 500
   },
 
-  // Search + filter
   topRow: {
     position: "absolute",
     left: 15,
@@ -374,7 +480,6 @@ const styles = StyleSheet.create({
     elevation: 4
   },
 
-  // Autocomplete box
   suggestionsBox: {
     position: "absolute",
     top: 95,
@@ -401,7 +506,6 @@ const styles = StyleSheet.create({
     color: "#333"
   },
 
-  // Recenter only
   recenterButton: {
     position: "absolute",
     right: 16,
@@ -417,5 +521,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
     zIndex: 500
-  }
+  },
+
 });

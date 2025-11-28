@@ -25,6 +25,12 @@ export const theme = {
 
     // Borders / separators
     border: "#22303C",
+
+    // Route drawing colours (MapScreen)
+    routeStart: "#D4A056",       // Start
+    routeWaypoint: "#7FC8F8",    // Waypoints
+    routeEnd: "#004E89",         // Destination
+  
   },
 
   spacing: {

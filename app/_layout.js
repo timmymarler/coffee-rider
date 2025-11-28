@@ -5,12 +5,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs, useRouter } from "expo-router";
 import { useContext, useEffect, useRef } from "react";
 import { Animated, TouchableOpacity } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-// ************ FLOATING TAB BAR ************
 function FloatingTabBar({ state }) {
   const router = useRouter();
   const { hidden } = useContext(TabBarContext);
-
+  const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -36,12 +37,12 @@ function FloatingTabBar({ state }) {
       style={{
         transform: [{ translateY }],
         position: "absolute",
-        bottom: 5,
         left: 15,
         right: 15,
+        bottom: insets.bottom,
         height: 40,
         backgroundColor: theme.colors.primaryExtraLight,
-        borderRadius: 40,
+        borderRadius: 20,
         flexDirection: "row",
         justifyContent: "space-around",
         alignItems: "center",
@@ -65,7 +66,7 @@ function FloatingTabBar({ state }) {
               flex: 1,
               alignItems: "center",
               justifyContent: "center",
-              paddingVertical: 5,
+              paddingVertical: 3,
             }}
           >
             <Ionicons
@@ -80,21 +81,22 @@ function FloatingTabBar({ state }) {
   );
 }
 
-// ************ ROUTER LAYOUT ************
 export default function Layout() {
   return (
-    <AuthProvider>
-      <TabBarProvider>
-        <Tabs
-          screenOptions={{ headerShown: false }}
-          tabBar={(props) => <FloatingTabBar {...props} />}
-        >
-          <Tabs.Screen name="map" />
-          <Tabs.Screen name="saved-routes" />
-          <Tabs.Screen name="add-cafe" />
-          <Tabs.Screen name="profile" />
-        </Tabs>
-      </TabBarProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <TabBarProvider>
+          <Tabs
+            screenOptions={{ headerShown: false }}
+            tabBar={(props) => <FloatingTabBar {...props} />}
+          >
+            <Tabs.Screen name="map" />
+            <Tabs.Screen name="saved-routes" />
+            <Tabs.Screen name="add-cafe" />
+            <Tabs.Screen name="profile" />
+          </Tabs>
+        </TabBarProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

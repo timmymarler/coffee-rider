@@ -1,26 +1,30 @@
 import { Header } from "@components/layout/Header";
+import PlaceCard from "@components/place/PlaceCard";
 import { theme } from "@config/theme";
+import { TabBarContext } from "@context/TabBarContext";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
-import { GoogleMaps } from "expo-maps";
-import { Stack } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  GoogleMaps,
+  Marker,
+  Polyline
+} from "expo-maps";
+import { Stack, useLocalSearchParams } from "expo-router";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Keyboard,
   Linking,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 
 // Debounce helper
 function debounce(fn, delay) {
@@ -56,15 +60,14 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-export default function MapScreen() {
-  const [reloadKey, setReloadKey] = useState(0);
 
-  // Force reload when returning to this tab
-  useFocusEffect(
-    useCallback(() => {
-      setReloadKey((k) => k + 1);
-    }, [])
-  );
+export default function MapScreen() {
+  const { route, mode } = useLocalSearchParams();
+  const savedRoute = route ? JSON.parse(route) : null;
+
+  const isRouteMode = !!savedRoute;
+  const isNavigateMode = mode === "navigate";
+  const isShowRouteMode = mode === "show";
 
   const [location, setLocation] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -81,6 +84,20 @@ export default function MapScreen() {
   const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
   const mapRef = useRef(null);
   const insets = useSafeAreaInsets();
+
+  // Tab bar visibility
+  const { hide, show } = useContext(TabBarContext);
+
+  // Tab visibility respects both card mode AND navigate mode
+  useEffect(() => {
+    if (isNavigateMode || isCardVisible) hide();
+    else show();
+  }, [isNavigateMode, isCardVisible, hide, show]);
+
+  useEffect(() => {
+    return () => show();
+  }, [show]);
+
 
   // ------------------------------------------------------------
   // Autocomplete
@@ -114,8 +131,13 @@ export default function MapScreen() {
     debouncedFetch(text);
   };
 
+  const handleAddWaypoint = () => {
+    console.log("Add waypoint not implemented yet");
+  };
+
+
   // ------------------------------------------------------------
-  // Fetch full place details (for card + centering)
+  // Fetch place details
   // ------------------------------------------------------------
   const openPlaceFromId = useCallback(
     async (placeId, descriptionOverride) => {
@@ -135,18 +157,14 @@ export default function MapScreen() {
 
         if (data.status !== "OK") {
           console.log("Place details error:", data.status);
-          setDetailsLoading(false);
           return;
         }
 
         const result = data.result;
         setPlaceDetails(result);
         setIsCardVisible(true);
-
-        // Fill the search bar with the name / description
         setQuery(descriptionOverride || result.name || "");
 
-        // Center the map
         const { lat, lng } = result.geometry.location;
         if (mapRef.current) {
           mapRef.current.setCameraPosition({
@@ -163,27 +181,58 @@ export default function MapScreen() {
     [PLACES_KEY]
   );
 
-  // ------------------------------------------------------------
-  // Handle selecting from autocomplete list
-  // ------------------------------------------------------------
   const handleSelectPlace = async (placeId, description) => {
     Keyboard.dismiss();
-    setSuggestions([]); // close dropdown
+    setSuggestions([]);
     await openPlaceFromId(placeId, description);
   };
 
+
   // ------------------------------------------------------------
-  // Handle tapping POIs on the map
+  // Map tap handler — DISABLED in route mode
   // ------------------------------------------------------------
-  const handleMapPress = async (e) => {
-    const native = e?.nativeEvent;
-    if (native?.placeId) {
-      // Treat map tap like selecting from list
+  const handleMapPress = async (event) => {
+    if (isRouteMode) return;
+
+    try {
       Keyboard.dismiss();
       setSuggestions([]);
-      await openPlaceFromId(native.placeId);
+
+      const coords = event?.coordinates;
+
+      if (!coords) return;
+
+      const { latitude, longitude } = coords;
+
+      if (mapRef.current) {
+        mapRef.current.setCameraPosition({
+          coordinates: { latitude, longitude },
+          zoom: 16
+        });
+      }
+
+      // Look for a nearby place from tap
+      const nearby =
+        `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
+        `?location=${latitude},${longitude}` +
+        `&radius=150&key=${PLACES_KEY}`;
+
+        //`https://maps.googleapis.com/maps/api/place/findplacefromtext/json` +
+        //`?query=prince` +
+        //`&key=${PLACES_KEY}`;
+
+      const res = await fetch(nearby);
+      const data = await res.json();
+
+      if (data.status === "OK" && data.results.length > 0) {
+        await openPlaceFromId(data.results[0].place_id, data.results[0].name);
+      }
+console.log("Tap at: " , data.results[0]);
+    } catch (err) {
+      console.log("Map tap error:", err);
     }
   };
+
 
   // ------------------------------------------------------------
   // Get device location
@@ -192,18 +241,13 @@ export default function MapScreen() {
     let mounted = true;
 
     (async () => {
-      console.log("🔍 Requesting location permissions…");
       const { status } = await Location.requestForegroundPermissionsAsync();
-      console.log("📍 Permission status:", status);
-
       if (status !== "granted") {
         if (mounted) setLoading(false);
         return;
       }
 
-      console.log("⏳ Getting current GPS position…");
       const current = await Location.getCurrentPositionAsync({});
-
       if (mounted) {
         setLocation({
           latitude: current.coords.latitude,
@@ -216,18 +260,23 @@ export default function MapScreen() {
     return () => {
       mounted = false;
     };
-  }, [reloadKey]);
+  }, []);
+
 
   // ------------------------------------------------------------
   // Initial camera
   // ------------------------------------------------------------
   const cameraForLocation = useMemo(() => {
+    if (savedRoute?.snappedCoords?.length) {
+      return {
+        coordinates: savedRoute.snappedCoords[0],
+        zoom: 12
+      };
+    }
+
     if (location) {
       return {
-        coordinates: {
-          latitude: location.latitude,
-          longitude: location.longitude
-        },
+        coordinates: location,
         zoom: 15
       };
     }
@@ -236,40 +285,35 @@ export default function MapScreen() {
       coordinates: { latitude: 51.5072, longitude: -0.1276 },
       zoom: 10
     };
-  }, [location]);
+  }, [location, savedRoute]);
+
 
   // ------------------------------------------------------------
-  // Recenter (keep card visible as per option A)
+  // Recenter: disabled in Navigate mode
   // ------------------------------------------------------------
   const recenter = () => {
+    if (isNavigateMode) return;
+
     if (mapRef.current && location) {
-      // Clear search + suggestions (we agreed this earlier)
       setQuery("");
       setSuggestions([]);
       Keyboard.dismiss();
 
       mapRef.current.setCameraPosition({
-        coordinates: {
-          latitude: location.latitude,
-          longitude: location.longitude
-        },
+        coordinates: location,
         zoom: 15
       });
     }
   };
 
-  // ------------------------------------------------------------
-  // Close autocomplete + keyboard (tap anywhere)
-  // ------------------------------------------------------------
+
   const closeSearchUI = () => {
     Keyboard.dismiss();
     setSuggestions([]);
     setQuery("");
   };
 
-  // ------------------------------------------------------------
-  // Navigate button handler
-  // ------------------------------------------------------------
+
   const handleNavigate = () => {
     const loc = placeDetails?.geometry?.location;
     if (!loc) return;
@@ -281,45 +325,46 @@ export default function MapScreen() {
     if (Platform.OS === "ios") {
       url = `http://maps.apple.com/?daddr=${lat},${lng}&dirflg=d&q=${label}`;
     } else {
-      url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+      url =
+        `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
     }
 
-    Linking.openURL(url).catch((err) =>
-      console.log("Navigation error:", err)
-    );
+    Linking.openURL(url).catch(console.log);
   };
 
+
   // ------------------------------------------------------------
-  // Derived hero photo + distance
+  // Polyline + markers for route mode
   // ------------------------------------------------------------
-  const heroPhotoUrl = useMemo(() => {
-    const ref = placeDetails?.photos?.[0]?.photo_reference;
-    if (!ref) return null;
+  const startPoint = savedRoute?.start;
+  const endPoint = savedRoute?.end;
+  const waypointPoints = savedRoute?.waypoints || [];
+  const polylineCoords = savedRoute?.snappedCoords || [];
 
-    return (
-      `https://maps.googleapis.com/maps/api/place/photo` +
-      `?maxwidth=800&photo_reference=${ref}&key=${PLACES_KEY}`
-    );
-  }, [placeDetails, PLACES_KEY]);
 
-  const distanceText = useMemo(() => {
-    if (!location || !placeDetails?.geometry?.location) return null;
+  useEffect(() => {
+    if (!isRouteMode) return;
+    if (!polylineCoords || polylineCoords.length === 0) return;
+    if (!mapRef.current) return;
 
-    const { lat, lng } = placeDetails.geometry.location;
-    const d = getDistanceKm(location.latitude, location.longitude, lat, lng);
-    if (d == null) return null;
+    // Fit camera once map is ready:
+    setTimeout(() => {
+      try {
+        mapRef.current.fitCoordinates(polylineCoords, {
+          edgePadding: {
+            top: 80,
+            bottom: 80,
+            left: 80,
+            right: 80
+          },
+          animated: true
+        });
+      } catch (err) {
+        console.log("fitCoordinates error:", err);
+      }
+    }, 400);
+  }, [isRouteMode, polylineCoords]);
 
-    if (d < 1) {
-      return `${Math.round(d * 1000)} m`;
-    }
-    return `${d.toFixed(1)} km`;
-  }, [location, placeDetails]);
-
-  const openNow =
-    placeDetails?.opening_hours &&
-    typeof placeDetails.opening_hours.open_now === "boolean"
-      ? placeDetails.opening_hours.open_now
-      : null;
 
   // ------------------------------------------------------------
   // UI
@@ -329,7 +374,7 @@ export default function MapScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <Header mode="logo-title" title="Map" />
 
-      <View key={reloadKey} style={styles.mapContainer}>
+      <View style={styles.mapContainer}>
         {loading ? (
           <View style={styles.loading}>
             <ActivityIndicator size="large" color={theme.colors.primaryLight} />
@@ -340,52 +385,82 @@ export default function MapScreen() {
             style={styles.map}
             cameraPosition={cameraForLocation}
             properties={{
-              isMyLocationEnabled: true,
+              isMyLocationEnabled: !isNavigateMode,
               isTrafficEnabled: false,
-              isPoiEnabled: true
+              isPoiEnabled: !isRouteMode
             }}
             uiSettings={{
               myLocationButtonEnabled: false,
               compassEnabled: false,
               mapToolbarEnabled: false,
-              zoomControlsEnabled: false
+              zoomControlsEnabled: false,
+              scaleBarEnabled: true
             }}
-            onPress={handleMapPress}
-          />
-        )}
-
-        {/* Tap-Anywhere Overlay (for autocomplete only) */}
-        {suggestions.length > 0 && (
-          <Pressable style={styles.tapOverlay} onPress={closeSearchUI} />
-        )}
-
-        {/* Search bar */}
-        <View
-          style={[
-            styles.topRow,
-            { top: 5 }
-          ]}
-        >
-          <View style={styles.searchContainer}>
-            <TextInput
-              value={query}
-              onChangeText={onChangeSearch}
-              placeholder="Search places…"
-              placeholderTextColor="#888"
-              style={styles.searchInput}
-            />
-          </View>
-
-          <Pressable
-            style={styles.filterButton}
-            onPress={() => console.log("Filter pressed")}
+            onMapClick={handleMapPress}
           >
-            <Ionicons name="filter" size={24} color="#333" />
-          </Pressable>
-        </View>
+            {/* Route Polyline */}
+            {isRouteMode && polylineCoords.length > 0 && (
+              <Polyline
+                coordinates={polylineCoords}
+                strokeColor={theme.colors.primaryExtraLight}
+                strokeWidth={5}
+              />
+            )}
 
-        {/* Autocomplete list */}
-        {suggestions.length > 0 && (
+            {/* Start Marker */}
+            {isRouteMode && startPoint && (
+              <Marker
+                coordinate={startPoint}
+                color={theme.colors.routeStart}
+              />
+            )}
+
+            {/* Waypoints */}
+            {isRouteMode &&
+              waypointPoints.map((wp, i) => (
+                <Marker
+                  key={`wp-${i}`}
+                  coordinate={wp}
+                  color={theme.colors.routeWaypoint}
+                />
+              ))}
+
+            {/* End Marker */}
+            {isRouteMode && endPoint && (
+              <Marker
+                coordinate={endPoint}
+                color={theme.colors.routeEnd}
+              />
+            )}
+          </GoogleMaps.View>
+        )}
+
+
+        {/* Search bar (hidden in navigate mode or if viewing a route in navigate mode) */}
+        {!isNavigateMode && !isRouteMode && (
+          <View style={[styles.topRow, { top: 5 }]}>
+            <View style={styles.searchContainer}>
+              <TextInput
+                value={query}
+                onChangeText={onChangeSearch}
+                placeholder="Search places…"
+                placeholderTextColor="#888"
+                style={styles.searchInput}
+              />
+            </View>
+
+            <Pressable
+              style={styles.filterButton}
+              onPress={() => console.log("Filter pressed")}
+            >
+              <Ionicons name="filter" size={24} color="#333" />
+            </Pressable>
+          </View>
+        )}
+
+
+        {/* Suggestions list */}
+        {!isNavigateMode && !isRouteMode && suggestions.length > 0 && (
           <View style={styles.suggestionsBox}>
             <FlatList
               data={suggestions}
@@ -406,86 +481,37 @@ export default function MapScreen() {
           </View>
         )}
 
-        {/* Recenter button (kept visible even when card is open) */}
-        <Pressable
-          style={[
-            styles.recenterButton,
-            { bottom: 55 + insets.bottom }
-          ]}
-          onPress={recenter}
-        >
-          <Ionicons
-            name="locate"
-            size={26}
-            color={theme.colors.primary}
-          />
-        </Pressable>
+        {/* Dim area to close suggestions */}
+        {!isNavigateMode && !isRouteMode && suggestions.length > 0 && (
+          <Pressable style={styles.tapOverlay} onPress={closeSearchUI} />
+        )}
 
-        {/* Place card bottom sheet */}
-        {isCardVisible && placeDetails && (
-          <View
+        {/* Recenter button (hidden in navigate mode) */}
+        {!isNavigateMode && (
+          <Pressable
             style={[
-              styles.placeCard,
-              { paddingBottom: 16 + insets.bottom }
+              styles.recenterButton,
+              { bottom: 55 + insets.bottom }
             ]}
+            onPress={recenter}
           >
-            {/* Fixed header row */}
-            <View style={styles.placeCardHeaderRow}>
-              <View style={styles.placeCardHandle} />
-              <Pressable hitSlop={12} onPress={() => setIsCardVisible(false)}>
-                <Ionicons
-                  name="close"
-                  size={22}
-                  color={theme.colors.textMuted}
-                />
-              </Pressable>
-            </View>
+            <Ionicons
+              name="locate"
+              size={26}
+              color={theme.colors.primary}
+            />
+          </Pressable>
+        )}
 
-            {/* Scroll content */}
-            <ScrollView
-              style={styles.placeScroll}
-              contentContainerStyle={{ paddingBottom: 30 }}
-              showsVerticalScrollIndicator={false}
-            >
-              {heroPhotoUrl && (
-                <Image
-                  source={{ uri: heroPhotoUrl }}
-                  style={styles.placeHero}
-                  resizeMode="cover"
-                />
-              )}
-
-              <View style={styles.placeContent}>
-                <Text style={styles.placeName} numberOfLines={1}>
-                  {placeDetails.name}
-                </Text>
-
-                <View style={styles.placeMetaRow}>
-                  {/* rating, open now, distance chips stay the same */}
-                </View>
-
-                <Text style={styles.placeAddress} numberOfLines={3}>
-                  {placeDetails.formatted_address}
-                </Text>
-              </View>
-
-              {/* Action buttons */}
-              <View style={styles.placeActionsRow}>
-                <Pressable style={styles.primaryButton} onPress={handleNavigate}>
-                  <Ionicons name="navigate" size={18} color={theme.colors.text} />
-                  <Text style={styles.primaryButtonText}>Navigate</Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.secondaryButton}
-                  onPress={() => console.log("Save")}
-                >
-                  <Ionicons name="bookmark" size={18} color={theme.colors.accent} />
-                  <Text style={styles.secondaryButtonText}>Save</Text>
-                </Pressable>
-              </View>
-            </ScrollView>
-          </View>
+        {/* Place-card (only allowed outside route mode) */}
+        {!isRouteMode && isCardVisible && placeDetails && (
+          <PlaceCard
+            google={placeDetails}
+            coffeeRider={null}
+            onClose={() => setIsCardVisible(false)}
+            onNavigate={handleNavigate}
+            onAddWaypoint={handleAddWaypoint}
+          />
         )}
 
         {detailsLoading && (
@@ -497,6 +523,7 @@ export default function MapScreen() {
     </View>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -514,7 +541,6 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
 
-  // Fullscreen tap overlay (to dismiss autocomplete)
   tapOverlay: {
     position: "absolute",
     top: 0,
@@ -524,7 +550,6 @@ const styles = StyleSheet.create({
     zIndex: 500
   },
 
-  // Search + filter
   topRow: {
     position: "absolute",
     left: 15,
@@ -563,7 +588,6 @@ const styles = StyleSheet.create({
     elevation: 4
   },
 
-  // Autocomplete box
   suggestionsBox: {
     position: "absolute",
     top: 95,
@@ -590,7 +614,6 @@ const styles = StyleSheet.create({
     color: "#333"
   },
 
-  // Recenter
   recenterButton: {
     position: "absolute",
     right: 16,
@@ -608,135 +631,13 @@ const styles = StyleSheet.create({
     zIndex: 500
   },
 
-  // Place card bottom sheet
-  placeCard: {
+  detailsLoadingOverlay: {
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 95,
-    backgroundColor: theme.colors.primaryLight,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    zIndex: 700,
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: -3 },
-    elevation: 12,
-    maxHeight: "65%",
-  },
-  placeCardHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8
-  },
-  placeCardHandle: {
-    alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: theme.colors.border,
-    marginLeft: "40%"
-  },
-  placeHero: {
-    width: "100%",
-    height: 150,
-    borderRadius: 14,
-    marginBottom: 12
-  },
-  placeContent: {
-    gap: 6,
-    marginBottom: 12
-  },
-  placeName: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: theme.colors.text
-  },
-  placeMetaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  metaChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "#1F2A33"
-  },
-  metaText: {
-    marginLeft: 4,
-    fontSize: 12,
-    color: theme.colors.textMuted
-  },
-  openDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4
-  },
-  placeAddress: {
-    fontSize: 13,
-    color: theme.colors.textMuted
-  },
-
-  placeScroll: {
-    maxHeight: "100%",
-  },
-
-  placeActionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10
-  },
-  primaryButton: {
-    flex: 1,
-    flexDirection: "row",
+    bottom: 120,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 10,
-    borderRadius: 999
-  },
-  primaryButtonText: {
-    marginLeft: 6,
-    color: theme.colors.text,
-    fontWeight: "600",
-    fontSize: 14
-  },
-  secondaryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: theme.colors.accent
-  },
-  secondaryButtonText: {
-    marginLeft: 6,
-    color: theme.colors.accent,
-    fontWeight: "500",
-    fontSize: 14
-  },
-
-  detailsLoadingOverlay: {
-    position: "absolute",
-    right: 24,
-    bottom: 150,
-    backgroundColor: "rgba(22,32,40,0.9)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    flexDirection: "row",
-    alignItems: "center",
-    zIndex: 800
+    zIndex: 700
   }
-
 });
