@@ -42,8 +42,6 @@ export default {
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
 
-    plugins: ["expo-maps"],
-    
     icon: `${brandFolder}/icon.png`,
     splash: {
       image: `${brandFolder}/splash.png`,

@@ -12,10 +12,13 @@ module.exports = function (api) {
             "@screens": "./core/screens",  // centralised screens
             "@firebaseLocal": "./core/firebase",
             "@assets": "./assets",
-            "@components": "./core/components",
+            "@components-ui": "./core/components/ui",
+            "@components": "./core/map/components",
             "@config": "./config",
             "@context": "./core/context",
-            "@lib": "./core/lib"
+            "@lib": "./core/lib",
+            "@themes": "./themes"
+
           },
           extensions: [".js", ".jsx", ".ts", ".tsx"]
         }

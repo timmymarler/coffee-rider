@@ -1,104 +1,101 @@
-import logo from "@assets/logo.png";
-import { PrimaryButton } from "@components/ui/Button";
-import { Input } from "@components/ui/Input";
-import { LinkText } from "@components/ui/Text";
-import { H1, H3 } from "@components/ui/Typography";
+// core/auth/login.js
+
+import { PrimaryButton } from "@components-ui/Button";
+import { Input } from "@components-ui/Input";
+import { H1, H3 } from "@components-ui/Typography";
 import { globalStyles } from "@config/globalStyles";
-import { theme } from "@config/theme";
 import { AuthContext } from "@context/AuthContext";
-import { loginWithEmail } from "@firebaseLocal/auth";
+import { getTheme } from "@themes";
 import { useRouter } from "expo-router";
 import { useContext, useState } from "react";
-import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
-
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function LoginScreen() {
+  const theme = getTheme();
   const router = useRouter();
-  const { user, loading: authLoading } = useContext(AuthContext);
+  const { login } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [localLoading, setLocalLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleLogin = async () => {
-    setLocalLoading(true);
-    setError("");
+  async function handleLogin() {
+    setErrorMsg(null);
+    setSubmitting(true);
 
     try {
-      await loginWithEmail(email, password);
-      router.replace("/map");
+      // Use AuthContext login(email, password) directly
+      await login(email.trim(), password);
+
+      // AuthContext will update user/profile via onAuthStateChanged.
+      // Then we can route to saved routes (or map, as you prefer).
+      router.replace("/saved-routes");
     } catch (err) {
-      setError(err.message);
+      console.error("Login error:", err);
+      setErrorMsg("Invalid email or password");
+    } finally {
+      setSubmitting(false);
     }
-
-    setLocalLoading(false);
-  };
-
-  if (authLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
   }
 
   return (
-    <View style={styles.container}>
-      <Image source={logo} style={globalStyles.logo} />
-
-      <H1 style={{ textAlign: "center", color: theme.colors.primaryLight }}>
-        Coffee Rider
-      </H1>
-
-      <H3 style={{ textAlign: "center", color: theme.colors.textMuted, marginBottom: 24 }}>
-        Sign in to continue
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: theme.colors.background }
+      ]}
+    >
+      <H1 style={{ color: theme.colors.text }}>Welcome Back</H1>
+      <H3 style={{ color: theme.colors.textMuted, marginBottom: 20 }}>
+        Log in to continue
       </H3>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <Input
-        placeholder="Email"
+        label="Email"
         value={email}
         onChangeText={setEmail}
+        placeholder="you@example.com"
+        autoCapitalize="none"
+        keyboardType="email-address"
       />
 
       <Input
-        placeholder="Password"
+        label="Password"
         value={password}
         onChangeText={setPassword}
+        placeholder="••••••••"
         secureTextEntry
       />
 
+      {errorMsg && (
+        <Text style={{ color: theme.colors.danger, marginTop: 10 }}>
+          {errorMsg}
+        </Text>
+      )}
+
       <PrimaryButton
-        title="Login"
+        label={submitting ? "Logging in..." : "Log In"}
         onPress={handleLogin}
-        loading={localLoading}
+        disabled={submitting}
+        style={{ marginTop: 25 }}
       />
 
-      <LinkText onPress={() => router.push("/auth/register")}>
-        Create an account
-      </LinkText>
-
+      <TouchableOpacity
+        onPress={() => router.push("/auth/register")}
+        style={{ marginTop: 20 }}
+      >
+        <Text style={{ color: theme.colors.primary }}>
+          Need an account? Register
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.background,
-  },
   container: {
-    flex: 1,
-    padding: 24,
-    justifyContent: "center",
-    backgroundColor: theme.colors.background,
+    ...globalStyles.screenContainer,
+    paddingTop: 80,
   },
-  error: {
-    color: theme.colors.danger,
-    marginBottom: 12,
-    textAlign: "center",
-  }
 });

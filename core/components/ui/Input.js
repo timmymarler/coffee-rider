@@ -1,42 +1,54 @@
-import { theme } from "@config/theme";
-import { StyleSheet, TextInput, View } from "react-native";
+// core/components/ui/Input.js
+
+import { getTheme } from "@themes";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 
 export function Input({
+  label,
   value,
   onChangeText,
   placeholder,
   secureTextEntry,
-  style,
-  inputStyle,
-  ...props
+  autoCapitalize = "none",
 }) {
+  const theme = getTheme();
+
   return (
-    <View style={[styles.container, style]}>
+    <View style={styles(theme).wrapper}>
+      {label && <Text style={styles(theme).label}>{label}</Text>}
+
       <TextInput
-        style={[styles.input, inputStyle]}
-        placeholder={placeholder}
-        placeholderTextColor={theme.colors.placeholder}
         value={value}
         onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={theme.colors.inputPlaceholder}
         secureTextEntry={secureTextEntry}
-        autoCapitalize="none"
-        {...props}
+        autoCapitalize={autoCapitalize}
+        style={styles(theme).input}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: theme.spacing.md,
-  },
-  input: {
-    backgroundColor: theme.colors.surface,
-    color: theme.colors.text,
-    padding: 14,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.placeholder,
-    fontSize: 16,
-  },
-});
+const styles = (theme) =>
+  StyleSheet.create({
+    wrapper: {
+      marginBottom: 16,
+    },
+    label: {
+      marginBottom: 6,
+      fontSize: 14,
+      color: theme.colors.text,
+      fontWeight: "600",
+    },
+    input: {
+      height: 48,
+      backgroundColor: theme.colors.inputBackground,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.inputBorder,
+      paddingHorizontal: 14,
+      fontSize: 15,
+      color: theme.colors.inputText,
+    },
+  });

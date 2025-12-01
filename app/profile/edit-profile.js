@@ -1,150 +1,120 @@
-import { theme } from "@/config/theme";
+import { useRouter } from "expo-router";
+import { useContext, useEffect, useState } from "react";
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+
+import { useTheme } from "@/core/context/ThemeContext";
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
-import { useRouter } from "expo-router";
-import { doc, updateDoc } from "firebase/firestore";
-import { useContext, useState } from "react";
-import {
-    ActivityIndicator,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from "react-native";
+
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 
 export default function EditProfileScreen() {
-  const { user, profile, loading } = useContext(AuthContext);
+  const theme = useTheme();
   const router = useRouter();
+  const { user } = useContext(AuthContext);
 
-  const [displayName, setDisplayName] = useState(
-    profile?.displayName || user?.email || ""
-  );
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  if (loading || !user) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={theme.colors.accent} />
-      </View>
-    );
-  }
+  // Load user profile
+  useEffect(() => {
+    async function load() {
+      if (!user) return;
 
-  async function handleSave() {
-    if (!displayName.trim()) {
-      setError("Display name cannot be empty.");
-      return;
+      const ref = doc(db, "users", user.uid);
+      const snap = await getDoc(ref);
+
+      if (snap.exists()) {
+        const data = snap.data();
+        setDisplayName(data.displayName || "");
+      }
     }
 
-    setError("");
-    setSaving(true);
+    load();
+  }, [user]);
+
+  async function saveProfile() {
+    if (!user) return;
+
+    setLoading(true);
 
     try {
-      await updateDoc(doc(db, "users", user.uid), {
-        displayName: displayName.trim(),
-      });
+      const ref = doc(db, "users", user.uid);
+      await updateDoc(ref, { displayName });
 
-      // For now, just go back. ProfileScreen will pick it up next refresh / session.
       router.back();
     } catch (err) {
-      console.error("Failed to update display name:", err);
-      setError("Failed to save changes. Please try again.");
+      console.error("Error saving profile:", err);
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Edit Profile</Text>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <Text style={[styles.label, { color: theme.textPrimary }]}>
+        Display Name
+      </Text>
 
-      <Text style={styles.label}>Display name</Text>
       <TextInput
         value={displayName}
         onChangeText={setDisplayName}
-        style={styles.input}
-        placeholder="How other riders will see you"
-        placeholderTextColor={theme.colors.placeholder}
+        placeholder="Enter your name"
+        placeholderTextColor={theme.textMuted}
+        style={[
+          styles.input,
+          {
+            backgroundColor: theme.cardBackground,
+            color: theme.textPrimary,
+            borderColor: theme.cardBorder,
+          },
+        ]}
       />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
       <TouchableOpacity
-        style={[styles.button, saving && { opacity: 0.7 }]}
-        onPress={handleSave}
-        disabled={saving}
+        onPress={saveProfile}
+        disabled={loading}
+        style={[
+          styles.saveButton,
+          { backgroundColor: theme.buttonPrimary, shadowColor: theme.shadow },
+        ]}
       >
-        {saving ? (
-          <ActivityIndicator color={theme.colors.text} />
-        ) : (
-          <Text style={styles.buttonText}>Save changes</Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => router.back()} style={styles.cancel}>
-        <Text style={styles.cancelText}>Cancel</Text>
+        <Text style={{ color: theme.buttonText, fontWeight: "600" }}>
+          {loading ? "Saving…" : "Save"}
+        </Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
-    paddingHorizontal: 20,
-    paddingTop: 60,
+    padding: 20,
   },
-  title: {
-    color: theme.colors.text,
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 24,
-  },
+
   label: {
-    color: theme.colors.text,
-    fontSize: 14,
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: theme.colors.surface,
-    color: theme.colors.text,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    marginBottom: 10,
-  },
-  error: {
-    color: theme.colors.danger,
-    marginBottom: 10,
-  },
-  button: {
-    backgroundColor: theme.colors.primaryLight,
-    paddingVertical: 12,
-    borderRadius: 10,
-    marginTop: 10,
-  },
-  buttonText: {
-    color: theme.colors.text,
     fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
+    marginBottom: 8,
   },
-  cancel: {
-    marginTop: 16,
+
+  input: {
+    width: "100%",
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 10,
+    fontSize: 16,
+    marginBottom: 20,
   },
-  cancelText: {
-    color: theme.colors.textMuted,
-    textAlign: "center",
-    fontSize: 15,
+
+  saveButton: {
+    marginTop: 10,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
 });

@@ -1,47 +1,45 @@
-import { theme } from "@config/theme";
+// core/components/ui/Button.js
+
+import { getTheme } from "@themes";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity } from "react-native";
 
-export function PrimaryButton({ title, onPress, loading, disabled, style, textStyle }) {
-  const isDisabled = disabled || loading;
+export function PrimaryButton({ label, onPress, loading, disabled, style }) {
+  const theme = getTheme();
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      disabled={isDisabled}
+      disabled={loading || disabled}
       style={[
-        styles.button,
-        isDisabled && styles.buttonDisabled,
-        style
+        styles(theme).button,
+        disabled ? styles(theme).disabled : null,
+        style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={theme.colors.text} />
+        <ActivityIndicator color={theme.colors.buttonText} />
       ) : (
-        <Text style={[styles.buttonText, textStyle]}>{title}</Text>
+        <Text style={styles(theme).label}>{label}</Text>
       )}
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
-  button: {
-    backgroundColor: theme.colors.primary,
-    padding: 16,
-    borderRadius: theme.radius.md,
-    alignItems: "center",
-    marginTop: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: theme.colors.text,       // 👈 now centrally defined
-    fontWeight: "700",
-    fontSize: 16,
-  },
-});
+const styles = (theme) =>
+  StyleSheet.create({
+    button: {
+      backgroundColor: theme.colors.primary,
+      paddingVertical: 14,
+      borderRadius: 10,
+      alignItems: "center",
+    },
+    label: {
+      color: "#FFFFFF",
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    disabled: {
+      backgroundColor: theme.colors.buttonBackgroundDisabled,
+      opacity: 0.7,
+    },
+  });

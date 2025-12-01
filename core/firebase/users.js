@@ -1,16 +1,21 @@
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "../../config/firebase";
+// core/firebase/users.js
 
-export async function ensureUserDocument(uid, data = {}) {
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { auth, db } from "../../config/firebase";
+
+export async function ensureUserDocument(uid, authUser = null) {
   const ref = doc(db, "users", uid);
   const snap = await getDoc(ref);
 
   if (!snap.exists()) {
+    const fallbackUser = authUser || auth.currentUser;
+
     await setDoc(ref, {
+      email: fallbackUser?.email || "",
+      displayName: fallbackUser?.displayName || "",
       role: "user",
       subscriptionStatus: "free",
       createdAt: new Date().toISOString(),
-      ...data
     });
   }
 }
