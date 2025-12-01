@@ -18,6 +18,7 @@ export function useMapData() {
   });
 
   const mapRef = useRef(null);
+  const [currentLocation, setCurrentLocation] = useState(null);
 
   // ----------------------------------------
   // CAFÉ + GOOGLE STATE
@@ -25,6 +26,49 @@ export function useMapData() {
   const [cafes, setCafes] = useState([]);
   const [googlePlaces, setGooglePlaces] = useState([]);
   const [selectedPlace, setSelectedPlace] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          console.log("Location permission denied");
+          return;
+        }
+
+        const loc = await Location.getCurrentPositionAsync({});
+        setCurrentLocation({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+      } catch (err) {
+        console.log("Location error:", err);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    let watcher = null;
+
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      watcher = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, distanceInterval: 10 },
+        (loc) => {
+          setCurrentLocation({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+        }
+      );
+    })();
+
+    return () => {
+      if (watcher) watcher.remove();
+    };
+  }, []);
 
   // ----------------------------------------
   // LOAD CR CAFÉS
@@ -133,5 +177,6 @@ export function useMapData() {
     handleMapPress,
     handlePoiPress,
     recenter,
+    currentLocation,
   };
 }

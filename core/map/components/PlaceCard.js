@@ -1,6 +1,8 @@
+import { AuthContext } from "@context/AuthContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { submitCRRating } from "@lib/ratings";
 import { getTheme } from "@themes";
-import { useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -11,10 +13,8 @@ import {
   View,
 } from "react-native";
 
-// If you have AuthContext available, uncomment this:
-// import { AuthContext } from "@/context/AuthContext";
-
-const screenWidth = Dimensions.get("window").width;
+// Get both width and height so we can cap card height
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 export default function PlaceCard({
   place,
@@ -26,8 +26,8 @@ export default function PlaceCard({
   const theme = getTheme();
   const styles = createStyles(theme);
 
-  // If AuthContext exists, swap null → useContext(AuthContext)
-  const user = null;
+  // CORRECT: destructure user from the AuthContext
+  const { user } = useContext(AuthContext);
 
   const [photoIndex, setPhotoIndex] = useState(0);
   const [commentText, setCommentText] = useState("");
@@ -35,13 +35,23 @@ export default function PlaceCard({
   const photos = useMemo(() => {
     return [
       ...(Array.isArray(place.photos) ? place.photos : []),
-      ...(Array.isArray(place.googlePhotoUrls) ? place.googlePhotoUrls : []),
+      ...(Array.isArray(place.googlePhotoUrls)
+        ? place.googlePhotoUrls
+        : []),
     ].filter(Boolean);
   }, [place]);
 
-  // Distance
+  // Distance calculation
   const distanceKm = useMemo(() => {
-    if (!userLocation || !place.latitude || !place.longitude) return null;
+    if (
+      !userLocation ||
+      typeof userLocation.latitude !== "number" ||
+      typeof userLocation.longitude !== "number" ||
+      typeof place.latitude !== "number" ||
+      typeof place.longitude !== "number"
+    ) {
+      return null;
+    }
 
     const toRad = (v) => (v * Math.PI) / 180;
     const R = 6371;
@@ -53,35 +63,98 @@ export default function PlaceCard({
 
     const a =
       Math.sin(dLat / 2) ** 2 +
-      Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+      Math.sin(dLng / 2) ** 2 *
+        Math.cos(lat1) *
+        Math.cos(lat2);
 
-    return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }, [userLocation, place]);
 
-  // ----- CR RATING PLACEHOLDERS -----
+  const distanceMiles = distanceKm
+    ? (distanceKm * 0.621371).toFixed(1)
+    : null;
+
+  // ----- CR RATING LOGIC -----
   const crAverage = place.crRatings?.average || null;
   const crCount = place.crRatings?.count || 0;
-  const userRating = user ? place.crRatings?.users?.[user.uid]?.rating : null;
-  const comments = place.crRatings?.comments || []; // array of { userName, rating, text }
+  const comments = place.crRatings?.comments || [];
 
-  // Render muted or full-colour CR stars
-  const renderStars = (value, muted = false) => {
-    const stars = [];
-    for (let i = 1; i <= 5; i++) {
-      stars.push(
+  // Interactive user rating (initialises from Firestore if exists)
+  const [userRating, setUserRating] = useState(
+    user && place.crRatings?.users?.[user.uid]?.rating
+      ? place.crRatings.users[user.uid].rating
+      : 0
+  );
+ 
+const renderCombinedInteractiveStars = (yourValue, averageValue, onChange) => {
+  const stars = [];
+
+  for (let i = 1; i <= 5; i++) {
+    let iconName = "star-outline";
+    let iconColor = theme.colors.subtleText;
+
+    // Your rating (light)
+    if (i <= yourValue) {
+      iconName = "star";
+      iconColor = theme.colors.primaryLight;
+    }
+    // CR average (dark)
+    else if (i <= averageValue) {
+      iconName = "star";
+      iconColor = theme.colors.primary;
+    }
+
+    stars.push(
+      <Pressable
+        key={i}
+        onPress={() => {
+          if (!user || user.isAnonymous) return; // permissions
+          onChange(i);
+        }}
+        style={{ padding: 1 }}
+      >
         <MaterialCommunityIcons
-          key={i}
-          name={i <= value ? "star" : "star-outline"}
-          size={18}
-          color={muted ? theme.colors.subtleText : theme.colors.primary}
+          name={iconName}
+          size={20}
+          color={iconColor}
           style={{ marginRight: 2 }}
         />
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      {stars}
+    </View>
+  );
+};
+
+  
+  // Render Price Range
+  const renderPriceRange = (value) => {
+    const max = 4; // £ to ££££
+    const symbols = [];
+
+    for (let i = 1; i <= max; i++) {
+      symbols.push(
+        <Text
+          key={i}
+          style={{
+            fontSize: 20,
+            fontWeight: "600",
+            marginRight: 4,
+            color: i <= value ? theme.colors.primaryLight : theme.colors.primary,
+          }}
+        >
+          £
+        </Text>
       );
     }
-    return <View style={{ flexDirection: "row" }}>{stars}</View>;
-  };
 
-  // Amenity rendering util
+    return <View style={{ flexDirection: "row", marginTop: 8 }}>{symbols}</View>;
+  };
+ 
   const amenityIcon = (enabled, icon, type = "mc") => {
     const IconSet = type === "ion" ? Ionicons : MaterialCommunityIcons;
     return (
@@ -96,12 +169,12 @@ export default function PlaceCard({
 
   return (
     <View style={styles.container}>
-      {/* Close button */}
+      {/* Close */}
       <Pressable onPress={onClose} style={styles.closeButton}>
         <Ionicons name="close" size={22} color="#fff" />
       </Pressable>
 
-      {/* Photo carousel */}
+      {/* Photo Carousel */}
       <View style={styles.photoContainer}>
         <ScrollView
           horizontal
@@ -127,7 +200,6 @@ export default function PlaceCard({
           ))}
         </ScrollView>
 
-        {/* Dot indicator */}
         <View style={styles.dots}>
           {photos.map((_, idx) => (
             <View
@@ -140,23 +212,37 @@ export default function PlaceCard({
           ))}
         </View>
       </View>
-
-      {/* Info */}
-      <View style={styles.info}>
+      <View>
         <Text style={styles.title}>{place.title}</Text>
-
+      </View>
+      {/* SCROLLABLE INFO */}
+      <ScrollView
+        style={styles.info}
+        contentContainerStyle={{ paddingBottom: 120 }}
+      >
+      <View>
         {place.address && (
           <Text style={styles.address}>{place.address}</Text>
         )}
-
-        {/* Google Rating + Badge */}
+      </View>
+      <View>
+        {/* Distance */}
+        {distanceMiles && (
+          <Text style={styles.distance}>
+            {distanceMiles} miles away (straight line distance)
+          </Text>
+        )}
+      </View>
+        <View style={{ marginTop: 12 }}>
+          <Text style={styles.crLabel}>Ratings</Text>
+        </View>
+        {/* GOOGLE RATING */}
         {place.rating && (
           <View style={styles.ratingRow}>
             <Text style={styles.ratingText}>
               ⭐ {place.rating.toFixed(1)} ({place.userRatingsTotal || 0})
             </Text>
-
-            {place.source === "google" && (
+            {place.rating && (
               <MaterialCommunityIcons
                 name="google"
                 size={18}
@@ -167,67 +253,62 @@ export default function PlaceCard({
           </View>
         )}
 
-        {/* ----- CR AVERAGE RATING ----- */}
-        {crAverage != null && (
-          <View style={{ marginTop: 12 }}>
-            <Text style={styles.crLabel}>Coffee Rider Rating</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
-              {renderStars(crAverage, true)}
-              <Text style={styles.crCountText}>
-                {crAverage.toFixed(1)} ({crCount})
-              </Text>
+        {/* CR AVERAGE */}
+          <View style={{ marginTop: 1 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginTop: 4,
+              }}
+            >
+            {renderCombinedInteractiveStars(userRating, crAverage, setUserRating)}
+            <Text style={styles.crCountText}>
+              {crAverage?.toFixed(1)} ({crCount})
+            </Text>
             </View>
           </View>
-        )}
-
-        {/* ----- USER RATING ----- */}
-        {user && (
-          <View style={{ marginTop: 12 }}>
-            <Text style={styles.crLabel}>Your Rating</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
-              {renderStars(userRating || 0, false)}
-            </View>
-          </View>
-        )}
+        
 
         {/* Price */}
-        {place.priceRange && (
-          <Text style={styles.price}>Price: {place.priceRange}</Text>
-        )}
 
-        {/* Distance */}
-        {distanceKm && (
-          <Text style={styles.distance}>{distanceKm} km away</Text>
+        {place.priceRange != null && (
+        <View style={{ marginTop: 12 }}>
+          <Text style={styles.crLabel}>Price Range</Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginTop: 1,
+              }}
+            >
+            {place.priceLevel && (
+              <View style={{ marginTop: 4 }}>
+                {renderPriceRange(place.priceLevel)}
+              </View>
+            )}
+            </View>
+          </View>
         )}
 
         {/* Amenities */}
-        <View style={styles.amenitiesRow}>
-          {amenityIcon(place.amenities?.bikes, "motorbike")}
-          {amenityIcon(place.amenities?.scooters, "scooter")}
-          {amenityIcon(place.amenities?.cyclists, "bicycle", "ion")}
-          {amenityIcon(place.amenities?.cars, "car", "ion")}
-          {amenityIcon(place.amenities?.pets, "dog")}
-          {amenityIcon(place.amenities?.disability, "wheelchair-accessibility")}
+        <View style={{ marginTop: 12 }}>
+          <Text style={styles.crLabel}>Facilities</Text>
+          <View style={styles.amenitiesRow}>
+            {amenityIcon(place.amenities?.bikes, "motorbike")}
+            {amenityIcon(place.amenities?.scooters, "moped")}
+            {amenityIcon(place.amenities?.cyclists, "bike")}
+            {amenityIcon(place.amenities?.cars, "car-side")}
+            {amenityIcon(place.amenities?.evcharger, "power-plug")}
+            {amenityIcon(place.amenities?.pets, "dog-side")}
+            {amenityIcon(
+              place.amenities?.disability,
+              "wheelchair-accessibility"
+            )}
+          </View>
         </View>
 
-        {/* ----- CR COMMENTS LIST ----- */}
-        {comments.length > 0 && (
-          <View style={{ marginTop: 18 }}>
-            <Text style={styles.crLabel}>Coffee Rider Reviews</Text>
-
-            {comments.map((c, i) => (
-              <View key={i} style={styles.commentCard}>
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  {renderStars(c.rating, false)}
-                </View>
-                <Text style={styles.commentUser}>{c.userName}</Text>
-                <Text style={styles.commentText}>{c.text}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* ----- ADD COMMENT (LOGGED IN ONLY) ----- */}
+        {/* ADD COMMENT */}
         {user && (
           <View style={styles.commentInputBlock}>
             <Text style={styles.crLabel}>Add a Comment</Text>
@@ -241,22 +322,57 @@ export default function PlaceCard({
               multiline
             />
 
-            <Pressable style={styles.submitButton}>
+            <Pressable
+              style={styles.submitButton}
+              onPress={async () => {
+                if (!user || user.isAnonymous) return;
+
+                try {
+                  const displayName =
+                    user.displayName ??
+                    user.email?.split("@")[0] ??
+                    "Unknown Rider";
+
+                  const updated = await submitCRRating(
+                    place.cafeId,
+                    user.uid,
+                    displayName,
+                    userRating || 0,
+                    commentText.trim()
+                  );
+
+                  place.crRatings = updated;
+                  setUserRating(updated.users[user.uid].rating);
+
+                  setCommentText("");
+                } catch (err) {
+                  console.error("CR rating submit error:", err);
+                }
+              }}
+            >
               <Text style={styles.submitText}>Submit</Text>
             </Pressable>
           </View>
         )}
-      </View>
+      </ScrollView>
 
-      {/* Action buttons */}
+      {/* FOOTER BUTTONS */}
       <View style={styles.actionsRow}>
         <Pressable style={styles.actionButton} onPress={onNavigate}>
-          <Ionicons name="navigate" size={20} color={theme.colors.primaryLight} />
+          <Ionicons
+            name="navigate"
+            size={20}
+            color={theme.colors.primaryLight}
+          />
           <Text style={styles.actionText}>Navigate</Text>
         </Pressable>
 
         <Pressable style={styles.actionButton} onPress={onRoute}>
-          <MaterialCommunityIcons name="map-marker-path" size={20} color={theme.colors.primaryLight} />
+          <MaterialCommunityIcons
+            name="map-marker-path"
+            size={20}
+            color={theme.colors.primaryLight}
+          />
           <Text style={styles.actionText}>Route</Text>
         </Pressable>
       </View>
@@ -276,6 +392,8 @@ function createStyles(theme) {
       overflow: "hidden",
       zIndex: 999,
       elevation: 999,
+      // Cap the card height so the top stays on-screen
+      maxHeight: screenHeight * 0.7,
     },
 
     closeButton: {
@@ -359,13 +477,13 @@ function createStyles(theme) {
     price: {
       marginTop: 6,
       fontSize: 14,
-      color: theme.colors.text,
+      color: theme.colors.primaryLight,
     },
 
     distance: {
       marginTop: 4,
       fontSize: 14,
-      color: theme.colors.text,
+      color: theme.colors.primaryLight,
     },
 
     amenitiesRow: {
@@ -376,7 +494,7 @@ function createStyles(theme) {
 
     amenityIcon: {
       marginRight: 14,
-      color: theme.colors.accentDark,
+      color: theme.colors.primaryLight,
     },
 
     amenityDisabled: {
@@ -386,7 +504,7 @@ function createStyles(theme) {
     crLabel: {
       fontSize: 15,
       fontWeight: "600",
-      color: theme.colors.text,
+      color: theme.colors.accentDark,
     },
 
     crCountText: {

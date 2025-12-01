@@ -59,6 +59,25 @@ export function mergeCafeAndGoogle(cafe, google, googlePhotoUrls) {
         offRoadParking: !!cafe.offRoadParking,
       }
     : null;
+// ----- Coffee Rider Ratings -----
+const crRatings = cafe?.crRatings
+  ? {
+      average: cafe.crRatings.average || null,
+      count: cafe.crRatings.count || 0,
+      users: cafe.crRatings.users || {},
+      comments: cafe.crRatings.comments || [],
+    }
+  : null;
+
+// ----- Hours (CR first, fallback to Google) -----
+const hours = cafe?.hours
+  ? cafe.hours
+  : google?.opening_hours
+  ? {
+      open_now: google.opening_hours.open_now,
+      weekday_text: google.opening_hours.weekday_text || [],
+    }
+  : null;
 
   return {
     latitude: lat,
@@ -86,6 +105,10 @@ export function mergeCafeAndGoogle(cafe, google, googlePhotoUrls) {
 
     amenities,
     source: cafe && google ? "merged" : cafe ? "cafe" : "google",
+
+    crRatings,
+    hours,
+
   };
 
 }

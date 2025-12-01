@@ -30,6 +30,7 @@ export default function MapScreenRN() {
     handleMapPress,
     handlePoiPress,
     recenter,
+    currentLocation,
   } = useMapData();
 
   // ----------------------------
@@ -99,12 +100,13 @@ export default function MapScreenRN() {
       {/* PLACE CARD */}
 
 
-{selectedPlace && (
-  <PlaceCard
-    place={selectedPlace}
-    onClose={() => setSelectedPlace(null)}
-  />
-)}
+      {selectedPlace && (
+        <PlaceCard
+          place={selectedPlace}
+          onClose={() => setSelectedPlace(null)}
+          userLocation={currentLocation}   
+        />
+      )}
 
     </View>
   );
