@@ -14,6 +14,7 @@ import {
   ensureUserDocument,
   getUserProfile
 } from "@firebaseLocal/users";
+import { getCapabilities } from "@roles/getCapabilities";
 
 export const AuthContext = createContext(null);
 
@@ -83,6 +84,12 @@ export default function AuthProvider({ children }) {
     return () => unsub();
   }, []);
 
+  // ----------------------------------------
+  // ROLE + CAPABILITIES
+  // ----------------------------------------
+  const role = profile?.role || "guest";
+  const capabilities = getCapabilities(role);
+
   const value = {
     user,
     profile,
@@ -90,7 +97,7 @@ export default function AuthProvider({ children }) {
     login,
     logout,
     register,
-    refreshProfile, // ← NEW
+    refreshProfile,
   };
 
   return (
