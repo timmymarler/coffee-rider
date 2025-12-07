@@ -2,8 +2,6 @@
 
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
-import { pickImageSquare } from "@lib/imagePicker";
-import { uploadImageAsync } from "@lib/storage";
 import { getTheme } from "@themes";
 import { useRouter } from "expo-router";
 import { doc, updateDoc } from "firebase/firestore";
@@ -64,34 +62,8 @@ export default function ProfileScreen() {
   // Upload profile photo
   // ----------------------------
   async function handlePhotoUpload() {
-    if (!user) return;
-
-    try {
-      const imageUri = await pickImageSquare();
-      if (!imageUri) return;
-
-      setUploading(true);
-console.log("IMAGE URI:", imageUri);
-
-      const downloadURL = await uploadImageAsync(
-        imageUri,
-        `profilePhotos/${user.uid}/avatar.jpg`
-      );
-console.log("IMAGE URI:", getDownloadURL);
-console.log(`profilePhotos/${user.uid}/avatar.jpg`);
-
-      await updateDoc(doc(db, "users", user.uid), {
-        photoURL: downloadURL,
-        updatedAt: Date.now(),
-      });
-
-      await refreshProfile();
-
-      setUploading(false);
-    } catch (err) {
-      console.error("Profile upload error:", err);
-      setUploading(false);
-    }
+    console.log("Profile photo upload temporarily disabled.");
+    return;
   }
 
   // ----------------------------
