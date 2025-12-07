@@ -65,7 +65,7 @@ export default {
         apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
         authDomain: "coffee-rider-bea88.firebaseapp.com",
         projectId: "coffee-rider-bea88",
-        storageBucket: "coffee-rider-bea88.firebasestorage.app",
+        storageBucket: "coffee-rider-bea88.appspot.com",
         messagingSenderId: "1001945286149",
         appId: "1:1001945286149:web:93cae68a7354a0dd1e7e6c"
       }
@@ -79,8 +79,11 @@ export default {
       package: ANDROID_PACKAGE[APP_NAME],
       permissions: [
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE"
       ],
+
       config: {
         googleMaps: {
           apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY

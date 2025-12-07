@@ -71,11 +71,14 @@ export default function ProfileScreen() {
       if (!imageUri) return;
 
       setUploading(true);
+console.log("IMAGE URI:", imageUri);
 
       const downloadURL = await uploadImageAsync(
         imageUri,
-        `profilePhotos/${user.uid}.jpg`
+        `profilePhotos/${user.uid}/avatar.jpg`
       );
+console.log("IMAGE URI:", getDownloadURL);
+console.log(`profilePhotos/${user.uid}/avatar.jpg`);
 
       await updateDoc(doc(db, "users", user.uid), {
         photoURL: downloadURL,

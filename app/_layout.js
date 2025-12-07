@@ -32,7 +32,6 @@ function FloatingTabBar({ state }) {
   const tabs = [
     { name: "map", icon: "map" },
     { name: "saved-routes", icon: "git-branch" },
-    { name: "add-cafe", icon: "cafe" },
     { name: "profile", icon: "person" },
   ];
 
@@ -96,7 +95,6 @@ export default function Layout() {
           >
             <Tabs.Screen name="map" />
             <Tabs.Screen name="saved-routes" />
-            <Tabs.Screen name="add-cafe" />
             <Tabs.Screen name="profile" />
           </Tabs>
         </TabBarProvider>
