@@ -1,4 +1,5 @@
 import { AuthContext } from "@context/AuthContext";
+import { MaterialIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
@@ -19,8 +20,55 @@ const GOOGLE_POI_TYPES = [
   "coffee_shop",
   "bakery",
   "restaurant",
-
 ];
+const POI_ICON_MAP = {
+  cafe: "coffee",
+  coffee_shop: "coffee",
+  bakery: "bakery-dining",
+
+  restaurant: "restaurant",
+  fast_food: "fastfood",
+
+  bar: "local-bar",
+  pub: "local-bar",
+
+  gas_station: "local-gas-station",
+  electric_vehicle_charging_station: "ev-station",
+
+  parking: "local-parking",
+  tourist_attraction: "landscape",
+
+  bicycle_store: "pedal-bike",
+  motorcycle_repair: "two-wheeler",
+
+  lodging: "hotel",
+};
+
+/* ------------------------------
+   Marker behaviour helpers
+------------------------------ */
+
+const getRiderPinColors = ({ source, selected }) => {
+  if (selected) {
+    return {
+      fill: theme.colors.accentMid,
+      border: theme.colors.accentDark,
+    };
+  }
+
+  if (source === "google") {
+    return {
+      fill: theme.colors.accentLight,
+      border: theme.colors.accentDark,
+    };
+  }
+
+  // CR
+  return {
+    fill: theme.colors.accentMid,
+    border: theme.colors.accentDark,
+  };
+};
 
 // ------------------------------------------------
 // SCREEN
@@ -97,8 +145,8 @@ export default function MapScreenRN() {
             "Content-Type": "application/json",
             "X-Goog-Api-Key":
               process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
-            "X-Goog-FieldMask":
-              "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location",
+              "X-Goog-FieldMask":
+                "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types",
           },
           body: JSON.stringify({
             includedTypes: GOOGLE_POI_TYPES,
@@ -122,6 +170,7 @@ export default function MapScreenRN() {
         name: place.displayName?.text,
         address: place.formattedAddress,
         rating: place.rating,
+        type: place.types?.[0],
         user_ratings_total: place.userRatingCount,
         geometry: {
           location: {
@@ -145,7 +194,7 @@ export default function MapScreenRN() {
     const places = await fetchGooglePois(
       latitude,
       longitude,
-      1800, // discovery radius
+      1000, // discovery radius
       20
     );
     setVisiblePois(places);
@@ -161,7 +210,7 @@ export default function MapScreenRN() {
     const places = await fetchGooglePois(
       latitude,
       longitude,
-      80, // tight radius
+      10, // tight radius
       1
     );
 
@@ -205,16 +254,46 @@ export default function MapScreenRN() {
         onPress={handleMapPress}
         onLongPress={handleLongPress}
       >
-        {visiblePois.map((place) => (
-          <Marker
-            key={place.id}
-            coordinate={{
-              latitude: place.geometry.location.lat,
-              longitude: place.geometry.location.lng,
-            }}
-            onPress={() => setSelectedPlace(place)}
-          />
-        ))}
+        {visiblePois.map((place) => {
+          const isSelected = selectedPlace?.id === place.id;
+          const iconName = POI_ICON_MAP[place.type] || "place";
+
+          const { fill, border } = getRiderPinColors({
+            source: place.source, // "cr" | "google"
+            selected: isSelected,
+          });
+
+          return (
+            <Marker
+              key={place.id}
+              coordinate={{
+                latitude: place.geometry.location.lat,
+                longitude: place.geometry.location.lng,
+              }}
+              onPress={() => setSelectedPlace(place)}
+              anchor={{ x: 0.5, y: 1 }}
+            >
+              <View
+                style={[
+                  theme.pinBase,
+                  {
+                    backgroundColor: fill,
+                    borderColor: border,
+                  },
+                  isSelected && theme.pinSelected,
+                ]}
+              >
+                
+                <MaterialIcons
+                  name={iconName}
+                  size={14}
+                  color="#000"
+                  style={theme.pinIcon}
+                />
+              </View>
+            </Marker>
+          );
+        })}
       </MapView>
 
       {/* GOOGLE PLACE CARD */}
