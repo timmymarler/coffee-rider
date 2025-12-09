@@ -2,7 +2,7 @@
 
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
-import { getTheme } from "@themes";
+import theme from "@themes";
 import { useRouter } from "expo-router";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
@@ -11,7 +11,6 @@ import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native
 export default function SavedRoutesScreen() {
   const { user } = useContext(AuthContext);
   const router = useRouter();
-  const theme = getTheme();
 
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(true);

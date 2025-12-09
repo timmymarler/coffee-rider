@@ -10,11 +10,11 @@ import {
 } from "firebase/auth";
 import { createContext, useEffect, useState } from "react";
 
+import { getCapabilities } from "@core/roles/getCapabilities";
 import {
   ensureUserDocument,
   getUserProfile
 } from "@firebaseLocal/users";
-import { getCapabilities } from "@roles/getCapabilities";
 
 export const AuthContext = createContext(null);
 
@@ -93,6 +93,8 @@ export default function AuthProvider({ children }) {
   const value = {
     user,
     profile,
+    role,
+    capabilities,
     loading,
     login,
     logout,

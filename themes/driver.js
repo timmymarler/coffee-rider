@@ -1,0 +1,66 @@
+export default {
+  colors: {
+    background: "#000",
+    text: "#fff",
+    primary: "#1e90ff",
+    accent: "#ffc107",
+    cardBackground: "#111",
+    border: "#333",
+
+    // Coffee / brown palette
+    primaryDark: "#6A4326",
+    primaryMid: "#9A714F",
+    primaryLight: "#CEA57D",
+    primaryBackground: "#F8F8F7",
+
+    // Use Rider-esque blues as accents
+    accentDark: "#1E3B57",
+    accentMid: "#4A6A89",
+    accentLight: "#8CAAB3",
+
+    background: "#9A714F",
+    surface: "#6A4326",
+
+    text: "#FFFFFF",
+    textMuted: "#E3D5C8",
+
+    inputBackground: "#FFFFFF",
+    inputBorder: "#CEA57D",
+    inputText: "#4A2A16",
+
+    tabBarBackground: "#6A4326",
+    tabBarActive: "#4A6A89",
+    tabBarInactive: "#CEA57D",
+    // Semantic feedback colours – used by brand themes
+    success: "#22c55e",
+    error: "#DC2626",
+    warning: "#FACC15",
+    danger: "#DC2626",
+
+  },
+    // spacing scale
+    spacing: {
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 32
+  },
+  // Border radius scale
+  radius: {
+    sm: 6,
+    md: 10,
+    lg: 16,
+    xl: 24,
+    full: 999,
+  },
+  // Typography scale
+  typography: {
+    h1: { fontSize: 22, fontWeight: "700" },
+    h2: { fontSize: 18, fontWeight: "600" },
+    h3: { fontSize: 16, fontWeight: "600" },
+    body: { fontSize: 14, fontWeight: "400" },
+    small: { fontSize: 12, fontWeight: "400" },
+  }
+}
+

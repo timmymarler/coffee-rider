@@ -1,28 +1,17 @@
 // themes/index.js
+import driver from "./driver";
+import rider from "./rider";
+import strider from "./strider";
 
-import colourBlind from "./accessibility/colourBlind";
-import highContrast from "./accessibility/highContrast";
-import driver from "./brands/driver";
-import rider from "./brands/rider";
-import strider from "./brands/strider";
-import { mergeThemes } from "./merge";
+// You decide which brand is active at build time
+// For Coffee Rider:
+const currentBrand = "rider";
 
-const BRANDS = {
+const brands = {
   rider,
   driver,
-  strider,
+  strider
 };
 
-export function getTheme({ brand = "rider", accessibility = "normal" } = {}) {
-  let base = BRANDS[brand] || rider;
-
-  if (accessibility === "highContrast") {
-    return mergeThemes(base, highContrast);
-  }
-
-  if (accessibility === "colourBlind") {
-    return mergeThemes(base, colourBlind);
-  }
-
-  return base;
-}
+export const theme = brands[currentBrand];
+export default theme;

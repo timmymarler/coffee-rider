@@ -1,101 +1,168 @@
 // core/auth/login.js
-
-import { PrimaryButton } from "@components-ui/Button";
-import { Input } from "@components-ui/Input";
-import { H1, H3 } from "@components-ui/Typography";
-import { globalStyles } from "@config/globalStyles";
-import { AuthContext } from "@context/AuthContext";
-import { getTheme } from "@themes";
 import { useRouter } from "expo-router";
-import { useContext, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+import { auth } from "@config/firebase";
+import theme from "@themes";
 
 export default function LoginScreen() {
-  const theme = getTheme();
   const router = useRouter();
-  const { login } = useContext(AuthContext);
+  const { colors } = theme;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [errorMsg, setErrorMsg] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleLogin() {
-    setErrorMsg(null);
+    if (!email || !password) {
+      Alert.alert("Missing details", "Please enter your email and password.");
+      return;
+    }
+
     setSubmitting(true);
-
     try {
-      // Use AuthContext login(email, password) directly
-      await login(email.trim(), password);
-
-      // AuthContext will update user/profile via onAuthStateChanged.
-      // Then we can route to saved routes (or map, as you prefer).
-      router.replace("/saved-routes");
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      setSubmitting(false);
+      router.back();
     } catch (err) {
       console.error("Login error:", err);
-      setErrorMsg("Invalid email or password");
-    } finally {
       setSubmitting(false);
+      Alert.alert("Login failed", err.message || "Please check your details and try again.");
     }
   }
 
+  const bgColor = colors?.background || "#1E3B57";
+  const cardColor = colors?.surface || "#1E3B57";
+  const labelColor = colors?.textMuted || "#D2D9E2";
+  const inputBg = colors?.inputBackground || "#FFFFFF";
+  const inputBorder = colors?.inputBorder || "#8CAAB3";
+  const inputText = colors?.inputText || "#1E3B57";
+  const buttonBg = colors?.accentMid || "#FFD85C";
+  const buttonText = colors?.primaryDark || "#1E3B57";
+
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: theme.colors.background }
-      ]}
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: bgColor }]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <H1 style={{ color: theme.colors.text }}>Welcome Back</H1>
-      <H3 style={{ color: theme.colors.textMuted, marginBottom: 20 }}>
-        Log in to continue
-      </H3>
-
-      <Input
-        label="Email"
-        value={email}
-        onChangeText={setEmail}
-        placeholder="you@example.com"
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-
-      <Input
-        label="Password"
-        value={password}
-        onChangeText={setPassword}
-        placeholder="••••••••"
-        secureTextEntry
-      />
-
-      {errorMsg && (
-        <Text style={{ color: theme.colors.danger, marginTop: 10 }}>
-          {errorMsg}
+      <View style={[styles.card, { backgroundColor: cardColor }]}>
+        <Text style={[styles.title, { color: colors?.text || "#FFFFFF" }]}>
+          Log in
         </Text>
-      )}
 
-      <PrimaryButton
-        label={submitting ? "Logging in..." : "Log In"}
-        onPress={handleLogin}
-        disabled={submitting}
-        style={{ marginTop: 25 }}
-      />
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: labelColor }]}>Email</Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholder="you@example.com"
+            placeholderTextColor={labelColor}
+            style={[
+              styles.input,
+              {
+                backgroundColor: inputBg,
+                borderColor: inputBorder,
+                color: inputText,
+              },
+            ]}
+          />
+        </View>
 
-      <TouchableOpacity
-        onPress={() => router.push("/auth/register")}
-        style={{ marginTop: 20 }}
-      >
-        <Text style={{ color: theme.colors.primary }}>
-          Need an account? Register
-        </Text>
-      </TouchableOpacity>
-    </View>
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: labelColor }]}>Password</Text>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            placeholder="••••••••"
+            placeholderTextColor={labelColor}
+            style={[
+              styles.input,
+              {
+                backgroundColor: inputBg,
+                borderColor: inputBorder,
+                color: inputText,
+              },
+            ]}
+          />
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.button,
+            {
+              backgroundColor: buttonBg,
+              opacity: submitting ? 0.7 : 1,
+            },
+          ]}
+          disabled={submitting}
+          onPress={handleLogin}
+        >
+          {submitting ? (
+            <ActivityIndicator size="small" color={buttonText} />
+          ) : (
+            <Text style={[styles.buttonText, { color: buttonText }]}>
+              Log in
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    ...globalStyles.screenContainer,
-    paddingTop: 80,
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  card: {
+    borderRadius: 20,
+    padding: 20,
+    elevation: 4,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "700",
+    marginBottom: 24,
+  },
+  field: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 15,
+  },
+  button: {
+    marginTop: 8,
+    paddingVertical: 12,
+    borderRadius: 999,
+    alignItems: "center",
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

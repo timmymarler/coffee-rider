@@ -1,74 +1,87 @@
 // core/screens/ProfileScreen.js
 
-import { db } from "@config/firebase";
+import { db } from "@/config/firebase";
 import { AuthContext } from "@context/AuthContext";
-import { getTheme } from "@themes";
-import { useRouter } from "expo-router";
+import { pickImageSquare } from "@lib/imagePicker";
+import { uploadImageAsync } from "@lib/storage";
 import { doc, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Image, Text, TouchableOpacity, View } from "react-native";
+
+import { CRButton } from "@components-ui/CRButton";
+import { CRCard } from "@components-ui/CRCard";
+import { CRInfoBadge } from "@components-ui/CRInfoBadge";
+import { CRInput } from "@components-ui/CRInput";
+import { CRLabel } from "@components-ui/CRLabel";
+import { CRScreen } from "@components-ui/CRScreen";
+import theme from "@themes";
+import { useRouter } from "expo-router";
+
 
 export default function ProfileScreen() {
   const { user, profile, loading, logout, refreshProfile } = useContext(AuthContext);
-  const theme = getTheme();
   const router = useRouter();
 
-  const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [savedTick, setSavedTick] = useState(false);
-
-  // ----------------------------
-  // Initial profile values
-  // ----------------------------
-  const initialDisplayName =
-    profile?.displayName || user?.displayName || (user ? "Coffee Rider" : "");
-
-  const initialBio = profile?.bio || "";
-  const initialBike = profile?.bike || "";
-  const initialLocation = profile?.homeLocation || "";
-
-  const email = user?.email || profile?.email || "";
-  const role = profile?.role || (user ? "user" : "guest");
-
+  // -----------------------------------
+  // Initial Values
+  // -----------------------------------
   const avatarUri =
     profile?.photoURL ||
     user?.photoURL ||
     "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
 
-  // Form state
-  const [displayName, setDisplayName] = useState(initialDisplayName);
-  const [bio, setBio] = useState(initialBio);
-  const [bike, setBike] = useState(initialBike);
-  const [homeLocation, setHomeLocation] = useState(initialLocation);
+  const [displayName, setDisplayName] = useState(profile?.displayName || user?.displayName || "");
+  const [bio, setBio] = useState(profile?.bio || "");
+  const [bike, setBike] = useState(profile?.bike || "");
+  const [homeLocation, setHomeLocation] = useState(profile?.homeLocation || "");
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
 
-  // Update form when profile changes
+  const email = user?.email || "";
+  const role = profile?.role || "user";
+
+  // Update when profile changes
   useEffect(() => {
     setDisplayName(profile?.displayName || user?.displayName || "");
     setBio(profile?.bio || "");
     setBike(profile?.bike || "");
     setHomeLocation(profile?.homeLocation || "");
-  }, [profile, user]);
+  }, [profile]);
 
-  // ----------------------------
-  // Upload profile photo
-  // ----------------------------
+  // -----------------------------------
+  // Upload Avatar
+  // -----------------------------------
   async function handlePhotoUpload() {
-    console.log("Profile photo upload temporarily disabled.");
-    return;
+    if (!user) return;
+
+    try {
+      const imageUri = await pickImageSquare();
+      if (!imageUri) return;
+
+      setUploading(true);
+
+      const downloadURL = await uploadImageAsync(
+        imageUri,
+        `profilePhotos/${user.uid}/avatar.jpg`
+      );
+
+      await updateDoc(doc(db, "users", user.uid), {
+        photoURL: downloadURL,
+        updatedAt: Date.now(),
+      });
+
+      await refreshProfile();
+      setUploading(false);
+    } catch (err) {
+      console.error("Profile upload error:", err);
+      setUploading(false);
+    }
   }
 
-  // ----------------------------
-  // Save profile fields
-  // ----------------------------
+  // -----------------------------------
+  // Save Profile Fields
+  // -----------------------------------
   async function handleSaveProfile() {
     if (!user) return;
 
@@ -78,18 +91,17 @@ export default function ProfileScreen() {
     try {
       const userRef = doc(db, "users", user.uid);
 
-      const updatePayload = {
+      await updateDoc(userRef, {
         displayName: displayName.trim(),
         bio: bio.trim(),
         bike: bike.trim(),
         homeLocation: homeLocation.trim(),
         updatedAt: Date.now(),
-      };
+      });
 
-      await updateDoc(userRef, updatePayload);
       await refreshProfile();
-
       setSaving(false);
+
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 2000);
     } catch (err) {
@@ -98,417 +110,172 @@ export default function ProfileScreen() {
     }
   }
 
-  // ----------------------------
-  // UI STATES
-  // ----------------------------
-
-  if (loading) {
+  // -----------------------------------
+  // Not Logged In → Show Login Prompt
+  // -----------------------------------
+  if (!user && !loading) {
     return (
-      <View
-        style={[
-          styles.loadingContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <ActivityIndicator size="large" color={theme.colors.accent} />
-        <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>
-          Loading profile…
-        </Text>
-      </View>
-    );
-  }
-
-  // Not logged in
-  if (!user) {
-    return (
-      <View
-        style={[
-          styles.loadingContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <Text style={[styles.name, { color: theme.colors.primaryDark }]}>
-          Anonymous Rider
-        </Text>
-
-        <Text
-          style={[
-            styles.email,
-            { color: theme.colors.textMuted, marginTop: 4 },
-          ]}
-        >
-          You’re not logged in.
-        </Text>
-
-        <TouchableOpacity
-          style={[
-            styles.primaryButtonGold,
-            { marginTop: 24, paddingHorizontal: 32 },
-          ]}
-          onPress={() => router.push("/auth/login")}
-        >
+      <CRScreen padded scroll>
+        <CRCard>
           <Text
-            style={[
-              styles.primaryButtonTextDark,
-              { color: theme.colors.primaryDark },
-            ]}
+            style={{
+              color: theme.colors.textPrimary,
+              fontSize: theme.spacing.xl,
+              fontWeight: "600",
+              marginBottom: theme.spacing.lg,
+            }}
           >
-            Log In
+            Anonymous Rider
           </Text>
-        </TouchableOpacity>
-      </View>
+
+          <Text
+            style={{
+              color: theme.colors.textMuted,
+              marginBottom: theme.spacing.lg,
+            }}
+          >
+            You’re not logged in.
+          </Text>
+
+          <CRButton title="Log In" onPress={() => router.push("/auth/login")} />
+        </CRCard>
+      </CRScreen>
     );
   }
 
-  const isAdmin = role === "admin";
-  const isPro = role === "pro";
-
+  // -----------------------------------
+  // MAIN PROFILE LAYOUT
+  // -----------------------------------
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
-    >
-      {/* HEADER CARD */}
-      <View
-        style={[
-          styles.card,
-          { backgroundColor: theme.colors.primaryDark },
-        ]}
+    <CRScreen scroll padded>
+
+      {/* ---------------- HEADER CARD ---------------- */}
+      <CRCard
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+        }}
       >
-        <View style={styles.avatarRow}>
-          <TouchableOpacity onPress={handlePhotoUpload} disabled={uploading}>
-            <Image source={{ uri: avatarUri }} style={styles.avatar} />
-            {uploading && (
-              <View style={styles.avatarOverlay}>
-                <ActivityIndicator size="small" color="#fff" />
-              </View>
-            )}
-          </TouchableOpacity>
+        {/* Avatar */}
+        <TouchableOpacity onPress={handlePhotoUpload} disabled={uploading}>
+          <Image
+            source={{ uri: avatarUri }}
+            style={{
+              width: 96,
+              height: 96,
+              borderRadius: 48,
+              marginRight: theme.spacing.lg,
+            }}
+          />
 
-          <View style={{ flex: 1, marginLeft: 16 }}>
-            <Text style={[styles.name, { color: theme.colors.accent }]}>
-              {displayName || "Coffee Rider"}
-            </Text>
-
-            <Text
-              style={[styles.email, { color: theme.colors.textMuted }]}
+          {uploading && (
+            <View
+              style={{
+                position: "absolute",
+                width: 96,
+                height: 96,
+                borderRadius: 48,
+                backgroundColor: theme.colors.primaryDark,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
             >
-              {email}
-            </Text>
-
-            <View style={styles.badgeRow}>
-              <View
-                style={[
-                  styles.roleBadge,
-                  {
-                    backgroundColor: isAdmin
-                      ? theme.colors.danger
-                      : isPro
-                      ? theme.colors.accent
-                      : theme.colors.primary,
-                    borderColor: theme.colors.textMuted,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.roleBadgeText,
-                    { color: isAdmin ? "#fff" : theme.colors.primaryDark },
-                  ]}
-                >
-                  {isAdmin ? "Admin" : isPro ? "Pro Rider" : "Rider"}
-                </Text>
-              </View>
+              <ActivityIndicator color={theme.colors.primaryDark} />
             </View>
+          )}
+        </TouchableOpacity>
+
+        {/* Name + Email + Role */}
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              color: theme.colors.accentMid,
+              fontSize: theme.spacing.xl,
+              fontWeight: "700",
+            }}
+          >
+            {displayName || "Coffee Rider"}
+          </Text>
+
+          <Text
+            style={{
+              color: theme.colors.textMuted,
+              marginTop: theme.spacing.xs,
+            }}
+          >
+            {email}
+          </Text>
+
+          <View style={{ marginTop: theme.spacing.sm }}>
+            <CRInfoBadge label={role.charAt(0).toUpperCase() + role.slice(1)} />
           </View>
         </View>
-      </View>
+      </CRCard>
 
-      {/* EDITABLE PROFILE CARD */}
-      <View
-        style={[
-          styles.card,
-          { backgroundColor: theme.colors.primaryDark },
-        ]}
-      >
-        <Text style={[styles.cardTitle, { color: theme.colors.accentDark }]}>
-          Profile
-        </Text>
+      {/* ---------------- PROFILE DETAILS CARD ---------------- */}
+      <CRCard>
 
-        {/* Display Name */}
-        <Text style={[styles.label, { color: theme.colors.textMuted }]}>
-          Display Name
-        </Text>
-        <TextInput
-          value={displayName}
-          onChangeText={setDisplayName}
-          placeholder="Your name"
-          placeholderTextColor={theme.colors.textMuted}
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.colors.inputBackground,
-              color: theme.colors.inputText,
-              borderColor: theme.colors.inputBorder,
-            },
-          ]}
-        />
+        <CRLabel>Display Name</CRLabel>
+        <CRInput value={displayName} onChangeText={setDisplayName} />
 
-        {/* Bike */}
-        <Text style={[styles.label, { color: theme.colors.textMuted }]}>
-          Bike
-        </Text>
-        <TextInput
-          value={bike}
-          onChangeText={setBike}
-          placeholder="e.g. Royal Enfield Guerrilla 450"
-          placeholderTextColor={theme.colors.textMuted}
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.colors.inputBackground,
-              color: theme.colors.inputText,
-              borderColor: theme.colors.inputBorder,
-            },
-          ]}
-        />
+        <CRLabel style={{ marginTop: theme.spacing.md }}>Bike</CRLabel>
+        <CRInput value={bike} onChangeText={setBike} />
 
-        {/* Home Area */}
-        <Text style={[styles.label, { color: theme.colors.textMuted }]}>
-          Home Area
-        </Text>
-        <TextInput
-          value={homeLocation}
-          onChangeText={setHomeLocation}
-          placeholder="e.g. Bedford, UK"
-          placeholderTextColor={theme.colors.textMuted}
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.colors.inputBackground,
-              color: theme.colors.inputText,
-              borderColor: theme.colors.inputBorder,
-            },
-          ]}
-        />
+        <CRLabel style={{ marginTop: theme.spacing.md }}>Home Area</CRLabel>
+        <CRInput value={homeLocation} onChangeText={setHomeLocation} />
 
-        {/* Bio */}
-        <Text style={[styles.label, { color: theme.colors.textMuted }]}>
-          Rider Bio
-        </Text>
-        <TextInput
-          value={bio}
-          onChangeText={setBio}
-          placeholder="Tell us about your riding style…"
-          placeholderTextColor={theme.colors.textMuted}
-          multiline
-          style={[
-            styles.input,
-            styles.textArea,
-            {
-              backgroundColor: theme.colors.inputBackground,
-              color: theme.colors.inputText,
-              borderColor: theme.colors.inputBorder,
-            },
-          ]}
-        />
+        <CRLabel style={{ marginTop: theme.spacing.md }}>Rider Bio</CRLabel>
+        <CRInput value={bio} onChangeText={setBio} multiline />
 
-        {/* Save Button */}
-        <View style={styles.saveRow}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            marginTop: theme.spacing.lg,
+          }}
+        >
           {savedTick && (
             <Text
-              style={[styles.savedText, { color: theme.colors.accentDark }]}
+              style={{
+                color: theme.colors.accentMid,
+                fontSize: theme.spacing.md,
+                marginRight: theme.spacing.md,
+              }}
             >
               Saved ✓
             </Text>
           )}
 
-          <TouchableOpacity
-            style={[
-              styles.primaryButtonGold,
-              { opacity: saving ? 0.7 : 1 },
-            ]}
+          <CRButton
+            title={saving ? "Saving…" : "Save Changes"}
+            loading={saving}
             onPress={handleSaveProfile}
-            disabled={saving}
-          >
-            {saving && (
-              <ActivityIndicator
-                size="small"
-                color={theme.colors.primaryDark}
-                style={{ marginRight: 8 }}
-              />
-            )}
-            <Text
-              style={[
-                styles.primaryButtonTextDark,
-                { color: theme.colors.primaryDark },
-              ]}
-            >
-              {saving ? "Saving…" : "Save Changes"}
-            </Text>
-          </TouchableOpacity>
+            style={{ flex: 1 }}
+          />
         </View>
-      </View>
+      </CRCard>
 
-      {/* ACCOUNT CARD */}
-      <View
-        style={[
-          styles.card,
-          { backgroundColor: theme.colors.primaryDark },
-        ]}
-      >
-        <Text style={[styles.cardTitle, { color: theme.colors.accentDark }]}>
-          Account
-        </Text>
-
-        <Text style={[styles.label, { color: theme.colors.textMuted }]}>
-          Email
-        </Text>
-        <Text style={[styles.value, { color: theme.colors.text }]}>
+      {/* ---------------- ACCOUNT CARD ---------------- */}
+      <CRCard>
+        <CRLabel>Email</CRLabel>
+        <Text style={{ color: theme.colors.textPrimary, marginBottom: theme.spacing.md }}>
           {email}
         </Text>
 
-        <TouchableOpacity
-          style={[
-            styles.secondaryButton,
-            { borderColor: theme.colors.textMuted },
-          ]}
-        >
-          <Text
-            style={[
-              styles.secondaryButtonText,
-              { color: theme.colors.textMuted },
-            ]}
-          >
-            Change password (coming soon)
-          </Text>
-        </TouchableOpacity>
-      </View>
+        <CRButton
+          title="Change Password (coming soon)"
+          variant="secondary"
+        />
+      </CRCard>
 
-      {/* LOGOUT BUTTON */}
-      <TouchableOpacity
-        style={[
-          styles.logoutButton,
-          { backgroundColor: theme.colors.danger },
-        ]}
+      {/* ---------------- LOGOUT ---------------- */}
+      <CRButton
+        title="Log Out"
+        variant="danger"
         onPress={logout}
-      >
-        <Text style={[styles.logoutText, { color: "#fff" }]}>
-          Log Out
-        </Text>
-      </TouchableOpacity>
-    </ScrollView>
+        style={{ marginTop: theme.spacing.md }}
+      />
+
+    </CRScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-  },
-
-  card: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "rgba(0,0,0,0.3)",
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  },
-
-  avatarRow: { flexDirection: "row", alignItems: "center" },
-  avatar: { width: 96, height: 96, borderRadius: 48 },
-
-  avatarOverlay: {
-    position: "absolute",
-    top: 0, left: 0, right: 0, bottom: 0,
-    borderRadius: 48,
-    backgroundColor: "rgba(0,0,0,0.25)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  name: { fontSize: 20, fontWeight: "600" },
-  email: { fontSize: 13, marginTop: 2 },
-  roleBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  roleBadgeText: { fontSize: 11, fontWeight: "600" },
-  badgeRow: { flexDirection: "row", marginTop: 8 },
-
-  cardTitle: { fontSize: 16, fontWeight: "600", marginBottom: 12 },
-  label: { fontSize: 13, marginTop: 10, marginBottom: 4 },
-  value: { fontSize: 14 },
-
-  input: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 14,
-  },
-  textArea: {
-    minHeight: 70,
-    textAlignVertical: "top",
-  },
-
-  saveRow: {
-    marginTop: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  savedText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-
-  primaryButtonGold: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 999,
-    backgroundColor: "#FFD85C",
-  },
-  primaryButtonTextDark: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-
-  secondaryButton: {
-    marginTop: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  secondaryButtonText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-
-  logoutButton: {
-    marginTop: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  logoutText: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-});

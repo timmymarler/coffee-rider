@@ -3,17 +3,15 @@
 import AuthProvider from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import { Ionicons } from "@expo/vector-icons";
+import theme from "@themes";
 import { Tabs, useRouter } from "expo-router";
 import { useContext, useEffect, useRef } from "react";
 import { Animated, TouchableOpacity } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { getTheme } from "@themes";
-
-function FloatingTabBar({ state }) {
+  function FloatingTabBar({ state }) {
   const router = useRouter();
-  const theme = getTheme(); // NEW THEME SYSTEM
   const { hidden } = useContext(TabBarContext);
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(0)).current;
@@ -27,7 +25,7 @@ function FloatingTabBar({ state }) {
   }, [hidden]);
 
   const activeColor = theme.colors.accentDark;
-  const inactiveColor = theme.colors.tabBarInactive;
+  const inactiveColor = theme.colors.primaryLight;
 
   const tabs = [
     { name: "map", icon: "map" },
@@ -44,7 +42,7 @@ function FloatingTabBar({ state }) {
         right: 15,
         bottom: insets.bottom,
         height: 40,
-        backgroundColor: theme.colors.card,
+        backgroundColor: theme.colors.primaryDark,
         borderRadius: 20,
         flexDirection: "row",
         justifyContent: "space-around",
