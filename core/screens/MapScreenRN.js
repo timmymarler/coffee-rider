@@ -84,6 +84,10 @@ const getRiderPinColors = ({ source, selected }) => {
   };
 };
 
+function getGooglePhotoUrl(photoName, maxWidth = 800) {
+  return `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=${maxWidth}&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`;
+}
+
 // ------------------------------------------------
 // SCREEN
 // ------------------------------------------------
@@ -159,8 +163,10 @@ export default function MapScreenRN() {
             "Content-Type": "application/json",
             "X-Goog-Api-Key":
               process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
+              //"X-Goog-FieldMask":
+              //  "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types",
               "X-Goog-FieldMask":
-                "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types",
+                "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.photos",
           },
           body: JSON.stringify({
             includedTypes: GOOGLE_POI_TYPES,
@@ -189,6 +195,11 @@ export default function MapScreenRN() {
 
         // ✅ existing
         source: "google",
+        googlePhotos: place.photos?.map((p) => p.name) || [],
+        googlePhotoUrls: place.photos?.map((p) =>
+          getGooglePhotoUrl(p.name)
+        ) || [],
+
         type: place.types?.[0],
 
         // ✅ keep geometry if map needs it
