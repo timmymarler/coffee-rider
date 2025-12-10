@@ -69,25 +69,29 @@ export default {
     small: { fontSize: 12, fontWeight: "400" },
   },
     pinBase: {
-        width: 25,
-        height: 25,
-        borderRadius: 4,
-        Anchor: { x: 0.5, y: 1 },
-        transform: [{ rotate: "45deg" }],
-        alignItems: "center",
-        justifyContent: "center",
-        borderWidth: 1.5,
-        shadowColor: "#000",
-        shadowOpacity: 0.45,
-        shadowRadius: 2,
-        elevation: 3,
+      width: 24,
+      height: 24,
+      borderRadius: 12,          // ✅ critical
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1.5,
+      shadowColor: "#000",
+      shadowOpacity: 0.45,
+      shadowRadius: 2,
+      elevation: 3,
     },
-    pinIcon: {
-        transform: [{ rotate: "-45deg" }],
+
+    pinTail: {
+      position: "absolute",
+      bottom: -6,
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      borderWidth: 1.5,
     },
+
     pinSelected: {
         transform: [
-            { rotate: "45deg" },
             { scale: 1.15 },
         ],
     },

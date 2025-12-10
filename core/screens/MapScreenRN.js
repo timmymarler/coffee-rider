@@ -1,5 +1,4 @@
 import { AuthContext } from "@context/AuthContext";
-import { MaterialIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
@@ -11,6 +10,7 @@ import {
   View,
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import SvgPin from "../map/components/SvgPin";
 
 // ------------------------------------------------
 // GOOGLE POI TYPES (EDIT FREELY)
@@ -22,26 +22,36 @@ const GOOGLE_POI_TYPES = [
   "restaurant",
 ];
 const POI_ICON_MAP = {
+  // Coffee shops
   cafe: "coffee",
   coffee_shop: "coffee",
   bakery: "bakery-dining",
-
-  restaurant: "restaurant",
-  fast_food: "fastfood",
-
-  bar: "local-bar",
-  pub: "local-bar",
-
+  cafeteria: "coffee",
+  // Car park
+  parking: "parking",
+  //Sights
+  tourist_attraction: "landscape",
+  beach: "landscape",
+  // Petrol / charging
   gas_station: "local-gas-station",
   electric_vehicle_charging_station: "ev-station",
-
-  parking: "local-parking",
-  tourist_attraction: "landscape",
-
-  bicycle_store: "pedal-bike",
-  motorcycle_repair: "two-wheeler",
-
+  motorcycle_repair: "motorcycle",
+  motorcycle_shop: "motorcycle",
+  car_repair: "car",
+  event_venue: "motorcycle",
+  // Take-aways
+  fast_food: "fastfood",
+  fast_food_restaurant: "fastfood",
+  sandwich_shop: "fastfood",  
+  //Pubs / restaurants
+  bar: "local-bar",
+  pub: "local-bar",
+  restaurant: "restaurant",
+  // Places to stay
   lodging: "hotel",
+  bed_and_breakfas: "hotel",
+  hotel: "hotel",
+
 };
 
 /* ------------------------------
@@ -194,7 +204,7 @@ export default function MapScreenRN() {
     const places = await fetchGooglePois(
       latitude,
       longitude,
-      1000, // discovery radius
+      1500, // discovery radius
       20
     );
     setVisiblePois(places);
@@ -273,24 +283,11 @@ export default function MapScreenRN() {
               onPress={() => setSelectedPlace(place)}
               anchor={{ x: 0.5, y: 1 }}
             >
-              <View
-                style={[
-                  theme.pinBase,
-                  {
-                    backgroundColor: fill,
-                    borderColor: border,
-                  },
-                  isSelected && theme.pinSelected,
-                ]}
-              >
-                
-                <MaterialIcons
-                  name={iconName}
-                  size={14}
-                  color="#000"
-                  style={theme.pinIcon}
-                />
-              </View>
+              <SvgPin
+                fill={fill}
+                stroke={border}
+                icon={iconName}
+              />
             </Marker>
           );
         })}
@@ -300,7 +297,7 @@ export default function MapScreenRN() {
       {selectedPlace && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>
-            {selectedPlace.name}
+            {selectedPlace.name} - {selectedPlace.type} 
           </Text>
 
           {selectedPlace.address && (
