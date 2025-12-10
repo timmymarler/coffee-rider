@@ -1,32 +1,43 @@
+import { db } from "@config/firebase";
+import { AuthContext } from "@context/AuthContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
-import { useMemo, useState } from "react";
+import {
+  addDoc,
+  collection,
+  serverTimestamp
+} from "firebase/firestore";
+import { useContext, useMemo, useState } from "react";
 import {
   Dimensions,
   Image,
   Pressable,
   ScrollView,
   Text,
-  TextInput,
-  View,
+  TextInput, TouchableOpacity, View
 } from "react-native";
 
-// If you have AuthContext available, uncomment this:
-// import { AuthContext } from "@/context/AuthContext";
 const screenWidth = Dimensions.get("window").width;
 
 export default function PlaceCard({
   place,
   onClose,
   userLocation,
+  onPlaceCreated,
   onNavigate,
   onRoute,
 }) {
   const styles = createStyles(theme);
-  const isGoogle = place?.source === "google";
+  const user = useContext(AuthContext);
+console.log("[AUTH DEBUG]", user);
 
-  // If AuthContext exists, swap null → useContext(AuthContext)
-  const user = null;
+  const isManual = place?.source === "manual";
+  const isGoogle = place?.source === "google";
+  const isCr = place?.source === "cr";
+
+  const [manualName, setManualName] = useState("");
+  const [manualType, setManualType] = useState(null);
+  const [manualComment, setManualComment] = useState("");
 
   const [photoIndex, setPhotoIndex] = useState(0);
   const [commentText, setCommentText] = useState("");
@@ -93,6 +104,50 @@ export default function PlaceCard({
     );
   };
 
+  const handleManualCommentSubmit = async () => {
+  const createdBy = user?.user?.uid;
+  if (!createdBy) {
+    console.log("[MANUAL CREATE] missing auth uid");
+    return;
+  }    if (place.source !== "manual") return;
+    if (!manualName?.trim() || !manualComment?.trim()) return;
+
+    try {
+      // 1. Create place
+      const placeRef = await addDoc(collection(db, "places"), {
+        name: manualName.trim(),
+        type: manualType ?? null,
+        location: {
+          latitude: place.latitude,
+          longitude: place.longitude,
+        },
+        createdAt: serverTimestamp(),
+        createdBy: createdBy,
+        source: "manual",
+      });
+
+      // 2. Add first comment
+      await addDoc(collection(placeRef, "comments"), {
+        text: manualComment.trim(),
+        createdAt: serverTimestamp(),
+        createdBy: createdBy,
+      });
+
+      // 3. Promote PlaceCard to CR mode (no remount)
+      onPlaceCreated?.({
+        id: placeRef.id,
+        source: "cr",
+        title: manualName.trim(),
+        latitude: place.latitude,
+        longitude: place.longitude,
+        type: manualType ?? null,
+      });
+
+    } catch (err) {
+      console.log("[MANUAL CREATE] failed", err);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Close button */}
@@ -142,7 +197,39 @@ export default function PlaceCard({
 
       {/* Info */}
       <View style={styles.info}>
-        <Text style={styles.title}>{place.title}</Text>
+        <Text style={styles.title}>
+          {isManual ? "New place" : place.title}
+        </Text>
+
+        {isManual && (
+          <Text style={styles.subtitle}>
+            Add details for this location
+          </Text>
+        )}
+
+        {isManual && (
+          <View style={styles.manualSection}>
+            <TextInput
+              style={styles.input}
+              placeholder="Place name"
+              value={manualName}
+              onChangeText={(text) => {
+                setManualName(text);
+                console.log("[MANUAL] name:", text);
+              }}
+            />
+
+            <Text style={styles.crLabel}>Type</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setManualType("cafe");
+                console.log("[MANUAL] type: cafe");
+              }}
+            >
+              <Text>Select Café</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {place.address && (
           <Text style={styles.address}>{place.address}</Text>
@@ -227,38 +314,42 @@ export default function PlaceCard({
         )}
 
         {/* ----- ADD COMMENT (LOGGED IN ONLY) ----- */}
-        {user && (
-          <View style={styles.commentInputBlock}>
-            <Text style={styles.crLabel}>Add a Comment</Text>
+          {isManual && (
+            <View style={styles.commentSection}>
+              <TextInput
+                multiline
+                placeholder="Add a comment"
+                value={manualComment}
+                onChangeText={setManualComment}
+              />
 
-            <TextInput
-              style={styles.commentBox}
-              placeholder="Write a comment…"
-              placeholderTextColor={theme.colors.subtleText}
-              value={commentText}
-              onChangeText={setCommentText}
-              multiline
-            />
-
-            <Pressable style={styles.submitButton}>
-              <Text style={styles.submitText}>Submit</Text>
-            </Pressable>
-          </View>
-        )}
+              <TouchableOpacity
+                style={styles.commentSubmit}
+                onPress={handleManualCommentSubmit}
+                disabled={!manualComment.trim()}
+              >
+                <Text style={styles.commentSubmitText}>
+                  Post comment
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
       </View>
 
       {/* Action buttons */}
-      <View style={styles.actionsRow}>
-        <Pressable style={styles.actionButton} onPress={onNavigate}>
-          <Ionicons name="navigate" size={20} color={theme.colors.primaryLight} />
-          <Text style={styles.actionText}>Navigate</Text>
-        </Pressable>
+      {!isManual && (
+        <View style={styles.actionsRow}>
+          <Pressable style={styles.actionButton} onPress={onNavigate}>
+            <Ionicons name="navigate" size={20} color={theme.colors.primaryLight} />
+            <Text style={styles.actionText}>Navigate</Text>
+          </Pressable>
 
-        <Pressable style={styles.actionButton} onPress={onRoute}>
-          <MaterialCommunityIcons name="map-marker-path" size={20} color={theme.colors.primaryLight} />
-          <Text style={styles.actionText}>Route</Text>
-        </Pressable>
-      </View>
+          <Pressable style={styles.actionButton} onPress={onRoute}>
+            <MaterialCommunityIcons name="map-marker-path" size={20} color={theme.colors.primaryLight} />
+            <Text style={styles.actionText}>Route</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -423,6 +514,18 @@ function createStyles(theme) {
       padding: 10,
       marginTop: 6,
       minHeight: 60,
+    },
+
+    commentSubmit: {
+      marginTop: 10,
+      paddingVertical: 8,
+      backgroundColor: theme.colors.accentDark,
+      borderRadius: 20,
+      alignItems: "center",
+    },
+    commentSubmitText: {
+      color: theme.colors.primaryDark,
+      fontWeight: 600
     },
 
     submitButton: {

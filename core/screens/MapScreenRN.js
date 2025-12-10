@@ -382,10 +382,19 @@ export default function MapScreenRN() {
       </MapView>
 
       {selectedPlace && (
-        <PlaceCard
-          place={selectedPlace}
-          onClose={() => setSelectedPlace(null)}
-        />
+      <PlaceCard
+        place={selectedPlace}
+        onClose={() => setSelectedPlace(null)}
+        onPlaceCreated={(newPlace) => {
+          console.log("[MAP] CR place created", newPlace);
+
+          // 1. Add marker immediately
+          //setCrPlaces((prev) => [...prev, newPlace]);
+
+          // 2. Switch selection to CR place
+          setSelectedPlace(newPlace);
+        }}
+      />
       )}
     </View>
   );
