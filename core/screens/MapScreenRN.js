@@ -5,9 +5,7 @@ import { useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import PlaceCard from "../map/components/PlaceCard";
@@ -103,6 +101,9 @@ export default function MapScreenRN() {
 
   // Selected POI for card (marker tap OR long-press)
   const [selectedPlace, setSelectedPlace] = useState(null);
+  
+  // Need to create user object to catch long press for non logged in users
+  const user = useContext(AuthContext);
 
   // ------------------------------------------------
   // GET USER LOCATION
@@ -234,29 +235,95 @@ export default function MapScreenRN() {
   // ------------------------------------------------
   // LONG PRESS = INSPECT NEAREST POI ONLY
   // ------------------------------------------------
-  const handleLongPress = async (e) => {
+  const handleMapLongPress = async (e) => {
+    if (!user?.role) return;
+
     const { latitude, longitude } = e.nativeEvent.coordinate;
-    const places = await fetchGooglePois(
+    const role = user.role;
+
+    const googlePlace = await getGooglePoiAtCoordinate({
       latitude,
       longitude,
-      10, // tight radius
-      1
-    );
-    if (places.length > 0) {
-      setSelectedPlace(places[0]);
-      mapRef.current?.animateToRegion(
-        {
-          latitude: places[0].geometry.location.lat,
-          longitude: places[0].geometry.location.lng,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        },
-        500
-      );
-    } else {
-      setSelectedPlace(null);
+    });
+
+    // USER: POI only
+    if (role === "user") {
+      if (!googlePlace) return;
+      setSelectedPlace(normalizeGooglePlace(googlePlace));
+      return;
+    }
+
+    // PRO / ADMIN
+    if (role === "pro" || role === "admin") {
+      if (googlePlace) {
+        setSelectedPlace(normalizeGooglePlace(googlePlace));
+      } else {
+        setSelectedPlace({
+          source: "manual",
+          latitude,
+          longitude,
+        });
+      }
     }
   };
+
+  async function getGooglePoiAtCoordinate({ latitude, longitude }) {
+    try {
+      const res = await fetch(
+        "https://places.googleapis.com/v1/places:searchNearby",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
+            "X-Goog-FieldMask":
+              "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.photos",
+          },
+          body: JSON.stringify({
+            locationRestriction: {
+              circle: {
+                center: { latitude, longitude },
+                radius: 80, // very small radius = intentional POI press
+              },
+            },
+            maxResultCount: 1,
+          }),
+        }
+      );
+
+      const json = await res.json();
+      if (!json.places || json.places.length === 0) {
+        console.log("[LONG PRESS] No POI returned by Google");
+      } else {
+        console.log(
+          "[LONG PRESS] POI returned:",
+          json.places[0].displayName?.text
+        );
+      }
+
+      return json.places?.[0] ?? null;
+    } catch (err) {
+      console.log("[LONG PRESS] POI lookup failed", err);
+      return null;
+    }
+  }
+
+  function normalizeGooglePlace(place) {
+    return {
+      id: place.id,
+      title: place.displayName?.text,
+      address: place.formattedAddress,
+      latitude: place.location.latitude,
+      longitude: place.location.longitude,
+      rating: place.rating,
+      userRatingsTotal: place.userRatingCount,
+      type: place.types?.[0],
+      source: "google",
+      googlePhotoUrls: place.photos?.map((p) =>
+        `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`
+      ) || [],
+    };
+  }
 
   // ------------------------------------------------
   // RENDER
@@ -279,7 +346,7 @@ export default function MapScreenRN() {
           }
         }
         onPress={handleMapPress}
-        //onLongPress={handleLongPress}
+        onLongPress={handleMapLongPress}
       >
         {visiblePois.map((place) => {
           const isSelected = selectedPlace?.id === place.id;
@@ -319,27 +386,6 @@ export default function MapScreenRN() {
           place={selectedPlace}
           onClose={() => setSelectedPlace(null)}
         />
-      )}
-
-
-      {/* ADD VENUE FAB */}
-      {capabilities?.canAddVenue && (
-        <TouchableOpacity
-          style={[
-            styles.fab,
-            { backgroundColor: theme.colors.accentMid },
-          ]}
-          onPress={() => router.push("/add-venue")}
-        >
-          <Text
-            style={[
-              styles.fabText,
-              { color: theme.colors.primaryDark },
-            ]}
-          >
-            Add Missing Venue
-          </Text>
-        </TouchableOpacity>
       )}
     </View>
   );
