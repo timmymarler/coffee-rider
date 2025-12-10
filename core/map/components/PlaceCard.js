@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { getTheme } from "@themes";
+import theme from "@themes";
 import { useMemo, useState } from "react";
 import {
   Dimensions,
@@ -13,7 +13,6 @@ import {
 
 // If you have AuthContext available, uncomment this:
 // import { AuthContext } from "@/context/AuthContext";
-
 const screenWidth = Dimensions.get("window").width;
 
 export default function PlaceCard({
@@ -23,8 +22,8 @@ export default function PlaceCard({
   onNavigate,
   onRoute,
 }) {
-  const theme = getTheme();
   const styles = createStyles(theme);
+  const isGoogle = place?.source === "google";
 
   // If AuthContext exists, swap null → useContext(AuthContext)
   const user = null;
@@ -271,7 +270,7 @@ function createStyles(theme) {
       bottom: 100,
       left: 10,
       right: 10,
-      backgroundColor: theme.colors.card,
+      backgroundColor: theme.colors.primaryLight,
       borderRadius: 16,
       overflow: "hidden",
       zIndex: 999,
@@ -331,12 +330,12 @@ function createStyles(theme) {
     title: {
       fontSize: 18,
       fontWeight: "600",
-      color: theme.colors.accent,
+      color: theme.colors.accentMid,
     },
 
     address: {
       fontSize: 14,
-      color: theme.colors.primaryLight,
+      color: theme.colors.accentDark,
       marginTop: 4,
     },
 
@@ -449,14 +448,14 @@ function createStyles(theme) {
     actionButton: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: theme.colors.primary,
+      backgroundColor: theme.colors.accentMid,
       paddingVertical: 8,
       paddingHorizontal: 18,
       borderRadius: 20,
     },
 
     actionText: {
-      color: theme.colors.accent,
+      color: theme.colors.primaryDark,
       marginLeft: 8,
       fontSize: 14,
     },

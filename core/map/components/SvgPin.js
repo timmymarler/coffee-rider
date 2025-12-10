@@ -1,4 +1,4 @@
-import { MaterialIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
@@ -7,11 +7,13 @@ const PIN_SIZE = 38;
 const INNER_RADIUS = 6;
 const ICON_OFFSET = 0.16;
 const STROKE_WIDTH = 1.2;
+const CIRCLE_FILL = theme.colors.accentDark;
+
 
 export default function SvgPin({
   size = PIN_SIZE,
-  fill = theme.colors.accentLight,
-  stroke = theme.colors.accenntMid,
+  fill = theme.colors.primaryLight,
+  stroke = theme.colors.primaryDark,
   icon = "local-cafe",
   iconColor = "#000",
 }) {
@@ -37,7 +39,8 @@ export default function SvgPin({
           cx="12"
           cy="9"
           r={INNER_RADIUS}
-          fill="#fff"
+          fill={CIRCLE_FILL}
+
           opacity={0.9}
         />
       </Svg>
@@ -49,7 +52,7 @@ export default function SvgPin({
           top: size * ICON_OFFSET,
         }}
       >
-        <MaterialIcons
+        <MaterialCommunityIcons
           name={icon}
           size={iconSize}
           color={iconColor}

@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
 
 // ------------------------------------------------
@@ -18,39 +19,42 @@ import SvgPin from "../map/components/SvgPin";
 const GOOGLE_POI_TYPES = [
   "cafe",
   "coffee_shop",
+  "cafeteria",
   "bakery",
-  "restaurant",
+  "parking",
+  "pub",
+  "bar",
 ];
 const POI_ICON_MAP = {
   // Coffee shops
   cafe: "coffee",
   coffee_shop: "coffee",
-  bakery: "bakery-dining",
-  cafeteria: "coffee",
+  bakery: "food",
+  cafeteria: "food",
   // Car park
   parking: "parking",
   //Sights
-  tourist_attraction: "landscape",
-  beach: "landscape",
+  tourist_attraction: "map-pin",
+  beach: "beach",
   // Petrol / charging
-  gas_station: "local-gas-station",
+  gas_station: "gas-station",
   electric_vehicle_charging_station: "ev-station",
-  motorcycle_repair: "motorcycle",
-  motorcycle_shop: "motorcycle",
+  motorcycle_repair: "motorbike",
+  motorcycle_shop: "motorbike",
   car_repair: "car",
-  event_venue: "motorcycle",
+  event_venue: "motorbike",
   // Take-aways
-  fast_food: "fastfood",
-  fast_food_restaurant: "fastfood",
-  sandwich_shop: "fastfood",  
+  fast_food: "food",
+  fast_food_restaurant: "food",
+  sandwich_shop: "food",  
   //Pubs / restaurants
-  bar: "local-bar",
-  pub: "local-bar",
-  restaurant: "restaurant",
+  bar: "beer",
+  pub: "beer",
+  restaurant: "food-fork-drink",
   // Places to stay
-  lodging: "hotel",
-  bed_and_breakfas: "hotel",
-  hotel: "hotel",
+  lodging: "bed",
+  bed_and_breakfas: "bed",
+  hotel: "bed",
 
 };
 
@@ -61,21 +65,21 @@ const POI_ICON_MAP = {
 const getRiderPinColors = ({ source, selected }) => {
   if (selected) {
     return {
-      fill: theme.colors.accentMid,
+      fill: theme.colors.primaryLight,
       border: theme.colors.accentDark,
     };
   }
 
   if (source === "google") {
     return {
-      fill: theme.colors.accentLight,
+      fill: theme.colors.primaryLight,
       border: theme.colors.accentDark,
     };
   }
 
   // CR
   return {
-    fill: theme.colors.accentMid,
+    fill: theme.colors.primaryLight,
     border: theme.colors.accentDark,
   };
 };
@@ -174,14 +178,20 @@ export default function MapScreenRN() {
       const json = await res.json();
 
       if (!json.places) return [];
-
       return json.places.map((place) => ({
         id: place.id,
-        name: place.displayName?.text,
+        title: place.displayName?.text,
         address: place.formattedAddress,
         rating: place.rating,
+        userRatingsTotal: place.userRatingCount,
+        latitude: place.location.latitude,
+        longitude: place.location.longitude,
+
+        // ✅ existing
+        source: "google",
         type: place.types?.[0],
-        user_ratings_total: place.userRatingCount,
+
+        // ✅ keep geometry if map needs it
         geometry: {
           location: {
             lat: place.location.latitude,
@@ -200,7 +210,6 @@ export default function MapScreenRN() {
   // ------------------------------------------------
   const handleMapPress = async (e) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
-
     const places = await fetchGooglePois(
       latitude,
       longitude,
@@ -216,17 +225,14 @@ export default function MapScreenRN() {
   // ------------------------------------------------
   const handleLongPress = async (e) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
-
     const places = await fetchGooglePois(
       latitude,
       longitude,
       10, // tight radius
       1
     );
-
     if (places.length > 0) {
       setSelectedPlace(places[0]);
-
       mapRef.current?.animateToRegion(
         {
           latitude: places[0].geometry.location.lat,
@@ -262,11 +268,11 @@ export default function MapScreenRN() {
           }
         }
         onPress={handleMapPress}
-        onLongPress={handleLongPress}
+        //onLongPress={handleLongPress}
       >
         {visiblePois.map((place) => {
           const isSelected = selectedPlace?.id === place.id;
-          const iconName = POI_ICON_MAP[place.type] || "place";
+          const iconName = POI_ICON_MAP[place.type] || "map-marker";
 
           const { fill, border } = getRiderPinColors({
             source: place.source, // "cr" | "google"
@@ -280,7 +286,10 @@ export default function MapScreenRN() {
                 latitude: place.geometry.location.lat,
                 longitude: place.geometry.location.lng,
               }}
-              onPress={() => setSelectedPlace(place)}
+              onPress={(e) => {
+                e.stopPropagation();
+                setSelectedPlace(place);
+              }}
               anchor={{ x: 0.5, y: 1 }}
             >
               <SvgPin
@@ -289,37 +298,18 @@ export default function MapScreenRN() {
                 icon={iconName}
               />
             </Marker>
+            
           );
         })}
       </MapView>
 
-      {/* GOOGLE PLACE CARD */}
       {selectedPlace && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>
-            {selectedPlace.name} - {selectedPlace.type} 
-          </Text>
-
-          {selectedPlace.address && (
-            <Text style={styles.cardAddress}>
-              {selectedPlace.address}
-            </Text>
-          )}
-
-          {selectedPlace.rating && (
-            <Text style={styles.cardRating}>
-              ⭐ {selectedPlace.rating} (
-              {selectedPlace.user_ratings_total})
-            </Text>
-          )}
-
-          <TouchableOpacity
-            onPress={() => setSelectedPlace(null)}
-          >
-            <Text style={styles.cardClose}>Close</Text>
-          </TouchableOpacity>
-        </View>
+        <PlaceCard
+          place={selectedPlace}
+          onClose={() => setSelectedPlace(null)}
+        />
       )}
+
 
       {/* ADD VENUE FAB */}
       {capabilities?.canAddVenue && (
