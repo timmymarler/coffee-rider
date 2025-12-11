@@ -14,17 +14,25 @@ import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
 
+//import { APP_NAME } from "../../eas.json";
+import { filterPois } from "../map/filters/filterPois";
+const APP_NAME = "rider";
 // ------------------------------------------------
 // GOOGLE POI TYPES (EDIT FREELY)
 // ------------------------------------------------
 const GOOGLE_POI_TYPES = [
-  "cafe",
-  "coffee_shop",
-  "cafeteria",
-  "bakery",
-  "parking",
-  "pub",
-  "bar",
+  "automotive",
+      "cafe",
+      "coffee_shop",
+      "bakery",
+      "fast_food",
+      "restaurant",
+      "gas_station",
+      "parking",
+      "tourist_attraction",
+      "point_of_interest",
+      "establishment"
+  
 ];
 
 const POI_ICON_MAP = {
@@ -36,7 +44,7 @@ const POI_ICON_MAP = {
   // Car park
   parking: "parking",
   // Sights
-  tourist_attraction: "map-pin",
+  tourist_attraction: "map-marker",
   beach: "beach",
   // Petrol / charging
   gas_station: "gas-station",
@@ -197,68 +205,94 @@ export default function MapScreenRN() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+      if (googlePois.length === 0 || crPlaces.length === 0) return;
+
+      // Remove any Google POIs that overlap CR places
+      const deduped = googlePois.filter(g => {
+          return !crPlaces.some(c => {
+              const dx = Math.abs(c.latitude - g.latitude);
+              const dy = Math.abs(c.longitude - g.longitude);
+              return dx < 0.0005 && dy < 0.0005;
+          });
+      });
+
+      if (deduped.length !== googlePois.length) {
+          setGooglePois(deduped);
+      }
+  }, [crPlaces]);
+
   // ------------------------------------------------
   // GOOGLE POI SEARCH (PLACES API – NEW)
   // ------------------------------------------------
-  const fetchGooglePois = async (
-    latitude,
-    longitude,
-    radius,
-    maxResults
-  ) => {
+
+  const fetchGooglePois = async (latitude, longitude, radius, maxResults) => {
     try {
       const res = await fetch(
-        "https://places.googleapis.com/v1/places:searchNearby",
+        "https://places.googleapis.com/v1/places:searchText",
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Goog-Api-Key":
-              process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
-            "X-Goog-FieldMask":
-              "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.photos",
+            "X-Goog-Api-Key": process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
+            "X-Goog-FieldMask": [
+              "places.id",
+              "places.displayName",
+              "places.formattedAddress",
+              "places.rating",
+              "places.userRatingCount",
+              "places.location",
+              "places.types",
+              "places.photos"
+            ].join(","),
           },
           body: JSON.stringify({
-            includedTypes: GOOGLE_POI_TYPES,
-            maxResultCount: maxResults,
-            locationRestriction: {
+            textQuery:
+              "cafe OR coffee OR tea OR sandwich OR biker OR motorcycle OR motorbike OR petrol OR gas OR pub OR scenic",
+            languageCode: "en",
+
+            locationBias: {
               circle: {
                 center: { latitude, longitude },
                 radius,
               },
             },
+
+            maxResultCount: maxResults,
           }),
         }
       );
 
       const json = await res.json();
-
       if (!json.places) return [];
-      return json.places.map((place) => ({
-        id: place.id,
-        title: place.displayName?.text,
-        address: place.formattedAddress,
-        rating: place.rating,
-        userRatingsTotal: place.userRatingCount,
-        latitude: place.location.latitude,
-        longitude: place.location.longitude,
+// DEBUG: Show closest 20 POIs with Name, Types, Keywords
+if (json.places) {
+  console.log("---- CLEAN POI DEBUG OUTPUT ----");
 
-        source: "google",
-        googlePhotos: place.photos?.map((p) => p.name) || [],
-        googlePhotoUrls:
-          place.photos?.map((p) => getGooglePhotoUrl(p.name)) || [],
+  json.places.slice(0, 20).forEach((p, i) => {
+    const name = p.displayName?.text || "Unknown";
+    const types = p.types || [];
+    const keywords = ["cafe", "coffee", "biker", "motorcycle", "scenic", "tea"]
+      .filter((kw) => name.toLowerCase().includes(kw));
 
-        type: place.types?.[0],
+    console.log(
+      `${i + 1}. ${name}\n` +
+      `   Types: ${JSON.stringify(types)}\n` +
+      `   Keywords: ${keywords.length ? keywords.join(", ") : "None"}\n`
+    );
+  });
 
-        geometry: {
-          location: {
-            lat: place.location.latitude,
-            lng: place.location.longitude,
-          },
-        },
-      }));
+  console.log("---- END POI DEBUG OUTPUT ----");
+}
+
+      // STEP 1 — normalise every Google POI
+      const rawPois = json.places.map(normalizeGooglePlace);
+      // STEP 2 — apply theme-aware filtering
+      const themeFiltered = filterPois(rawPois, APP_NAME);
+      // STEP 3 — return filtered POIs (your dedupe logic handles CR vs Google)
+      return themeFiltered;
     } catch (err) {
-      console.log("Places API error:", err);
+      console.log("TEXT SEARCH ERROR:", err);
       return [];
     }
   };
@@ -274,8 +308,19 @@ export default function MapScreenRN() {
       1500,
       20
     );
-    setGooglePois(places);
+    const filtered = places.filter(g => {
+        return !crPlaces.some(c => {
+            const dx = Math.abs(c.latitude - g.latitude);
+            const dy = Math.abs(c.longitude - g.longitude);
+
+            // Same threshold we use elsewhere (approx ±50m)
+            return dx < 0.0005 && dy < 0.0005;
+        });
+    });
+
+    setGooglePois(filtered);
     setSelectedPlace(null);
+    
   };
 
   // ------------------------------------------------
@@ -286,7 +331,7 @@ export default function MapScreenRN() {
     if (!role) return;
 
     const { latitude, longitude } = e.nativeEvent.coordinate;
-    
+
     // 1. Check if long-press is near an existing CR place
     const existingCr = crPlaces.find(p => {
         const dx = Math.abs(p.latitude - latitude);
@@ -362,7 +407,8 @@ export default function MapScreenRN() {
       } else {
         console.log(
           "[LONG PRESS] POI returned:",
-          json.places[0].displayName?.text
+          json.places[0].displayName?.text, json.places[0].types
+
         );
       }
 
@@ -373,22 +419,42 @@ export default function MapScreenRN() {
     }
   }
 
+
+  // Minimal normaliser
   function normalizeGooglePlace(place) {
+    const title = place.displayName?.text || "";
+    const types = place.types || [];
+
+    const matchedKeywords = ["cafe", "coffee", "biker", "motorcycle", "scenic", "tea","fuel"]
+      .filter((kw) => title.toLowerCase().includes(kw));
+
     return {
       id: place.id,
-      title: place.displayName?.text,
+      title,
       address: place.formattedAddress,
-      latitude: place.location.latitude,
-      longitude: place.location.longitude,
       rating: place.rating,
       userRatingsTotal: place.userRatingCount,
-      type: place.types?.[0],
+      latitude: place.location.latitude,
+      longitude: place.location.longitude,
       source: "google",
+
+      types,
+      _keywordsMatched: matchedKeywords,
+
       googlePhotoUrls:
         place.photos?.map(
           (p) =>
             `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`
         ) || [],
+
+      type: types[0] || "point_of_interest",
+
+      geometry: {
+        location: {
+          lat: place.location.latitude,
+          lng: place.location.longitude,
+        },
+      },
     };
   }
 

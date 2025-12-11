@@ -542,7 +542,7 @@ export default function PlaceCard({
             </Text>
           </>
         ) : (
-          <Text style={styles.title}>{place.title}</Text>
+          <Text style={styles.title}>{place.title} - {place.type}</Text>
         )}
 
         {/* Manual / Google-new input area */}
