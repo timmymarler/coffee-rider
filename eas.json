@@ -3,47 +3,61 @@
     "version": ">= 3.0.0",
     "appVersionSource": "local"
   },
+
   "build": {
+    /* ------------------------------ RIDER ------------------------------ */
+
     "rider": {
-      "env": {
-        "APP_NAME": "rider"
-      }
+      "env": { "APP_NAME": "rider" }
     },
+
     "rider-dev": {
       "developmentClient": true,
-      "env": {
-        "APP_NAME": "rider"
-      },
+      "env": { "APP_NAME": "rider" },
       "environment": "development"
     },
-    "driver": {
-      "env": {
-        "APP_NAME": "driver"
-      }
+
+    "rider-preview": {
+      "android": { "buildType": "apk" },
+      "env": { "APP_NAME": "rider" }
     },
+
+    /* ------------------------------ DRIVER ----------------------------- */
+
+    "driver": {
+      "env": { "APP_NAME": "driver" }
+    },
+
     "driver-dev": {
       "developmentClient": true,
-      "env": {
-        "APP_NAME": "driver"
-      }
+      "env": { "APP_NAME": "driver" }
     },
+
+    "driver-preview": {
+      "android": { "buildType": "apk" },
+      "env": { "APP_NAME": "driver" }
+    },
+
+    /* ------------------------------ STRIDER ---------------------------- */
 
     "strider": {
-      "env": {
-        "APP_NAME": "strider"
-      }
-    },
-    "strider-dev": {
-      "developmentClient": true,
-      "env": {
-        "APP_NAME": "strider"
-      }
+      "env": { "APP_NAME": "strider" }
     },
 
+    "strider-dev": {
+      "developmentClient": true,
+      "env": { "APP_NAME": "strider" }
+    },
+
+    "strider-preview": {
+      "android": { "buildType": "apk" },
+      "env": { "APP_NAME": "strider" }
+    },
+
+    /* ----------------------------- PRODUCTION -------------------------- */
+
     "production": {
-      "env": {
-        "APP_NAME": "rider"
-      }
+      "env": { "APP_NAME": "rider" }
     }
   },
 

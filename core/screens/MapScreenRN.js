@@ -1,12 +1,15 @@
+import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import theme from "@themes";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { useContext, useEffect, useRef, useState } from "react";
 import {
-  StyleSheet,
-  View
-} from "react-native";
+  collection,
+  onSnapshot,
+  query,
+} from "firebase/firestore";
+import { useContext, useEffect, useRef, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
@@ -23,6 +26,7 @@ const GOOGLE_POI_TYPES = [
   "pub",
   "bar",
 ];
+
 const POI_ICON_MAP = {
   // Coffee shops
   cafe: "coffee",
@@ -31,7 +35,7 @@ const POI_ICON_MAP = {
   cafeteria: "food",
   // Car park
   parking: "parking",
-  //Sights
+  // Sights
   tourist_attraction: "map-pin",
   beach: "beach",
   // Petrol / charging
@@ -44,8 +48,8 @@ const POI_ICON_MAP = {
   // Take-aways
   fast_food: "food",
   fast_food_restaurant: "food",
-  sandwich_shop: "food",  
-  //Pubs / restaurants
+  sandwich_shop: "food",
+  // Pubs / restaurants
   bar: "beer",
   pub: "beer",
   restaurant: "food-fork-drink",
@@ -53,7 +57,6 @@ const POI_ICON_MAP = {
   lodging: "bed",
   bed_and_breakfas: "bed",
   hotel: "bed",
-
 };
 
 /* ------------------------------
@@ -61,6 +64,7 @@ const POI_ICON_MAP = {
 ------------------------------ */
 
 const getRiderPinColors = ({ source, selected }) => {
+  // Selected marker: highlight
   if (selected) {
     return {
       fill: theme.colors.primaryLight,
@@ -68,14 +72,15 @@ const getRiderPinColors = ({ source, selected }) => {
     };
   }
 
-  if (source === "google") {
+  // CR vs Google styling – tweak later if you want more contrast
+  if (source === "cr") {
     return {
-      fill: theme.colors.primaryLight,
+      fill: theme.colors.accentMid,
       border: theme.colors.accentDark,
     };
   }
 
-  // CR
+  // Default / Google
   return {
     fill: theme.colors.primaryLight,
     border: theme.colors.accentDark,
@@ -92,18 +97,20 @@ function getGooglePhotoUrl(photoName, maxWidth = 800) {
 export default function MapScreenRN() {
   const router = useRouter();
   const mapRef = useRef(null);
-  const { capabilities } = useContext(AuthContext);
+
+  const auth = useContext(AuthContext);
+  const { role } = auth || {};
 
   const [region, setRegion] = useState(null);
 
-  // Ephemeral Google POI markers (tap-to-load)
-  const [visiblePois, setVisiblePois] = useState([]);
+  // Ephemeral Google POIs (tap-to-load)
+  const [googlePois, setGooglePois] = useState([]);
+
+  // Persistent CR places from Firestore
+  const [crPlaces, setCrPlaces] = useState([]);
 
   // Selected POI for card (marker tap OR long-press)
   const [selectedPlace, setSelectedPlace] = useState(null);
-  
-  // Need to create user object to catch long press for non logged in users
-  const user = useContext(AuthContext);
 
   // ------------------------------------------------
   // GET USER LOCATION
@@ -147,6 +154,50 @@ export default function MapScreenRN() {
   }, []);
 
   // ------------------------------------------------
+  // FIRESTORE LISTENER FOR CR PLACES
+  // ------------------------------------------------
+  useEffect(() => {
+    const q = query(collection(db, "places"));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const docs = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data() || {};
+          const loc = data.location || {};
+          const latitude = loc.latitude;
+          const longitude = loc.longitude;
+
+          return {
+            id: docSnap.id,
+            title: data.name,
+            type: data.type ?? null,
+            source: "cr",
+            latitude,
+            longitude,
+            suitability: data.suitability || {},
+            amenities: data.amenities || {},
+            crRatings: data.crRatings || {},
+            googlePhotoUrls: data.googlePhotoUrls || [],
+            geometry: {
+              location: {
+                lat: latitude,
+                lng: longitude,
+              },
+            },
+          };
+        });
+
+        setCrPlaces(docs);
+      },
+      (error) => {
+        console.log("[CR PLACES] listener error", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // ------------------------------------------------
   // GOOGLE POI SEARCH (PLACES API – NEW)
   // ------------------------------------------------
   const fetchGooglePois = async (
@@ -164,10 +215,8 @@ export default function MapScreenRN() {
             "Content-Type": "application/json",
             "X-Goog-Api-Key":
               process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
-              //"X-Goog-FieldMask":
-              //  "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types",
-              "X-Goog-FieldMask":
-                "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.photos",
+            "X-Goog-FieldMask":
+              "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.photos",
           },
           body: JSON.stringify({
             includedTypes: GOOGLE_POI_TYPES,
@@ -194,16 +243,13 @@ export default function MapScreenRN() {
         latitude: place.location.latitude,
         longitude: place.location.longitude,
 
-        // ✅ existing
         source: "google",
         googlePhotos: place.photos?.map((p) => p.name) || [],
-        googlePhotoUrls: place.photos?.map((p) =>
-          getGooglePhotoUrl(p.name)
-        ) || [],
+        googlePhotoUrls:
+          place.photos?.map((p) => getGooglePhotoUrl(p.name)) || [],
 
         type: place.types?.[0],
 
-        // ✅ keep geometry if map needs it
         geometry: {
           location: {
             lat: place.location.latitude,
@@ -218,45 +264,63 @@ export default function MapScreenRN() {
   };
 
   // ------------------------------------------------
-  // TAP = LOAD POIS IN AREA (MARKERS)
+  // TAP = LOAD GOOGLE POIS IN AREA (MARKERS)
   // ------------------------------------------------
   const handleMapPress = async (e) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
     const places = await fetchGooglePois(
       latitude,
       longitude,
-      1500, // discovery radius
+      1500,
       20
     );
-    setVisiblePois(places);
+    setGooglePois(places);
     setSelectedPlace(null);
   };
 
   // ------------------------------------------------
-  // LONG PRESS = INSPECT NEAREST POI ONLY
+  // LONG PRESS = INSPECT / SAVE NEAREST POI OR MANUAL
   // ------------------------------------------------
   const handleMapLongPress = async (e) => {
-    if (!user?.role) return;
+    // Only logged-in roles can long-press
+    if (!role) return;
 
     const { latitude, longitude } = e.nativeEvent.coordinate;
-    const role = user.role;
+    
+    // 1. Check if long-press is near an existing CR place
+    const existingCr = crPlaces.find(p => {
+        const dx = Math.abs(p.latitude - latitude);
+        const dy = Math.abs(p.longitude - longitude);
+
+        // crude proximity check, but works perfectly at this zoom:
+        return dx < 0.0005 && dy < 0.0005;
+    });
+
+    if (existingCr) {
+        // Open the CR place in VIEW mode, not create mode
+        setSelectedPlace(existingCr);
+        return;
+    }
 
     const googlePlace = await getGooglePoiAtCoordinate({
       latitude,
       longitude,
     });
 
-    // USER: POI only
+    // USER: POI only (view)
     if (role === "user") {
       if (!googlePlace) return;
       setSelectedPlace(normalizeGooglePlace(googlePlace));
       return;
     }
 
-    // PRO / ADMIN
+    // PRO / ADMIN: either Google-import or manual
     if (role === "pro" || role === "admin") {
       if (googlePlace) {
-        setSelectedPlace(normalizeGooglePlace(googlePlace));
+        const normalized = normalizeGooglePlace(googlePlace);
+        // Flag this as a "Google → CR" creation candidate
+        normalized.source = "google-new";
+        setSelectedPlace(normalized);
       } else {
         setSelectedPlace({
           source: "manual",
@@ -275,7 +339,8 @@ export default function MapScreenRN() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Goog-Api-Key": process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
+            "X-Goog-Api-Key":
+              process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
             "X-Goog-FieldMask":
               "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location,places.types,places.photos",
           },
@@ -283,7 +348,7 @@ export default function MapScreenRN() {
             locationRestriction: {
               circle: {
                 center: { latitude, longitude },
-                radius: 80, // very small radius = intentional POI press
+                radius: 80,
               },
             },
             maxResultCount: 1,
@@ -319,15 +384,19 @@ export default function MapScreenRN() {
       userRatingsTotal: place.userRatingCount,
       type: place.types?.[0],
       source: "google",
-      googlePhotoUrls: place.photos?.map((p) =>
-        `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`
-      ) || [],
+      googlePhotoUrls:
+        place.photos?.map(
+          (p) =>
+            `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`
+        ) || [],
     };
   }
 
   // ------------------------------------------------
   // RENDER
   // ------------------------------------------------
+  const allMarkers = [...googlePois, ...crPlaces];
+
   return (
     <View style={styles.container}>
       <MapView
@@ -336,7 +405,7 @@ export default function MapScreenRN() {
         provider={PROVIDER_GOOGLE}
         showsUserLocation
         showsMyLocationButton
-        showsPointsOfInterest={true} // keep Google POIs visible
+        showsPointsOfInterest={true}
         initialRegion={
           region || {
             latitude: 52.1364,
@@ -348,53 +417,66 @@ export default function MapScreenRN() {
         onPress={handleMapPress}
         onLongPress={handleMapLongPress}
       >
-        {visiblePois.map((place) => {
+        {allMarkers.map((place) => {
           const isSelected = selectedPlace?.id === place.id;
-          const iconName = POI_ICON_MAP[place.type] || "map-marker";
 
           const { fill, border } = getRiderPinColors({
             source: place.source, // "cr" | "google"
             selected: isSelected,
           });
 
+          const iconName = POI_ICON_MAP[place.type] || "map-marker";
+
+          const lat =
+            place.geometry?.location?.lat ?? place.latitude ?? 0;
+          const lng =
+            place.geometry?.location?.lng ?? place.longitude ?? 0;
+
           return (
             <Marker
               key={place.id}
-              coordinate={{
-                latitude: place.geometry.location.lat,
-                longitude: place.geometry.location.lng,
-              }}
+              coordinate={{ latitude: lat, longitude: lng }}
               onPress={(e) => {
                 e.stopPropagation();
                 setSelectedPlace(place);
               }}
               anchor={{ x: 0.5, y: 1 }}
             >
-              <SvgPin
-                fill={fill}
-                stroke={border}
-                icon={iconName}
-              />
+              <SvgPin fill={fill} stroke={border} icon={iconName} />
             </Marker>
-            
           );
         })}
       </MapView>
 
       {selectedPlace && (
-      <PlaceCard
-        place={selectedPlace}
-        onClose={() => setSelectedPlace(null)}
-        onPlaceCreated={(newPlace) => {
-          console.log("[MAP] CR place created", newPlace);
+        <PlaceCard
+          place={selectedPlace}
+          onClose={() => setSelectedPlace(null)}
+          onPlaceCreated={(newPlace) => {
+            console.log("[MAP] CR place created", newPlace);
 
-          // 1. Add marker immediately
-          //setCrPlaces((prev) => [...prev, newPlace]);
+            // Optimistically add CR marker while Firestore listener catches up
+            setCrPlaces((prev) => {
+              if (prev.some((p) => p.id === newPlace.id)) return prev;
+              return [
+                ...prev,
+                {
+                  ...newPlace,
+                  geometry: {
+                    location: {
+                      lat: newPlace.latitude,
+                      lng: newPlace.longitude,
+                    },
+                  },
+                },
+              ];
+            });
 
-          // 2. Switch selection to CR place
-          setSelectedPlace(newPlace);
-        }}
-      />
+            // Clear selection first so React re-renders correctly
+            setSelectedPlace(null);
+            // Re-select the CR marker (forces the new pin style to show immediately)
+            setTimeout(() => setSelectedPlace(newPlace), 50);          }}
+        />
       )}
     </View>
   );
