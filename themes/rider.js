@@ -19,6 +19,12 @@ export default {
     accentMid: "#FFD85C",
     accentLight: "#FFF2C7",
 
+    // Use Strider as accents
+    secondaryDark: "#2F622D",
+    secondaryMid: "#699955",
+    secondaryLight: "#A4BF8F",
+
+
     // App surfaces
     // You said main screen background should be “the blue”, we’ll use primaryMid here.
     background: "#587587",

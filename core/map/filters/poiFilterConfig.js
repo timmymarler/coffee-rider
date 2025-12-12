@@ -9,7 +9,7 @@ export const POI_FILTERS = {
       "gas_station",
       "parking",
     ],
-    keywords: ["cafe", "coffee", "biker", "motorcycle", "fuel", "tea", "scenic"],
+    keywords: ["cafe", "coffee", "biker", "motorcycle", "motorbike", "scooter", "fuel", "tea", "scenic"],
     //keywords: ["fuel"],
   },
 

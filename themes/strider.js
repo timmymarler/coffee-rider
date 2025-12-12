@@ -18,6 +18,11 @@ export default {
     accentMid: "#9A714F",
     accentLight: "#CEA57D",
 
+    // Rider as accents
+    secondaryDark:  "#0F2A38", // deep blue-teal, strong not muddy
+    secondaryMid:   "#163B4F", // saturated slate-blue
+    secondaryLight: "#1F566F", // confident blue for borders/highlights
+
     background: "#699955",
     surface: "#2F622D",
 

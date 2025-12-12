@@ -1,40 +1,31 @@
+import PlaceCard from "@components/PlaceCard";
+import SvgPin from "@components/SvgPin";
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import theme from "@themes";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import {
-  collection,
-  onSnapshot,
-  query,
-} from "firebase/firestore";
+import { collection, onSnapshot, query } from "firebase/firestore";
 import { useContext, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
-import PlaceCard from "../map/components/PlaceCard";
-import SvgPin from "../map/components/SvgPin";
 
-//import { APP_NAME } from "../../eas.json";
-import { filterPois } from "../map/filters/filterPois";
 const APP_NAME = "rider";
-// ------------------------------------------------
-// GOOGLE POI TYPES (EDIT FREELY)
-// ------------------------------------------------
-const GOOGLE_POI_TYPES = [
-  "automotive",
-      "cafe",
-      "coffee_shop",
-      "bakery",
-      "fast_food",
-      "restaurant",
-      "gas_station",
-      "parking",
-      "tourist_attraction",
-      "point_of_interest",
-      "establishment"
-  
-];
 
+import { THEME_CONFIG } from "../map/config/themeConfig";
+import { passesFilters } from "../map/utils/passesFilters";
+import { rankAndLimitPois } from "../map/utils/rankAndLimitPois";
+
+// Empty filters → browse mode
+const uiFilters = {
+  categories: [],
+  suitability: [],
+  amenities: [],
+};
+
+// ------------------------------------------------
+// POI ICON MAP
+// ------------------------------------------------
 const POI_ICON_MAP = {
   // Coffee shops
   cafe: "coffee",
@@ -71,8 +62,7 @@ const POI_ICON_MAP = {
    Marker behaviour helpers
 ------------------------------ */
 
-const getRiderPinColors = ({ source, selected }) => {
-  // Selected marker: highlight
+const getRiderPinColors = ({ source, selected, suitability }) => {
   if (selected) {
     return {
       fill: theme.colors.primaryLight,
@@ -80,23 +70,102 @@ const getRiderPinColors = ({ source, selected }) => {
     };
   }
 
-  // CR vs Google styling – tweak later if you want more contrast
-  if (source === "cr") {
+  if (source !== "cr") {
+    // GOOGLE → de-emphasised
     return {
-      fill: theme.colors.accentMid,
+      fill: theme.colors.primaryMid,
+      border: theme.colors.primaryLight,
+    };
+  }
+
+  // -----------------------------
+  // CR: multi-tier suitability
+  // -----------------------------
+  const isRider =
+    suitability?.bikers === true || suitability?.scooters === true;
+
+  const isCar = suitability?.cars === true;
+  const isWalker = suitability?.walkers === true;
+
+  if (isRider) {
+    return {
+      fill: theme.colors.accentMid,     // Rider
+      border: theme.colors.accentDark,
+    };
+  } else if (isCar) {
+    return {
+      fill: theme.colors.primaryMid,    // Driver
+      border: theme.colors.accentDark,
+    };
+  } else if (isWalker) {
+    return {
+      fill: theme.colors.secondaryMid,  // Strider
       border: theme.colors.accentDark,
     };
   }
 
-  // Default / Google
+  // CR place but irrelevant for Rider
   return {
-    fill: theme.colors.primaryLight,
+    fill: theme.colors.accentDark,
     border: theme.colors.accentDark,
   };
 };
 
-function getGooglePhotoUrl(photoName, maxWidth = 800) {
-  return `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=${maxWidth}&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`;
+// ------------------------------------------------
+// GOOGLE NORMALISER (RIDER)
+// ------------------------------------------------
+function normalizeGooglePlace(place) {
+  const title = place.displayName?.text || "";
+  const types = place.types || [];
+
+  const keywordPool = [
+    "cafe",
+    "coffee",
+    "biker",
+    "motorcycle",
+    "motorbike",
+    "scenic",
+    "tea",
+    "fuel",
+    "petrol",
+    "gas",
+    "pub",
+  ];
+
+  const matchedKeywords = keywordPool.filter((kw) =>
+    title.toLowerCase().includes(kw)
+  );
+
+  return {
+    id: place.id,
+    title,
+    types,
+    matchedKeywords,
+
+    address: place.formattedAddress,
+    latitude: place.location.latitude,
+    longitude: place.location.longitude,
+
+    rating: place.rating,
+    userRatingsTotal: place.userRatingCount,
+
+    source: "google",
+
+    googlePhotoUrls:
+      place.photos?.map(
+        (p) =>
+          `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`
+      ) || [],
+
+    type: types[0] || "point_of_interest",
+
+    geometry: {
+      location: {
+        lat: place.location.latitude,
+        lng: place.location.longitude,
+      },
+    },
+  };
 }
 
 // ------------------------------------------------
@@ -205,27 +274,30 @@ export default function MapScreenRN() {
     return () => unsubscribe();
   }, []);
 
+  // ------------------------------------------------
+  // DEDUPE: REMOVE GOOGLE POIS THAT OVERLAP ANY CR PLACE (~50m)
+  // ------------------------------------------------
   useEffect(() => {
-      if (googlePois.length === 0 || crPlaces.length === 0) return;
+    if (googlePois.length === 0 || crPlaces.length === 0) return;
 
-      // Remove any Google POIs that overlap CR places
-      const deduped = googlePois.filter(g => {
-          return !crPlaces.some(c => {
-              const dx = Math.abs(c.latitude - g.latitude);
-              const dy = Math.abs(c.longitude - g.longitude);
-              return dx < 0.0005 && dy < 0.0005;
-          });
+    const deduped = googlePois.filter((g) => {
+      return !crPlaces.some((c) => {
+        const dx = Math.abs(c.latitude - g.latitude);
+        const dy = Math.abs(c.longitude - g.longitude);
+        // ≈ 50m at UK latitudes
+        return dx < 0.0005 && dy < 0.0005;
       });
+    });
 
-      if (deduped.length !== googlePois.length) {
-          setGooglePois(deduped);
-      }
-  }, [crPlaces]);
+    // Prevent render loops by checking identity properly
+    if (JSON.stringify(deduped) !== JSON.stringify(googlePois)) {
+      setGooglePois(deduped);
+    }
+  }, [crPlaces, googlePois]);
 
   // ------------------------------------------------
-  // GOOGLE POI SEARCH (PLACES API – NEW)
+  // GOOGLE POI SEARCH (PLACES API – TEXT SEARCH)
   // ------------------------------------------------
-
   const fetchGooglePois = async (latitude, longitude, radius, maxResults) => {
     try {
       const res = await fetch(
@@ -234,7 +306,8 @@ export default function MapScreenRN() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Goog-Api-Key": process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
+            "X-Goog-Api-Key":
+              process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
             "X-Goog-FieldMask": [
               "places.id",
               "places.displayName",
@@ -243,21 +316,16 @@ export default function MapScreenRN() {
               "places.userRatingCount",
               "places.location",
               "places.types",
-              "places.photos"
+              "places.photos",
             ].join(","),
           },
           body: JSON.stringify({
             textQuery:
               "cafe OR coffee OR tea OR sandwich OR biker OR motorcycle OR motorbike OR petrol OR gas OR pub OR scenic",
             languageCode: "en",
-
             locationBias: {
-              circle: {
-                center: { latitude, longitude },
-                radius,
-              },
+              circle: { center: { latitude, longitude }, radius },
             },
-
             maxResultCount: maxResults,
           }),
         }
@@ -265,32 +333,15 @@ export default function MapScreenRN() {
 
       const json = await res.json();
       if (!json.places) return [];
-// DEBUG: Show closest 20 POIs with Name, Types, Keywords
-if (json.places) {
-  console.log("---- CLEAN POI DEBUG OUTPUT ----");
 
-  json.places.slice(0, 20).forEach((p, i) => {
-    const name = p.displayName?.text || "Unknown";
-    const types = p.types || [];
-    const keywords = ["cafe", "coffee", "biker", "motorcycle", "scenic", "tea"]
-      .filter((kw) => name.toLowerCase().includes(kw));
-
-    console.log(
-      `${i + 1}. ${name}\n` +
-      `   Types: ${JSON.stringify(types)}\n` +
-      `   Keywords: ${keywords.length ? keywords.join(", ") : "None"}\n`
-    );
-  });
-
-  console.log("---- END POI DEBUG OUTPUT ----");
-}
-
-      // STEP 1 — normalise every Google POI
+      // 1. Normalise
       const rawPois = json.places.map(normalizeGooglePlace);
-      // STEP 2 — apply theme-aware filtering
-      const themeFiltered = filterPois(rawPois, APP_NAME);
-      // STEP 3 — return filtered POIs (your dedupe logic handles CR vs Google)
-      return themeFiltered;
+
+      // 2. Rank & limit for Rider
+      const top20 = rankAndLimitPois(rawPois, THEME_CONFIG[APP_NAME]);
+
+      // 3. Apply Rider filters (currently only category/amenities; CR branch ignored here)
+      return top20.filter((p) => passesFilters(p, APP_NAME, uiFilters));
     } catch (err) {
       console.log("TEXT SEARCH ERROR:", err);
       return [];
@@ -302,25 +353,12 @@ if (json.places) {
   // ------------------------------------------------
   const handleMapPress = async (e) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
-    const places = await fetchGooglePois(
-      latitude,
-      longitude,
-      1500,
-      20
-    );
-    const filtered = places.filter(g => {
-        return !crPlaces.some(c => {
-            const dx = Math.abs(c.latitude - g.latitude);
-            const dy = Math.abs(c.longitude - g.longitude);
 
-            // Same threshold we use elsewhere (approx ±50m)
-            return dx < 0.0005 && dy < 0.0005;
-        });
-    });
+    const places = await fetchGooglePois(latitude, longitude, 1500, 20);
 
-    setGooglePois(filtered);
+    // Let the dedupe effect handle CR vs Google – no extra filtering here
+    setGooglePois(places);
     setSelectedPlace(null);
-    
   };
 
   // ------------------------------------------------
@@ -333,18 +371,16 @@ if (json.places) {
     const { latitude, longitude } = e.nativeEvent.coordinate;
 
     // 1. Check if long-press is near an existing CR place
-    const existingCr = crPlaces.find(p => {
-        const dx = Math.abs(p.latitude - latitude);
-        const dy = Math.abs(p.longitude - longitude);
-
-        // crude proximity check, but works perfectly at this zoom:
-        return dx < 0.0005 && dy < 0.0005;
+    const existingCr = crPlaces.find((p) => {
+      const dx = Math.abs(p.latitude - latitude);
+      const dy = Math.abs(p.longitude - longitude);
+      return dx < 0.0005 && dy < 0.0005;
     });
 
     if (existingCr) {
-        // Open the CR place in VIEW mode, not create mode
-        setSelectedPlace(existingCr);
-        return;
+      // Open the CR place (view/edit) – NOT create
+      setSelectedPlace(existingCr);
+      return;
     }
 
     const googlePlace = await getGooglePoiAtCoordinate({
@@ -401,67 +437,24 @@ if (json.places) {
         }
       );
 
-      const json = await res.json();
-      if (!json.places || json.places.length === 0) {
-        console.log("[LONG PRESS] No POI returned by Google");
-      } else {
-        console.log(
-          "[LONG PRESS] POI returned:",
-          json.places[0].displayName?.text, json.places[0].types
-
-        );
-      }
-
-      return json.places?.[0] ?? null;
     } catch (err) {
       console.log("[LONG PRESS] POI lookup failed", err);
       return null;
     }
   }
 
-
-  // Minimal normaliser
-  function normalizeGooglePlace(place) {
-    const title = place.displayName?.text || "";
-    const types = place.types || [];
-
-    const matchedKeywords = ["cafe", "coffee", "biker", "motorcycle", "scenic", "tea","fuel"]
-      .filter((kw) => title.toLowerCase().includes(kw));
-
-    return {
-      id: place.id,
-      title,
-      address: place.formattedAddress,
-      rating: place.rating,
-      userRatingsTotal: place.userRatingCount,
-      latitude: place.location.latitude,
-      longitude: place.location.longitude,
-      source: "google",
-
-      types,
-      _keywordsMatched: matchedKeywords,
-
-      googlePhotoUrls:
-        place.photos?.map(
-          (p) =>
-            `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`
-        ) || [],
-
-      type: types[0] || "point_of_interest",
-
-      geometry: {
-        location: {
-          lat: place.location.latitude,
-          lng: place.location.longitude,
-        },
-      },
-    };
-  }
-
   // ------------------------------------------------
   // RENDER
   // ------------------------------------------------
-  const allMarkers = [...googlePois, ...crPlaces];
+
+  // CR places are ALWAYS visible; suitability is communicated via colour
+  const visibleCrPlaces = crPlaces || [];
+
+  // Final marker list: Google + CR (CR always wins when within 50m – handled by dedupe)
+  const allMarkers = [
+    ...visibleCrPlaces, // CR FIRST
+    ...googlePois       // Google second
+  ];
 
   return (
     <View style={styles.container}>
@@ -489,10 +482,12 @@ if (json.places) {
           const { fill, border } = getRiderPinColors({
             source: place.source, // "cr" | "google"
             selected: isSelected,
+            suitability: place.suitability,
           });
 
           const iconName = POI_ICON_MAP[place.type] || "map-marker";
 
+          if (!place.latitude || !place.longitude) return null;
           const lat =
             place.geometry?.location?.lat ?? place.latitude ?? 0;
           const lng =
@@ -541,7 +536,8 @@ if (json.places) {
             // Clear selection first so React re-renders correctly
             setSelectedPlace(null);
             // Re-select the CR marker (forces the new pin style to show immediately)
-            setTimeout(() => setSelectedPlace(newPlace), 50);          }}
+            setTimeout(() => setSelectedPlace(newPlace), 50);
+          }}
         />
       )}
     </View>

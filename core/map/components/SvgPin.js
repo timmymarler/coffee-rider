@@ -7,13 +7,14 @@ const PIN_SIZE = 38;
 const INNER_RADIUS = 6;
 const ICON_OFFSET = 0.16;
 const STROKE_WIDTH = 1.2;
-const CIRCLE_FILL = theme.colors.accentDark;
+//const CIRCLE_FILL = theme.colors.accentDark;
 
 
 export default function SvgPin({
   size = PIN_SIZE,
   fill = theme.colors.primaryLight,
-  stroke = theme.colors.primaryDark,
+  stroke = theme.colors.accentDark,
+  circle = theme.colors.accentDark,
   icon = "local-cafe",
   iconColor = "#000",
 }) {
@@ -39,7 +40,7 @@ export default function SvgPin({
           cx="12"
           cy="9"
           r={INNER_RADIUS}
-          fill={CIRCLE_FILL}
+          fill={circle}
 
           opacity={0.9}
         />

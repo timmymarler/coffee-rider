@@ -18,6 +18,11 @@ export default {
     accentMid: "#4A6A89",
     accentLight: "#8CAAB3",
 
+    // Use Strider as accents
+    secondaryDark: "#2F622D",
+    secondaryMid: "#699955",
+    secondaryLight: "#A4BF8F",
+
     background: "#9A714F",
     surface: "#6A4326",
 
