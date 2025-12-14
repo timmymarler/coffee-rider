@@ -1,61 +1,85 @@
-import PlaceCard from "@components/PlaceCard";
-import SvgPin from "@components/SvgPin";
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import theme from "@themes";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { collection, onSnapshot, query } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  query,
+} from "firebase/firestore";
 import { useContext, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
-
-const APP_NAME = "rider";
-
-import { THEME_CONFIG } from "../map/config/themeConfig";
-import { passesFilters } from "../map/utils/passesFilters";
-import { rankAndLimitPois } from "../map/utils/rankAndLimitPois";
-
-// Empty filters → browse mode
-const uiFilters = {
-  categories: [],
-  suitability: [],
-  amenities: [],
-};
+import { classifyPoi } from "../map/classify/classifyPois";
+import PlaceCard from "../map/components/PlaceCard";
+import SvgPin from "../map/components/SvgPin";
+import { applyFilters } from "../map/filters/applyFilters";
+import { FILTER_GROUPS } from "../map/filters/filterGroups";
+import { normalisePoi } from "../map/normalise/normalisePoi";
 
 // ------------------------------------------------
-// POI ICON MAP
+// GOOGLE POI TYPES (EDIT FREELY)
 // ------------------------------------------------
-const POI_ICON_MAP = {
-  // Coffee shops
+const GOOGLE_POI_TYPES = [
+  "automotive",
+];
+
+// ---- POI ICON MAPPING FOR RIDER ----
+// Expanded to cover all Google types you've actually seen in your results.
+// Ensures food, fuel, bike shops, cafés, and pubs always get the correct icons.
+
+export const POI_ICON_MAP = {
+  // ---- Coffee / Café ----
   cafe: "coffee",
   coffee_shop: "coffee",
+  tea_house: "coffee",
+  dog_cafe: "coffee",
   bakery: "food",
   cafeteria: "food",
-  // Car park
-  parking: "parking",
-  // Sights
-  tourist_attraction: "map-marker",
-  beach: "beach",
-  // Petrol / charging
+  food_store: "food",                 // Google uses this for bakery/café hybrids
+  breakfast_restaurant: "coffee",
+  brunch_restaurant: "coffee",
+
+  // ---- Restaurants / Food ----
+  restaurant: "food-fork-drink",
+  food: "food-fork-drink",
+  fast_food: "food",
+  fast_food_restaurant: "food",
+  meal_takeaway: "food",
+  sandwich_shop: "food",
+  dessert_restaurant: "food-fork-drink",
+  vegetarian_restaurant: "food-fork-drink",
+  vegan_restaurant: "food-fork-drink",
+  bar_and_grill: "food-fork-drink",
+  seafood_restaurant: "food-fork-drink",
+  turkish_restaurant: "food-fork-drink",
+
+  // ---- Pubs / Bars ----
+  bar: "beer",
+  pub: "beer",
+
+  // ---- Fuel / Vehicle ----
   gas_station: "gas-station",
   electric_vehicle_charging_station: "ev-station",
   motorcycle_repair: "motorbike",
   motorcycle_shop: "motorbike",
-  car_repair: "car",
-  event_venue: "motorbike",
-  // Take-aways
-  fast_food: "food",
-  fast_food_restaurant: "food",
-  sandwich_shop: "food",
-  // Pubs / restaurants
-  bar: "beer",
-  pub: "beer",
-  restaurant: "food-fork-drink",
-  // Places to stay
-  lodging: "bed",
-  bed_and_breakfas: "bed",
-  hotel: "bed",
+  motorcyle: "motorbike",
+  auto_parts_store: "motorbike",
+
+  // ---- Parking ----
+  parking: "parking",
+
+  // ---- Attractions / Misc ----
+  tourist_attraction: "map-marker",
+  historical_landmark: "map-marker",
+  museum: "map-marker",
+  park: "map-marker",
+  playground: "map-marker",
+
+  // ---- Generic Fallbacks ----
+//  point_of_interest: "map-marker",
+//  establishment: "map-marker",
 };
 
 /* ------------------------------
@@ -63,131 +87,76 @@ const POI_ICON_MAP = {
 ------------------------------ */
 
 const getRiderPinColors = ({ source, selected, suitability }) => {
+  let baseColors = {
+    fill: theme.colors.primaryLight,
+    border: theme.colors.primaryMid,
+  };
+
+  // GOOGLE POIs
+  if (source === "google") {
+    baseColors = {
+      fill: theme.colors.primaryLight,
+      border: theme.colors.primaryMid,
+    };
+  }
+
+  // CR PLACES — Suitability logic
+  if (source === "cr") {
+    const isBikeFriendly =
+      suitability?.bikers || suitability?.scooters;
+
+    const isDriverFriendly =
+      suitability?.evDrivers || suitability?.cars;
+
+    const isStriderFriendly =
+      suitability?.cyclists || suitability?.walkers;
+
+    if (isBikeFriendly) {
+      baseColors = {
+        fill: theme.colors.accentMid,
+        border: theme.colors.accentLight,
+      };
+    } else if (isDriverFriendly) {
+      baseColors = {
+        fill: theme.colors.primaryMid,
+        border: theme.colors.accentMid,
+      };
+    } else if (isStriderFriendly) {
+      baseColors = {
+        fill: theme.colors.secondaryMid,
+        border: theme.colors.accentMid,
+      };
+    }
+  }
+
+  // SELECTED OVERLAY → do NOT change category colour!
   if (selected) {
     return {
-      fill: theme.colors.primaryLight,
-      border: theme.colors.accentDark,
+      fill: baseColors.fill,
+      border: theme.colors.accentDark,   // highlight only
     };
   }
 
-  if (source !== "cr") {
-    // GOOGLE → de-emphasised
-    return {
-      fill: theme.colors.primaryMid,
-      border: theme.colors.primaryLight,
-    };
-  }
-
-  // -----------------------------
-  // CR: multi-tier suitability
-  // -----------------------------
-  const isRider =
-    suitability?.bikers === true || suitability?.scooters === true;
-
-  const isCar = suitability?.cars === true;
-  const isWalker = suitability?.walkers === true;
-
-  if (isRider) {
-    return {
-      fill: theme.colors.accentMid,     // Rider
-      border: theme.colors.accentDark,
-    };
-  } else if (isCar) {
-    return {
-      fill: theme.colors.primaryMid,    // Driver
-      border: theme.colors.accentDark,
-    };
-  } else if (isWalker) {
-    return {
-      fill: theme.colors.secondaryMid,  // Strider
-      border: theme.colors.accentDark,
-    };
-  }
-
-  // CR place but irrelevant for Rider
-  return {
-    fill: theme.colors.accentDark,
-    border: theme.colors.accentDark,
-  };
+  return baseColors;
 };
 
-// ------------------------------------------------
-// GOOGLE NORMALISER (RIDER)
-// ------------------------------------------------
-function normalizeGooglePlace(place) {
-  const title = place.displayName?.text || "";
-  const types = place.types || [];
-
-  const keywordPool = [
-    "cafe",
-    "coffee",
-    "biker",
-    "motorcycle",
-    "motorbike",
-    "scenic",
-    "tea",
-    "fuel",
-    "petrol",
-    "gas",
-    "pub",
-  ];
-
-  const matchedKeywords = keywordPool.filter((kw) =>
-    title.toLowerCase().includes(kw)
-  );
-
-  return {
-    id: place.id,
-    title,
-    types,
-    matchedKeywords,
-
-    address: place.formattedAddress,
-    latitude: place.location.latitude,
-    longitude: place.location.longitude,
-
-    rating: place.rating,
-    userRatingsTotal: place.userRatingCount,
-
-    source: "google",
-
-    googlePhotoUrls:
-      place.photos?.map(
-        (p) =>
-          `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`
-      ) || [],
-
-    type: types[0] || "point_of_interest",
-
-    geometry: {
-      location: {
-        lat: place.location.latitude,
-        lng: place.location.longitude,
-      },
-    },
-  };
-}
-
-// ------------------------------------------------
-// SCREEN
-// ------------------------------------------------
 export default function MapScreenRN() {
   const router = useRouter();
+  const auth = useContext(AuthContext);
+  const { user, role } = auth || {};
+
   const mapRef = useRef(null);
 
-  const auth = useContext(AuthContext);
-  const { role } = auth || {};
-
   const [region, setRegion] = useState(null);
-
-  // Ephemeral Google POIs (tap-to-load)
   const [googlePois, setGooglePois] = useState([]);
-
-  // Persistent CR places from Firestore
   const [crPlaces, setCrPlaces] = useState([]);
-
-  // Selected POI for card (marker tap OR long-press)
   const [selectedPlace, setSelectedPlace] = useState(null);
+  const [filters, setFilters] = useState({
+    query: "",
+    categories: new Set(),     // e.g. "cafe", "fuel"
+    suitability: new Set(),    // e.g. "bikers", "scooters"
+    amenities: new Set(),      // e.g. "parking", "outdoorSeating"
+  });
 
   // ------------------------------------------------
   // GET USER LOCATION
@@ -195,22 +164,29 @@ export default function MapScreenRN() {
   useEffect(() => {
     (async () => {
       try {
+        console.log("[MAP] Requesting location permissions…");
         const { status } =
           await Location.requestForegroundPermissionsAsync();
 
+        console.log("[MAP] Permission status:", status);
         if (status !== "granted") {
-          const fallback = {
-            latitude: 52.1364,
+          console.log(
+            "[MAP] Location permission not granted, using fallback region"
+          );
+          const fallbackRegion = {
+            latitude: 52.1364, // Bedford-ish
             longitude: -0.4607,
             latitudeDelta: 0.1,
             longitudeDelta: 0.1,
           };
-          setRegion(fallback);
+          setRegion(fallbackRegion);
           return;
         }
 
+        console.log("[MAP] Getting current GPS position…");
         const loc = await Location.getCurrentPositionAsync({});
         const { latitude, longitude } = loc.coords;
+        console.log("[MAP] Current position:", loc.coords);
 
         const newRegion = {
           latitude,
@@ -222,10 +198,12 @@ export default function MapScreenRN() {
         setRegion(newRegion);
 
         setTimeout(() => {
-          mapRef.current?.animateToRegion(newRegion, 800);
+          if (mapRef.current) {
+            mapRef.current.animateToRegion(newRegion, 800);
+          }
         }, 300);
       } catch (err) {
-        console.log("Location error:", err);
+        console.log("[MAP] Error fetching location:", err);
       }
     })();
   }, []);
@@ -244,24 +222,25 @@ export default function MapScreenRN() {
           const latitude = loc.latitude;
           const longitude = loc.longitude;
 
-          return {
+          let base = normalisePoi({
+            ...data,
             id: docSnap.id,
-            title: data.name,
-            type: data.type ?? null,
             source: "cr",
             latitude,
             longitude,
+
             suitability: data.suitability || {},
             amenities: data.amenities || {},
-            crRatings: data.crRatings || {},
-            googlePhotoUrls: data.googlePhotoUrls || [],
-            geometry: {
-              location: {
-                lat: latitude,
-                lng: longitude,
-              },
-            },
+          });
+
+          // CLASSIFY IT
+          base.category = classifyPoi(base, FILTER_GROUPS);
+
+          return {
+            ...base,
+            crRatings: data.crRatings || base.crRatings || {},
           };
+
         });
 
         setCrPlaces(docs);
@@ -274,9 +253,7 @@ export default function MapScreenRN() {
     return () => unsubscribe();
   }, []);
 
-  // ------------------------------------------------
-  // DEDUPE: REMOVE GOOGLE POIS THAT OVERLAP ANY CR PLACE (~50m)
-  // ------------------------------------------------
+  // Deduplicate Google POIs if they overlap CR places (~50m)
   useEffect(() => {
     if (googlePois.length === 0 || crPlaces.length === 0) return;
 
@@ -284,19 +261,17 @@ export default function MapScreenRN() {
       return !crPlaces.some((c) => {
         const dx = Math.abs(c.latitude - g.latitude);
         const dy = Math.abs(c.longitude - g.longitude);
-        // ≈ 50m at UK latitudes
-        return dx < 0.0005 && dy < 0.0005;
+        return dx < 0.0005 && dy < 0.0005; // ~50m
       });
     });
 
-    // Prevent render loops by checking identity properly
-    if (JSON.stringify(deduped) !== JSON.stringify(googlePois)) {
+    if (deduped.length !== googlePois.length) {
       setGooglePois(deduped);
     }
-  }, [crPlaces, googlePois]);
+  }, [googlePois, crPlaces]);
 
   // ------------------------------------------------
-  // GOOGLE POI SEARCH (PLACES API – TEXT SEARCH)
+  // GOOGLE POI SEARCH (TEXT SEARCH)
   // ------------------------------------------------
   const fetchGooglePois = async (latitude, longitude, radius, maxResults) => {
     try {
@@ -323,25 +298,83 @@ export default function MapScreenRN() {
             textQuery:
               "cafe OR coffee OR tea OR sandwich OR biker OR motorcycle OR motorbike OR petrol OR gas OR pub OR scenic",
             languageCode: "en",
+
             locationBias: {
-              circle: { center: { latitude, longitude }, radius },
+              circle: {
+                center: { latitude, longitude },
+                radius,
+              },
             },
+
             maxResultCount: maxResults,
           }),
         }
       );
 
       const json = await res.json();
+
+      // DEBUG BLOCK (you can remove this when happy)
+      if (json.places) {
+        json.places.forEach((p, i) => {
+          const name = p.displayName?.text || "";
+          const types = p.types || [];
+          const category = p.category || "";
+          const keywords = [
+            "cafe",
+            "coffee",
+            "biker",
+            "motorcycle",
+            "scenic",
+            "tea",
+            "fuel",
+            "petrol",
+            "gas",
+            "pub",
+            "restaurant",
+          ].filter((kw) => name.toLowerCase().includes(kw));
+
+          console.log(
+            `${i + 1}. ${name}\n` +
+              `   Types: ${JSON.stringify(types)}\n` +
+              `   Keywords: ${
+                keywords.length ? keywords.join(", ") : "None"
+              }\n`
+          );
+        });
+
+      }
+
       if (!json.places) return [];
 
-      // 1. Normalise
-      const rawPois = json.places.map(normalizeGooglePlace);
+      // MANUAL FILTER (replaces includedTypes)
+      const allowedTypes = [
+        "cafe",
+        "coffee_shop",
+        "cafeteria",
+        "bakery",
+        "parking",
+        "gas_station",
+        "motorcycle_shop",
+        "motorcycle_repair",
+        "auto_parts_store",
+        "tourist_attraction",
+      ];
 
-      // 2. Rank & limit for Rider
-      const top20 = rankAndLimitPois(rawPois, THEME_CONFIG[APP_NAME]);
+      const filtered = json.places.filter((p) => {
+        return p.types?.some((t) => allowedTypes.includes(t));
+      });
 
-      // 3. Apply Rider filters (currently only category/amenities; CR branch ignored here)
-      return top20.filter((p) => passesFilters(p, APP_NAME, uiFilters));
+      // NEW: normalise all Google places into canonical POIs
+      return filtered.map((place) => {
+        const poi = normalisePoi({
+          ...place,
+          source: "google",
+        });
+
+        // CLASSIFY IT
+        poi.category = classifyPoi(poi, FILTER_GROUPS);
+        return poi;
+      });
     } catch (err) {
       console.log("TEXT SEARCH ERROR:", err);
       return [];
@@ -356,7 +389,6 @@ export default function MapScreenRN() {
 
     const places = await fetchGooglePois(latitude, longitude, 1500, 20);
 
-    // Let the dedupe effect handle CR vs Google – no extra filtering here
     setGooglePois(places);
     setSelectedPlace(null);
   };
@@ -374,12 +406,14 @@ export default function MapScreenRN() {
     const existingCr = crPlaces.find((p) => {
       const dx = Math.abs(p.latitude - latitude);
       const dy = Math.abs(p.longitude - longitude);
+
+      // crude proximity check, but works perfectly at this zoom:
       return dx < 0.0005 && dy < 0.0005;
     });
 
     if (existingCr) {
-      // Open the CR place (view/edit) – NOT create
-      setSelectedPlace(existingCr);
+      // Open the CR place in VIEW mode, not create mode
+      setSelectedPlace({ ...existingCr });
       return;
     }
 
@@ -391,14 +425,25 @@ export default function MapScreenRN() {
     // USER: POI only (view)
     if (role === "user") {
       if (!googlePlace) return;
-      setSelectedPlace(normalizeGooglePlace(googlePlace));
+        const normalizedUser = normalisePoi({
+          ...googlePlace,
+          source: "google",
+        });
+
+        normalizedUser.category = classifyPoi(normalizedUser, FILTER_GROUPS);
+        setSelectedPlace({ ...normalizedUser });
       return;
     }
 
     // PRO / ADMIN: either Google-import or manual
     if (role === "pro" || role === "admin") {
       if (googlePlace) {
-        const normalized = normalizeGooglePlace(googlePlace);
+        let normalized = normalisePoi({
+          ...googlePlace,
+          source: "google",
+        });
+
+        normalized.category = classifyPoi(normalized, FILTER_GROUPS);
         // Flag this as a "Google → CR" creation candidate
         normalized.source = "google-new";
         setSelectedPlace(normalized);
@@ -437,6 +482,17 @@ export default function MapScreenRN() {
         }
       );
 
+      const json = await res.json();
+      if (!json.places || json.places.length === 0) {
+        console.log("[LONG PRESS] No POI returned by Google");
+      } else {
+        console.log(
+          "[LONG PRESS] POI returned:",
+          json.places[0].displayName?.text
+        );
+      }
+
+      return json.places?.[0] ?? null;
     } catch (err) {
       console.log("[LONG PRESS] POI lookup failed", err);
       return null;
@@ -446,15 +502,12 @@ export default function MapScreenRN() {
   // ------------------------------------------------
   // RENDER
   // ------------------------------------------------
+  const visibleCrPlaces = crPlaces;
 
-  // CR places are ALWAYS visible; suitability is communicated via colour
-  const visibleCrPlaces = crPlaces || [];
-
-  // Final marker list: Google + CR (CR always wins when within 50m – handled by dedupe)
-  const allMarkers = [
-    ...visibleCrPlaces, // CR FIRST
-    ...googlePois       // Google second
-  ];
+  const allMarkers = [...googlePois, ...visibleCrPlaces];
+  const filteredMarkers = allMarkers.filter((poi) =>
+    applyFilters(poi, filters, "rider")
+  );
 
   return (
     <View style={styles.container}>
@@ -476,30 +529,29 @@ export default function MapScreenRN() {
         onPress={handleMapPress}
         onLongPress={handleMapLongPress}
       >
-        {allMarkers.map((place) => {
+        {filteredMarkers.map((place) => {
           const isSelected = selectedPlace?.id === place.id;
 
           const { fill, border } = getRiderPinColors({
-            source: place.source, // "cr" | "google"
+            source: place.source,
             selected: isSelected,
             suitability: place.suitability,
           });
 
-          const iconName = POI_ICON_MAP[place.type] || "map-marker";
+          const iconName = POI_ICON_MAP[place.category] || "map-marker";
 
-          if (!place.latitude || !place.longitude) return null;
           const lat =
-            place.geometry?.location?.lat ?? place.latitude ?? 0;
+            place.latitude ?? place.geometry?.location?.lat ?? 0;
           const lng =
-            place.geometry?.location?.lng ?? place.longitude ?? 0;
+            place.longitude ?? place.geometry?.location?.lng ?? 0;
 
           return (
             <Marker
-              key={place.id}
+              key={`${place.id}-${isSelected ? "sel" : "unsel"}`}
               coordinate={{ latitude: lat, longitude: lng }}
               onPress={(e) => {
                 e.stopPropagation();
-                setSelectedPlace(place);
+                setSelectedPlace({ ...place });
               }}
               anchor={{ x: 0.5, y: 1 }}
             >
@@ -516,7 +568,6 @@ export default function MapScreenRN() {
           onPlaceCreated={(newPlace) => {
             console.log("[MAP] CR place created", newPlace);
 
-            // Optimistically add CR marker while Firestore listener catches up
             setCrPlaces((prev) => {
               if (prev.some((p) => p.id === newPlace.id)) return prev;
               return [
@@ -533,9 +584,8 @@ export default function MapScreenRN() {
               ];
             });
 
-            // Clear selection first so React re-renders correctly
             setSelectedPlace(null);
-            // Re-select the CR marker (forces the new pin style to show immediately)
+
             setTimeout(() => setSelectedPlace(newPlace), 50);
           }}
         />
@@ -544,9 +594,6 @@ export default function MapScreenRN() {
   );
 }
 
-// ------------------------------------------------
-// STYLES
-// ------------------------------------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,

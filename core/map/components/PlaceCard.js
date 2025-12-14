@@ -331,7 +331,7 @@ export default function PlaceCard({
           activeOpacity={isCreateMode ? 0.7 : 1}
           onPress={() => toggleSuitability("cyclists")}
         >
-          {amenityIcon(values.cyclists, "bicycle", "ion")}
+          {amenityIcon(values.cyclists, "bike")}
         </TouchableOpacity>
 
         {/* Walkers */}
@@ -347,7 +347,7 @@ export default function PlaceCard({
           activeOpacity={isCreateMode ? 0.7 : 1}
           onPress={() => toggleSuitability("cars")}
         >
-          {amenityIcon(values.cars, "car", "ion")}
+          {amenityIcon(values.cars, "car")}
         </TouchableOpacity>
 
         {/* EV Drivers */}
@@ -355,7 +355,7 @@ export default function PlaceCard({
           activeOpacity={isCreateMode ? 0.7 : 1}
           onPress={() => toggleSuitability("evDrivers")}
         >
-          {amenityIcon(values.evDrivers, "ev-station")}
+          {amenityIcon(values.evDrivers, "car-electric")}
         </TouchableOpacity>
       </View>
     );
@@ -385,7 +385,7 @@ export default function PlaceCard({
           activeOpacity={isCreateMode ? 0.7 : 1}
           onPress={() => toggleAmenity("evCharger")}
         >
-          {amenityIcon(values.evCharger, "ev-station")}
+          {amenityIcon(values.evCharger, "ev-plug-ccs2")}
         </TouchableOpacity>
 
         {/* Toilets */}
@@ -401,7 +401,7 @@ export default function PlaceCard({
           activeOpacity={isCreateMode ? 0.7 : 1}
           onPress={() => toggleAmenity("petFriendly")}
         >
-          {amenityIcon(values.petFriendly, "dog")}
+          {amenityIcon(values.petFriendly, "dog-side")}
         </TouchableOpacity>
 
         {/* Disabled Access */}
@@ -420,7 +420,7 @@ export default function PlaceCard({
           activeOpacity={isCreateMode ? 0.7 : 1}
           onPress={() => toggleAmenity("outdoorSeating")}
         >
-          {amenityIcon(values.outdoorSeating, "umbrella-beach")}
+          {amenityIcon(values.outdoorSeating, "table-picnic")}
         </TouchableOpacity>
       </View>
     );
@@ -542,7 +542,7 @@ export default function PlaceCard({
             </Text>
           </>
         ) : (
-          <Text style={styles.title}>{place.title} - {place.type}</Text>
+          <Text style={styles.title}>{place.title} - {place.category}</Text>
         )}
 
         {/* Manual / Google-new input area */}
