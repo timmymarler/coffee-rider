@@ -1,4 +1,6 @@
 // core/map/utils/mergePlaceData.js
+import { classifyPoi } from "../classify/classifyPois";
+
 export function buildGooglePhotoUrl(ref, apiKey) {
   if (!ref || !apiKey) return null;
   return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${ref}&key=${apiKey}`;
@@ -14,6 +16,8 @@ export function extractGooglePhotoUrls(googleResult, apiKey) {
 
 export function mergeCafeAndGoogle(cafe, google, googlePhotoUrls) {
   if (!cafe && !google) return null;
+
+  const category = google ? classifyPoi(google) : cafe?.category ?? "other";
 
   const lat =
     cafe?.coords?.latitude ??
@@ -65,7 +69,8 @@ export function mergeCafeAndGoogle(cafe, google, googlePhotoUrls) {
     longitude: lng,
 
     title: cafe?.name || google?.name || "Place",
-
+    category, // ← THIS IS THE KEY LINE
+    
     // Google address first
     address:
       google?.formatted_address ||

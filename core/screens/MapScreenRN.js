@@ -8,12 +8,12 @@ import { collection, onSnapshot } from "firebase/firestore";
 import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
 
-import { classifyPoi } from "../map/classify/classifyPois";
 import { FilterBar } from "../map/components/FilterBar";
 import { RIDER_FILTER_GROUPS } from "../map/config/riderFilterGroups";
 
 import { applyFilters } from "../map/filters/applyFilters";
-console.log("RIDER_FILTER_GROUPS:", RIDER_FILTER_GROUPS);
+
+import { classifyPoi } from "../map/classify/classifyPois";
 
 //import { applyFilters } from "../map/filters/applyFilters";
 
@@ -24,6 +24,7 @@ console.log("RIDER_FILTER_GROUPS:", RIDER_FILTER_GROUPS);
 const CATEGORY_ICON_MAP = {
   cafe: "coffee",
   food: "food-fork-drink",
+  pub: "beer",
   fuel: "gas-station",
   parking: "parking",
   motorcycle: "motorbike",
@@ -91,29 +92,49 @@ const EMPTY_FILTERS = {
         return [];
       }
 
-      return json.places.map((place) => ({
-        id: place.id,
-        title: place.displayName?.text || "",
-        address: place.formattedAddress || "",
-        latitude: place.location?.latitude,
-        longitude: place.location?.longitude,
+  return json.places.map((place) => {
+    const types = Array.isArray(place.types) ? place.types : [];
 
-        // for classifier + filters
-        types: place.types || [],
-        googleTypes: place.types || [],
+    // 1️⃣ classify from raw Google data
+    const rawCategory = classifyPoi({ types });
 
-        rating: place.rating,
-        userRatingsTotal: place.userRatingCount,
+    // TEMP, LOCAL normalisation (uses your agreed categories)
+    let category = rawCategory;
 
-        googlePhotos: place.photos?.map((p) => p.name) || [],
-        googlePhotoUrls:
-          place.photos?.map(
-            (p) =>
-              `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`
-          ) || [],
+    if (rawCategory === "coffee_shop") category = "cafe";
+    if (rawCategory === "bar") category = "pub";
+    if (rawCategory === "restaurant") category = "food";
+    if (rawCategory === "auto_parts_store") category = "bikes";
+    if (rawCategory === "motorcycle_shop") category = "bikes";
+    if (rawCategory === "motorcycle_repair") category = "bikes";
 
-        source: "google",
-      }));
+    return {
+      id: place.id,
+      title: place.displayName?.text || "",
+      address: place.formattedAddress || "",
+      latitude: place.location?.latitude,
+      longitude: place.location?.longitude,
+
+      // keep raw types for debugging / future use
+      types,
+      googleTypes: types,
+
+      // ✅ authoritative app category
+      category,
+
+      rating: place.rating,
+      userRatingsTotal: place.userRatingCount,
+
+      googlePhotos: place.photos?.map((p) => p.name) || [],
+      googlePhotoUrls:
+        place.photos?.map(
+          (p) =>
+            `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`
+        ) || [],
+
+      source: "google",
+    };
+  });
     } catch (err) {
       console.log("TEXT SEARCH ERROR:", err);
       return [];
@@ -139,6 +160,12 @@ export default function MapScreenRN() {
     const unsub = onSnapshot(collection(db, "places"), (snapshot) => {
       const places = snapshot.docs.map((doc) => {
         const data = doc.data();
+        let category = data.category ?? data.type ?? "other";
+
+        // normalise legacy / google-ish CR values
+        if (category === "auto_parts_store") category = "bikes";
+        if (category === "motorcycle_shop") category = "bikes";
+        if (category === "motorcycle_repair") category = "bikes";
 
         return {
           id: doc.id,
@@ -148,13 +175,7 @@ export default function MapScreenRN() {
           longitude: data.location?.longitude,
           suitability: data.suitability || {},
           amenities: data.amenities || {},
-          category: classifyPoi(
-            {
-              title: data.name,
-              types: data.types || [],
-            },
-            RIDER_FILTER_GROUPS
-          ),
+          category,
           ...data,
         };
       });
@@ -180,16 +201,11 @@ export default function MapScreenRN() {
           ? p.types
           : [];
 
-        const category = classifyPoi(
-          { title: p.title, googleTypes },
-          RIDER_FILTER_GROUPS
-        );
-
         return {
           ...p,
           source: "google",
           googleTypes,
-          category,  // Ensure the category is set for Google POIs
+          category: p.category  // Ensure the category is set for Google POIs
         };
       });
 
@@ -239,6 +255,13 @@ export default function MapScreenRN() {
         }}
       >
         {filteredMarkers.map((poi) => {
+
+//console.log("📍 MARKER DEBUG", {
+//  title: poi.title,
+//  category: poi.category,
+//  source: poi.source,
+//});
+          
           if (!poi.latitude || !poi.longitude) return null;
 
           const isSelected = selectedPlace?.id === poi.id;

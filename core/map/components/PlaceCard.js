@@ -51,6 +51,7 @@ export default function PlaceCard({
   onNavigate,
   onRoute,
 }) {
+
   const styles = createStyles(theme);
   const auth = useContext(AuthContext);
   const currentUser = auth?.user || null;
@@ -63,12 +64,6 @@ export default function PlaceCard({
 
   // "Creation mode" covers both manual drops and Google → CR imports
   const isCreateMode = isManualOnly || isGoogleNew;
-  console.log("🟡 BEDFORD ARMS TYPES", {
-    name: place.name,
-    types: place.types,
-    primaryType: place.primaryType,
-    businessStatus: place.businessStatus,
-  });
 
   // ----------------------------
   // Local editable fields (create mode)
