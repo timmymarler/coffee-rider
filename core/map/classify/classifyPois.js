@@ -3,21 +3,35 @@
 // Produces a category that matches the filter groups exactly.
 // ------------------------------------------------------------
 
+const safeTypes = (group) =>
+  Array.isArray(group?.googleTypes) ? group.googleTypes : [];
+
+const safeKeywords = (group) =>
+  Array.isArray(group?.keywords) ? group.keywords : [];
+
 export function classifyPoi(poi, FILTER_GROUPS) {
+  if (!FILTER_GROUPS || !FILTER_GROUPS.cafe) {
+    console.warn(
+      "classifyPoi called without valid FILTER_GROUPS",
+      FILTER_GROUPS
+    );
+    return "other";
+  }
+
+  console.log("🔍 classifyPoi input", Object.keys(poi));
+
   const name = (poi.title || poi.name || "").toLowerCase();
-  const googleTypes = poi.types || [];
-  const keywords = poi.keywords || [];
+
+  const googleTypes = Array.isArray(poi.googleTypes) ? poi.googleTypes : [];
+  const allTypes = [...googleTypes];
+  const keywords = Array.isArray(poi.keywords) ? poi.keywords : [];
 
   // ------------------------------------------------------------
-  // 1. CATEGORY: CAFÉ
+  // 1. CAFÉ
   // ------------------------------------------------------------
   if (
-    googleTypes.some(t =>
-      FILTER_GROUPS.cafe.googleTypes.includes(t)
-    ) ||
-    keywords.some(k =>
-      FILTER_GROUPS.cafe.keywords.includes(k)
-    ) ||
+    allTypes.some(t => safeTypes(FILTER_GROUPS.cafe).includes(t)) ||
+    keywords.some(k => safeKeywords(FILTER_GROUPS.cafe).includes(k)) ||
     name.includes("cafe") ||
     name.includes("coffee") ||
     name.includes("espresso")
@@ -26,15 +40,11 @@ export function classifyPoi(poi, FILTER_GROUPS) {
   }
 
   // ------------------------------------------------------------
-  // 2. CATEGORY: FOOD (restaurants, pubs, takeaways)
+  // 2. FOOD
   // ------------------------------------------------------------
   if (
-    googleTypes.some(t =>
-      FILTER_GROUPS.food.googleTypes.includes(t)
-    ) ||
-    keywords.some(k =>
-      FILTER_GROUPS.food.keywords.includes(k)
-    ) ||
+    allTypes.some(t => safeTypes(FILTER_GROUPS.food).includes(t)) ||
+    keywords.some(k => safeKeywords(FILTER_GROUPS.food).includes(k)) ||
     name.includes("pub") ||
     name.includes("grill") ||
     name.includes("kitchen") ||
@@ -44,29 +54,21 @@ export function classifyPoi(poi, FILTER_GROUPS) {
   }
 
   // ------------------------------------------------------------
-  // 3. CATEGORY: FUEL
+  // 3. FUEL
   // ------------------------------------------------------------
   if (
-    googleTypes.some(t =>
-      FILTER_GROUPS.fuel.googleTypes.includes(t)
-    ) ||
-    keywords.some(k =>
-      FILTER_GROUPS.fuel.keywords.includes(k)
-    )
+    allTypes.some(t => safeTypes(FILTER_GROUPS.fuel).includes(t)) ||
+    keywords.some(k => safeKeywords(FILTER_GROUPS.fuel).includes(k))
   ) {
     return "fuel";
   }
 
   // ------------------------------------------------------------
-  // 4. CATEGORY: MOTORCYCLE
+  // 4. MOTORCYCLE
   // ------------------------------------------------------------
   if (
-    googleTypes.some(t =>
-      FILTER_GROUPS.motorcycle.googleTypes.includes(t)
-    ) ||
-    keywords.some(k =>
-      FILTER_GROUPS.motorcycle.keywords.includes(k)
-    ) ||
+    allTypes.some(t => safeTypes(FILTER_GROUPS.motorcycle).includes(t)) ||
+    keywords.some(k => safeKeywords(FILTER_GROUPS.motorcycle).includes(k)) ||
     name.includes("moto") ||
     name.includes("motorcycle") ||
     name.includes("bike shop")
@@ -75,26 +77,18 @@ export function classifyPoi(poi, FILTER_GROUPS) {
   }
 
   // ------------------------------------------------------------
-  // 5. CATEGORY: PARKING
+  // 5. PARKING
   // ------------------------------------------------------------
-  if (
-    googleTypes.some(t =>
-      FILTER_GROUPS.parking.googleTypes.includes(t)
-    )
-  ) {
+  if (allTypes.some(t => safeTypes(FILTER_GROUPS.parking).includes(t))) {
     return "parking";
   }
 
   // ------------------------------------------------------------
-  // 6. CATEGORY: SCENIC
+  // 6. SCENIC
   // ------------------------------------------------------------
   if (
-    googleTypes.some(t =>
-      FILTER_GROUPS.scenic.googleTypes.includes(t)
-    ) ||
-    keywords.some(k =>
-      FILTER_GROUPS.scenic.keywords.includes(k)
-    ) ||
+    allTypes.some(t => safeTypes(FILTER_GROUPS.scenic).includes(t)) ||
+    keywords.some(k => safeKeywords(FILTER_GROUPS.scenic).includes(k)) ||
     name.includes("lookout") ||
     name.includes("view") ||
     name.includes("park") ||
@@ -104,12 +98,11 @@ export function classifyPoi(poi, FILTER_GROUPS) {
   }
 
   // ------------------------------------------------------------
-  // 7. CATEGORY: SHOP
+  // 7. Motorbike stuff
   // ------------------------------------------------------------
   if (
-    googleTypes.includes("store") ||
-    googleTypes.includes("shopping_mall") ||
-    googleTypes.includes("retail")
+    allTypes.includes("motorcycle_store") ||
+    allTypes.includes("motorcycle_services")
   ) {
     return "shop";
   }

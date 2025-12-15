@@ -63,6 +63,12 @@ export default function PlaceCard({
 
   // "Creation mode" covers both manual drops and Google → CR imports
   const isCreateMode = isManualOnly || isGoogleNew;
+  console.log("🟡 BEDFORD ARMS TYPES", {
+    name: place.name,
+    types: place.types,
+    primaryType: place.primaryType,
+    businessStatus: place.businessStatus,
+  });
 
   // ----------------------------
   // Local editable fields (create mode)
@@ -542,7 +548,7 @@ export default function PlaceCard({
             </Text>
           </>
         ) : (
-          <Text style={styles.title}>{place.title} - {place.category}</Text>
+          <Text style={styles.title}>{place.title}</Text>
         )}
 
         {/* Manual / Google-new input area */}

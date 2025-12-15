@@ -1,12 +1,11 @@
 export default {
   colors: {
     background: "#000",
-    text: "#fff",
     primary: "#1e90ff",
     accent: "#ffc107",
     cardBackground: "#111",
     border: "#333",
-    danger: "#ae1717ff",
+    danger: "#cd3434ff",
 
     // Core Rider blues (you can tweak exact hexes later)
     primaryDark:  "#0F2A38", // deep blue-teal, strong not muddy
@@ -46,7 +45,7 @@ export default {
 
     // Semantic feedback colours – used by brand themes
     success: "#22c55e",
-    error: "#DC2626",
+    error: "#cd3434ff",
     warning: "#FACC15",
   
   },

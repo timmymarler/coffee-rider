@@ -42,7 +42,7 @@ export const FILTER_GROUPS = {
   },
 
   motorcycle: {
-    label: "Motorcycle",
+    label: "motorcycle",
     icon: "motorbike",
     category: "motorcycle",
     googleTypes: [
@@ -50,7 +50,7 @@ export const FILTER_GROUPS = {
       "motorcycle_shop",
       "auto_parts_store",
     ],
-    keywords: ["motorcycle", "biker", "bike", "triumph"],
+    keywords: ["motorcycle", "motorbike", "biker", "bike", "triumph"],
   },
 
   parking: {

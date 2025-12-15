@@ -61,7 +61,7 @@ export function normalisePoi(raw) {
   // Temporary: category, keywords, priority
   // (These will be filled in Step 2 with classifyPoi)
   // ------------------------------
-  const category = raw.category || null;
+  const category = raw.category || raw.types || "unknown" ;
   const keywords = raw.keywords || [];
   const priority = raw.priority || 0;
 
