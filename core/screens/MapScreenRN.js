@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 
 import { db } from "@config/firebase";
@@ -10,28 +10,28 @@ import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
 
 import * as Location from "expo-location";
+import { classifyPoi } from "../map/classify/classifyPois";
 import { FilterBar } from "../map/components/FilterBar";
 import { RIDER_FILTER_GROUPS } from "../map/config/riderFilterGroups";
-
 import { applyFilters } from "../map/filters/applyFilters";
 
-import { TouchableOpacity } from "react-native";
-import { classifyPoi } from "../map/classify/classifyPois";
-//import { applyFilters } from "../map/filters/applyFilters";
-
 /* ------------------------------------------------------------------ */
-/* FILTER STATE                                                        */
+/* CATEGORY → ICON MAP (authoritative)                                 */
 /* ------------------------------------------------------------------ */
 
 const CATEGORY_ICON_MAP = {
   cafe: "coffee",
-  food: "food-fork-drink",
+  restaurant: "silverware-fork-knife",
   pub: "beer",
   fuel: "gas-station",
   parking: "parking",
-  motorcycle: "motorbike",
   scenic: "forest",
+  service: "tools",
 };
+
+/* ------------------------------------------------------------------ */
+/* FILTER STATE                                                        */
+/* ------------------------------------------------------------------ */
 
 const EMPTY_FILTERS = {
   categories: new Set(),
@@ -39,110 +39,81 @@ const EMPTY_FILTERS = {
 };
 
 /* ------------------------------------------------------------------ */
-/* SAFE FILTERING                                                      */
+/* GOOGLE POI SEARCH                                                   */
 /* ------------------------------------------------------------------ */
 
-  // ------------------------------------------------
-  // GOOGLE POI SEARCH (TEXT SEARCH) – STABLE VERSION
-  // ------------------------------------------------
-  const fetchGooglePois = async (
-    latitude,
-    longitude,
-    radius,
-    maxResults,
-    /* typesList (currently unused) */
-  ) => {
-    try {
-      const res = await fetch(
-        "https://places.googleapis.com/v1/places:searchText",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key":
-              process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
-            "X-Goog-FieldMask": [
-              "places.id",
-              "places.displayName",
-              "places.formattedAddress",
-              "places.location",
-              "places.types",
-              "places.photos",
-              "places.rating",
-              "places.userRatingCount",
-            ].join(","),
-          },
-          body: JSON.stringify({
-            textQuery:
-              "cafe OR coffee OR tea OR sandwich OR biker OR motorcycle OR motorbike OR petrol OR gas OR pub OR scenic",
-            languageCode: "en",
-            locationBias: {
-              circle: {
-                center: { latitude, longitude },
-                radius: radius || 1000,
-              },
+const fetchGooglePois = async (
+  latitude,
+  longitude,
+  radius,
+  maxResults
+) => {
+  try {
+    const res = await fetch(
+      "https://places.googleapis.com/v1/places:searchText",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key":
+            process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
+          "X-Goog-FieldMask": [
+            "places.id",
+            "places.displayName",
+            "places.formattedAddress",
+            "places.location",
+            "places.types",
+            "places.photos",
+            "places.rating",
+            "places.userRatingCount",
+          ].join(","),
+        },
+        body: JSON.stringify({
+          textQuery:
+            "cafe OR coffee OR pub OR restaurant OR fuel OR scenic",
+          languageCode: "en",
+          locationBias: {
+            circle: {
+              center: { latitude, longitude },
+              radius: radius || 1000,
             },
-            maxResultCount: maxResults || 20,
-          }),
-        }
-      );
-
-      const json = await res.json();
-      //console.log("TEXT SEARCH JSON:", JSON.stringify(json));
-
-      if (!json.places) {
-        return [];
+          },
+          maxResultCount: maxResults || 20,
+        }),
       }
+    );
 
-  return json.places.map((place) => {
-    const types = Array.isArray(place.types) ? place.types : [];
+    const json = await res.json();
+    if (!json.places) return [];
 
-    // 1️⃣ classify from raw Google data
-    const rawCategory = classifyPoi({ types });
+    return json.places.map((place) => {
+      const types = Array.isArray(place.types) ? place.types : [];
+      const category = classifyPoi({ types });
 
-    // TEMP, LOCAL normalisation (uses your agreed categories)
-    let category = rawCategory;
-
-    if (rawCategory === "coffee_shop") category = "cafe";
-    if (rawCategory === "bar") category = "pub";
-    if (rawCategory === "restaurant") category = "food";
-    if (rawCategory === "auto_parts_store") category = "bikes";
-    if (rawCategory === "motorcycle_shop") category = "bikes";
-    if (rawCategory === "motorcycle_repair") category = "bikes";
-
-    return {
-      id: place.id,
-      title: place.displayName?.text || "",
-      address: place.formattedAddress || "",
-      latitude: place.location?.latitude,
-      longitude: place.location?.longitude,
-
-      // keep raw types for debugging / future use
-      types,
-      googleTypes: types,
-
-      // ✅ authoritative app category
-      category,
-
-      rating: place.rating,
-      userRatingsTotal: place.userRatingCount,
-
-      googlePhotos: place.photos?.map((p) => p.name) || [],
-      googlePhotoUrls:
-        place.photos?.map(
-          (p) =>
-            `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`
-        ) || [],
-
-      source: "google",
-    };
-  });
-    } catch (err) {
-      console.log("TEXT SEARCH ERROR:", err);
-      return [];
-    }
-  };
-
+      return {
+        id: place.id,
+        title: place.displayName?.text || "",
+        address: place.formattedAddress || "",
+        latitude: place.location?.latitude,
+        longitude: place.location?.longitude,
+        googleTypes: types,
+        category,
+        rating: place.rating,
+        userRatingsTotal: place.userRatingCount,
+        googlePhotoUrls:
+          place.photos?.map(
+            (p) =>
+              `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}`
+          ) || [],
+        source: "google",
+        amenities: [],
+      };
+    });
+  } catch (err) {
+    console.log("TEXT SEARCH ERROR:", err);
+    return [];
+  }
+};
 
 /* ------------------------------------------------------------------ */
 /* MAIN SCREEN                                                         */
@@ -154,9 +125,8 @@ export default function MapScreenRN() {
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [userLocation, setUserLocation] = useState(null);
+
   const mapRef = useRef(null);
-  const [route, setRoute] = useState(null);
-  const [routeDestination, setRouteDestination] = useState(null);
 
   /* ------------------------------------------------------------ */
   /* LOAD CR PLACES                                               */
@@ -166,12 +136,6 @@ export default function MapScreenRN() {
     const unsub = onSnapshot(collection(db, "places"), (snapshot) => {
       const places = snapshot.docs.map((doc) => {
         const data = doc.data();
-        let category = data.category ?? data.type ?? "other";
-
-        // normalise legacy / google-ish CR values
-        if (category === "auto_parts_store") category = "bikes";
-        if (category === "motorcycle_shop") category = "bikes";
-        if (category === "motorcycle_repair") category = "bikes";
 
         return {
           id: doc.id,
@@ -179,9 +143,9 @@ export default function MapScreenRN() {
           title: data.name,
           latitude: data.location?.latitude,
           longitude: data.location?.longitude,
+          category: data.category || "unknown",
+          amenities: Array.isArray(data.amenities) ? data.amenities : [],
           suitability: data.suitability || {},
-          amenities: data.amenities || {},
-          category,
           ...data,
         };
       });
@@ -190,86 +154,37 @@ export default function MapScreenRN() {
     });
 
     return unsub;
-
-    
   }, []);
 
-  // ------------------------------------------------
-  // GET USER LOCATION
-  // ------------------------------------------------
+  /* ------------------------------------------------------------ */
+  /* USER LOCATION                                                */
+  /* ------------------------------------------------------------ */
+
   useEffect(() => {
     (async () => {
-      try {
-        const { status } =
-          await Location.requestForegroundPermissionsAsync();
+      const { status } =
+        await Location.requestForegroundPermissionsAsync();
 
-        if (status !== "granted") {
-          const fallback = {
-            latitude: 52.1364,
-            longitude: -0.4607,
-            latitudeDelta: 0.1,
-            longitudeDelta: 0.1,
-          };
-          setRegion(fallback);
-          return;
-        }
+      if (status !== "granted") return;
 
-        const loc = await Location.getCurrentPositionAsync({});
-        const { latitude, longitude } = loc.coords;
-
-        const newRegion = {
-          latitude,
-          longitude,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        };
-
-        setRegion(newRegion);
-
-        setTimeout(() => {
-          mapRef.current?.animateToRegion(newRegion, 800);
-        }, 300);
-      } catch (err) {
-        console.log("Location error:", err);
-      }
+      const loc = await Location.getCurrentPositionAsync({});
+      setUserLocation(loc.coords);
     })();
   }, []);
 
-  
   /* ------------------------------------------------------------ */
   /* MAP TAP → GOOGLE POIS                                        */
   /* ------------------------------------------------------------ */
 
   const handleMapPress = async (e) => {
-    try {
-      const { latitude, longitude } = e.nativeEvent.coordinate;
-      const places = await fetchGooglePois(latitude, longitude, 1200, 20);
-      const normalised = places.map((p) => {
-        const googleTypes = Array.isArray(p.googleTypes)
-          ? p.googleTypes
-          : Array.isArray(p.types)
-          ? p.types
-          : [];
-
-        return {
-          ...p,
-          source: "google",
-          googleTypes,
-          category: p.category  // Ensure the category is set for Google POIs
-        };
-      });
-
-      setGooglePois(normalised);
-      setSelectedPlace(null);
-
-    } catch (err) {
-      console.log("MAP TAP ERROR:", err);
-    }
-  
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    const pois = await fetchGooglePois(latitude, longitude, 1200, 20);
+    setGooglePois(pois);
+    setSelectedPlace(null);
   };
 
   /* ------------------------------------------------------------ */
-  /* MERGE + FILTER MARKERS                                       */
+  /* MERGE + FILTER                                               */
   /* ------------------------------------------------------------ */
 
   const allMarkers = useMemo(
@@ -284,34 +199,20 @@ export default function MapScreenRN() {
     ) {
       return allMarkers;
     }
-
     return allMarkers.filter((poi) => applyFilters(poi, filters));
   }, [allMarkers, filters]);
-
-  const recenterMap = (location) => {
-    if (!mapRef.current || !location) return;
-
-    mapRef.current.animateToRegion(
-      {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      },
-      300
-    );
-  };
 
   /* ------------------------------------------------------------ */
   /* RENDER                                                       */
   /* ------------------------------------------------------------ */
+
   return (
     <View style={styles.container}>
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
-        showsUserLocation={true}
-        showsMyLocationButton={false} // optional, since you have your own button
+        showsUserLocation
+        showsMyLocationButton={false}
         onPress={handleMapPress}
         initialRegion={{
           latitude: 52.136,
@@ -321,17 +222,10 @@ export default function MapScreenRN() {
         }}
       >
         {filteredMarkers.map((poi) => {
-
-//console.log("📍 MARKER DEBUG", {
-//  title: poi.title,
-//  category: poi.category,
-//  source: poi.source,
-//});
-          
           if (!poi.latitude || !poi.longitude) return null;
 
-          const isSelected = selectedPlace?.id === poi.id;
-          const iconName = CATEGORY_ICON_MAP[poi.category] || "map-marker";
+          const iconName =
+            CATEGORY_ICON_MAP[poi.category] || "map-marker";
 
           return (
             <Marker
@@ -351,16 +245,33 @@ export default function MapScreenRN() {
           );
         })}
       </MapView>
+
       <FilterBar
         filters={filters}
         setFilters={setFilters}
         filterConfig={RIDER_FILTER_GROUPS}
       />
+
       <TouchableOpacity
-        onPress={() => recenterMap(userLocation)}
+        onPress={() => {
+          if (!userLocation) return;
+          mapRef.current?.animateToRegion(
+            {
+              latitude: userLocation.latitude,
+              longitude: userLocation.longitude,
+              latitudeDelta: 0.02,
+              longitudeDelta: 0.02,
+            },
+            300
+          );
+        }}
         style={styles.recenterButton}
       >
-        <MaterialCommunityIcons name="crosshairs-gps" size={22} color="#C5A041" />
+        <MaterialCommunityIcons
+          name="crosshairs-gps"
+          size={22}
+          color="#C5A041"
+        />
       </TouchableOpacity>
 
       {selectedPlace && (
@@ -377,31 +288,18 @@ export default function MapScreenRN() {
 /* STYLES                                                             */
 /* ------------------------------------------------------------------ */
 
-const TAB_BAR_HEIGHT = 60; // safe default
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-
+  container: { flex: 1 },
   recenterButton: {
     position: "absolute",
     right: 16,
-    bottom: TAB_BAR_HEIGHT + 35,
-
+    bottom: 95,
     width: 44,
     height: 44,
     borderRadius: 22,
-
-    backgroundColor: "#1f2937", // dark, neutral
+    backgroundColor: "#1f2937",
     justifyContent: "center",
     alignItems: "center",
-    
-    elevation: 4, // Android shadow
-    shadowColor: "#000", // iOS shadow
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.5,
+    elevation: 4,
   },
-
 });

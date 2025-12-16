@@ -1,13 +1,19 @@
 export function applyFilters(poi, filters) {
-  // Check category filter for both CR and Google POIs
-  if (filters.categories.size && !filters.categories.has(poi.category)) {
-    return false;
+  // Category filter (CR + Google)
+  if (filters.categories.size > 0) {
+    if (!filters.categories.has(poi.category)) {
+      return false;
+    }
   }
 
-  // Skip amenities filter for Google POIs, only check for CR places
-  if (poi.source === "cr" && filters.amenities.size) {
-    for (const a of filters.amenities) {
-      if (!poi.amenities?.[a]) return false;
+  // Amenities filter (CR only)
+  if (poi.source === "cr" && filters.amenities.size > 0) {
+    if (!Array.isArray(poi.amenities)) return false;
+
+    for (const amenity of filters.amenities) {
+      if (!poi.amenities.includes(amenity)) {
+        return false;
+      }
     }
   }
 
