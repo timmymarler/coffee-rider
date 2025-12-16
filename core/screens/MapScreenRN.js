@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 
@@ -8,13 +9,14 @@ import { collection, onSnapshot } from "firebase/firestore";
 import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
 
+import * as Location from "expo-location";
 import { FilterBar } from "../map/components/FilterBar";
 import { RIDER_FILTER_GROUPS } from "../map/config/riderFilterGroups";
 
 import { applyFilters } from "../map/filters/applyFilters";
 
+import { TouchableOpacity } from "react-native";
 import { classifyPoi } from "../map/classify/classifyPois";
-
 //import { applyFilters } from "../map/filters/applyFilters";
 
 /* ------------------------------------------------------------------ */
@@ -151,6 +153,10 @@ export default function MapScreenRN() {
   const [googlePois, setGooglePois] = useState([]);
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [userLocation, setUserLocation] = useState(null);
+  const mapRef = useRef(null);
+  const [route, setRoute] = useState(null);
+  const [routeDestination, setRouteDestination] = useState(null);
 
   /* ------------------------------------------------------------ */
   /* LOAD CR PLACES                                               */
@@ -184,8 +190,52 @@ export default function MapScreenRN() {
     });
 
     return unsub;
+
+    
   }, []);
 
+  // ------------------------------------------------
+  // GET USER LOCATION
+  // ------------------------------------------------
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } =
+          await Location.requestForegroundPermissionsAsync();
+
+        if (status !== "granted") {
+          const fallback = {
+            latitude: 52.1364,
+            longitude: -0.4607,
+            latitudeDelta: 0.1,
+            longitudeDelta: 0.1,
+          };
+          setRegion(fallback);
+          return;
+        }
+
+        const loc = await Location.getCurrentPositionAsync({});
+        const { latitude, longitude } = loc.coords;
+
+        const newRegion = {
+          latitude,
+          longitude,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        };
+
+        setRegion(newRegion);
+
+        setTimeout(() => {
+          mapRef.current?.animateToRegion(newRegion, 800);
+        }, 300);
+      } catch (err) {
+        console.log("Location error:", err);
+      }
+    })();
+  }, []);
+
+  
   /* ------------------------------------------------------------ */
   /* MAP TAP → GOOGLE POIS                                        */
   /* ------------------------------------------------------------ */
@@ -238,6 +288,19 @@ export default function MapScreenRN() {
     return allMarkers.filter((poi) => applyFilters(poi, filters));
   }, [allMarkers, filters]);
 
+  const recenterMap = (location) => {
+    if (!mapRef.current || !location) return;
+
+    mapRef.current.animateToRegion(
+      {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      },
+      300
+    );
+  };
 
   /* ------------------------------------------------------------ */
   /* RENDER                                                       */
@@ -245,7 +308,10 @@ export default function MapScreenRN() {
   return (
     <View style={styles.container}>
       <MapView
+        ref={mapRef}
         style={StyleSheet.absoluteFill}
+        showsUserLocation={true}
+        showsMyLocationButton={false} // optional, since you have your own button
         onPress={handleMapPress}
         initialRegion={{
           latitude: 52.136,
@@ -290,6 +356,12 @@ export default function MapScreenRN() {
         setFilters={setFilters}
         filterConfig={RIDER_FILTER_GROUPS}
       />
+      <TouchableOpacity
+        onPress={() => recenterMap(userLocation)}
+        style={styles.recenterButton}
+      >
+        <MaterialCommunityIcons name="crosshairs-gps" size={22} color="#C5A041" />
+      </TouchableOpacity>
 
       {selectedPlace && (
         <PlaceCard
@@ -305,8 +377,31 @@ export default function MapScreenRN() {
 /* STYLES                                                             */
 /* ------------------------------------------------------------------ */
 
+const TAB_BAR_HEIGHT = 60; // safe default
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+
+  recenterButton: {
+    position: "absolute",
+    right: 16,
+    bottom: TAB_BAR_HEIGHT + 35,
+
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+
+    backgroundColor: "#1f2937", // dark, neutral
+    justifyContent: "center",
+    alignItems: "center",
+    
+    elevation: 4, // Android shadow
+    shadowColor: "#000", // iOS shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.5,
+  },
+
 });
