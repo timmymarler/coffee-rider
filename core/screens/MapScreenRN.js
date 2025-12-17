@@ -94,7 +94,8 @@ const fetchGooglePois = async (
   longitude,
   radius,
   maxResults,
-  textQuery
+  textQuery,
+  intentCategory,
 ) => {
   try {
     const res = await fetch(
@@ -135,7 +136,7 @@ const fetchGooglePois = async (
 
     return json.places.map((place) => {
       const types = Array.isArray(place.types) ? place.types : [];
-      const category = classifyPoi({ types });
+      const category = intentCategory ?? classifyPoi({ types });
 
       return {
         id: place.id,
@@ -226,12 +227,14 @@ export default function MapScreenRN() {
   const handleMapPress = async (e) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
     const query = buildGoogleQuery(filters);
+    const intentCategory = getIntentCategory(filters);
     const pois = await fetchGooglePois(
       latitude,
       longitude,
       1200,
       20,
-      query
+      query,
+      intentCategory
     );
     setGooglePois(pois);
     setSelectedPlace(null);
@@ -275,6 +278,14 @@ export default function MapScreenRN() {
       .map((cat) => GOOGLE_CATEGORY_QUERIES[cat])
       .filter(Boolean)
       .join(" OR ");
+  }
+
+  // Needed to match Bikes / Scooters as no valuable Google Types are available
+  function getIntentCategory(filters) {
+    if (!filters.categories || filters.categories.size !== 1) {
+      return null;
+    }
+    return Array.from(filters.categories)[0];
   }
 
   /* ------------------------------------------------------------ */
