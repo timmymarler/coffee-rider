@@ -18,7 +18,6 @@ import { applyFilters } from "../map/filters/applyFilters";
 /* ------------------------------------------------------------------ */
 /* CATEGORY → ICON MAP (authoritative)                                 */
 /* ------------------------------------------------------------------ */
-
 const CATEGORY_ICON_MAP = {
   cafe: "coffee",
   restaurant: "silverware-fork-knife",
@@ -26,7 +25,55 @@ const CATEGORY_ICON_MAP = {
   fuel: "gas-station",
   parking: "parking",
   scenic: "forest",
-  service: "tools",
+  bikes: "motorbike",
+  scooters: "moped",
+};
+
+const GOOGLE_CATEGORY_QUERIES = {
+  cafe: [
+      "cafe",
+      "coffee",
+      "coffee shop",
+      "brasserie",
+  ].join(" OR "),
+  
+  restaurant: [
+      "restaurant",
+      "food",
+  ].join(" OR "), 
+  
+  pub: "pub OR bar",
+  
+  parking: "parking",
+  
+  scenic: "viewpoint OR scenic OR landmark OR park",
+  
+  fuel: [
+    "petrol station",
+    "gas station",
+    "service station",
+    "fuel station"
+  ].join(" OR "),
+  
+  bikes: [
+    "motorcycle",
+    "motorbike",
+    "motorcycle repair",
+    "motorcycle dealer",
+    "motorbike garage",
+    "motorcycle service",
+    "motorcycle tyres"
+  ].join(" OR "),
+  
+  scooters: [
+    "scooter",
+    "scooters",
+    "scooter repair",
+    "scooter dealer",
+    "scooter garage",
+    "scooter service",
+    "scooter tyres"
+  ].join(" OR "),
 };
 
 /* ------------------------------------------------------------------ */
@@ -46,7 +93,8 @@ const fetchGooglePois = async (
   latitude,
   longitude,
   radius,
-  maxResults
+  maxResults,
+  textQuery
 ) => {
   try {
     const res = await fetch(
@@ -69,8 +117,7 @@ const fetchGooglePois = async (
           ].join(","),
         },
         body: JSON.stringify({
-          textQuery:
-            "cafe OR coffee OR pub OR restaurant OR fuel OR scenic",
+          textQuery,
           languageCode: "en",
           locationBias: {
             circle: {
@@ -178,7 +225,14 @@ export default function MapScreenRN() {
 
   const handleMapPress = async (e) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
-    const pois = await fetchGooglePois(latitude, longitude, 1200, 20);
+    const query = buildGoogleQuery(filters);
+    const pois = await fetchGooglePois(
+      latitude,
+      longitude,
+      1200,
+      20,
+      query
+    );
     setGooglePois(pois);
     setSelectedPlace(null);
   };
@@ -202,6 +256,27 @@ export default function MapScreenRN() {
     return allMarkers.filter((poi) => applyFilters(poi, filters));
   }, [allMarkers, filters]);
 
+
+  function buildGoogleQuery(filters) {
+    // Default: rider-relevant, ambient places only
+    if (!filters.categories || filters.categories.size === 0) {
+      return [
+        GOOGLE_CATEGORY_QUERIES.cafe,
+        GOOGLE_CATEGORY_QUERIES.pub,
+        GOOGLE_CATEGORY_QUERIES.fuel,
+        GOOGLE_CATEGORY_QUERIES.scenic,
+//        GOOGLE_CATEGORY_QUERIES.bikes,
+//        GOOGLE_CATEGORY_QUERIES.scooters,
+      ].join(" OR ");
+    }
+
+    // Explicit filters: user knows what they want
+    return Array.from(filters.categories)
+      .map((cat) => GOOGLE_CATEGORY_QUERIES[cat])
+      .filter(Boolean)
+      .join(" OR ");
+  }
+
   /* ------------------------------------------------------------ */
   /* RENDER                                                       */
   /* ------------------------------------------------------------ */
@@ -223,7 +298,6 @@ export default function MapScreenRN() {
       >
         {filteredMarkers.map((poi) => {
           if (!poi.latitude || !poi.longitude) return null;
-
           const iconName =
             CATEGORY_ICON_MAP[poi.category] || "map-marker";
 

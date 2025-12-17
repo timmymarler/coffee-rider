@@ -1,4 +1,10 @@
 export function applyFilters(poi, filters) {
+
+  // Hide unclassified Google POIs (noise reduction)
+  if (poi.source === "google" && poi.category === "unknown") {
+    return false;
+  }
+
   // Category filter (CR + Google)
   if (filters.categories.size > 0) {
     if (!filters.categories.has(poi.category)) {

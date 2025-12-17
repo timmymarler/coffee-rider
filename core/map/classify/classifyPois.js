@@ -1,60 +1,69 @@
-// core/map/classifyPoi.js
+// classifyPois.js
+// Conservative, type-first Google POI classification
+// Bikes & scooters are INTENT-based and handled upstream
 
-export function classifyPoi(place = {}) {
-    if (!place || !Array.isArray(place.types)) {
-    console.warn("classifyPoi called with invalid place", place);
-    return "other";
-  }
+export function classifyPoi({ types = [], name = "" }) {
+  if (!Array.isArray(types)) types = [];
 
-  const types = Array.isArray(place.types) ? place.types : [];
-  const name = typeof place.name === "string" ? place.name : "";
+  const t = new Set(types.map((x) => x.toLowerCase()));
 
-  // PUBS (must come early)
-  if (types.some(t =>
-    ["pub", "bar", "lodging"].includes(t)
-  )) {
-    return "pub";
-  }
-
-  // CAFÉS
-  if (types.includes("cafe")) {
+  /* -------------------------------------------------- */
+  /* CAFÉ                                               */
+  /* -------------------------------------------------- */
+  if (
+    t.has("cafe") ||
+    t.has("coffee_shop")
+  ) {
     return "cafe";
   }
 
-  // FOOD (restaurants that aren't pubs)
-  if (types.includes("restaurant") || types.includes("food")) {
-    return "food";
+  /* -------------------------------------------------- */
+  /* PUB / BAR                                          */
+  /* -------------------------------------------------- */
+  if (
+    t.has("bar") ||
+    t.has("pub")
+  ) {
+    return "pub";
   }
 
-  // FUEL
-  if (types.includes("gas_station")) {
+  /* -------------------------------------------------- */
+  /* RESTAURANT                                        */
+  /* -------------------------------------------------- */
+  if (
+    t.has("restaurant") ||
+    t.has("food")
+  ) {
+    return "restaurant";
+  }
+
+  /* -------------------------------------------------- */
+  /* FUEL (including service stations with food)       */
+  /* -------------------------------------------------- */
+  if (t.has("gas_station")) {
     return "fuel";
   }
 
-  // PARKING
-  if (types.includes("parking")) {
+  /* -------------------------------------------------- */
+  /* PARKING                                           */
+  /* -------------------------------------------------- */
+  if (t.has("parking")) {
     return "parking";
   }
 
-  // BIKES
-  if (types.includes("auto_parts_store")) {
-    return "bikes";
-  }
-
-  // SCENIC / POI
-  if (types.includes("tourist_attraction")) {
+  /* -------------------------------------------------- */
+  /* SCENIC / VIEWPOINT                                */
+  /* -------------------------------------------------- */
+  if (
+    t.has("tourist_attraction") ||
+    t.has("park") ||
+    t.has("natural_feature")
+  ) {
     return "scenic";
   }
 
-  const lowerName = name?.toLowerCase?.() || "";
-  if (
-    lowerName.includes("motorcycle") ||
-    lowerName.includes("motorcycles") ||
-    lowerName.includes("motorbike") ||
-    lowerName.includes("motorbikes")
-  ) {
-    return "bikes";
-  }
-
-  return "other";
+  /* -------------------------------------------------- */
+  /* EVERYTHING ELSE                                   */
+  /* -------------------------------------------------- */
+  return "unknown";
 }
