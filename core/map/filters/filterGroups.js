@@ -35,9 +35,21 @@ export const FILTER_GROUPS = {
     category: "scenic",
   },
 
-  service: {
-    label: "Service / Repair",
-    icon: "tools",
-    category: "service",
+  bikes: {
+    label: "Bikes",
+    icon: "motorbike",
+    category: "bikes",
   },
+
+  scooters: {
+    label: "Scooters",
+    icon: "moped",
+    category: "scooters",
+  },
+
+//  service: {
+//    label: "Service / Repair",
+//    icon: "tools",
+//    category: "service",
+//  },
 };

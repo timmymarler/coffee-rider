@@ -34,14 +34,14 @@ export const RIDER_FILTER_GROUPS = {
     keywords: ["fuel", "petrol", "diesel"],
   },
 
-  servicing: {
-    googleTypes: [
-      "motorcycle_repair",
-      "motorcycle_shop",
-      "car_repair",
-    ],
-    keywords: ["motorcycle", "garage", "service"],
-  },
+//  servicing: {
+//    googleTypes: [
+//      "motorcycle_repair",
+//      "motorcycle_shop",
+//      "car_repair",
+//    ],
+//    keywords: ["motorcycle", "garage", "service"],
+//  },
 
   parking: {
     googleTypes: ["parking"],

@@ -62,7 +62,8 @@ const GOOGLE_CATEGORY_QUERIES = {
     "motorcycle dealer",
     "motorbike garage",
     "motorcycle service",
-    "motorcycle tyres"
+    "motorcycle tyres",
+    "superbike",
   ].join(" OR "),
   
   scooters: [
@@ -76,6 +77,7 @@ const GOOGLE_CATEGORY_QUERIES = {
   ].join(" OR "),
 };
 
+
 /* ------------------------------------------------------------------ */
 /* FILTER STATE                                                        */
 /* ------------------------------------------------------------------ */
@@ -88,6 +90,17 @@ const EMPTY_FILTERS = {
 /* ------------------------------------------------------------------ */
 /* GOOGLE POI SEARCH                                                   */
 /* ------------------------------------------------------------------ */
+function dedupeById(items) {
+  const seen = new Set();
+  const out = [];
+  for (const it of items) {
+    const k = `${it.source}-${it.id}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(it);
+  }
+  return out;
+}
 
 const fetchGooglePois = async (
   latitude,
@@ -137,6 +150,10 @@ const fetchGooglePois = async (
     return json.places.map((place) => {
       const types = Array.isArray(place.types) ? place.types : [];
       const category = intentCategory ?? classifyPoi({ types });
+      const renderIcon =
+        intentCategory === "bikes" || intentCategory === "scooters"
+          ? intentCategory
+          : category;
 
       return {
         id: place.id,
@@ -146,6 +163,7 @@ const fetchGooglePois = async (
         longitude: place.location?.longitude,
         googleTypes: types,
         category,
+        renderIcon,
         rating: place.rating,
         userRatingsTotal: place.userRatingCount,
         googlePhotoUrls:
@@ -173,8 +191,12 @@ export default function MapScreenRN() {
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [userLocation, setUserLocation] = useState(null);
+  const isTwoWheelsMode =
+    filters.categories.has("bikes") &&
+    filters.categories.has("scooters");
 
   const mapRef = useRef(null);
+  const markerPressRef = useRef(false);
 
   /* ------------------------------------------------------------ */
   /* LOAD CR PLACES                                               */
@@ -226,8 +248,41 @@ export default function MapScreenRN() {
 
   const handleMapPress = async (e) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
+
+    const isTwoWheelsMode =
+      filters.categories.has("bikes") &&
+      filters.categories.has("scooters");
+
+    // Combined Bikes + Scooters: do TWO searches so each result gets a real category
+    if (isTwoWheelsMode) {
+      const [bikePois, scooterPois] = await Promise.all([
+        fetchGooglePois(
+          latitude,
+          longitude,
+          1200,
+          20,
+          GOOGLE_CATEGORY_QUERIES.bikes,
+          "bikes"
+        ),
+        fetchGooglePois(
+          latitude,
+          longitude,
+          1200,
+          20,
+          GOOGLE_CATEGORY_QUERIES.scooters,
+          "scooters"
+        ),
+      ]);
+
+      setGooglePois(dedupeById([...bikePois, ...scooterPois]));
+      setSelectedPlace(null);
+      return;
+    }
+
+    // Normal path (0 or 1 category or other mixes)
     const query = buildGoogleQuery(filters);
     const intentCategory = getIntentCategory(filters);
+
     const pois = await fetchGooglePois(
       latitude,
       longitude,
@@ -236,6 +291,7 @@ export default function MapScreenRN() {
       query,
       intentCategory
     );
+
     setGooglePois(pois);
     setSelectedPlace(null);
   };
@@ -268,8 +324,8 @@ export default function MapScreenRN() {
         GOOGLE_CATEGORY_QUERIES.pub,
         GOOGLE_CATEGORY_QUERIES.fuel,
         GOOGLE_CATEGORY_QUERIES.scenic,
-//        GOOGLE_CATEGORY_QUERIES.bikes,
-//        GOOGLE_CATEGORY_QUERIES.scooters,
+        GOOGLE_CATEGORY_QUERIES.bikes,
+        GOOGLE_CATEGORY_QUERIES.scooters,
       ].join(" OR ");
     }
 
@@ -309,8 +365,10 @@ export default function MapScreenRN() {
       >
         {filteredMarkers.map((poi) => {
           if (!poi.latitude || !poi.longitude) return null;
-          const iconName =
-            CATEGORY_ICON_MAP[poi.category] || "map-marker";
+            const iconName =
+              poi.renderIcon === "bikes" || poi.renderIcon === "scooters"
+                ? "racing-helmet"
+                : CATEGORY_ICON_MAP[poi.category] || "map-marker";
 
           return (
             <Marker
@@ -321,7 +379,9 @@ export default function MapScreenRN() {
               }}
               onPress={(e) => {
                 e.stopPropagation();
+                markerPressRef.current = true;
                 setSelectedPlace(poi);
+                console.log(poi.googleTypes);
               }}
               anchor={{ x: 0.5, y: 1 }}
             >
