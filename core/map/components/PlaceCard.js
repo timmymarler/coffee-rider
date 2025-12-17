@@ -16,9 +16,7 @@ import { useContext, useMemo, useState } from "react";
 import {
   Dimensions,
   Image,
-  Pressable,
-  ScrollView,
-  Text,
+  Pressable, ScrollView, Text,
   TouchableOpacity,
   View
 } from "react-native";
@@ -58,6 +56,7 @@ const AMENITY_KEY_MAP = {
   disabledAccess: "disabled_access",
   outdoorSeating: "outdoor_seating",
 };
+
 
 /* ------------------------------------------------------------------ */
 
@@ -147,6 +146,13 @@ export default function PlaceCard({
         : []),
     ].filter(Boolean);
   }, [place]);
+
+  const googleRating =
+    place.googleRating ?? place.rating ?? null;
+  const googleRatingCount =
+    place.googleUserRatingsTotal ?? place.userRatingsTotal ?? 0;
+  const crAverageRating = place.crRatings?.average ?? null;
+  const crRatingCount = place.crRatings?.count ?? 0;
 
   /* ------------------------------------------------------------------ */
   /* HELPERS                                                           */
@@ -273,6 +279,7 @@ export default function PlaceCard({
   /* ------------------------------------------------------------------ */
 
   return (
+    
     <View style={styles.container}>
       <Pressable onPress={onClose} style={styles.closeButton}>
         <Ionicons name="close" size={22} color="#fff" />
@@ -310,120 +317,155 @@ export default function PlaceCard({
       )}
 
       {/* INFO */}
-      <View style={styles.info}>
-        <Text style={styles.title}>
-          {isCreateMode ? "Save this place" : place.title}
-        </Text>
-        {/* Category */}
-        {place.category ? (
-          <Text style={styles.subTitle}>
-            {place.category.charAt(0).toUpperCase() + place.category.slice(1)}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >      
+        <View style={styles.info}>
+          <Text style={styles.title}>
+            {isCreateMode ? "Save this place" : place.title}
           </Text>
-        ) : null}
-        {/* Address */}
-        {(place.address || place.formattedAddress) ? (
-          <Text style={styles.subText}>
-            {place.address || place.formattedAddress} 
-          </Text>
-        ) : null}
-        {distanceMiles && (
-          <Text style={styles.subText}>{distanceMiles} miles away (straight line distance)</Text>
-        )}
+          {/* Category */}
+          {place.category ? (
+            <Text style={styles.ratingMeta}>
+              {place.category.charAt(0).toUpperCase() + place.category.slice(1)}
+            </Text>
+          ) : null}
+          {/* Address */}
+          {(place.address || place.formattedAddress) ? (
+            <Text style={styles.subText}>
+              {place.address || place.formattedAddress} 
+            </Text>
+          ) : null}
+          {distanceMiles && (
+            <Text style={styles.subText}>{distanceMiles} miles away (straight line distance)</Text>
+          )}
+          {/* Opening Hours (Google only) */}
+          {place.regularOpeningHours?.weekdayDescriptions?.length ? (
+            <View style={styles.openingHours}>
+              <Text style={styles.crLabel}>Opening Hours</Text>
+              {place.regularOpeningHours.weekdayDescriptions.map((line) => (
+                <Text key={line} style={styles.subText}>
+                  {line}
+                </Text>
+              ))}
+            </View>
+          ) : null}
 
-        {/* Opening Hours (Google only) */}
-        {place.regularOpeningHours?.weekdayDescriptions?.length ? (
-          <View style={styles.openingHours}>
-            <Text style={styles.sectionTitle}>Opening Hours</Text>
-            {place.regularOpeningHours.weekdayDescriptions.map((line) => (
-              <Text key={line} style={styles.openingHourLine}>
-                {line}
-              </Text>
+          {/* Ratings */}
+          <View style={styles.ratingsSection}>
+            <Text style={styles.crLabel}>Ratings</Text>
+
+            {/* Google rating */}
+            {googleRating ? (
+              <View style={styles.ratingRow}>
+                <Text style={styles.ratingValue}>
+                  ★ {googleRating.toFixed(1)}
+                </Text>
+                <Text style={styles.ratingMeta}>
+                  ({googleRatingCount}) G
+                </Text>
+              </View>
+            ) : null}
+
+            {/* CR rating */}
+            {crAverageRating !== null ? (
+              <View style={styles.ratingRow}>
+                <Text style={styles.ratingValue}>
+                  ★ {crAverageRating.toFixed(1)}
+                </Text>
+                <Text style={styles.ratingMeta}>
+                  ({crRatingCount})
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
+          {/* Suitability */}
+          <Text style={styles.crLabel}>Suitability</Text>
+          <View style={styles.amenitiesRow}>
+            {Object.keys(defaultSuitability).map((key) => (
+              <TouchableOpacity
+                key={key}
+                onPress={() => toggleSuitability(key)}
+                activeOpacity={isCreateMode ? 0.7 : 1}
+              >
+                {amenityIcon(
+                  suitabilityState[key],
+                  key === "bikers"
+                    ? "motorbike"
+                    : key === "scooters"
+                    ? "moped"
+                    : key === "cyclists"
+                    ? "bike"
+                    : key === "walkers"
+                    ? "walk"
+                    : key === "cars"
+                    ? "car"
+                    : "car-electric"
+                )}
+              </TouchableOpacity>
             ))}
           </View>
-        ) : null}
 
-        {/* Suitability */}
-        <Text style={styles.crLabel}>Suitability</Text>
-        <View style={styles.amenitiesRow}>
-          {Object.keys(defaultSuitability).map((key) => (
+          {/* Amenities */}
+          <Text style={styles.crLabel}>Amenities</Text>
+          <View style={styles.amenitiesRow}>
+            {Object.keys(defaultAmenities).map((key) => (
+              <TouchableOpacity
+                key={key}
+                onPress={() => toggleAmenity(key)}
+                activeOpacity={isCreateMode ? 0.7 : 1}
+              >
+                {amenityIcon(
+                  amenitiesState[key],
+                  key === "parking"
+                    ? "parking"
+                    : key === "motorcycleParking"
+                    ? "motorbike"
+                    : key === "evCharger"
+                    ? "ev-plug-ccs2"
+                    : key === "toilets"
+                    ? "toilet"
+                    : key === "petFriendly"
+                    ? "dog-side"
+                    : key === "disabledAccess"
+                    ? "wheelchair-accessibility"
+                    : "table-picnic"
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {isCreateMode && (
             <TouchableOpacity
-              key={key}
-              onPress={() => toggleSuitability(key)}
-              activeOpacity={isCreateMode ? 0.7 : 1}
+              style={styles.primaryButton}
+              onPress={handleSavePlace}
             >
-              {amenityIcon(
-                suitabilityState[key],
-                key === "bikers"
-                  ? "motorbike"
-                  : key === "scooters"
-                  ? "moped"
-                  : key === "cyclists"
-                  ? "bike"
-                  : key === "walkers"
-                  ? "walk"
-                  : key === "cars"
-                  ? "car"
-                  : "car-electric"
-              )}
+              <Text style={styles.primaryButtonText}>Save place</Text>
             </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Amenities */}
-        <Text style={styles.crLabel}>Amenities</Text>
-        <View style={styles.amenitiesRow}>
-          {Object.keys(defaultAmenities).map((key) => (
+          )}
+          {/* Actions */}
+          <View style={styles.actionsRow}>
             <TouchableOpacity
-              key={key}
-              onPress={() => toggleAmenity(key)}
-              activeOpacity={isCreateMode ? 0.7 : 1}
+              style={styles.primaryAction}
+              onPress={() => onNavigate(place)}
             >
-              {amenityIcon(
-                amenitiesState[key],
-                key === "parking"
-                  ? "parking"
-                  : key === "motorcycleParking"
-                  ? "motorbike"
-                  : key === "evCharger"
-                  ? "ev-plug-ccs2"
-                  : key === "toilets"
-                  ? "toilet"
-                  : key === "petFriendly"
-                  ? "dog-side"
-                  : key === "disabledAccess"
-                  ? "wheelchair-accessibility"
-                  : "table-picnic"
-              )}
+              <Text style={styles.primaryActionText}>Navigate</Text>
             </TouchableOpacity>
-          ))}
+
+            <TouchableOpacity
+              style={styles.secondaryAction}
+              onPress={() => onRoute(place)}
+            >
+              <Text style={styles.secondaryActionText}>Route</Text>
+            </TouchableOpacity>
+          </View>
+
         </View>
+      </ScrollView>
 
-        {isCreateMode && (
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={handleSavePlace}
-          >
-            <Text style={styles.primaryButtonText}>Save place</Text>
-          </TouchableOpacity>
-        )}
-        {/* Actions */}
-        <View style={styles.actionsRow}>
-          <TouchableOpacity
-            style={styles.primaryAction}
-            onPress={() => onNavigate(place)}
-          >
-            <Text style={styles.primaryActionText}>Navigate</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.secondaryAction}
-            onPress={() => onRoute(place)}
-          >
-            <Text style={styles.secondaryActionText}>Route</Text>
-          </TouchableOpacity>
-        </View>
-
-      </View>
     </View>
   );
 }
@@ -439,6 +481,7 @@ function createStyles(theme) {
       bottom: 100,
       left: 10,
       right: 10,
+      maxHeight: "65%",
       backgroundColor: theme.colors.primaryDark,
       borderRadius: 16,
       overflow: "hidden",
@@ -552,6 +595,36 @@ function createStyles(theme) {
     secondaryActionText: {
       color: theme.colors.primaryDark,
       fontWeight: "500",
+    },
+
+    ratingsSection: {
+      marginTop: 12,
+    },
+
+    ratingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 4,
+    },
+
+    ratingValue: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.accentDark,
+      marginRight: 6,
+    },
+
+    ratingMeta: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+
+    scroll: {
+      flexGrow: 0,
+    },
+
+    scrollContent: {
+      paddingBottom: 16,
     },
     
   };
