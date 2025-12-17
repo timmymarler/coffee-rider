@@ -121,7 +121,7 @@ export default function PlaceCard({
   /* DERIVED DATA                                                      */
   /* ------------------------------------------------------------------ */
 
-  const distanceKm = useMemo(() => {
+  const distanceMiles = useMemo(() => {    
     if (!userLocation || !place.latitude || !place.longitude) return null;
 
     const toRad = (v) => (v * Math.PI) / 180;
@@ -136,7 +136,7 @@ export default function PlaceCard({
       Math.sin(dLat / 2) ** 2 +
       Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
 
-    return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1);
+    return ((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))*0.62).toFixed(1);
   }, [userLocation, place]);
 
   const photos = useMemo(() => {
@@ -314,10 +314,33 @@ export default function PlaceCard({
         <Text style={styles.title}>
           {isCreateMode ? "Save this place" : place.title}
         </Text>
-
-        {distanceKm && (
-          <Text style={styles.distance}>{distanceKm} km away</Text>
+        {/* Category */}
+        {place.category ? (
+          <Text style={styles.subTitle}>
+            {place.category.charAt(0).toUpperCase() + place.category.slice(1)}
+          </Text>
+        ) : null}
+        {/* Address */}
+        {(place.address || place.formattedAddress) ? (
+          <Text style={styles.subText}>
+            {place.address || place.formattedAddress} 
+          </Text>
+        ) : null}
+        {distanceMiles && (
+          <Text style={styles.subText}>{distanceMiles} miles away (straight line distance)</Text>
         )}
+
+        {/* Opening Hours (Google only) */}
+        {place.regularOpeningHours?.weekdayDescriptions?.length ? (
+          <View style={styles.openingHours}>
+            <Text style={styles.sectionTitle}>Opening Hours</Text>
+            {place.regularOpeningHours.weekdayDescriptions.map((line) => (
+              <Text key={line} style={styles.openingHourLine}>
+                {line}
+              </Text>
+            ))}
+          </View>
+        ) : null}
 
         {/* Suitability */}
         <Text style={styles.crLabel}>Suitability</Text>
@@ -383,6 +406,23 @@ export default function PlaceCard({
             <Text style={styles.primaryButtonText}>Save place</Text>
           </TouchableOpacity>
         )}
+        {/* Actions */}
+        <View style={styles.actionsRow}>
+          <TouchableOpacity
+            style={styles.primaryAction}
+            onPress={() => onNavigate(place)}
+          >
+            <Text style={styles.primaryActionText}>Navigate</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryAction}
+            onPress={() => onRoute(place)}
+          >
+            <Text style={styles.secondaryActionText}>Route</Text>
+          </TouchableOpacity>
+        </View>
+
       </View>
     </View>
   );
@@ -399,7 +439,7 @@ function createStyles(theme) {
       bottom: 100,
       left: 10,
       right: 10,
-      backgroundColor: theme.colors.primaryLight,
+      backgroundColor: theme.colors.primaryDark,
       borderRadius: 16,
       overflow: "hidden",
       elevation: 10,
@@ -422,13 +462,28 @@ function createStyles(theme) {
     title: {
       fontSize: 18,
       fontWeight: "600",
+      color: theme.colors.accentMid,
+    },
+    subTitle: {
+      fontSize: 16,
+      fontWeight: "600",
       color: theme.colors.accentDark,
+    },
+    text: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.primaryLight,
+    },
+    subText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.primaryLight,
     },
     crLabel: {
       marginTop: 16,
       fontSize: 15,
       fontWeight: "600",
-      color: theme.colors.text,
+      color: theme.colors.accentDark,
     },
     amenitiesRow: {
       flexDirection: "row",
@@ -466,5 +521,38 @@ function createStyles(theme) {
       marginLeft: 6,
       fontWeight: "600",
     },
+
+    actionsRow: {
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 12,
+    },
+
+    primaryAction: {
+      flex: 1,
+      backgroundColor: theme.colors.primary,
+      paddingVertical: 10,
+      borderRadius: 10,
+      alignItems: "center",
+    },
+
+    primaryActionText: {
+      color: theme.colors.onPrimary || "#fff",
+      fontWeight: "600",
+    },
+
+    secondaryAction: {
+      flex: 1,
+      backgroundColor: theme.colors.accentDark,
+      paddingVertical: 10,
+      borderRadius: 10,
+      alignItems: "center",
+    },
+
+    secondaryActionText: {
+      color: theme.colors.primaryDark,
+      fontWeight: "500",
+    },
+    
   };
 }

@@ -128,6 +128,7 @@ const fetchGooglePois = async (
             "places.photos",
             "places.rating",
             "places.userRatingCount",
+            "places.regularOpeningHours",
           ].join(","),
         },
         body: JSON.stringify({
@@ -166,6 +167,7 @@ const fetchGooglePois = async (
         renderIcon,
         rating: place.rating,
         userRatingsTotal: place.userRatingCount,
+        regularOpeningHours: place.regularOpeningHours,
         googlePhotoUrls:
           place.photos?.map(
             (p) =>
@@ -381,7 +383,6 @@ export default function MapScreenRN() {
                 e.stopPropagation();
                 markerPressRef.current = true;
                 setSelectedPlace(poi);
-                console.log(poi.googleTypes);
               }}
               anchor={{ x: 0.5, y: 1 }}
             >
@@ -422,7 +423,10 @@ export default function MapScreenRN() {
       {selectedPlace && (
         <PlaceCard
           place={selectedPlace}
+          userLocation={userLocation}
           onClose={() => setSelectedPlace(null)}
+          onNavigate={() => ""}
+          onRoute={() => ""}
         />
       )}
     </View>
