@@ -223,11 +223,39 @@ export default function MapScreenRN() {
       });
 
       setCrPlaces(places);
+      
     });
 
     return unsub;
   }, []);
 
+  const crByGoogleId = useMemo(() => {
+    const m = new Map();
+    for (const p of crPlaces || []) {
+      if (p.googlePlaceId) m.set(p.googlePlaceId, p);
+    }
+    return m;
+  }, [crPlaces]);
+
+  const annotateGooglePois = (pois) => {
+    return (pois || []).map((poi) => {
+      const crMatch = poi?.id ? crByGoogleId.get(poi.id) : null;
+
+      if (crMatch) {
+        return {
+          ...poi,
+          source: "google",       // exists in CR already
+          crId: crMatch.id,       // optional: useful for “open CR place”
+        };
+      }
+
+      return {
+        ...poi,
+        source: "google-new",    // not yet in CR
+      };
+    });
+  };
+  
   /* ------------------------------------------------------------ */
   /* USER LOCATION                                                */
   /* ------------------------------------------------------------ */
@@ -276,10 +304,11 @@ export default function MapScreenRN() {
         ),
       ]);
 
-      setGooglePois(dedupeById([...bikePois, ...scooterPois]));
+      setGooglePois(annotateGooglePois(dedupeById([...bikePois, ...scooterPois])));
       setSelectedPlace(null);
       return;
     }
+
 
     // Normal path (0 or 1 category or other mixes)
     const query = buildGoogleQuery(filters);
@@ -294,14 +323,59 @@ export default function MapScreenRN() {
       intentCategory
     );
 
-    setGooglePois(pois);
+    setGooglePois(annotateGooglePois(pois));
     setSelectedPlace(null);
   };
+
+
+    // Scroll map to show POIs
+    const handleRegionChangeComplete = async (region) => {
+      // Ignore tiny movements if you want (optional optimisation)
+      if (!region) return;
+
+      const { latitude, longitude, latitudeDelta } = region;
+
+      // Decide zoom level from delta
+      const zoomLevel =
+        latitudeDelta < 0.03 ? "close" :
+        latitudeDelta < 0.08 ? "medium" :
+        "far";
+
+      // Call existing fetch logic
+      await fetchPoisForRegion(latitude, longitude, zoomLevel);
+    };  
+
+    // As it says, fetch POIs based on the current region
+    const fetchPoisForRegion = async (latitude, longitude, zoomLevel) => {
+      const radius =
+        zoomLevel === "close" ? 600 :
+        zoomLevel === "medium" ? 1200 :
+        2500;
+
+      const limit =
+        zoomLevel === "close" ? 40 :
+        zoomLevel === "medium" ? 25 :
+        12;
+
+      const query = buildGoogleQuery(filters);
+      const intentCategory = getIntentCategory(filters);
+
+      const pois = await fetchGooglePois(
+        latitude,
+        longitude,
+        radius,
+        limit,
+        query,
+        intentCategory
+      );
+
+      setGooglePois(pois);
+    };
 
   /* ------------------------------------------------------------ */
   /* MERGE + FILTER                                               */
   /* ------------------------------------------------------------ */
-
+  
   const allMarkers = useMemo(
     () => [...crPlaces, ...googlePois],
     [crPlaces, googlePois]
@@ -325,7 +399,8 @@ export default function MapScreenRN() {
         GOOGLE_CATEGORY_QUERIES.cafe,
         GOOGLE_CATEGORY_QUERIES.pub,
         GOOGLE_CATEGORY_QUERIES.scenic,
-        //GOOGLE_CATEGORY_QUERIES.fuel,
+        GOOGLE_CATEGORY_QUERIES.fuel,
+        GOOGLE_CATEGORY_QUERIES.parking,
         //GOOGLE_CATEGORY_QUERIES.bikes,
         //GOOGLE_CATEGORY_QUERIES.scooters,
       ].join(" OR ");
@@ -357,7 +432,8 @@ export default function MapScreenRN() {
         style={StyleSheet.absoluteFill}
         showsUserLocation
         showsMyLocationButton={false}
-        onPress={handleMapPress}
+        onRegionChangeComplete={handleRegionChangeComplete}
+        onPress={() => setSelectedPlace(null)}
         initialRegion={{
           latitude: 52.136,
           longitude: -0.467,
@@ -365,31 +441,67 @@ export default function MapScreenRN() {
           longitudeDelta: 0.15,
         }}
       >
-        {filteredMarkers.map((poi) => {
-          if (!poi.latitude || !poi.longitude) return null;
-            const iconName =
-              poi.renderIcon === "bikes" || poi.renderIcon === "scooters"
-                ? "racing-helmet"
-                : CATEGORY_ICON_MAP[poi.category] || "map-marker";
+{filteredMarkers.map((poi) => {
+  if (!poi.latitude || !poi.longitude) return null;
 
-          return (
-            <Marker
-              key={poi.id}
-              coordinate={{
-                latitude: poi.latitude,
-                longitude: poi.longitude,
-              }}
-              onPress={(e) => {
-                e.stopPropagation();
-                markerPressRef.current = true;
-                setSelectedPlace(poi);
-              }}
-              anchor={{ x: 0.5, y: 1 }}
-            >
-              <SvgPin icon={iconName} />
-            </Marker>
-          );
-        })}
+  const iconName =
+    poi.renderIcon === "bikes" || poi.renderIcon === "scooters"
+      ? "racing-helmet"
+      : CATEGORY_ICON_MAP[poi.category] || "map-marker";
+
+  const isSelected = String(selectedPlace?.id) === String(poi.id);
+  const isCr = poi.source === "cr";
+
+  // 0 = google, 1 = cr, 2 = selected
+  const tier = isSelected ? 2 : isCr ? 1 : 0;
+
+  // SCALE (this is the important part)
+  const scale = tier === 2 ? 1.35 : tier === 1 ? 1.18 : 1.0;
+
+  // COLOUR (only works if SvgPin supports it)
+  const color =
+    tier === 2
+      ? "#FFF2C7"   // selected
+      : tier === 1
+      ?  "#FFD85C"   // CR
+      : "#C5A041"; // google
+
+  // Force remount when tier changes (kills ghost markers)
+  const markerKey = `${poi.id}-${tier}`;
+
+  return (
+    <Marker
+      key={markerKey}
+      coordinate={{
+        latitude: poi.latitude,
+        longitude: poi.longitude,
+      }}
+      onPress={(e) => {
+        e.stopPropagation();
+        markerPressRef.current = true;
+        setSelectedPlace(poi);
+      }}
+      anchor={{ x: 0.5, y: 1 }}
+      zIndex={tier === 2 ? 1000 : tier === 1 ? 50 : 1}
+      tracksViewChanges={true}
+    >
+      <View
+        style={{
+          alignItems: "center",
+          justifyContent: "center",
+          transform: [{ scale }],
+        }}
+      >
+        <SvgPin
+          icon={iconName}
+          size={28}     // KEEP CONSTANT
+          fill={color} // may or may not apply depending on SvgPin
+          circle={color}
+        />
+      </View>
+    </Marker>
+  );
+})}
       </MapView>
 
       <FilterBar

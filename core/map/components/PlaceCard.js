@@ -85,6 +85,8 @@ export default function PlaceCard({
       : 0;
 
   const [selectedRating, setSelectedRating] = useState(userCrRating);
+  const [justSaved, setJustSaved] = useState(false);
+
   useEffect(() => {
     setSelectedRating(userCrRating);
   }, [userCrRating, place?.id]);
@@ -246,6 +248,13 @@ export default function PlaceCard({
         amenities,
         googlePhotoUrls: place.googlePhotoUrls || [],
       });
+
+      setJustSaved(true);
+
+      setTimeout(() => {
+        setJustSaved(false);
+      }, 1200);
+
     } catch (err) {
       console.log("[SAVE PLACE] failed", err);
     }
@@ -355,7 +364,7 @@ export default function PlaceCard({
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          style={{ width: screenWidth, height: 180 }}
+          style={{ width: screenWidth, height: 60 }}
           onScroll={(e) =>
             setPhotoIndex(
               Math.round(
@@ -388,7 +397,7 @@ export default function PlaceCard({
       >      
         <View style={styles.info}>
           <Text style={styles.title}>
-            {isCreateMode ? "Save this place" : place.title}
+            {isManualOnly ? "Save this place" : place.title}
           </Text>
           {/* Category */}
           {place.category ? (
@@ -531,11 +540,15 @@ export default function PlaceCard({
           {isCreateMode && (
             <TouchableOpacity
               style={styles.primaryButton}
+              disabled={justSaved}
               onPress={handleSavePlace}
             >
-              <Text style={styles.primaryButtonText}>Save place</Text>
+              <Text style={styles.primaryButtonText}>
+                {justSaved ? "Saved ✓" : "Add this place"}
+              </Text>
             </TouchableOpacity>
           )}
+
           {/* Actions */}
           <View style={styles.actionsRow}>
             <TouchableOpacity
@@ -571,7 +584,7 @@ function createStyles(theme) {
       bottom: 100,
       left: 10,
       right: 10,
-      maxHeight: "65%",
+      maxHeight: "45%",
       backgroundColor: theme.colors.primaryDark,
       borderRadius: 16,
       overflow: "hidden",
