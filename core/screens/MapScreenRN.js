@@ -324,10 +324,10 @@ export default function MapScreenRN() {
       return [
         GOOGLE_CATEGORY_QUERIES.cafe,
         GOOGLE_CATEGORY_QUERIES.pub,
-        GOOGLE_CATEGORY_QUERIES.fuel,
         GOOGLE_CATEGORY_QUERIES.scenic,
-        GOOGLE_CATEGORY_QUERIES.bikes,
-        GOOGLE_CATEGORY_QUERIES.scooters,
+        //GOOGLE_CATEGORY_QUERIES.fuel,
+        //GOOGLE_CATEGORY_QUERIES.bikes,
+        //GOOGLE_CATEGORY_QUERIES.scooters,
       ].join(" OR ");
     }
 

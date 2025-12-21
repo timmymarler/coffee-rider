@@ -1,26 +1,26 @@
 // core/screens/ProfileScreen.js
 
 import { db } from "@/config/firebase";
-import { AuthContext } from "@context/AuthContext";
-import { pickImageSquare } from "@lib/imagePicker";
-import { uploadImageAsync } from "@lib/storage";
-import { doc, updateDoc } from "firebase/firestore";
-import { useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Image, Text, TouchableOpacity, View } from "react-native";
-
 import { CRButton } from "@components-ui/CRButton";
 import { CRCard } from "@components-ui/CRCard";
 import { CRInfoBadge } from "@components-ui/CRInfoBadge";
 import { CRInput } from "@components-ui/CRInput";
 import { CRLabel } from "@components-ui/CRLabel";
 import { CRScreen } from "@components-ui/CRScreen";
+import { AuthContext } from "@context/AuthContext";
+import { uploadImage } from "@core/utils/uploadImage";
 import theme from "@themes";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
+import { doc, updateDoc } from "firebase/firestore";
+import { useContext, useEffect, useState } from "react";
+import { ActivityIndicator, Image, Text, TouchableOpacity, View } from "react-native";
 
 
 export default function ProfileScreen() {
-  const { user, profile, loading, logout, refreshProfile } = useContext(AuthContext);
+
   const router = useRouter();
+  const { user, profile, loading, logout, refreshProfile, capabilities } = useContext(AuthContext);
 
   // -----------------------------------
   // Initial Values
@@ -52,32 +52,43 @@ export default function ProfileScreen() {
   // -----------------------------------
   // Upload Avatar
   // -----------------------------------
-  async function handlePhotoUpload() {
+  const handlePhotoUpload = async () => {
     if (!user) return;
 
-    try {
-      const imageUri = await pickImageSquare();
-      if (!imageUri) return;
+    const { status } =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") return;
 
-      setUploading(true);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,     // 🔥 enable crop UI
+      quality: 0.8,
+      base64: true,
+    });
 
-      const downloadURL = await uploadImageAsync(
-        imageUri,
-        `profilePhotos/${user.uid}/avatar.jpg`
-      );
+    if (result.canceled) return;
 
-      await updateDoc(doc(db, "users", user.uid), {
-        photoURL: downloadURL,
-        updatedAt: Date.now(),
-      });
+    const asset = result.assets[0];
+    if (!asset?.base64) return;
 
-      await refreshProfile();
-      setUploading(false);
-    } catch (err) {
-      console.error("Profile upload error:", err);
-      setUploading(false);
-    }
-  }
+    // 🔥 NEW: call Cloud Function
+    const { url } = await uploadImage({
+      user,
+      type: "profile",
+      imageBase64: asset.base64,
+    });
+
+    // Persist to Firestore
+    // 🔥 cache-busting
+    const cacheBustedUrl = `${url}?v=${Date.now()}`;
+
+    await updateDoc(doc(db, "users", user.uid), {
+      photoURL: cacheBustedUrl,
+    });
+
+    // Optional: update local UI state if you cache profile data
+    await refreshProfile();
+  };
 
   // -----------------------------------
   // Save Profile Fields

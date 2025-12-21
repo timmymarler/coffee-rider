@@ -8,6 +8,15 @@ export function classifyPoi({ types = [], name = "" }) {
   const t = new Set(types.map((x) => x.toLowerCase()));
 
   /* -------------------------------------------------- */
+  /* FUEL (including service stations with food)       */
+  /* -------------------------------------------------- */
+  if (
+    t.has("gas_station")
+  ) {
+    return "fuel";
+  }
+
+  /* -------------------------------------------------- */
   /* CAFÉ                                               */
   /* -------------------------------------------------- */
   if (
@@ -35,13 +44,6 @@ export function classifyPoi({ types = [], name = "" }) {
     t.has("food")
   ) {
     return "restaurant";
-  }
-
-  /* -------------------------------------------------- */
-  /* FUEL (including service stations with food)       */
-  /* -------------------------------------------------- */
-  if (t.has("gas_station")) {
-    return "fuel";
   }
 
   /* -------------------------------------------------- */

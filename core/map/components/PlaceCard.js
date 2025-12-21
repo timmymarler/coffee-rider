@@ -1,18 +1,15 @@
-import { db, storage } from "@config/firebase";
+import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
+import { uploadImage } from "@core/utils/uploadImage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
 import {
   addDoc,
   arrayUnion,
-  collection,
-  doc,
-  serverTimestamp,
-  updateDoc,
+  collection, doc, serverTimestamp, updateDoc
 } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { useContext, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -69,8 +66,8 @@ export default function PlaceCard({
   onRoute,
 }) {
   const styles = createStyles(theme);
-  const auth = useContext(AuthContext);
-  const currentUser = auth?.user || null;
+  const { user, profile, loading, logout, refreshProfile, capabilities } = useContext(AuthContext);
+  const currentUser = user || null;
   const currentUid = currentUser?.uid || null;
 
   const isManualOnly = place?.source === "manual";
@@ -79,6 +76,18 @@ export default function PlaceCard({
   const isCr = place?.source === "cr";
 
   const isCreateMode = isManualOnly || isGoogleNew;
+
+  const uid = user?.uid;
+
+  const userCrRating =
+    uid && place.crRatings?.users?.[uid]?.rating
+      ? place.crRatings.users[uid].rating
+      : 0;
+
+  const [selectedRating, setSelectedRating] = useState(userCrRating);
+  useEffect(() => {
+    setSelectedRating(userCrRating);
+  }, [userCrRating, place?.id]);
 
   /* ------------------------------------------------------------------ */
   /* LOCAL STATE                                                        */
@@ -95,6 +104,7 @@ export default function PlaceCard({
   const [commentText, setCommentText] = useState("");
   const [ratingInput, setRatingInput] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
+  const [localPlace, setLocalPlace] = useState(place);
 
   const [suitabilityState, setSuitabilityState] = useState(() => ({
     ...defaultSuitability,
@@ -246,7 +256,7 @@ export default function PlaceCard({
   /* ------------------------------------------------------------------ */
 
   const handleAddPhoto = async () => {
-    if (!place.id) return;
+    if (!user || !place?.id) return;
 
     const { status } =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -254,24 +264,78 @@ export default function PlaceCard({
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: true,     // 🔥 enable crop UI
       quality: 0.8,
+      base64: true,
     });
 
     if (result.canceled) return;
 
-    const uri = result.assets[0].uri;
-    const filename = `${place.id}/${Date.now()}.jpg`;
-    const storageRef = ref(storage, `places/${filename}`);
+    // 🔑 THIS was missing
+    const asset = result.assets?.[0];
+    if (!asset?.base64) return;
 
-    const img = await fetch(uri);
-    const bytes = await img.blob();
-    await uploadBytes(storageRef, bytes);
-
-    const downloadUrl = await getDownloadURL(storageRef);
-    await updateDoc(doc(db, "places", place.id), {
-      photos: arrayUnion(downloadUrl),
+    const { url } = await uploadImage({
+      user,
+      type: "place",
+      placeId: place.id,
+      imageBase64: asset.base64,
     });
+
+    const cacheBustedUrl = `${url}?v=${Date.now()}`;
+
+    await updateDoc(doc(db, "places", place.id), {
+      photos: arrayUnion(cacheBustedUrl),
+    });
+
+    setLocalPlace(prev => ({
+      ...prev,
+      photos: [...(prev.photos || []), cacheBustedUrl],
+    }));
+
+  };
+
+  const handleSaveRating = async () => {
+    if (!capabilities.canRate) return;
+    if (!uid || !place?.id || !selectedRating) return;
+
+    const placeRef = doc(db, "places", place.id);
+
+    // Clone existing users map (or start fresh)
+    const existingUsers = place.crRatings?.users || {};
+    const nextUsers = {
+      ...existingUsers,
+      [uid]: {
+        rating: selectedRating,
+        createdAt: existingUsers[uid]?.createdAt || serverTimestamp(),
+        createdBy: uid,
+      },
+    };
+
+    // Recompute aggregates
+    const ratings = Object.values(nextUsers).map((u) => u.rating);
+    const count = ratings.length;
+    const average =
+      count > 0
+        ? Math.round(
+            (ratings.reduce((sum, r) => sum + r, 0) / count) * 10
+          ) / 10
+        : 0;
+
+    await updateDoc(placeRef, {
+      crRatings: {
+        users: nextUsers,
+        average,
+        count,
+      },
+    });
+
+    // Optimistic UI update
+    place.crRatings = {
+      users: nextUsers,
+      average,
+      count,
+    };
   };
 
   /* ------------------------------------------------------------------ */
@@ -381,6 +445,32 @@ export default function PlaceCard({
               </View>
             ) : null}
           </View>
+          
+          {/* Add user rating */}
+          {capabilities.canRate ? (
+            <View style={styles.rateRow}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <TouchableOpacity
+                  key={value}
+                  onPress={() => {
+                    setSelectedRating(value);
+                    handleSaveRating(value);
+                  }}
+                  style={styles.starButton}
+                >
+                  <Text
+                    style={[
+                      styles.star,
+                      value <= selectedRating && styles.starActive,
+                    ]}
+                  >
+                    ★
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+
 
           {/* Suitability */}
           <Text style={styles.crLabel}>Suitability</Text>
@@ -625,6 +715,25 @@ function createStyles(theme) {
 
     scrollContent: {
       paddingBottom: 16,
+    },
+  
+    rateRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 6,
+    },
+
+    starButton: {
+      paddingHorizontal: 2,
+    },
+
+    star: {
+      fontSize: 22,
+      color: theme.colors.textMuted,
+    },
+
+    starActive: {
+      color: theme.colors.accentDark,
     },
     
   };
