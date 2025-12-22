@@ -3,7 +3,7 @@ import theme from "@themes";
 import { View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 
-const PIN_SIZE = 38;
+const PIN_SIZE = 36;
 const INNER_RADIUS = 6;
 const ICON_OFFSET = 0.16;
 const STROKE_WIDTH = 1.2;
@@ -13,7 +13,7 @@ const STROKE_WIDTH = 1.2;
 export default function SvgPin({
   size = PIN_SIZE,
   fill = theme.colors.primaryLight,
-  stroke = theme.colors.accentDark,
+  stroke = theme.colors.primaryLight,
   circle = theme.colors.accentDark,
   icon = "local-cafe",
   iconColor = "#000",
@@ -21,7 +21,7 @@ export default function SvgPin({
   const iconSize = size * 0.45;
 
   return (
-    <View style={{ alignItems: "center" }}>
+    <View style={{ alignItems: "center", justifyContent: "center" }}>
       <Svg
         width={size}
         height={size}

@@ -364,7 +364,7 @@ export default function PlaceCard({
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          style={{ width: screenWidth, height: 60 }}
+          style={{ width: screenWidth, height: 180 }}
           onScroll={(e) =>
             setPhotoIndex(
               Math.round(
@@ -584,7 +584,7 @@ function createStyles(theme) {
       bottom: 100,
       left: 10,
       right: 10,
-      maxHeight: "45%",
+      maxHeight: "35%",
       backgroundColor: theme.colors.primaryDark,
       borderRadius: 16,
       overflow: "hidden",
@@ -602,8 +602,8 @@ function createStyles(theme) {
       justifyContent: "center",
       zIndex: 10,
     },
-    photoContainer: { height: 180 },
-    photo: { width: screenWidth, height: 180 },
+    photoContainer: { height: 150 },
+    photo: { width: screenWidth, height: 150 },
     info: { padding: 12 },
     title: {
       fontSize: 18,
