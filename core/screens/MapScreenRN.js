@@ -15,10 +15,9 @@ import { FilterBar } from "../map/components/FilterBar";
 import { RIDER_FILTER_GROUPS } from "../map/config/riderFilterGroups";
 import { applyFilters } from "../map/filters/applyFilters";
 
-/*  Ready for routing */
+/* Ready for routing */
 import { decode } from "@mapbox/polyline";
 import { fetchRoute } from "../map/utils/fetchRoute";
-
 
 /* ------------------------------------------------------------------ */
 /* CATEGORY → ICON MAP                                                */
@@ -33,6 +32,7 @@ const CATEGORY_ICON_MAP = {
   scenic: "forest",
   bikes: "motorbike",
   scooters: "moped",
+  unknown: "map-marker",
 };
 
 /* ------------------------------------------------------------------ */
@@ -59,6 +59,15 @@ function inRegion(p, region) {
   );
 }
 
+function expandRegion(region, factor = 1.4) {
+  if (!region) return null;
+  return {
+    ...region,
+    latitudeDelta: region.latitudeDelta * factor,
+    longitudeDelta: region.longitudeDelta * factor,
+  };
+}
+
 function dedupeById(items) {
   const seen = new Set();
   const out = [];
@@ -71,8 +80,45 @@ function dedupeById(items) {
   return out;
 }
 
+function dedupeByProximity(crPlaces, googlePlaces) {
+  const CR_RADIUS_METERS = 40;
+
+  function distanceMeters(a, b) {
+    const dx = (a.latitude - b.latitude) * 111320;
+    const dy =
+      (a.longitude - b.longitude) *
+      (40075000 * Math.cos((a.latitude * Math.PI) / 180)) /
+      360;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  return googlePlaces.filter((g) => {
+    return !crPlaces.some((c) => distanceMeters(c, g) < CR_RADIUS_METERS);
+  });
+}
+
+function getIconForCategory(category) {
+  if (CATEGORY_ICON_MAP[category]) return CATEGORY_ICON_MAP[category];
+
+  switch (category) {
+    case "food":
+      return CATEGORY_ICON_MAP.restaurant;
+    case "bar":
+      return CATEGORY_ICON_MAP.pub;
+    case "gas_station":
+      return CATEGORY_ICON_MAP.fuel;
+    case "tourist_attraction":
+    case "landmark":
+    case "viewpoint":
+    case "park":
+      return CATEGORY_ICON_MAP.scenic;
+    default:
+      return CATEGORY_ICON_MAP.unknown;
+  }
+}
+
 /* ------------------------------------------------------------------ */
-/* GOOGLE NEARBY SEARCH (ROBUST)                                       */
+/* GOOGLE NEARBY SEARCH (NEW API)                                      */
 /* ------------------------------------------------------------------ */
 
 const INCLUDED_TYPES = [
@@ -132,7 +178,6 @@ async function doNearbyRequest({ latitude, longitude, radius, includedTypes }) {
   }
 
   if (!res.ok) {
-    // Places API errors are typically in json.error
     console.log("[GOOGLE] searchNearby error:", res.status, json?.error || json);
     return { places: [], error: json?.error?.message || `HTTP ${res.status}` };
   }
@@ -168,7 +213,6 @@ function mapGooglePlace(place) {
 }
 
 async function fetchNearbyPois(latitude, longitude, radius) {
-  // Attempt 1: multi-type request (fastest if accepted)
   const attempt = await doNearbyRequest({
     latitude,
     longitude,
@@ -177,7 +221,6 @@ async function fetchNearbyPois(latitude, longitude, radius) {
   });
 
   if (attempt.error) {
-    // Fallback: request each type separately and merge
     const all = [];
     for (const t of INCLUDED_TYPES) {
       const one = await doNearbyRequest({
@@ -187,12 +230,12 @@ async function fetchNearbyPois(latitude, longitude, radius) {
         includedTypes: [t],
       });
       if (one.error) {
-        // Keep going, but log it
         console.log(`[GOOGLE] type "${t}" failed:`, one.error);
         continue;
       }
       all.push(...(one.places || []));
     }
+
     const mapped = dedupeById(all.map(mapGooglePlace).filter((p) => p.latitude && p.longitude));
     console.log("[GOOGLE] nearby fallback places:", mapped.length);
     return mapped;
@@ -205,22 +248,6 @@ async function fetchNearbyPois(latitude, longitude, radius) {
   console.log("[GOOGLE] nearby places:", mapped.length);
   return mapped;
 }
-
-  function dedupeByProximity(crPlaces, googlePlaces) {
-    const CR_RADIUS_METERS = 40;
-
-    function distanceMeters(a, b) {
-      const dx = (a.latitude - b.latitude) * 111320;
-      const dy = (a.longitude - b.longitude) * 40075000 * Math.cos(a.latitude * Math.PI / 180) / 360;
-      return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    return googlePlaces.filter((g) => {
-      return !crPlaces.some((c) => {
-        return distanceMeters(c, g) < CR_RADIUS_METERS;
-      });
-    });
-  }
 
 /* ------------------------------------------------------------------ */
 /* MAIN SCREEN                                                        */
@@ -237,8 +264,17 @@ export default function MapScreenRN() {
 
   const [mapRegion, setMapRegion] = useState(null);
 
+  // Selected marker/placecard
   const [selectedPlaceId, setSelectedPlaceId] = useState(null);
+
+  // Temporary “promoted” Google place (in-memory only)
+  const [tempCrPlace, setTempCrPlace] = useState(null);
+
+  // Routing
   const [routeCoords, setRouteCoords] = useState([]);
+  const [routeDestinationId, setRouteDestinationId] = useState(null);
+
+  const hasRoute = routeCoords.length > 0;
 
   /* ------------------------------------------------------------ */
   /* LOAD CR PLACES                                               */
@@ -294,56 +330,122 @@ export default function MapScreenRN() {
       3000;
 
     const pois = await fetchNearbyPois(region.latitude, region.longitude, radius);
-
-    // Replace is fine because visibility is computed from viewport;
-    // also keeps memory bounded and behaviour predictable.
     setGooglePois(pois);
   };
+
+  /* ------------------------------------------------------------ */
+  /* TEMP PROMOTION (GOOGLE -> TEMP CR)                            */
+  /* ------------------------------------------------------------ */
+
+  function promoteGoogleToTempCr(googlePlace) {
+    if (!googlePlace) return null;
+
+    const temp = {
+      ...googlePlace,
+      id: `temp-${googlePlace.id}`,
+      source: "cr",       // treat like CR for visibility/priority
+      _temp: true,        // flag for us
+      _googleId: googlePlace.id,
+    };
+
+    setTempCrPlace(temp);
+    return temp;
+  }
+
+  function clearTempIfSafe() {
+    // Keep the temp place if it is the current route destination (so it doesn’t vanish mid-route).
+    if (tempCrPlace && routeDestinationId === tempCrPlace.id) return;
+    setTempCrPlace(null);
+  }
 
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
   /* ------------------------------------------------------------ */
 
+  const paddedRegion = useMemo(() => expandRegion(mapRegion, 1.4), [mapRegion]);
+
   const visiblePlaces = useMemo(() => {
-    if (!mapRegion) return [];
+    if (!mapRegion || !paddedRegion) return [];
 
     const dedupedGoogle = dedupeByProximity(crPlaces, googlePois);
-    let candidates = [...crPlaces, ...dedupedGoogle];
 
-    // Hard filters
+    // Base candidates: (optional temp CR) + CR + Google
+    let candidates = tempCrPlace
+      ? [tempCrPlace, ...crPlaces, ...dedupedGoogle]
+      : [...crPlaces, ...dedupedGoogle];
+
+    // Always apply region culling (buffered), but NEVER cull:
+    // - temp promoted place
+    // - route destination
+    candidates = candidates.filter((p) => {
+      if (tempCrPlace && p.id === tempCrPlace.id) return true;
+      if (routeDestinationId && p.id === routeDestinationId) return true;
+      return inRegion(p, paddedRegion);
+    });
+
+    // Hard filters (if any)
     if (filters.categories.size || filters.amenities.size) {
       candidates = candidates.filter((p) => applyFilters(p, filters));
     }
 
-    // CR first, then Google. Each sorted by rating desc
+    // CR first (includes temp because we set source="cr"), then Google
     const cr = candidates.filter((p) => p.source === "cr");
     const google = candidates.filter((p) => p.source !== "cr");
 
     const byRating = (a, b) => (b.rating || 0) - (a.rating || 0);
-
     cr.sort(byRating);
     google.sort(byRating);
 
-    return [...cr, ...google].slice(0, 20);
-  }, [crPlaces, googlePois, mapRegion, filters]);
+    let result = [...cr, ...google].slice(0, 20);
+
+    // Force include selected place (prevents card/marker disappearing if it falls out of top 20)
+    if (selectedPlaceId) {
+      const forced =
+        candidates.find((p) => p.id === selectedPlaceId) ||
+        (tempCrPlace && tempCrPlace.id === selectedPlaceId ? tempCrPlace : null);
+
+      if (forced && !result.some((p) => p.id === forced.id)) {
+        result = [...result, forced];
+      }
+    }
+
+    // Force include route destination (same reason)
+    if (routeDestinationId) {
+      const forced =
+        candidates.find((p) => p.id === routeDestinationId) ||
+        (tempCrPlace && tempCrPlace.id === routeDestinationId ? tempCrPlace : null);
+
+      if (forced && !result.some((p) => p.id === forced.id)) {
+        result = [...result, forced];
+      }
+    }
+
+    return result;
+  }, [
+    crPlaces,
+    googlePois,
+    mapRegion,
+    paddedRegion,
+    filters,
+    selectedPlaceId,
+    tempCrPlace,
+    routeDestinationId,
+  ]);
 
   const selectedPlace = useMemo(() => {
     if (!selectedPlaceId) return null;
     return visiblePlaces.find((p) => p.id === selectedPlaceId) || null;
   }, [selectedPlaceId, visiblePlaces]);
 
+  /* ------------------------------------------------------------ */
+  /* ROUTING                                                      */
+  /* ------------------------------------------------------------ */
+
   async function handleRoute(place) {
-    console.log("[ROUTE] handleRoute called", place?.title);
+    if (!place) return;
+    if (!userLocation) return;
 
-    if (!place) {
-      console.log("[ROUTE] no place");
-      return;
-    }
-
-    if (!userLocation) {
-      console.log("[ROUTE] no userLocation");
-      return;
-    }
+    setRouteDestinationId(place.id);
 
     const result = await fetchRoute({
       origin: {
@@ -356,23 +458,14 @@ export default function MapScreenRN() {
       },
     });
 
-    console.log("[ROUTE] fetchRoute result", result);
-
-    if (!result?.polyline) {
-      console.log("[ROUTE] no polyline");
-      return;
-    }
+    if (!result?.polyline) return;
 
     const decoded = decode(result.polyline).map(([lat, lng]) => ({
       latitude: lat,
       longitude: lng,
     }));
 
-    console.log("[ROUTE] decoded points", decoded.length);
-
     setRouteCoords(decoded);
-
-    console.log("[ROUTE] activeRoute set");
 
     mapRef.current?.fitToCoordinates(decoded, {
       edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
@@ -392,7 +485,10 @@ export default function MapScreenRN() {
         showsUserLocation
         showsMyLocationButton={false}
         onRegionChangeComplete={handleRegionChangeComplete}
-        onPress={() => setSelectedPlaceId(null)}
+        onPress={() => {
+          setSelectedPlaceId(null);
+          clearTempIfSafe();
+        }}
         initialRegion={{
           latitude: 52.136,
           longitude: -0.467,
@@ -400,16 +496,22 @@ export default function MapScreenRN() {
           longitudeDelta: 0.15,
         }}
       >
-          {visiblePlaces.map((poi) => {
-            const category = poi.category || "unknown";
-            const icon =
-              CATEGORY_ICON_MAP[category] || CATEGORY_ICON_MAP.unknown;
+        {visiblePlaces.map((poi) => {
+          const category = poi.category || "unknown";
+          const icon = getIconForCategory(category);
 
-            const isCr = poi.source === "cr";
+          const isCr = poi.source === "cr" && !poi._temp;
+          const isTemp = !!poi._temp;
+          const isDestination = routeDestinationId && poi.id === routeDestinationId;
 
-          // Brighter CR markers, muted Google markers
-          const fill = "#9CA3AF";
-          const circle = isCr ? "#FFD85C" : "#C5A041";
+          // Brighter CR markers, muted Google markers; destination green.
+          // Temp promoted place treated as CR visually (same family).
+          const fill = isDestination ? "#22c55e" : "#9CA3AF";
+          const circle = isDestination
+            ? "#16a34a"
+            : (isCr || isTemp)
+            ? "#FFD85C"
+            : "#C5A041";
 
           return (
             <Marker
@@ -417,26 +519,31 @@ export default function MapScreenRN() {
               coordinate={{ latitude: poi.latitude, longitude: poi.longitude }}
               onPress={(e) => {
                 e.stopPropagation?.();
+
+                if (poi.source === "google") {
+                  const temp = promoteGoogleToTempCr(poi);
+                  if (temp) setSelectedPlaceId(temp.id);
+                  return;
+                }
+
+                // CR or temp (already promoted)
                 setSelectedPlaceId(poi.id);
               }}
               anchor={{ x: 0.5, y: 1 }}
+              zIndex={isDestination ? 1000 : 1}
               tracksViewChanges={true}
             >
-              <SvgPin
-                icon={icon}
-                fill={fill}
-                circle={circle}
-              />
+              <SvgPin icon={icon} fill={fill} circle={circle} />
             </Marker>
-            
           );
         })}
-          <Polyline
-            coordinates={routeCoords}
-            strokeWidth={3}
-            strokeColor="#2563eb"
-            zIndex={1000}
-          />
+
+        <Polyline
+          coordinates={routeCoords}
+          strokeWidth={3}
+          strokeColor="#2563eb"
+          zIndex={1000}
+        />
       </MapView>
 
       <FilterBar
@@ -467,11 +574,23 @@ export default function MapScreenRN() {
         <PlaceCard
           place={selectedPlace}
           userLocation={userLocation}
-          onRoute={handleRoute}
-          onClose={() => setSelectedPlaceId(null)}
-          onPress={() => onRoute(place)}
+          onRoute={(placeArg) => {
+            // If somehow a Google place slips through, promote it before routing so it behaves like CR
+            if (placeArg?.source === "google") {
+              const temp = promoteGoogleToTempCr(placeArg);
+              if (temp) {
+                setSelectedPlaceId(temp.id);
+                handleRoute(temp);
+              }
+              return;
+            }
+            handleRoute(placeArg);
+          }}
+          onClose={() => {
+            setSelectedPlaceId(null);
+            clearTempIfSafe();
+          }}
         />
-
       )}
     </View>
   );

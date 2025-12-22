@@ -584,7 +584,7 @@ function createStyles(theme) {
       bottom: 100,
       left: 10,
       right: 10,
-      maxHeight: "35%",
+      maxHeight: "55%",
       backgroundColor: theme.colors.primaryDark,
       borderRadius: 16,
       overflow: "hidden",
