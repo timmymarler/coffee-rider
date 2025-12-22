@@ -1,24 +1,52 @@
-export async function fetchRoute({ origin, destination, mode }) {
+export async function fetchRoute({ origin, destination }) {
   try {
     const key = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-    const url = `https://maps.googleapis.com/maps/api/directions/json` +
-      `?origin=${origin.latitude},${origin.longitude}` +
-      `&destination=${destination.latitude},${destination.longitude}` +
-      `&mode=${mode}` +
-      `&key=${key}`;
+    const response = await fetch(
+      "https://routes.googleapis.com/directions/v2:computeRoutes",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": key,
+          "X-Goog-FieldMask":
+            "routes.polyline.encodedPolyline,routes.distanceMeters,routes.duration",
+        },
+        body: JSON.stringify({
+          origin: {
+            location: {
+              latLng: {
+                latitude: origin.latitude,
+                longitude: origin.longitude,
+              },
+            },
+          },
+          destination: {
+            location: {
+              latLng: {
+                latitude: destination.latitude,
+                longitude: destination.longitude,
+              },
+            },
+          },
+          travelMode: "DRIVE",
+        }),
+      }
+    );
 
-    const response = await fetch(url);
     const json = await response.json();
 
-    if (json.status !== "OK") {
-      console.log("Route error:", json.status, json.error_message);
+    const route = json.routes?.[0];
+    if (!route?.polyline?.encodedPolyline) {
+      console.log("Route error:", json);
       return null;
     }
 
-    const points = json.routes[0]?.overview_polyline?.points;
-    return points || null;
-
+    return {
+      polyline: route.polyline.encodedPolyline,
+      distanceMeters: route.distanceMeters,
+      durationSeconds: route.duration,
+    };
   } catch (err) {
     console.log("Route fetch failed:", err);
     return null;

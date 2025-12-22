@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Polyline } from "react-native-maps";
 
 import { db } from "@config/firebase";
 import { collection, onSnapshot } from "firebase/firestore";
@@ -14,6 +14,11 @@ import { classifyPoi } from "../map/classify/classifyPois";
 import { FilterBar } from "../map/components/FilterBar";
 import { RIDER_FILTER_GROUPS } from "../map/config/riderFilterGroups";
 import { applyFilters } from "../map/filters/applyFilters";
+
+/*  Ready for routing */
+import { decode } from "@mapbox/polyline";
+import { fetchRoute } from "../map/utils/fetchRoute";
+
 
 /* ------------------------------------------------------------------ */
 /* CATEGORY → ICON MAP                                                */
@@ -233,6 +238,7 @@ export default function MapScreenRN() {
   const [mapRegion, setMapRegion] = useState(null);
 
   const [selectedPlaceId, setSelectedPlaceId] = useState(null);
+  const [routeCoords, setRouteCoords] = useState([]);
 
   /* ------------------------------------------------------------ */
   /* LOAD CR PLACES                                               */
@@ -326,6 +332,54 @@ export default function MapScreenRN() {
     return visiblePlaces.find((p) => p.id === selectedPlaceId) || null;
   }, [selectedPlaceId, visiblePlaces]);
 
+  async function handleRoute(place) {
+    console.log("[ROUTE] handleRoute called", place?.title);
+
+    if (!place) {
+      console.log("[ROUTE] no place");
+      return;
+    }
+
+    if (!userLocation) {
+      console.log("[ROUTE] no userLocation");
+      return;
+    }
+
+    const result = await fetchRoute({
+      origin: {
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+      },
+      destination: {
+        latitude: place.latitude,
+        longitude: place.longitude,
+      },
+    });
+
+    console.log("[ROUTE] fetchRoute result", result);
+
+    if (!result?.polyline) {
+      console.log("[ROUTE] no polyline");
+      return;
+    }
+
+    const decoded = decode(result.polyline).map(([lat, lng]) => ({
+      latitude: lat,
+      longitude: lng,
+    }));
+
+    console.log("[ROUTE] decoded points", decoded.length);
+
+    setRouteCoords(decoded);
+
+    console.log("[ROUTE] activeRoute set");
+
+    mapRef.current?.fitToCoordinates(decoded, {
+      edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
+      animated: true,
+    });
+  }
+
   /* ------------------------------------------------------------ */
   /* RENDER                                                       */
   /* ------------------------------------------------------------ */
@@ -374,8 +428,15 @@ export default function MapScreenRN() {
                 circle={circle}
               />
             </Marker>
+            
           );
         })}
+          <Polyline
+            coordinates={routeCoords}
+            strokeWidth={3}
+            strokeColor="#2563eb"
+            zIndex={1000}
+          />
       </MapView>
 
       <FilterBar
@@ -406,10 +467,11 @@ export default function MapScreenRN() {
         <PlaceCard
           place={selectedPlace}
           userLocation={userLocation}
+          onRoute={handleRoute}
           onClose={() => setSelectedPlaceId(null)}
-          onNavigate={() => ""}
-          onRoute={() => ""}
+          onPress={() => onRoute(place)}
         />
+
       )}
     </View>
   );
