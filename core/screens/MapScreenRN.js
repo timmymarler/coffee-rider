@@ -197,6 +197,7 @@ async function fetchNearbyPois(latitude, longitude, radius) {
     .map(mapGooglePlace)
     .filter((p) => p.latitude && p.longitude);
 
+  console.log("[GOOGLE] nearby places:", mapped.length);
   return mapped;
 }
 
@@ -365,7 +366,7 @@ export default function MapScreenRN() {
                 setSelectedPlaceId(poi.id);
               }}
               anchor={{ x: 0.5, y: 1 }}
-              tracksViewChanges={poi.source === "google"}
+              tracksViewChanges={true}
             >
               <SvgPin
                 icon={icon}
