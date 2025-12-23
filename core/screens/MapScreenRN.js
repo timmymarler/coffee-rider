@@ -252,7 +252,7 @@ async function fetchNearbyPois(latitude, longitude, radius) {
 /* MAIN SCREEN                                                        */
 /* ------------------------------------------------------------------ */
 
-export default function MapScreenRN() {
+export default function MapScreenRN({ mapKey }) {
   const mapRef = useRef(null);
 
   const [crPlaces, setCrPlaces] = useState([]);
@@ -493,13 +493,17 @@ export default function MapScreenRN() {
     <View style={styles.container}>
       <MapView
         ref={mapRef}
+        key={mapKey}
         style={StyleSheet.absoluteFill}
         showsUserLocation
         showsMyLocationButton={false}
         onRegionChangeComplete={handleRegionChangeComplete}
         onPress={() => {
-          setSelectedPlaceId(null);
-          clearTempIfSafe();
+          // Only clear selection if no active route
+          if (!routeCoords.length) {
+            setSelectedPlaceId(null);
+            clearTempIfSafe();
+          }
         }}
         initialRegion={{
           latitude: 52.136,

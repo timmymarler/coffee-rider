@@ -78,6 +78,7 @@ export default function PlaceCard({
   const isGoogle = place?.source === "google";
   const isGoogleNew = place?.source === "google-new";
   const isCr = place?.source === "cr";
+  const isRealCr = place.source === "cr" && !place._temp;
 
   const isCreateMode = isManualOnly || isGoogleNew;
 
@@ -165,7 +166,7 @@ export default function PlaceCard({
     }
 
     if (distanceMiles) {
-      return `${distanceMiles} miles away (as the crow flies)`;
+      return `${distanceMiles} miles • (as the crow flies)`;
     }
 
     return null;
@@ -225,6 +226,23 @@ export default function PlaceCard({
       />
     );
   };
+
+  function ActionButton({ icon, label, onPress, variant = "secondary", iconOnly = false }) {
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        style={[
+          styles.actionButton,
+          variant === "primary"
+            ? styles.actionButtonPrimary
+            : styles.actionButtonSecondary,
+        ]}
+      >
+        <MaterialCommunityIcons name={icon} size={18} color="#fff" />
+        {!iconOnly && <Text style={styles.actionButtonText}>{label}</Text>}
+      </TouchableOpacity>
+    );
+  }
 
   /* ------------------------------------------------------------------ */
   /* SAVE PLACE                                                        */
@@ -393,35 +411,67 @@ export default function PlaceCard({
       </Pressable>
 
       {/* Photos */}
-      <View style={styles.photoContainer}>
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          style={{ width: screenWidth, height: 180 }}
-          onScroll={(e) =>
-            setPhotoIndex(
-              Math.round(
-                e.nativeEvent.contentOffset.x / screenWidth
+      <View style={styles.photoWrapper}>
+        <View style={styles.photoContainer}>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={{ width: screenWidth, height: 180 }}
+            onScroll={(e) =>
+              setPhotoIndex(
+                Math.round(
+                  e.nativeEvent.contentOffset.x / screenWidth
+                )
               )
-            )
-          }
-        >
-          {photos.map((p, i) => (
-            <Image key={i} source={{ uri: p }} style={styles.photo} />
-          ))}
-        </ScrollView>
-      </View>
+            }
+          >
+            {photos.map((p, i) => (
+              <Image key={i} source={{ uri: p }} style={styles.photo} />
+            ))}
+          </ScrollView>
+        </View>
 
-      {isCr && currentUid && (
-        <TouchableOpacity
-          style={styles.addPhotoButton}
-          onPress={handleAddPhoto}
-        >
-          <Ionicons name="camera" size={18} />
-          <Text style={styles.addPhotoText}>Add Photo</Text>
-        </TouchableOpacity>
-      )}
+        {/* Floating action bar */}
+        <View style={styles.photoActionBar}>
+          {isCr && currentUid && (
+            <TouchableOpacity
+              /* Add photo */
+              style={styles.photoActionButton}
+              onPress={handleAddPhoto}
+            >
+              <Ionicons name="camera" size={18} color="#fff" />
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            /* Navigate */
+            style={[styles.photoActionButton, styles.primaryAction]}
+              onPress={() => onNavigate(place)}
+          >
+            <MaterialCommunityIcons
+              name="navigation-variant"
+              size={18}
+              color="#fff"
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            /* Route / Clear Route */
+            style={styles.photoActionButton}
+            onPress={() => {
+              if (hasRoute) onClearRoute?.();
+              else onRoute?.(place);
+            }}
+          >
+            <MaterialCommunityIcons
+              name={hasRoute ? "map-marker-off" : "map-marker-path"}
+              size={18}
+              color="#fff"
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* INFO */}
       <ScrollView
@@ -467,7 +517,7 @@ export default function PlaceCard({
           <View style={styles.ratingsSection}>
             <Text style={styles.crLabel}>Ratings</Text>
 
-            {/* Google rating */}
+            {/* Google rating (always allowed) */}
             {googleRating ? (
               <View style={styles.ratingRow}>
                 <Text style={styles.ratingValue}>
@@ -479,8 +529,8 @@ export default function PlaceCard({
               </View>
             ) : null}
 
-            {/* CR rating */}
-            {crAverageRating !== null ? (
+            {/* CR rating (REAL CR ONLY) */}
+            {isRealCr && crAverageRating !== null ? (
               <View style={styles.ratingRow}>
                 <Text style={styles.ratingValue}>
                   ★ {crAverageRating.toFixed(1)}
@@ -491,9 +541,9 @@ export default function PlaceCard({
               </View>
             ) : null}
           </View>
-          
-          {/* Add user rating */}
-          {capabilities.canRate ? (
+
+          {/* Add user rating (REAL CR ONLY) */}
+          {isRealCr && capabilities.canRate ? (
             <View style={styles.rateRow}>
               {[1, 2, 3, 4, 5].map((value) => (
                 <TouchableOpacity
@@ -519,60 +569,68 @@ export default function PlaceCard({
 
 
           {/* Suitability */}
-          <Text style={styles.crLabel}>Suitability</Text>
-          <View style={styles.amenitiesRow}>
-            {Object.keys(defaultSuitability).map((key) => (
-              <TouchableOpacity
-                key={key}
-                onPress={() => toggleSuitability(key)}
-                activeOpacity={isCreateMode ? 0.7 : 1}
-              >
-                {amenityIcon(
-                  suitabilityState[key],
-                  key === "bikers"
-                    ? "motorbike"
-                    : key === "scooters"
-                    ? "moped"
-                    : key === "cyclists"
-                    ? "bike"
-                    : key === "walkers"
-                    ? "walk"
-                    : key === "cars"
-                    ? "car"
-                    : "car-electric"
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
+          {isRealCr && (
+            <>
+              <Text style={styles.crLabel}>Suitability</Text>
+              <View style={styles.amenitiesRow}>
+                {Object.keys(defaultSuitability).map((key) => (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => toggleSuitability(key)}
+                    activeOpacity={isCreateMode ? 0.7 : 1}
+                  >
+                    {amenityIcon(
+                      suitabilityState[key],
+                      key === "bikers"
+                        ? "motorbike"
+                        : key === "scooters"
+                        ? "moped"
+                        : key === "cyclists"
+                        ? "bike"
+                        : key === "walkers"
+                        ? "walk"
+                        : key === "cars"
+                        ? "car"
+                        : "car-electric"
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
 
           {/* Amenities */}
-          <Text style={styles.crLabel}>Amenities</Text>
-          <View style={styles.amenitiesRow}>
-            {Object.keys(defaultAmenities).map((key) => (
-              <TouchableOpacity
-                key={key}
-                onPress={() => toggleAmenity(key)}
-                activeOpacity={isCreateMode ? 0.7 : 1}
-              >
-                {amenityIcon(
-                  amenitiesState[key],
-                  key === "parking"
-                    ? "parking"
-                    : key === "motorcycleParking"
-                    ? "motorbike"
-                    : key === "evCharger"
-                    ? "ev-plug-ccs2"
-                    : key === "toilets"
-                    ? "toilet"
-                    : key === "petFriendly"
-                    ? "dog-side"
-                    : key === "disabledAccess"
-                    ? "wheelchair-accessibility"
-                    : "table-picnic"
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
+          {isRealCr && (
+            <>
+              <Text style={styles.crLabel}>Amenities</Text>
+              <View style={styles.amenitiesRow}>
+                {Object.keys(defaultAmenities).map((key) => (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => toggleAmenity(key)}
+                    activeOpacity={isCreateMode ? 0.7 : 1}
+                  >
+                    {amenityIcon(
+                      amenitiesState[key],
+                      key === "parking"
+                        ? "parking"
+                        : key === "motorcycleParking"
+                        ? "motorbike"
+                        : key === "evCharger"
+                        ? "ev-plug-ccs2"
+                        : key === "toilets"
+                        ? "toilet"
+                        : key === "petFriendly"
+                        ? "dog-side"
+                        : key === "disabledAccess"
+                        ? "wheelchair-accessibility"
+                        : "table-picnic"
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
 
           {isCreateMode && (
             <TouchableOpacity
@@ -586,32 +644,8 @@ export default function PlaceCard({
             </TouchableOpacity>
           )}
 
-          {/* Actions */}
-          <View style={styles.actionsRow}>
-            <TouchableOpacity
-              style={styles.primaryAction}
-              onPress={() => onNavigate(place)}
-            >
-              <Text style={styles.primaryActionText}>Navigate</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.secondaryAction}
-              onPress={() => {
-                if (hasRoute) {
-                  onClearRoute?.();
-                } else {
-                  onRoute?.(place);
-                }
-              }}
-            >
-              <Text>{hasRoute ? "Clear Route" : "Route"}</Text>
-            </TouchableOpacity>
-          </View>
-
         </View>
       </ScrollView>
-
     </View>
   );
 }
@@ -627,7 +661,7 @@ function createStyles(theme) {
       bottom: 100,
       left: 10,
       right: 10,
-      maxHeight: "55%",
+      maxHeight: "35%",
       backgroundColor: theme.colors.primaryDark,
       borderRadius: 16,
       overflow: "hidden",
@@ -790,6 +824,59 @@ function createStyles(theme) {
 
     starActive: {
       color: theme.colors.accentDark,
+    },
+
+    actionButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 10,
+    },
+
+    actionButtonPrimary: {
+      backgroundColor: theme.colors.primary, // TEMP: primary blue
+    },
+
+    actionButtonSecondary: {
+      backgroundColor: theme.colors.accentMid, // TEMP: accentDark
+    },
+
+    actionButtonText: {
+      color: "#f9fafb",
+      fontSize: 14,
+      fontWeight: "600",
+    },
+
+    photoWrapper: {
+      position: "relative",
+    },
+
+    photoActionBar: {
+      position: "absolute",
+      right: 12,
+      bottom: 12,
+      flexDirection: "row",
+      gap: 8,
+    },
+
+    photoActionButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.colors.accentDark, // accentDark
+      justifyContent: "center",
+      alignItems: "center",
+      elevation: 4,
+      shadowColor: "#000",
+      shadowOpacity: 0.25,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 2 },
+    },
+
+    primaryAction: {
+      backgroundColor: theme.colors.primary, // primary blue
     },
     
   };
