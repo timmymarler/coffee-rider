@@ -1,5 +1,6 @@
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
+import { getCapabilities } from "@core/roles/getCapabilities";
 import { uploadImage } from "@core/utils/uploadImage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
@@ -19,7 +20,6 @@ import {
 } from "react-native";
 
 const screenWidth = Dimensions.get("window").width;
-
 /* ------------------------------------------------------------------ */
 /* CONSTANTS                                                          */
 /* ------------------------------------------------------------------ */
@@ -65,15 +65,20 @@ export default function PlaceCard({
   routeMeta=null,
   onPlaceCreated,
   onClearRoute = null,
-  onNavigate,
   onRoute,
+  onNavigate,
 }) {
 
   const styles = createStyles(theme);
-  const { user, profile, loading, logout, refreshProfile, capabilities } = useContext(AuthContext);
-  const currentUser = user || null;
-  const currentUid = currentUser?.uid || null;
 
+  const auth = useContext(AuthContext);
+  const user = auth?.user || null;
+  const role = auth?.profile?.role || "guest"; // or auth.role if that’s what you store
+  const capabilities = getCapabilities(role);
+  const canNavigate = capabilities.canNavigate === true;
+  const canRate = capabilities.canRate === true;
+  const currentUid = user?.uid || null;
+  
   const isManualOnly = place?.source === "manual";
   const isGoogle = place?.source === "google";
   const isGoogleNew = place?.source === "google-new";
@@ -444,17 +449,19 @@ export default function PlaceCard({
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity
-            /* Navigate */
-            style={[styles.photoActionButton, styles.primaryAction]}
-              onPress={() => onNavigate(place)}
-          >
-            <MaterialCommunityIcons
-              name="navigation-variant"
-              size={18}
-              color="#fff"
-            />
-          </TouchableOpacity>
+          {canNavigate && (
+            <TouchableOpacity
+              /* Navigate */
+              style={[styles.photoActionButton, styles.primaryAction]}
+                onPress={() => onNavigate(place)}
+            >
+              <MaterialCommunityIcons
+                name="navigation-variant"
+                size={18}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             /* Route / Clear Route */
@@ -543,7 +550,7 @@ export default function PlaceCard({
           </View>
 
           {/* Add user rating (REAL CR ONLY) */}
-          {isRealCr && capabilities.canRate ? (
+          {isRealCr && canRate ? (
             <View style={styles.rateRow}>
               {[1, 2, 3, 4, 5].map((value) => (
                 <TouchableOpacity

@@ -18,6 +18,8 @@ import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
 import { decode } from "@mapbox/polyline";
 import { fetchRoute } from "../map/utils/fetchRoute";
+import { openNativeNavigation } from "../map/utils/navigation";
+
 
 /* ------------------------------------------------------------------ */
 /* CATEGORY → ICON MAP                                                */
@@ -275,6 +277,7 @@ export default function MapScreenRN({ mapKey }) {
 
   const hasRoute = routeCoords.length > 0;
   const [routeMeta, setRouteMeta] = useState(null);
+  const [followUser, setFollowUser] = useState(false);
 
 
   /* ------------------------------------------------------------ */
@@ -317,6 +320,25 @@ export default function MapScreenRN({ mapKey }) {
       setUserLocation(loc.coords);
     })();
   }, []);
+
+  /* ------------------------------------------------------------ */
+  /* FOLLOW MODE                                                  */
+  /* ------------------------------------------------------------ */
+
+  useEffect(() => {
+    if (!followUser || !userLocation || !mapRef.current) return;
+
+    mapRef.current.animateCamera(
+      {
+        center: {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+        },
+        zoom: 16, // tweak later per rider/driver/strider
+      },
+      { duration: 600 }
+    );
+  }, [userLocation, followUser]);
 
   /* ------------------------------------------------------------ */
   /* FETCH GOOGLE POIS ON REGION CHANGE                            */
@@ -366,6 +388,10 @@ export default function MapScreenRN({ mapKey }) {
     setRouteMeta(null);
   }
 
+  /* Used for Follow Me mode */
+  function toggleFollowMe() {
+    setFollowUser((prev) => !prev);
+  }
 
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
@@ -483,6 +509,20 @@ export default function MapScreenRN({ mapKey }) {
       edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
       animated: true,
     });
+  }
+
+  function handleNavigate(place) {
+    if (!place || !userLocation) return;
+
+    openNativeNavigation({
+      destination: {
+        latitude: place.latitude,
+        longitude: place.longitude,
+      },
+      waypoints: [], // ready for future Pro routes
+    });
+
+    setFollowUser(true);
   }
 
   /* ------------------------------------------------------------ */
@@ -606,6 +646,7 @@ export default function MapScreenRN({ mapKey }) {
             setSelectedPlaceId(null);
             clearTempIfSafe();
           }}
+          onNavigate={handleNavigate}
         />
       )}
     </View>
