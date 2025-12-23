@@ -61,10 +61,14 @@ export default function PlaceCard({
   place,
   onClose,
   userLocation,
+  hasRoute = false,
+  routeMeta=null,
   onPlaceCreated,
+  onClearRoute = null,
   onNavigate,
   onRoute,
 }) {
+
   const styles = createStyles(theme);
   const { user, profile, loading, logout, refreshProfile, capabilities } = useContext(AuthContext);
   const currentUser = user || null;
@@ -149,6 +153,23 @@ export default function PlaceCard({
 
     return ((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))*0.62).toFixed(1);
   }, [userLocation, place]);
+  
+  const distanceText = useMemo(() => {
+    if (hasRoute && routeMeta?.distanceMeters && routeMeta?.durationSeconds) {
+      const miles = metersToMiles(routeMeta.distanceMeters);
+      const mins = secondsToMinutes(routeMeta.durationSeconds);
+
+      if (miles && mins) {
+        return `${miles} miles • ${mins} mins (via route)`;
+      }
+    }
+
+    if (distanceMiles) {
+      return `${distanceMiles} miles away (as the crow flies)`;
+    }
+
+    return null;
+  }, [hasRoute, routeMeta, distanceMiles]);
 
   const photos = useMemo(() => {
     return [
@@ -169,6 +190,19 @@ export default function PlaceCard({
   /* ------------------------------------------------------------------ */
   /* HELPERS                                                           */
   /* ------------------------------------------------------------------ */
+
+
+  function metersToMiles(meters) {
+    return meters ? (meters / 1609.34).toFixed(1) : null;
+  }
+
+  function secondsToMinutes(seconds) {
+    if (!seconds) return null;
+    const s = typeof seconds === "string"
+      ? parseInt(seconds, 10)
+      : seconds;
+    return Number.isFinite(s) ? Math.round(s / 60) : null;
+  }
 
   const toggleSuitability = (key) => {
     if (!isCreateMode) return;
@@ -412,7 +446,10 @@ export default function PlaceCard({
             </Text>
           ) : null}
           {distanceMiles && (
-            <Text style={styles.subText}>{distanceMiles} miles away (straight line distance)</Text>
+            <Text style={styles.subText}>
+              {/* {distanceMiles} miles away (straight line distance) */}
+              {distanceText}
+            </Text>
           )}
           {/* Opening Hours (Google only) */}
           {place.regularOpeningHours?.weekdayDescriptions?.length ? (
@@ -560,9 +597,15 @@ export default function PlaceCard({
 
             <TouchableOpacity
               style={styles.secondaryAction}
-              onPress={() => onRoute(place)}
+              onPress={() => {
+                if (hasRoute) {
+                  onClearRoute?.();
+                } else {
+                  onRoute?.(place);
+                }
+              }}
             >
-              <Text style={styles.secondaryActionText}>Route</Text>
+              <Text>{hasRoute ? "Clear Route" : "Route"}</Text>
             </TouchableOpacity>
           </View>
 

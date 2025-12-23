@@ -245,7 +245,6 @@ async function fetchNearbyPois(latitude, longitude, radius) {
     .map(mapGooglePlace)
     .filter((p) => p.latitude && p.longitude);
 
-  console.log("[GOOGLE] nearby places:", mapped.length);
   return mapped;
 }
 
@@ -275,6 +274,8 @@ export default function MapScreenRN() {
   const [routeDestinationId, setRouteDestinationId] = useState(null);
 
   const hasRoute = routeCoords.length > 0;
+  const [routeMeta, setRouteMeta] = useState(null);
+
 
   /* ------------------------------------------------------------ */
   /* LOAD CR PLACES                                               */
@@ -357,6 +358,14 @@ export default function MapScreenRN() {
     if (tempCrPlace && routeDestinationId === tempCrPlace.id) return;
     setTempCrPlace(null);
   }
+
+  function clearRoute() {
+    setRouteCoords([]);
+    setRouteDestinationId(null);
+    setTempCrPlace(null);   // ✅ THIS is the missing piece
+    setRouteMeta(null);
+  }
+
 
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
@@ -464,7 +473,10 @@ export default function MapScreenRN() {
       latitude: lat,
       longitude: lng,
     }));
-
+    setRouteMeta({
+      distanceMeters: result.distanceMeters,
+      durationSeconds: result.durationSeconds,
+    });
     setRouteCoords(decoded);
 
     mapRef.current?.fitToCoordinates(decoded, {
@@ -506,12 +518,8 @@ export default function MapScreenRN() {
 
           // Brighter CR markers, muted Google markers; destination green.
           // Temp promoted place treated as CR visually (same family).
-          const fill = isDestination ? "#22c55e" : "#9CA3AF";
-          const circle = isDestination
-            ? "#16a34a"
-            : (isCr || isTemp)
-            ? "#FFD85C"
-            : "#C5A041";
+          const fill = "#9CA3AF";
+          const circle = (isCr || isTemp) ? "#FFD85C" : "#C5A041";
 
           return (
             <Marker
@@ -528,6 +536,7 @@ export default function MapScreenRN() {
 
                 // CR or temp (already promoted)
                 setSelectedPlaceId(poi.id);
+
               }}
               anchor={{ x: 0.5, y: 1 }}
               zIndex={isDestination ? 1000 : 1}
@@ -574,6 +583,8 @@ export default function MapScreenRN() {
         <PlaceCard
           place={selectedPlace}
           userLocation={userLocation}
+          hasRoute={routeCoords.length > 0}
+          routeMeta={routeMeta}
           onRoute={(placeArg) => {
             // If somehow a Google place slips through, promote it before routing so it behaves like CR
             if (placeArg?.source === "google") {
@@ -586,6 +597,7 @@ export default function MapScreenRN() {
             }
             handleRoute(placeArg);
           }}
+          onClearRoute={clearRoute}
           onClose={() => {
             setSelectedPlaceId(null);
             clearTempIfSafe();
