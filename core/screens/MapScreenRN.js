@@ -1,10 +1,10 @@
+import { db } from "@config/firebase";
+import { TabBarContext } from "@context/TabBarContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { collection, onSnapshot } from "firebase/firestore";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-
-import { db } from "@config/firebase";
-import { collection, onSnapshot } from "firebase/firestore";
 
 import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
@@ -18,8 +18,8 @@ import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
 import { decode } from "@mapbox/polyline";
 import { fetchRoute } from "../map/utils/fetchRoute";
+//import { mapRef } from "../map/utils/mapRef"; // adjust path if needed
 import { openNativeNavigation } from "../map/utils/navigation";
-
 
 /* ------------------------------------------------------------------ */
 /* CATEGORY → ICON MAP                                                */
@@ -118,6 +118,7 @@ function getIconForCategory(category) {
       return CATEGORY_ICON_MAP.unknown;
   }
 }
+
 
 /* ------------------------------------------------------------------ */
 /* GOOGLE NEARBY SEARCH (NEW API)                                      */
@@ -255,7 +256,7 @@ async function fetchNearbyPois(latitude, longitude, radius) {
 /* ------------------------------------------------------------------ */
 
 export default function MapScreenRN({ mapKey }) {
-  const mapRef = useRef(null);
+  const mapRef = useRef();
 
   const [crPlaces, setCrPlaces] = useState([]);
   const [googlePois, setGooglePois] = useState([]);
@@ -278,7 +279,16 @@ export default function MapScreenRN({ mapKey }) {
   const hasRoute = routeCoords.length > 0;
   const [routeMeta, setRouteMeta] = useState(null);
   const [followUser, setFollowUser] = useState(false);
+  const { setMapActions } = useContext(TabBarContext);
 
+
+  useEffect(() => {
+    setMapActions({
+      recenter: recentreToCurrentPosition,
+      toggleFollow: toggleFollowMe,
+      isFollowing: () => followUser,
+    });
+  }, [followUser, userLocation]);
 
   /* ------------------------------------------------------------ */
   /* LOAD CR PLACES                                               */
@@ -326,18 +336,19 @@ export default function MapScreenRN({ mapKey }) {
   /* ------------------------------------------------------------ */
 
   useEffect(() => {
-    if (!followUser || !userLocation || !mapRef.current) return;
 
-    mapRef.current.animateCamera(
-      {
-        center: {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
+    if (!followUser || !userLocation || !mapRef.current) return;
+      mapRef.current?.animateCamera(
+        {
+          center: {
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+          },
+          zoom: 16,
         },
-        zoom: 16, // tweak later per rider/driver/strider
-      },
-      { duration: 600 }
-    );
+        { duration: 600 }
+      );
+
   }, [userLocation, followUser]);
 
   /* ------------------------------------------------------------ */
@@ -345,6 +356,7 @@ export default function MapScreenRN({ mapKey }) {
   /* ------------------------------------------------------------ */
 
   const handleRegionChangeComplete = async (region) => {
+    
     setMapRegion(region);
 
     const radius =
@@ -393,6 +405,26 @@ export default function MapScreenRN({ mapKey }) {
     setFollowUser((prev) => !prev);
   }
 
+  function recentreToCurrentPosition() {
+    mapRef.current?.animateToRegion(
+      {
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      },
+      300
+    );
+  }
+
+  useEffect(() => {
+    setMapActions({
+      recenter: recentreToCurrentPosition,
+      toggleFollow: toggleFollowMe,
+      isFollowing: () => followUser,
+    });
+  }, [followUser, userLocation]);
+
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
   /* ------------------------------------------------------------ */
@@ -400,6 +432,7 @@ export default function MapScreenRN({ mapKey }) {
   const paddedRegion = useMemo(() => expandRegion(mapRegion, 1.4), [mapRegion]);
 
   const visiblePlaces = useMemo(() => {
+
     if (!mapRegion || !paddedRegion) return [];
 
     const dedupedGoogle = dedupeByProximity(crPlaces, googlePois);
@@ -545,6 +578,9 @@ export default function MapScreenRN({ mapKey }) {
             clearTempIfSafe();
           }
         }}
+        onPanDrag={() => {
+          if (followUser) setFollowUser(false);
+        }}
         initialRegion={{
           latitude: 52.136,
           longitude: -0.467,
@@ -608,15 +644,7 @@ export default function MapScreenRN({ mapKey }) {
       <TouchableOpacity
         onPress={() => {
           if (!userLocation) return;
-          mapRef.current?.animateToRegion(
-            {
-              latitude: userLocation.latitude,
-              longitude: userLocation.longitude,
-              latitudeDelta: 0.02,
-              longitudeDelta: 0.02,
-            },
-            300
-          );
+          recentreToCurrentPosition();
         }}
         style={styles.recenterButton}
       >
@@ -652,13 +680,11 @@ export default function MapScreenRN({ mapKey }) {
     </View>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* STYLES                                                             */
-/* ------------------------------------------------------------------ */
-
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
+
   recenterButton: {
     position: "absolute",
     right: 16,
@@ -672,3 +698,6 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 });
+
+
+
