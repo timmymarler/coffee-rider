@@ -11,7 +11,6 @@ import SvgPin from "../map/components/SvgPin";
 import * as Location from "expo-location";
 import { classifyPoi } from "../map/classify/classifyPois";
 import { applyFilters } from "../map/filters/applyFilters";
-import { searchQuery, setSearchQuery } from useState("");
 /* Ready for routing */
 import { decode } from "@mapbox/polyline";
 import { fetchRoute } from "../map/utils/fetchRoute";
@@ -277,6 +276,7 @@ export default function MapScreenRN({ mapKey }) {
   const [routeMeta, setRouteMeta] = useState(null);
   const [followUser, setFollowUser] = useState(false);
   const { setMapActions } = useContext(TabBarContext);
+  const { searchQuery, setSearchQuery } = useState("");
 
 
   useEffect(() => {
