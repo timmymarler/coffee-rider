@@ -278,6 +278,7 @@ export default function MapScreenRN({ mapKey }) {
   const [followUser, setFollowUser] = useState(false);
   const { setMapActions } = useContext(TabBarContext);
   const [ searchQuery, setSearchQuery ] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     setMapActions({
@@ -655,7 +656,7 @@ export default function MapScreenRN({ mapKey }) {
 
         <Polyline
           coordinates={routeCoords}
-          strokeWidth={3}
+          strokeWidth={4}
           strokeColor="#2563eb"
           zIndex={1000}
         />
@@ -684,9 +685,7 @@ export default function MapScreenRN({ mapKey }) {
           // Optional: collapse results after selection
           setSearchQuery("");
         }}
-        onFilterPress={() => {
-          console.log("Open filters");
-        }}
+        onFilterPress={() => setShowFilters(true)}
       />
 
       {selectedPlace && (
