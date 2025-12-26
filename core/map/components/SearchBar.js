@@ -30,7 +30,7 @@ export function SearchBar({
           <Ionicons
             name="search"
             size={18}
-            color={theme.colors.textMuted}
+            color={theme.colors.accentMid}
             style={{ marginRight: 8 }}
           />
 
@@ -38,8 +38,8 @@ export function SearchBar({
             value={value}
             onChangeText={onChange}
             placeholder="Search places…"
-            placeholderTextColor={theme.colors.textMuted}
-            style={[styles.searchInput, { color: theme.colors.text }]}
+            placeholderTextColor={theme.colors.accentMid}
+            style={[styles.searchInput, { color: theme.colors.accentMid }]}
             returnKeyType="search"
             clearButtonMode="while-editing"
           />
@@ -47,7 +47,7 @@ export function SearchBar({
           {isLoading && (
             <ActivityIndicator
               size="small"
-              color={theme.colors.textMuted}
+              color={theme.colors.accentMid}
               style={{ marginLeft: 4 }}
             />
           )}
@@ -57,7 +57,7 @@ export function SearchBar({
               <Ionicons
                 name="close-circle"
                 size={18}
-                color={theme.colors.textMuted}
+                color={theme.colors.accentMid}
               />
             </TouchableOpacity>
           )}
@@ -125,9 +125,9 @@ function createStyles(theme) {
   return StyleSheet.create({
     container: {
       position: "absolute",
-      top: 60,
+      top: 40,
       left: 12,
-      right: 60, // leaves room for filter button
+      right: 30, // leaves room for filter button
       zIndex: 10,
       elevation: 10,
     },
@@ -139,11 +139,11 @@ function createStyles(theme) {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: theme.colors.card,
+      backgroundColor: theme.colors.primaryDark,
       paddingHorizontal: 12,
       paddingVertical: 10,
       borderRadius: 12,
-      shadowColor: theme.colors.shadow,
+      shadowColor: theme.colors.accentMid,
       shadowOpacity: 0.2,
       shadowRadius: 6,
       shadowOffset: { width: 0, height: 2 },
@@ -157,13 +157,13 @@ function createStyles(theme) {
     },
     filterButton: {
       marginLeft: 8,
-      width: 44,
-      height: 44,
+      width: 41,
+      height: 41,
       borderRadius: 12,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: theme.colors.card,
-      shadowColor: theme.colors.shadow,
+      backgroundColor: theme.colors.primaryDark,
+      shadowColor: theme.colors.accentMid,
       shadowOpacity: 0.2,
       shadowRadius: 6,
       shadowOffset: { width: 0, height: 2 },
@@ -172,10 +172,10 @@ function createStyles(theme) {
     resultsPanel: {
       marginTop: 6,
       borderRadius: 14,
-      backgroundColor: theme.colors.card,
+      backgroundColor: theme.colors.primaryDark,
       maxHeight: 260,
       paddingVertical: 4,
-      shadowColor: theme.colors.shadow,
+      shadowColor: theme.colors.accentMid,
       shadowOpacity: 0.25,
       shadowRadius: 8,
       shadowOffset: { width: 0, height: 3 },
@@ -189,11 +189,11 @@ function createStyles(theme) {
     },
     resultPrimary: {
       fontSize: 14,
-      color: theme.colors.text,
+      color: theme.colors.accentMid,
     },
     resultSecondary: {
       fontSize: 12,
-      color: theme.colors.textMuted,
+      color: theme.colors.accentMid,
     },
   });
 }

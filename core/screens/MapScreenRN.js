@@ -277,8 +277,7 @@ export default function MapScreenRN({ mapKey }) {
   const [routeMeta, setRouteMeta] = useState(null);
   const [followUser, setFollowUser] = useState(false);
   const { setMapActions } = useContext(TabBarContext);
-  const { searchQuery, setSearchQuery } = useState("");
-
+  const [ searchQuery, setSearchQuery ] = useState("");
 
   useEffect(() => {
     setMapActions({
@@ -343,6 +342,7 @@ export default function MapScreenRN({ mapKey }) {
     };
   }, []);
 
+  
   /* ------------------------------------------------------------ */
   /* FOLLOW MODE                                                  */
   /* ------------------------------------------------------------ */
@@ -517,6 +517,19 @@ export default function MapScreenRN({ mapKey }) {
     return visiblePlaces.find((p) => p.id === selectedPlaceId) || null;
   }, [selectedPlaceId, visiblePlaces]);
 
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+
+    return visiblePlaces
+      .filter((p) => {
+        const title = p.title?.toLowerCase() || "";
+        const address = p.address?.toLowerCase() || "";
+        return title.includes(q) || address.includes(q);
+      })
+      .slice(0, 15); // keep it tight
+  }, [searchQuery, visiblePlaces]);
+
   /* ------------------------------------------------------------ */
   /* ROUTING                                                      */
   /* ------------------------------------------------------------ */
@@ -568,6 +581,7 @@ export default function MapScreenRN({ mapKey }) {
     });
 
     setFollowUser(true);
+    
   }
 
   /* ------------------------------------------------------------ */
@@ -650,10 +664,29 @@ export default function MapScreenRN({ mapKey }) {
       <SearchBar
         value={searchQuery}
         onChange={setSearchQuery}
-        results={[]}
+        results={searchResults}
         onClear={() => setSearchQuery("")}
-        onResultPress={() => {}}
-        onFilterPress={() => {}}
+        onResultPress={(place) => {
+          setSelectedPlaceId(place.id);
+
+          if (mapRef.current && place.latitude && place.longitude) {
+            mapRef.current.animateCamera(
+              {
+                center: {
+                  latitude: place.latitude,
+                  longitude: place.longitude,
+                },
+                zoom: 16,
+              },
+              { duration: 500 }
+            );
+          }
+          // Optional: collapse results after selection
+          setSearchQuery("");
+        }}
+        onFilterPress={() => {
+          console.log("Open filters");
+        }}
       />
 
       {selectedPlace && (
