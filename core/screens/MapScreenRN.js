@@ -10,8 +10,6 @@ import SvgPin from "../map/components/SvgPin";
 
 import * as Location from "expo-location";
 import { classifyPoi } from "../map/classify/classifyPois";
-import { FilterBar } from "../map/components/FilterBar";
-import { RIDER_FILTER_GROUPS } from "../map/config/riderFilterGroups";
 import { applyFilters } from "../map/filters/applyFilters";
 import { searchQuery, setSearchQuery } from useState("");
 /* Ready for routing */
@@ -655,12 +653,6 @@ export default function MapScreenRN({ mapKey }) {
         onClear={() => setSearchQuery("")}
         onResultPress={() => {}}
         onFilterPress={() => {}}
-      />
-
-      <FilterBar
-        filters={filters}
-        setFilters={setFilters}
-        filterConfig={RIDER_FILTER_GROUPS}
       />
 
       {selectedPlace && (

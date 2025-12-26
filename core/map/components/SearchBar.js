@@ -126,7 +126,7 @@ function createStyles(theme) {
   return StyleSheet.create({
     container: {
       position: "absolute",
-      top: 12,
+      top: 60,
       left: 12,
       right: 60, // leaves room for filter button
       zIndex: 10,
