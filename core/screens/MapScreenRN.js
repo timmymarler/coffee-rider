@@ -1,9 +1,8 @@
 import { db } from "@config/firebase";
 import { TabBarContext } from "@context/TabBarContext";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 
 import PlaceCard from "../map/components/PlaceCard";
@@ -14,7 +13,7 @@ import { classifyPoi } from "../map/classify/classifyPois";
 import { FilterBar } from "../map/components/FilterBar";
 import { RIDER_FILTER_GROUPS } from "../map/config/riderFilterGroups";
 import { applyFilters } from "../map/filters/applyFilters";
-
+import { searchQuery, setSearchQuery } from useState("");
 /* Ready for routing */
 import { decode } from "@mapbox/polyline";
 import { fetchRoute } from "../map/utils/fetchRoute";
@@ -322,13 +321,27 @@ export default function MapScreenRN({ mapKey }) {
   /* ------------------------------------------------------------ */
 
   useEffect(() => {
+    let subscription;
+
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
 
-      const loc = await Location.getCurrentPositionAsync({});
-      setUserLocation(loc.coords);
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 1000,      // 1s updates
+          distanceInterval: 5,     // or every ~5m
+        },
+        (location) => {
+          setUserLocation(location.coords);
+        }
+      );
     })();
+
+    return () => {
+      subscription?.remove();
+    };
   }, []);
 
   /* ------------------------------------------------------------ */
@@ -635,21 +648,20 @@ export default function MapScreenRN({ mapKey }) {
         />
       </MapView>
 
+      <SearchBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        results={[]}
+        onClear={() => setSearchQuery("")}
+        onResultPress={() => {}}
+        onFilterPress={() => {}}
+      />
+
       <FilterBar
         filters={filters}
         setFilters={setFilters}
         filterConfig={RIDER_FILTER_GROUPS}
       />
-
-      <TouchableOpacity
-        onPress={() => {
-          if (!userLocation) return;
-          recentreToCurrentPosition();
-        }}
-        style={styles.recenterButton}
-      >
-        <MaterialCommunityIcons name="crosshairs-gps" size={22} color="#FFD85C" />
-      </TouchableOpacity>
 
       {selectedPlace && (
         <PlaceCard

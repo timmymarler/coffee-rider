@@ -1,25 +1,26 @@
-// core/map/components/SearchBar.js
 import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "@themes";
 import {
-    ActivityIndicator,
-    FlatList,
-    Pressable,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 export function SearchBar({
-  query,
-  onChangeText,
-  isLoading,
-  suggestions,
-  onSuggestionPress,
+  value,
+  onChange,
+  results = [],
+  isLoading = false,
+  onResultPress,
   onClear,
-  theme,
+  onFilterPress,
 }) {
+  const theme = useTheme();
   const styles = createStyles(theme);
 
   return (
@@ -35,11 +36,13 @@ export function SearchBar({
           />
 
           <TextInput
-            value={query}
-            onChangeText={onChangeText}
-            placeholder="Search cafés and places…"
+            value={value}
+            onChangeText={onChange}
+            placeholder="Search places…"
             placeholderTextColor={theme.colors.textMuted}
             style={[styles.searchInput, { color: theme.colors.text }]}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
           />
 
           {isLoading && (
@@ -50,7 +53,7 @@ export function SearchBar({
             />
           )}
 
-          {query.length > 0 && !isLoading && (
+          {value?.length > 0 && !isLoading && (
             <TouchableOpacity onPress={onClear}>
               <Ionicons
                 name="close-circle"
@@ -61,22 +64,31 @@ export function SearchBar({
           )}
         </View>
 
-        {/* Filter Button (not wired yet, safe placeholder) */}
-        <TouchableOpacity style={styles.filterButton}>
-          <Ionicons name="options" size={20} color={theme.colors.primaryDark} />
+        {/* Filter Button */}
+        <TouchableOpacity
+          style={styles.filterButton}
+          onPress={onFilterPress}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="options"
+            size={20}
+            color={theme.colors.primaryDark}
+          />
         </TouchableOpacity>
       </View>
 
-      {/* ---- Suggestions ---- */}
-      {suggestions.length > 0 && (
-        <View style={styles.suggestionsPanel}>
+      {/* ---- Results ---- */}
+      {results.length > 0 && (
+        <View style={styles.resultsPanel}>
           <FlatList
-            data={suggestions}
-            keyExtractor={(item) => item.place_id}
+            data={results}
+            keyExtractor={(item) => item.id}
+            keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <Pressable
-                onPress={() => onSuggestionPress(item)}
-                style={styles.suggestionItem}
+                onPress={() => onResultPress(item)}
+                style={styles.resultItem}
               >
                 <Ionicons
                   name="location-outline"
@@ -86,19 +98,18 @@ export function SearchBar({
                 />
                 <View style={{ flex: 1 }}>
                   <Text
-                    style={styles.suggestionPrimary}
+                    style={styles.resultPrimary}
                     numberOfLines={1}
                   >
-                    {item.structured_formatting?.main_text ||
-                      item.description}
+                    {item.title}
                   </Text>
 
-                  {item.structured_formatting?.secondary_text && (
+                  {item.address && (
                     <Text
-                      style={styles.suggestionSecondary}
+                      style={styles.resultSecondary}
                       numberOfLines={1}
                     >
-                      {item.structured_formatting.secondary_text}
+                      {item.address}
                     </Text>
                   )}
                 </View>
@@ -115,9 +126,11 @@ function createStyles(theme) {
   return StyleSheet.create({
     container: {
       position: "absolute",
-      top: 40,
+      top: 12,
       left: 12,
-      right: 12,
+      right: 60, // leaves room for filter button
+      zIndex: 10,
+      elevation: 10,
     },
     searchRow: {
       flexDirection: "row",
@@ -128,9 +141,9 @@ function createStyles(theme) {
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: theme.colors.card,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
-      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
       shadowColor: theme.colors.shadow,
       shadowOpacity: 0.2,
       shadowRadius: 6,
@@ -145,9 +158,9 @@ function createStyles(theme) {
     },
     filterButton: {
       marginLeft: 8,
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: 44,
+      height: 44,
+      borderRadius: 12,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: theme.colors.card,
@@ -157,7 +170,7 @@ function createStyles(theme) {
       shadowOffset: { width: 0, height: 2 },
       elevation: 4,
     },
-    suggestionsPanel: {
+    resultsPanel: {
       marginTop: 6,
       borderRadius: 14,
       backgroundColor: theme.colors.card,
@@ -169,17 +182,17 @@ function createStyles(theme) {
       shadowOffset: { width: 0, height: 3 },
       elevation: 6,
     },
-    suggestionItem: {
+    resultItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 10,
-      paddingVertical: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
     },
-    suggestionPrimary: {
+    resultPrimary: {
       fontSize: 14,
       color: theme.colors.text,
     },
-    suggestionSecondary: {
+    resultSecondary: {
       fontSize: 12,
       color: theme.colors.textMuted,
     },
