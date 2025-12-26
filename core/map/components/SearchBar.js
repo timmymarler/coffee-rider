@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import theme from "@themes";
 import {
   ActivityIndicator,
   FlatList,
@@ -9,7 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useTheme } from "../../../themes";
 
 export function SearchBar({
   value,
@@ -20,7 +20,6 @@ export function SearchBar({
   onClear,
   onFilterPress,
 }) {
-  const theme = useTheme();
   const styles = createStyles(theme);
 
   return (
