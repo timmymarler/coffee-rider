@@ -646,15 +646,6 @@ export default function MapScreenRN({ mapKey }) {
         />
       </MapView>
 
-      <SearchBar
-        value={searchQuery}
-        onChange={setSearchQuery}
-        results={[]}
-        onClear={() => setSearchQuery("")}
-        onResultPress={() => {}}
-        onFilterPress={() => {}}
-      />
-
       {selectedPlace && (
         <PlaceCard
           place={selectedPlace}
