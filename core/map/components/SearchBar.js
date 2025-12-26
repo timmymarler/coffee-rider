@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "@themes";
 import {
   ActivityIndicator,
   FlatList,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTheme } from "../../../themes";
 
 export function SearchBar({
   value,

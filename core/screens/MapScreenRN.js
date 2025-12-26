@@ -15,6 +15,7 @@ import { applyFilters } from "../map/filters/applyFilters";
 import { decode } from "@mapbox/polyline";
 import { fetchRoute } from "../map/utils/fetchRoute";
 //import { mapRef } from "../map/utils/mapRef"; // adjust path if needed
+import { SearchBar } from "../map/components/SearchBar";
 import { openNativeNavigation } from "../map/utils/navigation";
 
 /* ------------------------------------------------------------------ */
@@ -645,6 +646,15 @@ export default function MapScreenRN({ mapKey }) {
           zIndex={1000}
         />
       </MapView>
+
+      <SearchBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        results={[]}
+        onClear={() => setSearchQuery("")}
+        onResultPress={() => {}}
+        onFilterPress={() => {}}
+      />
 
       {selectedPlace && (
         <PlaceCard
