@@ -5,7 +5,7 @@ import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 //import { mapRef } from "@core/map/utils/mapRef";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef } from "react";
 import { Animated, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -16,6 +16,11 @@ function FloatingTabBar({ state }) {
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(0)).current;
   const { hidden, mapActions } = useContext(TabBarContext);
+  const pathname = usePathname();
+
+  const isMapScreen =
+    pathname === "/map" ||
+    pathname.startsWith("/map/");
 
   useEffect(() => {
     Animated.timing(translateY, {
@@ -80,44 +85,48 @@ function FloatingTabBar({ state }) {
         );
       })}
 
-      {/* separator */}
-      <View
-        style={{
-          width: 1,
-          height: 22,
-          backgroundColor: theme.colors.primaryLight,
-          opacity: 0.4,
-          marginHorizontal: 8,
-        }}
-      />
+      {isMapScreen && (
+      <>
+          {/* separator */}
+          <View
+            style={{
+              width: 1,
+              height: 22,
+              backgroundColor: theme.colors.primaryLight,
+              opacity: 0.4,
+              marginHorizontal: 8,
+            }}
+          />
 
-      {/* Re-centre */}
-      <TouchableOpacity
-        onPress={() => mapActions?.recenter()}
-        style={{ paddingHorizontal: 6 }}
-      >
-        <MaterialCommunityIcons
-          name="crosshairs-gps"
-          size={22}
-          color={theme.colors.primary}
-        />
-      </TouchableOpacity>
+          {/* Re-centre */}
+          <TouchableOpacity
+            onPress={() => mapActions?.recenter()}
+            style={{ paddingHorizontal: 6 }}
+          >
+            <MaterialCommunityIcons
+              name="crosshairs-gps"
+              size={22}
+              color={theme.colors.primary}
+            />
+          </TouchableOpacity>
 
-      {/* Follow Me */}
-      <TouchableOpacity
-        onPress={() => mapActions?.toggleFollow()}
-        style={{ paddingHorizontal: 6 }}
-      >
-        <MaterialCommunityIcons
-          name={"navigation-variant"}
-          size={22}
-          color={
-            mapActions?.isFollowing()
-              ? theme.colors.danger
-              : theme.colors.primary
-          }
-        />
-      </TouchableOpacity>
+          {/* Follow Me */}
+          <TouchableOpacity
+            onPress={() => mapActions?.toggleFollow()}
+            style={{ paddingHorizontal: 6 }}
+          >
+            <MaterialCommunityIcons
+              name={"navigation-variant"}
+              size={22}
+              color={
+                mapActions?.isFollowing()
+                  ? theme.colors.danger
+                  : theme.colors.primary
+              }
+            />
+          </TouchableOpacity>
+        </>
+      )}      
     </Animated.View>
   );
 }
