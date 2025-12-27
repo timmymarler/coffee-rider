@@ -17,6 +17,7 @@ import { fetchRoute } from "../map/utils/fetchRoute";
 //import { mapRef } from "../map/utils/mapRef"; // adjust path if needed
 import { SearchBar } from "../map/components/SearchBar";
 import { openNativeNavigation } from "../map/utils/navigation";
+const ENABLE_GOOGLE_AUTO_FETCH = false;
 
 /* ------------------------------------------------------------------ */
 /* CATEGORY → ICON MAP                                                */
@@ -369,9 +370,12 @@ export default function MapScreenRN({ mapKey }) {
   /* ------------------------------------------------------------ */
 
   const handleRegionChangeComplete = async (region) => {
-    
     setMapRegion(region);
-
+    // Temporarily disable requests to Google Places
+    if (!ENABLE_GOOGLE_AUTO_FETCH) {
+      // 🔒 Google auto-fetch disabled intentionally
+      return;
+    }
     const radius =
       region.latitudeDelta < 0.03 ? 800 :
       region.latitudeDelta < 0.08 ? 1500 :

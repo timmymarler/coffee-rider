@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import AuthLayout from "./AuthLayout";
 
 import { auth } from "@config/firebase";
 import theme from "@themes";
@@ -53,75 +54,95 @@ export default function LoginScreen() {
   const buttonText = colors?.primaryDark || "#1E3B57";
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: bgColor }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <AuthLayout
+      title="Welcome back"
+      subtitle="Log in to Coffee Rider"
     >
-      <View style={[styles.card, { backgroundColor: cardColor }]}>
-        <Text style={[styles.title, { color: colors?.text || "#FFFFFF" }]}>
-          Log in
-        </Text>
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: bgColor }]}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={[styles.card, { backgroundColor: cardColor }]}>
+          <Text style={[styles.title, { color: colors?.text || "#FFFFFF" }]}>
+            Log in
+          </Text>
 
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: labelColor }]}>Email</Text>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder="you@example.com"
-            placeholderTextColor={labelColor}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: labelColor }]}>Email</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder="you@example.com"
+              placeholderTextColor={labelColor}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: inputBg,
+                  borderColor: inputBorder,
+                  color: inputText,
+                },
+              ]}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: labelColor }]}>Password</Text>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              placeholder="••••••••"
+              placeholderTextColor={labelColor}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: inputBg,
+                  borderColor: inputBorder,
+                  color: inputText,
+                },
+              ]}
+            />
+          </View>
+
+          <TouchableOpacity
             style={[
-              styles.input,
+              styles.button,
               {
-                backgroundColor: inputBg,
-                borderColor: inputBorder,
-                color: inputText,
+                backgroundColor: buttonBg,
+                opacity: submitting ? 0.7 : 1,
               },
             ]}
-          />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: labelColor }]}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholder="••••••••"
-            placeholderTextColor={labelColor}
-            style={[
-              styles.input,
-              {
-                backgroundColor: inputBg,
-                borderColor: inputBorder,
-                color: inputText,
-              },
-            ]}
-          />
-        </View>
-
-        <TouchableOpacity
-          style={[
-            styles.button,
-            {
-              backgroundColor: buttonBg,
-              opacity: submitting ? 0.7 : 1,
-            },
-          ]}
-          disabled={submitting}
-          onPress={handleLogin}
-        >
-          {submitting ? (
-            <ActivityIndicator size="small" color={buttonText} />
-          ) : (
-            <Text style={[styles.buttonText, { color: buttonText }]}>
-              Log in
+            disabled={submitting}
+            onPress={handleLogin}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color={buttonText} />
+            ) : (
+              <Text style={[styles.buttonText, { color: buttonText }]}>
+                Log in
+              </Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push("/auth/register")}
+            style={{ marginTop: 16, alignItems: "center" }}
+          >
+            <Text
+              style={{
+                color: colors?.accentMid || "#FFD85C",
+                fontSize: 14,
+                fontWeight: "500",
+              }}
+            >
+              Don’t have an account? Register
             </Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+          </TouchableOpacity>
+
+        </View>
+      </KeyboardAvoidingView>
+    </AuthLayout>
   );
 }
 

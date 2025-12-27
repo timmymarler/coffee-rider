@@ -49,6 +49,13 @@ export default function ProfileScreen() {
     setHomeLocation(profile?.homeLocation || "");
   }, [profile]);
 
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/auth/login");
+    }
+  }, [loading, user]);
+
   // -----------------------------------
   // Upload Avatar
   // -----------------------------------
@@ -121,42 +128,11 @@ export default function ProfileScreen() {
     }
   }
 
-  // -----------------------------------
-  // Not Logged In → Show Login Prompt
-  // -----------------------------------
-  if (!user && !loading) {
-    return (
-      <CRScreen padded scroll>
-        <CRCard>
-          <Text
-            style={{
-              color: theme.colors.textPrimary,
-              fontSize: theme.spacing.xl,
-              fontWeight: "600",
-              marginBottom: theme.spacing.lg,
-            }}
-          >
-            Anonymous Rider
-          </Text>
-
-          <Text
-            style={{
-              color: theme.colors.textMuted,
-              marginBottom: theme.spacing.lg,
-            }}
-          >
-            You’re not logged in.
-          </Text>
-
-          <CRButton title="Log In" onPress={() => router.push("/auth/login")} />
-        </CRCard>
-      </CRScreen>
-    );
-  }
 
   // -----------------------------------
   // MAIN PROFILE LAYOUT
   // -----------------------------------
+
   return (
     <CRScreen scroll padded>
 
@@ -266,26 +242,50 @@ export default function ProfileScreen() {
         </View>
       </CRCard>
 
-      {/* ---------------- ACCOUNT CARD ---------------- */}
+      {/* ---------------- ACCOUNT & SECURITY ---------------- */}
       <CRCard>
-        <CRLabel>Email</CRLabel>
-        <Text style={{ color: theme.colors.textPrimary, marginBottom: theme.spacing.md }}>
-          {email}
-        </Text>
+        <CRLabel>Account</CRLabel>
+          <View
+            style={{
+              marginTop: theme.spacing.xs,
+              paddingVertical: theme.spacing.sm,
+              paddingHorizontal: theme.spacing.md,
+              borderRadius: theme.radius.md,
+              backgroundColor: theme.colors.primaryDark,
+            }}
+          >
+          <Text
+            style={{
+              color: theme.colors.textMuted,
+              fontSize: theme.spacing.sm,
+              marginBottom: 2, // was too large before
+            }}
+          >
+            Signed in as
+          </Text>
 
-        <CRButton
-          title="Change Password (coming soon)"
-          variant="secondary"
-        />
+          <Text
+            style={{
+              color: theme.colors.textMuted,
+              fontSize: theme.spacing.md,
+              fontWeight: "500",
+              lineHeight: theme.spacing.lg,
+            }}
+          >
+            {email}
+          </Text>
+        </View>
+
       </CRCard>
 
-      {/* ---------------- LOGOUT ---------------- */}
-      <CRButton
-        title="Log Out"
-        variant="danger"
-        onPress={logout}
-        style={{ marginTop: theme.spacing.md }}
-      />
+      {/* ---------------- ACCOUNT ACTIONS ---------------- */}
+      <CRCard>
+        <CRButton
+          title="Log Out"
+          variant="danger"
+          onPress={logout}
+        />
+      </CRCard>
 
     </CRScreen>
   );
