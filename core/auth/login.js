@@ -13,14 +13,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import AuthLayout from "./AuthLayout";
 
 import { auth } from "@config/firebase";
 import theme from "@themes";
+import AuthLayout from "./AuthLayout";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { colors } = theme;
+  const { colors, spacing } = theme;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,22 +36,16 @@ export default function LoginScreen() {
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
       setSubmitting(false);
-      router.back();
+      router.replace("/map");
     } catch (err) {
       console.error("Login error:", err);
       setSubmitting(false);
-      Alert.alert("Login failed", err.message || "Please check your details and try again.");
+      Alert.alert(
+        "Login failed",
+        err.message || "Please check your details and try again."
+      );
     }
   }
-
-  const bgColor = colors?.background || "#1E3B57";
-  const cardColor = colors?.surface || "#1E3B57";
-  const labelColor = colors?.textMuted || "#D2D9E2";
-  const inputBg = colors?.inputBackground || "#FFFFFF";
-  const inputBorder = colors?.inputBorder || "#8CAAB3";
-  const inputText = colors?.inputText || "#1E3B57";
-  const buttonBg = colors?.accentMid || "#FFD85C";
-  const buttonText = colors?.primaryDark || "#1E3B57";
 
   return (
     <AuthLayout
@@ -59,131 +53,99 @@ export default function LoginScreen() {
       subtitle="Log in to Coffee Rider"
     >
       <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: bgColor }]}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={[styles.card, { backgroundColor: cardColor }]}>
-          <Text style={[styles.title, { color: colors?.text || "#FFFFFF" }]}>
-            Log in
-          </Text>
-
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: labelColor }]}>Email</Text>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              placeholder="you@example.com"
-              placeholderTextColor={labelColor}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: inputBg,
-                  borderColor: inputBorder,
-                  color: inputText,
-                },
-              ]}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: labelColor }]}>Password</Text>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              placeholder="••••••••"
-              placeholderTextColor={labelColor}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: inputBg,
-                  borderColor: inputBorder,
-                  color: inputText,
-                },
-              ]}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[
-              styles.button,
-              {
-                backgroundColor: buttonBg,
-                opacity: submitting ? 0.7 : 1,
-              },
-            ]}
-            disabled={submitting}
-            onPress={handleLogin}
-          >
-            {submitting ? (
-              <ActivityIndicator size="small" color={buttonText} />
-            ) : (
-              <Text style={[styles.buttonText, { color: buttonText }]}>
-                Log in
-              </Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.push("/auth/register")}
-            style={{ marginTop: 16, alignItems: "center" }}
-          >
-            <Text
-              style={{
-                color: colors?.accentMid || "#FFD85C",
-                fontSize: 14,
-                fontWeight: "500",
-              }}
-            >
-              Don’t have an account? Register
-            </Text>
-          </TouchableOpacity>
-
+        {/* Email */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholder="you@example.com"
+            placeholderTextColor={colors.textMuted}
+            style={styles.input}
+          />
         </View>
+
+        {/* Password */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            placeholder="••••••••"
+            placeholderTextColor={colors.textMuted}
+            style={styles.input}
+          />
+        </View>
+
+        {/* Submit */}
+        <TouchableOpacity
+          style={[
+            styles.button,
+            submitting && { opacity: 0.7 },
+          ]}
+          disabled={submitting}
+          onPress={handleLogin}
+        >
+          {submitting ? (
+            <ActivityIndicator size="small" color={colors.primaryDark} />
+          ) : (
+            <Text style={styles.buttonText}>Log in</Text>
+          )}
+        </TouchableOpacity>
+
+        {/* Register link */}
+        <TouchableOpacity
+          onPress={() => router.push("/auth/register")}
+          style={{ marginTop: spacing.md, alignItems: "center" }}
+        >
+          <Text style={styles.linkText}>
+            Don’t have an account? Register
+          </Text>
+        </TouchableOpacity>
       </KeyboardAvoidingView>
     </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 20,
-  },
-  card: {
-    borderRadius: 20,
-    padding: 20,
-    elevation: 4,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 24,
-  },
   field: {
-    marginBottom: 16,
+    marginBottom: theme.spacing.md,
   },
   label: {
+    color: theme.colors.textMuted,
     fontSize: 13,
     marginBottom: 4,
   },
   input: {
+    backgroundColor: theme.colors.inputBackground,
     borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
     borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     fontSize: 15,
+    color: theme.colors.inputText,
   },
   button: {
-    marginTop: 8,
+    marginTop: theme.spacing.sm,
+    backgroundColor: theme.colors.accentMid,
     paddingVertical: 12,
     borderRadius: 999,
     alignItems: "center",
   },
   buttonText: {
+    color: theme.colors.primaryDark,
     fontSize: 16,
     fontWeight: "600",
+  },
+  linkText: {
+    color: theme.colors.accentMid,
+    fontSize: 14,
+    fontWeight: "500",
   },
 });

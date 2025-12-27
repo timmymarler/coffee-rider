@@ -19,6 +19,7 @@ export function useMapData() {
 
   const mapRef = useRef(null);
 
+
   // ----------------------------------------
   // CAFÉ + GOOGLE STATE
   // ----------------------------------------
@@ -30,6 +31,7 @@ export function useMapData() {
   // LOAD CR CAFÉS
   // ----------------------------------------
   useEffect(() => {
+    if (!user) return;
     const unsub = onSnapshot(collection(db, "cafes"), (snap) => {
       const list = snap.docs.map((d) => ({
         id: d.id,

@@ -15,12 +15,12 @@ import { useRouter } from "expo-router";
 import { doc, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Image, Text, TouchableOpacity, View } from "react-native";
-
+import LoginScreen from "../auth/login";
 
 export default function ProfileScreen() {
 
   const router = useRouter();
-  const { user, profile, loading, logout, refreshProfile, capabilities } = useContext(AuthContext);
+  const { user, profile, loading, logout, refreshProfile } = useContext(AuthContext);
 
   // -----------------------------------
   // Initial Values
@@ -37,10 +37,7 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
-
-  const email = user?.email || "";
-  const role = profile?.role || "user";
-
+  
   // Update when profile changes
   useEffect(() => {
     setDisplayName(profile?.displayName || user?.displayName || "");
@@ -49,12 +46,16 @@ export default function ProfileScreen() {
     setHomeLocation(profile?.homeLocation || "");
   }, [profile]);
 
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!loading && !user) {
-      router.replace("/auth/login");
-    }
-  }, [loading, user]);
+  const email = user?.email || "";
+  const role = profile?.role || "user";
+
+  if (loading) {
+    return null;
+  }
+
+  if (!user) {
+    return <LoginScreen />;
+  }
 
   // -----------------------------------
   // Upload Avatar
