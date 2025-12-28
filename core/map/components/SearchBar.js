@@ -2,21 +2,17 @@ import { Ionicons } from "@expo/vector-icons";
 import theme from "@themes";
 import {
   ActivityIndicator,
-  FlatList,
-  Pressable,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 export function SearchBar({
   value,
   onChange,
-  results = [],
+  onSubmit = () => {},   // ✅ default no-op  results = [],
   isLoading = false,
-  onResultPress,
   onClear,
   onFilterPress,
 }) {
@@ -27,17 +23,32 @@ export function SearchBar({
       {/* ---- Main Search Row ---- */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
-          <Ionicons
-            name="search"
-            size={18}
-            color={theme.colors.accentMid}
-            style={{ marginRight: 8 }}
-          />
+          <TouchableOpacity
+            onPress={() => {
+              const trimmed = value?.trim();
+              if (trimmed?.length > 0 && typeof onSubmit === "function") {
+                onSubmit(trimmed);
+              }
+            }}
+          >
+            <Ionicons
+              name="search"
+              size={18}
+              color={theme.colors.accentMid}
+              style={{ marginRight: 8 }}
+            />
+          </TouchableOpacity>
 
           <TextInput
             value={value}
             onChangeText={onChange}
-            placeholder="Search places…"
+            onSubmitEditing={() => {
+              const trimmed = value?.trim();
+              if (trimmed?.length > 0 && typeof onSubmit === "function") {
+                onSubmit(trimmed);
+              }
+            }}
+            placeholder="Search visible area…"
             placeholderTextColor={theme.colors.accentMid}
             style={[styles.searchInput, { color: theme.colors.accentMid }]}
             returnKeyType="search"
@@ -77,46 +88,6 @@ export function SearchBar({
         </TouchableOpacity>
       </View>
 
-      {/* ---- Results ---- */}
-      {results.length > 0 && (
-        <View style={styles.resultsPanel}>
-          <FlatList
-            data={results}
-            keyExtractor={(item) => item.id}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={() => onResultPress(item)}
-                style={styles.resultItem}
-              >
-                <Ionicons
-                  name="location-outline"
-                  size={18}
-                  color={theme.colors.textMuted}
-                  style={{ marginRight: 8 }}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={styles.resultPrimary}
-                    numberOfLines={1}
-                  >
-                    {item.title}
-                  </Text>
-
-                  {item.address && (
-                    <Text
-                      style={styles.resultSecondary}
-                      numberOfLines={1}
-                    >
-                      {item.address}
-                    </Text>
-                  )}
-                </View>
-              </Pressable>
-            )}
-          />
-        </View>
-      )}
     </View>
   );
 }
@@ -168,32 +139,6 @@ function createStyles(theme) {
       shadowRadius: 6,
       shadowOffset: { width: 0, height: 2 },
       elevation: 4,
-    },
-    resultsPanel: {
-      marginTop: 6,
-      borderRadius: 14,
-      backgroundColor: theme.colors.primaryDark,
-      maxHeight: 260,
-      paddingVertical: 4,
-      shadowColor: theme.colors.accentMid,
-      shadowOpacity: 0.25,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 3 },
-      elevation: 6,
-    },
-    resultItem: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-    },
-    resultPrimary: {
-      fontSize: 14,
-      color: theme.colors.accentMid,
-    },
-    resultSecondary: {
-      fontSize: 12,
-      color: theme.colors.accentMid,
     },
   });
 }

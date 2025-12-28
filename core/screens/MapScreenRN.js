@@ -117,6 +117,15 @@ function getIconForCategory(category) {
   }
 }
 
+function matchesQuery(place, query) {
+  if (!query) return false;
+  const q = query.toLowerCase();
+
+  const title = place.title?.toLowerCase() || "";
+  const address = place.address?.toLowerCase() || "";
+
+  return title.includes(q) || address.includes(q);
+}
 
 /* ------------------------------------------------------------------ */
 /* GOOGLE NEARBY SEARCH (NEW API)                                      */
@@ -278,8 +287,11 @@ export default function MapScreenRN({ mapKey }) {
   const [routeMeta, setRouteMeta] = useState(null);
   const [followUser, setFollowUser] = useState(false);
   const { setMapActions } = useContext(TabBarContext);
-  const [ searchQuery, setSearchQuery ] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [searchInput, setSearchInput] = useState("");   // what user is typing
+  const [activeQuery, setActiveQuery] = useState("");   // what we are actually searching
+  const [searchOrigin, setSearchOrigin] = useState(null);
+
 
   useEffect(() => {
     setMapActions({
@@ -288,6 +300,7 @@ export default function MapScreenRN({ mapKey }) {
       isFollowing: () => followUser,
     });
   }, [followUser, userLocation]);
+
 
   /* ------------------------------------------------------------ */
   /* LOAD CR PLACES                                               */
@@ -417,6 +430,15 @@ export default function MapScreenRN({ mapKey }) {
     setRouteMeta(null);
   }
 
+  function clearSearch() {
+    setSearchInput("");
+    setActiveQuery("");
+    setSearchOrigin(null);
+    setGooglePois([]);       // ✅ clears the Google markers/results
+    // Optional: if a temp-promoted google place is selected, clear it too
+    // setTempCrPlace(null);
+  }
+
   /* Used for Follow Me mode */
   function toggleFollowMe() {
     setFollowUser((prev) => !prev);
@@ -434,6 +456,51 @@ export default function MapScreenRN({ mapKey }) {
     );
   }
 
+  async function doTextSearch({ query, latitude, longitude, radius = 50000 }) {
+    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
+    if (!apiKey) {
+      console.log("[GOOGLE] Missing API key");
+      return [];
+    }
+
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": [
+          "places.id",
+          "places.displayName",
+          "places.formattedAddress",
+          "places.location",
+          "places.types",
+          "places.photos",
+          "places.rating",
+          "places.userRatingCount",
+          "places.regularOpeningHours",
+        ].join(","),
+      },
+      body: JSON.stringify({
+        textQuery: query,
+        locationBias: {
+          circle: {
+            center: { latitude, longitude },
+            radius,
+          },
+        },
+        maxResultCount: 20,
+      }),
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      console.log("[GOOGLE] text search error:", json?.error || json);
+      return [];
+    }
+
+    return (json?.places || []).map(mapGooglePlace).filter(p => p.latitude && p.longitude);
+  }
+
   useEffect(() => {
     setMapActions({
       recenter: recentreToCurrentPosition,
@@ -441,6 +508,80 @@ export default function MapScreenRN({ mapKey }) {
       isFollowing: () => followUser,
     });
   }, [followUser, userLocation]);
+
+  const lastSearchRef = useRef("");
+
+  useEffect(() => {
+    if (!activeQuery || !searchOrigin) return;
+
+    // Prevent duplicate searches
+    if (lastSearchRef.current === activeQuery) return;
+    lastSearchRef.current = activeQuery;
+
+    let cancelled = false;
+
+    async function run() {
+      const { latitude, longitude, latitudeDelta } = searchOrigin;
+
+      const radius =
+        latitudeDelta < 0.03 ? 15000 :
+        latitudeDelta < 0.08 ? 30000 :
+        50000;
+
+      console.log("[SEARCH] Text search:", activeQuery);
+
+      const results = await doTextSearch({
+        query: activeQuery,
+        latitude,
+        longitude,
+        radius,
+      });
+
+      if (cancelled) return;
+
+      setGooglePois(results);
+
+      // --- Prefer CR match if one exists ---
+      const crMatch = crPlaces.find(
+        (p) => p.source === "cr" && matchesQuery(p, activeQuery)
+      );
+
+      if (crMatch && mapRef.current) {
+        // Select it so PlaceCard opens
+        setSelectedPlaceId(crMatch.id);
+
+        // Zoom to CR place
+        mapRef.current.animateCamera(
+          {
+            center: {
+              latitude: crMatch.latitude,
+              longitude: crMatch.longitude,
+            },
+            zoom: 16,
+          },
+          { duration: 600 }
+        );
+
+        return; // ⛔ important: don't auto-fit to all results
+      }
+
+      if (results.length && mapRef.current) {
+        mapRef.current.fitToCoordinates(
+          results.map(p => ({
+            latitude: p.latitude,
+            longitude: p.longitude,
+          })),
+          {
+            edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
+            animated: true,
+          }
+        );
+      }
+    }
+
+    run();
+    return () => { cancelled = true; };
+  }, [activeQuery, searchOrigin]);
 
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
@@ -522,18 +663,17 @@ export default function MapScreenRN({ mapKey }) {
     return visiblePlaces.find((p) => p.id === selectedPlaceId) || null;
   }, [selectedPlaceId, visiblePlaces]);
 
-  const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-
-    return visiblePlaces
-      .filter((p) => {
-        const title = p.title?.toLowerCase() || "";
-        const address = p.address?.toLowerCase() || "";
-        return title.includes(q) || address.includes(q);
-      })
-      .slice(0, 15); // keep it tight
-  }, [searchQuery, visiblePlaces]);
+//  const searchResults = useMemo(() => {
+//    const q = searchQuery.trim().toLowerCase();
+//    if (!q) return [];
+//    return visiblePlaces
+//      .filter((p) => {
+//        const title = p.title?.toLowerCase() || "";
+//        const address = p.address?.toLowerCase() || "";
+//        return title.includes(q) || address.includes(q);
+//      })
+//      .slice(0, 15); // keep it tight
+//  }, [searchQuery, visiblePlaces]);
 
   /* ------------------------------------------------------------ */
   /* ROUTING                                                      */
@@ -667,29 +807,13 @@ export default function MapScreenRN({ mapKey }) {
       </MapView>
 
       <SearchBar
-        value={searchQuery}
-        onChange={setSearchQuery}
-        results={searchResults}
-        onClear={() => setSearchQuery("")}
-        onResultPress={(place) => {
-          setSelectedPlaceId(place.id);
-
-          if (mapRef.current && place.latitude && place.longitude) {
-            mapRef.current.animateCamera(
-              {
-                center: {
-                  latitude: place.latitude,
-                  longitude: place.longitude,
-                },
-                zoom: 16,
-              },
-              { duration: 500 }
-            );
-          }
-          // Optional: collapse results after selection
-          setSearchQuery("");
+        value={searchInput}
+        onChange={setSearchInput}
+        onSubmit={(query) => {
+          setActiveQuery(query);
+          setSearchOrigin(mapRegion); // 🔒 snapshot once
         }}
-        onFilterPress={() => setShowFilters(true)}
+        onClear={clearSearch}
       />
 
       {selectedPlace && (
