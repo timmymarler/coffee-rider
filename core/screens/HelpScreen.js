@@ -42,26 +42,29 @@ export default function HelpScreen() {
 
         {role === "guest" && (
           <>
-            <Text style={styles.bullet}>• View places on the map</Text>
-            <Text style={styles.bullet}>• Search for cafés and meeting spots</Text>
-            <Text style={styles.bullet}>• Navigate to places</Text>
+            <Text style={styles.bullet}>• View Coffee Rider places on the map</Text>
+            <Text style={styles.bullet}>
+              • Search previously added Coffee Rider cafés and meeting spots
+            </Text>
+            <Text style={styles.bullet}>• View place details, photos and ratings</Text>
           </>
         )}
 
         {role === "user" && (
           <>
             <Text style={styles.bullet}>• Everything a guest can do</Text>
-            <Text style={styles.bullet}>• Add new places to Coffee Rider</Text>
-            <Text style={styles.bullet}>• Rate and comment on places</Text>
+            <Text style={styles.bullet}>• Search for new places using Google</Text>
+            <Text style={styles.bullet}>• Navigate to places</Text>
+            <Text style={styles.bullet}>• Add ratings and comments</Text>
           </>
         )}
 
         {role === "pro" && (
           <>
             <Text style={styles.bullet}>• Everything a logged-in user can do</Text>
+            <Text style={styles.bullet}>• Higher Google search limits</Text>
             <Text style={styles.bullet}>• Save and manage routes</Text>
             <Text style={styles.bullet}>• Multi-stop navigation</Text>
-            <Text style={styles.bullet}>• Advanced rider features</Text>
           </>
         )}
 
@@ -70,6 +73,32 @@ export default function HelpScreen() {
             <Text style={styles.bullet}>• Full administrative access</Text>
             <Text style={styles.bullet}>• Manage places and users</Text>
             <Text style={styles.bullet}>• Moderate comments and ratings</Text>
+          </>
+        )}
+      </View>
+
+      {/* -------------------------------------------------- */}
+      {/* LIMITS & FAIR USE                                 */}
+      {/* -------------------------------------------------- */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Limits & fair use</Text>
+
+        {role === "guest" && (
+          <Text style={styles.subText}>
+            • Guests can browse Coffee Rider places only. Searching external
+            places and navigation require a registered account.
+          </Text>
+        )}
+
+        {role !== "guest" && (
+          <>
+            <Text style={styles.subText}>
+              • Google place searches are limited per day to keep the service
+              fast and fair for everyone.
+            </Text>
+            <Text style={styles.subText}>
+              • During beta testing, higher limits may be temporarily applied.
+            </Text>
           </>
         )}
       </View>
@@ -133,27 +162,14 @@ export default function HelpScreen() {
       </View>
 
       {/* -------------------------------------------------- */}
-      {/* ACCOUNT TYPES                                     */}
-      {/* -------------------------------------------------- */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account types</Text>
-
-        <Text style={styles.bullet}>• Guest – browse and search places</Text>
-        <Text style={styles.bullet}>• User – add places, ratings and comments</Text>
-        <Text style={styles.bullet}>
-          • Pro – advanced routing and navigation tools
-        </Text>
-      </View>
-
-      {/* -------------------------------------------------- */}
       {/* FEEDBACK / SUPPORT                                 */}
       {/* -------------------------------------------------- */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Feedback & support</Text>
 
         <Text style={styles.text}>
-          Coffee Rider is in active development. Bug reports and suggestions are
-          always welcome.
+          Coffee Rider is in active beta. Bug reports and suggestions are always
+          welcome.
         </Text>
 
         <Pressable
@@ -227,7 +243,7 @@ const styles = StyleSheet.create({
 
   bullet: {
     fontSize: 14,
-    color: theme.colors.acc,
+    color: theme.colors.accentDark,
     marginBottom: 6,
   },
 

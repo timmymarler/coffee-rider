@@ -2,7 +2,7 @@ import { db } from "@config/firebase";
 import { TabBarContext } from "@context/TabBarContext";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 
 import PlaceCard from "../map/components/PlaceCard";
@@ -17,6 +17,13 @@ import { fetchRoute } from "../map/utils/fetchRoute";
 //import { mapRef } from "../map/utils/mapRef"; // adjust path if needed
 import { SearchBar } from "../map/components/SearchBar";
 import { openNativeNavigation } from "../map/utils/navigation";
+
+import { AuthContext } from "@context/AuthContext";
+import { getCapabilities } from "@core/roles/getCapabilities";
+import theme from "@themes";
+
+
+
 const ENABLE_GOOGLE_AUTO_FETCH = false;
 
 /* ------------------------------------------------------------------ */
@@ -291,6 +298,10 @@ export default function MapScreenRN({ mapKey }) {
   const [searchInput, setSearchInput] = useState("");   // what user is typing
   const [activeQuery, setActiveQuery] = useState("");   // what we are actually searching
   const [searchOrigin, setSearchOrigin] = useState(null);
+  const { role = "guest" } = useContext(AuthContext);
+  const capabilities = getCapabilities(role);
+  const [searchNotice, setSearchNotice] = useState(null);
+
 
 
   useEffect(() => {
@@ -385,8 +396,7 @@ export default function MapScreenRN({ mapKey }) {
   const handleRegionChangeComplete = async (region) => {
     setMapRegion(region);
     // Temporarily disable requests to Google Places
-    if (!ENABLE_GOOGLE_AUTO_FETCH) {
-      // 🔒 Google auto-fetch disabled intentionally
+    if (!ENABLE_GOOGLE_AUTO_FETCH || !capabilities.canSearchGoogle) {
       return;
     }
     const radius =
@@ -431,12 +441,25 @@ export default function MapScreenRN({ mapKey }) {
   }
 
   function clearSearch() {
+    // Search UI
     setSearchInput("");
     setActiveQuery("");
     setSearchOrigin(null);
-    setGooglePois([]);       // ✅ clears the Google markers/results
-    // Optional: if a temp-promoted google place is selected, clear it too
-    // setTempCrPlace(null);
+    setSearchNotice(null);
+    lastSearchRef.current = "";
+
+    // 🔥 All Google / transient data
+    setGooglePois([]);
+    setTempCrPlace(null);
+
+    // Selection tied to search
+    setSelectedPlaceId(null);
+
+    // Optional but recommended:
+    // if routing was to a Google place, clear it too
+    setRouteDestinationId(null);
+    setRouteCoords([]);
+    setRouteMeta(null);
   }
 
   /* Used for Follow Me mode */
@@ -457,6 +480,11 @@ export default function MapScreenRN({ mapKey }) {
   }
 
   async function doTextSearch({ query, latitude, longitude, radius = 50000 }) {
+    if (!capabilities?.canSearchGoogle) {
+      console.log("[GOOGLE] doTextSearch blocked by capability");
+      return [];
+    }
+
     const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
     if (!apiKey) {
       console.log("[GOOGLE] Missing API key");
@@ -514,6 +542,16 @@ export default function MapScreenRN({ mapKey }) {
   useEffect(() => {
     if (!activeQuery || !searchOrigin) return;
 
+    // 🔒 HARD GATE: guests (or restricted roles) cannot hit Google
+    if (!capabilities.canSearchGoogle) {
+      console.log("[SEARCH] Google search blocked for role");
+      setGooglePois([]); // ensure no stale results linger
+      setSearchNotice({
+        title: "Search restricted",
+        message: "You must log in to use the search function.",
+      });      
+      return;
+    }    
     // Prevent duplicate searches
     if (lastSearchRef.current === activeQuery) return;
     lastSearchRef.current = activeQuery;
@@ -535,6 +573,7 @@ export default function MapScreenRN({ mapKey }) {
         latitude,
         longitude,
         radius,
+        capabilities,
       });
 
       if (cancelled) return;
@@ -580,6 +619,7 @@ export default function MapScreenRN({ mapKey }) {
     }
 
     run();
+    setSearchNotice(null);
     return () => { cancelled = true; };
   }, [activeQuery, searchOrigin]);
 
@@ -662,18 +702,6 @@ export default function MapScreenRN({ mapKey }) {
     if (!selectedPlaceId) return null;
     return visiblePlaces.find((p) => p.id === selectedPlaceId) || null;
   }, [selectedPlaceId, visiblePlaces]);
-
-//  const searchResults = useMemo(() => {
-//    const q = searchQuery.trim().toLowerCase();
-//    if (!q) return [];
-//    return visiblePlaces
-//      .filter((p) => {
-//        const title = p.title?.toLowerCase() || "";
-//        const address = p.address?.toLowerCase() || "";
-//        return title.includes(q) || address.includes(q);
-//      })
-//      .slice(0, 15); // keep it tight
-//  }, [searchQuery, visiblePlaces]);
 
   /* ------------------------------------------------------------ */
   /* ROUTING                                                      */
@@ -769,8 +797,9 @@ export default function MapScreenRN({ mapKey }) {
 
           // Brighter CR markers, muted Google markers; destination green.
           // Temp promoted place treated as CR visually (same family).
-          const fill = "#9CA3AF";
-          const circle = (isCr || isTemp) ? "#FFD85C" : "#C5A041";
+          const fill = (isCr || isTemp) ? theme.colors.accentMid : theme.colors.primaryLight;;
+          const circle = (isCr || isTemp) ? theme.colors.accentLight : theme.colors.accentDark;
+          const stroke = (isCr || isTemp) ? theme.colors.accentDark : theme.colors.primaryDark;;
 
           return (
             <Marker
@@ -779,11 +808,12 @@ export default function MapScreenRN({ mapKey }) {
               onPress={(e) => {
                 e.stopPropagation?.();
 
-                if (poi.source === "google") {
-                  const temp = promoteGoogleToTempCr(poi);
-                  if (temp) setSelectedPlaceId(temp.id);
-                  return;
-                }
+              if (poi.source === "google") {
+                if (!capabilities.canSearchGoogle) return;
+                const temp = promoteGoogleToTempCr(poi);
+                if (temp) setSelectedPlaceId(temp.id);
+                return;
+              }
 
                 // CR or temp (already promoted)
                 setSelectedPlaceId(poi.id);
@@ -793,7 +823,7 @@ export default function MapScreenRN({ mapKey }) {
               zIndex={isDestination ? 1000 : 1}
               tracksViewChanges={true}
             >
-              <SvgPin icon={icon} fill={fill} circle={circle} />
+              <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
             </Marker>
           );
         })}
@@ -805,6 +835,14 @@ export default function MapScreenRN({ mapKey }) {
           zIndex={1000}
         />
       </MapView>
+      
+      
+      {searchNotice && (
+        <View style={styles.noticeBox}>
+          <Text style={styles.noticeTitle}>{searchNotice.title}</Text>
+          <Text style={styles.noticeText}>{searchNotice.message}</Text>
+        </View>
+      )}
 
       <SearchBar
         value={searchInput}
@@ -862,6 +900,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 4,
   },
+
+  noticeBox: {
+    position: "absolute",
+    top: 70,
+    left: 16,
+    right: 16,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#1f2937", // dark slate
+    zIndex: 2000,
+    elevation: 6,
+  },
+
+  noticeTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fbbf24", // amber
+    marginBottom: 2,
+  },
+
+  noticeText: {
+    fontSize: 13,
+    color: "#e5e7eb",
+  },
+
 });
 
 
