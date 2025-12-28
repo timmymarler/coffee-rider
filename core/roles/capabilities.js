@@ -13,6 +13,8 @@ export const ROLE_CAPABILITIES = {
     canCreateGroups: false,
     canJoinGroups: false,
     canShareLocation: false,
+    canSearchCR: false,
+    canSearchGoogle: false,
   },
 
   user: {
@@ -29,6 +31,8 @@ export const ROLE_CAPABILITIES = {
     canCreateGroups: false,
     canJoinGroups: false,
     canShareLocation: false,
+    canSearchCR: true,
+    canSearchGoogle: false,
   },
 
   pro: {
@@ -45,6 +49,8 @@ export const ROLE_CAPABILITIES = {
     canCreateGroups: true,
     canJoinGroups: true,
     canShareLocation: true,
+    canSearchCR: true,
+    canSearchGoogle: true,
   },
 
   admin: {
@@ -64,5 +70,7 @@ export const ROLE_CAPABILITIES = {
     canEditAnyVenue: true,
     canDeleteAnyVenue: true,
     canModerateUsers: true,
+    canSearchCR: true,
+    canSearchGoogle: true,
   }
 };

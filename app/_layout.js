@@ -37,6 +37,7 @@ function FloatingTabBar({ state }) {
     { name: "map", icon: "map" },
     { name: "saved-routes", icon: "git-branch" },
     { name: "profile", icon: "person" },
+    { name: "help", icon: "help" },
   ];
 
   return (
@@ -126,7 +127,46 @@ function FloatingTabBar({ state }) {
             />
           </TouchableOpacity>
         </>
-      )}      
+      )}
+
+
+      {!isMapScreen && (
+      <>
+          {/* separator */}
+          <View
+            style={{
+              width: 1,
+              height: 22,
+              backgroundColor: theme.colors.primaryLight,
+              opacity: 0.4,
+              marginHorizontal: 8,
+            }}
+          />
+
+          {/* Re-centre */}
+          <TouchableOpacity
+            style={{ paddingHorizontal: 6 }}
+          >
+            <MaterialCommunityIcons
+              name="crosshairs-gps"
+              size={22}
+              color={theme.colors.primaryMid}
+            />
+          </TouchableOpacity>
+
+          {/* Follow Me */}
+          <TouchableOpacity
+            style={{ paddingHorizontal: 6 }}
+          >
+            <MaterialCommunityIcons
+              name={"navigation-variant"}
+              size={22}
+              color={theme.colors.primaryMid}
+            />
+          </TouchableOpacity>
+        </>
+      )}
+
     </Animated.View>
   );
 }
@@ -143,6 +183,7 @@ export default function Layout() {
             <Tabs.Screen name="map" />
             <Tabs.Screen name="saved-routes" />
             <Tabs.Screen name="profile" />
+            <Tabs.Screen name="help" />
           </Tabs>
         </TabBarProvider>
       </AuthProvider>

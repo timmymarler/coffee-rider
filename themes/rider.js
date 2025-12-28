@@ -1,4 +1,8 @@
 export default {
+  brandName: {
+    name: "Rider"
+  },
+  
   colors: {
     background: "#000",
     primary: "#1e90ff",
