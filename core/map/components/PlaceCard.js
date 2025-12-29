@@ -78,24 +78,21 @@ export default function PlaceCard({
   const canNavigate = capabilities.canNavigate === true;
   const canRate = capabilities.canRate === true;
   const currentUid = user?.uid || null;
-  
   const isManualOnly = place?.source === "manual";
   const isGoogle = place?.source === "google";
   const isGoogleNew = place?.source === "google-new";
   const isCr = place?.source === "cr";
   const isRealCr = place.source === "cr" && !place._temp;
-
-  const isCreateMode = isManualOnly || isGoogleNew;
-
   const uid = user?.uid;
-
   const userCrRating =
     uid && place.crRatings?.users?.[uid]?.rating
       ? place.crRatings.users[uid].rating
       : 0;
-
   const [selectedRating, setSelectedRating] = useState(userCrRating);
-  const [justSaved, setJustSaved] = useState(false);
+  const canAddPlace = place.source !== "cr" && !place._justAdded;
+  const isCrPlace = place.source === "cr";
+  const isEditable = place.source !== "cr"; // add flow only (for now)
+
 
   useEffect(() => {
     setSelectedRating(userCrRating);
@@ -211,12 +208,10 @@ export default function PlaceCard({
   }
 
   const toggleSuitability = (key) => {
-    if (!isCreateMode) return;
     setSuitabilityState((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const toggleAmenity = (key) => {
-    if (!isCreateMode) return;
     setAmenitiesState((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -254,11 +249,15 @@ export default function PlaceCard({
   /* ------------------------------------------------------------------ */
 
   const handleSavePlace = async () => {
-    if (!isCreateMode || !currentUid) return;
+
+    const selectedAmenities = Object.values(amenitiesState).some(Boolean);
+    if (!selectedAmenities) {
+      console.log("[SAVE PLACE] no amenities selected");
+      return;
+    }
 
     const name = manualName.trim() || place.title || "Untitled place";
     const { latitude, longitude } = place;
-
     if (!latitude || !longitude) return;
 
     const amenities = Object.entries(amenitiesState)
@@ -294,23 +293,8 @@ export default function PlaceCard({
             : { average: null, count: 0, users: {} },
       });
 
-      onPlaceCreated?.({
-        id: placeRef.id,
-        source: "cr",
-        title: name,
-        latitude,
-        longitude,
-        category: manualCategory ?? place.category ?? null,
-        suitability: suitabilityState,
-        amenities,
-        googlePhotoUrls: place.googlePhotoUrls || [],
-      });
-
-      setJustSaved(true);
-
-      setTimeout(() => {
-        setJustSaved(false);
-      }, 1200);
+      // 🔔 notify parent (THIS is what triggers postbox)
+      onPlaceCreated?.(name, placeRef.id);
 
     } catch (err) {
       console.log("[SAVE PLACE] failed", err);
@@ -549,108 +533,75 @@ export default function PlaceCard({
             ) : null}
           </View>
 
-          {/* Add user rating (REAL CR ONLY) */}
-          {isRealCr && canRate ? (
-            <View style={styles.rateRow}>
-              {[1, 2, 3, 4, 5].map((value) => (
-                <TouchableOpacity
-                  key={value}
-                  onPress={() => {
-                    setSelectedRating(value);
-                    handleSaveRating(value);
-                  }}
-                  style={styles.starButton}
-                >
-                  <Text
-                    style={[
-                      styles.star,
-                      value <= selectedRating && styles.starActive,
-                    ]}
-                  >
-                    ★
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : null}
-
-
           {/* Suitability */}
-          {isRealCr && (
-            <>
-              <Text style={styles.crLabel}>Suitability</Text>
-              <View style={styles.amenitiesRow}>
-                {Object.keys(defaultSuitability).map((key) => (
-                  <TouchableOpacity
-                    key={key}
-                    onPress={() => toggleSuitability(key)}
-                    activeOpacity={isCreateMode ? 0.7 : 1}
-                  >
-                    {amenityIcon(
-                      suitabilityState[key],
-                      key === "bikers"
-                        ? "motorbike"
-                        : key === "scooters"
-                        ? "moped"
-                        : key === "cyclists"
-                        ? "bike"
-                        : key === "walkers"
-                        ? "walk"
-                        : key === "cars"
-                        ? "car"
-                        : "car-electric"
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </>
-          )}
+          <Text style={styles.crLabel}>Suitability</Text>
+          <View style={styles.amenitiesRow}>
+            {Object.keys(defaultSuitability).map((key) => (
+              <TouchableOpacity
+                key={key}
+                disabled={!isEditable}
+                onPress={() => isEditable && toggleSuitability(key)}
+                style={{ opacity: isEditable ? 1 : 0.5 }}
+              >
+                {amenityIcon(
+                  suitabilityState[key],
+                  key === "bikers"
+                    ? "motorbike"
+                    : key === "scooters"
+                    ? "moped"
+                    : key === "cyclists"
+                    ? "bike"
+                    : key === "walkers"
+                    ? "walk"
+                    : key === "cars"
+                    ? "car"
+                    : "car-electric"
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
 
           {/* Amenities */}
-          {isRealCr && (
-            <>
-              <Text style={styles.crLabel}>Amenities</Text>
-              <View style={styles.amenitiesRow}>
-                {Object.keys(defaultAmenities).map((key) => (
-                  <TouchableOpacity
-                    key={key}
-                    onPress={() => toggleAmenity(key)}
-                    activeOpacity={isCreateMode ? 0.7 : 1}
-                  >
-                    {amenityIcon(
-                      amenitiesState[key],
-                      key === "parking"
-                        ? "parking"
-                        : key === "motorcycleParking"
-                        ? "motorbike"
-                        : key === "evCharger"
-                        ? "ev-plug-ccs2"
-                        : key === "toilets"
-                        ? "toilet"
-                        : key === "petFriendly"
-                        ? "dog-side"
-                        : key === "disabledAccess"
-                        ? "wheelchair-accessibility"
-                        : "table-picnic"
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </>
-          )}
+          <Text style={styles.crLabel}>Amenities</Text>
+          <View style={styles.amenitiesRow}>
+            {Object.keys(defaultAmenities).map((key) => (
+              <TouchableOpacity
+                key={key}
+                disabled={!isEditable}
+                onPress={() => isEditable && toggleAmenity(key)}
+                style={{ opacity: isEditable ? 1 : 0.5 }}
+              >
+                {amenityIcon(
+                  amenitiesState[key],
+                  key === "parking"
+                    ? "parking"
+                    : key === "motorcycleParking"
+                    ? "motorbike"
+                    : key === "evCharger"
+                    ? "ev-plug-ccs2"
+                    : key === "toilets"
+                    ? "toilet"
+                    : key === "petFriendly"
+                    ? "dog-side"
+                    : key === "disabledAccess"
+                    ? "wheelchair-accessibility"
+                    : "table-picnic"
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
 
-          {isCreateMode && (
-            <TouchableOpacity
-              style={styles.primaryButton}
-              disabled={justSaved}
-              onPress={handleSavePlace}
-            >
-              <Text style={styles.primaryButtonText}>
-                {justSaved ? "Saved ✓" : "Add this place"}
-              </Text>
-            </TouchableOpacity>
-          )}
 
+            {canAddPlace && (
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={handleSavePlace}
+              >
+                <Text style={styles.primaryButtonText}>
+                  Add this place
+                </Text>
+              </TouchableOpacity>
+            )}
         </View>
       </ScrollView>
     </View>
@@ -668,7 +619,7 @@ function createStyles(theme) {
       bottom: 100,
       left: 10,
       right: 10,
-      maxHeight: "35%",
+      maxHeight: "65%",
       backgroundColor: theme.colors.primaryDark,
       borderRadius: 16,
       overflow: "hidden",
@@ -885,6 +836,13 @@ function createStyles(theme) {
     primaryAction: {
       backgroundColor: theme.colors.primary, // primary blue
     },
+
+    savedHint: {
+      marginTop: 8,
+      fontSize: 13,
+      color: theme.colors.accentMid,
+      textAlign: "center",
+    }
     
   };
 }

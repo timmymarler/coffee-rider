@@ -48,7 +48,7 @@ export function SearchBar({
                 onSubmit(trimmed);
               }
             }}
-            placeholder="Search visible area…"
+            placeholder="Search places…"
             placeholderTextColor={theme.colors.accentMid}
             style={[styles.searchInput, { color: theme.colors.accentMid }]}
             returnKeyType="search"

@@ -301,6 +301,8 @@ export default function MapScreenRN({ mapKey }) {
   const { role = "guest" } = useContext(AuthContext);
   const capabilities = getCapabilities(role);
   const [searchNotice, setSearchNotice] = useState(null);
+  const [postbox, setPostbox] = useState(null);
+  const isSearchActive = !!activeQuery;
 
 
 
@@ -418,7 +420,7 @@ export default function MapScreenRN({ mapKey }) {
     const temp = {
       ...googlePlace,
       id: `temp-${googlePlace.id}`,
-      source: "cr",       // treat like CR for visibility/priority
+      source: "google",   // treat like CR for visibility/priority
       _temp: true,        // flag for us
       _googleId: googlePlace.id,
     };
@@ -530,6 +532,16 @@ export default function MapScreenRN({ mapKey }) {
   }
 
   useEffect(() => {
+    if (!postbox) return;
+
+    const timer = setTimeout(() => {
+      setPostbox(null);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [postbox]);
+
+  useEffect(() => {
     setMapActions({
       recenter: recentreToCurrentPosition,
       toggleFollow: toggleFollowMe,
@@ -632,8 +644,10 @@ export default function MapScreenRN({ mapKey }) {
   const visiblePlaces = useMemo(() => {
 
     if (!mapRegion || !paddedRegion) return [];
-
     const dedupedGoogle = dedupeByProximity(crPlaces, googlePois);
+    const searchActive = !!activeQuery;
+    const isSearchHit = (place) =>
+      searchActive && matchesQuery(place, activeQuery);
 
     // Base candidates: (optional temp CR) + CR + Google
     let candidates = tempCrPlace
@@ -664,25 +678,32 @@ export default function MapScreenRN({ mapKey }) {
 
     let result = [...cr, ...google].slice(0, 20);
 
-    // Force include selected place (prevents card/marker disappearing if it falls out of top 20)
+    // Force include selected place
     if (selectedPlaceId) {
-      const forced =
-        candidates.find((p) => p.id === selectedPlaceId) ||
-        (tempCrPlace && tempCrPlace.id === selectedPlaceId ? tempCrPlace : null);
-
+      const forced = candidates.find((p) => p.id === selectedPlaceId);
       if (forced && !result.some((p) => p.id === forced.id)) {
-        result = [...result, forced];
+        result.push(forced);
       }
     }
 
-    // Force include route destination (same reason)
+    // Force include route destination
     if (routeDestinationId) {
-      const forced =
-        candidates.find((p) => p.id === routeDestinationId) ||
-        (tempCrPlace && tempCrPlace.id === routeDestinationId ? tempCrPlace : null);
-
+      const forced = candidates.find((p) => p.id === routeDestinationId);
       if (forced && !result.some((p) => p.id === forced.id)) {
-        result = [...result, forced];
+        result.push(forced);
+      }
+    }
+
+    // 🔍 Force include search hits (ONLY while search is active)
+    if (searchActive) {
+      const searchHits = candidates.filter((p) =>
+        matchesQuery(p, activeQuery)
+      );
+
+      for (const p of searchHits) {
+        if (!result.some((r) => r.id === p.id)) {
+          result.push(p);
+        }
       }
     }
 
@@ -696,6 +717,7 @@ export default function MapScreenRN({ mapKey }) {
     selectedPlaceId,
     tempCrPlace,
     routeDestinationId,
+    activeQuery,
   ]);
 
   const selectedPlace = useMemo(() => {
@@ -790,16 +812,62 @@ export default function MapScreenRN({ mapKey }) {
         {visiblePlaces.map((poi) => {
           const category = poi.category || "unknown";
           const icon = getIconForCategory(category);
-
           const isCr = poi.source === "cr" && !poi._temp;
-          const isTemp = !!poi._temp;
           const isDestination = routeDestinationId && poi.id === routeDestinationId;
+          const isTemp = !!poi._temp;
+          const isSearchHitCR =
+            isSearchActive && isCr && matchesQuery(poi, activeQuery);
+          const isSearchHitGoogle =
+            isSearchActive && !isCr && matchesQuery(poi, activeQuery);
 
-          // Brighter CR markers, muted Google markers; destination green.
-          // Temp promoted place treated as CR visually (same family).
-          const fill = (isCr || isTemp) ? theme.colors.accentMid : theme.colors.primaryLight;;
-          const circle = (isCr || isTemp) ? theme.colors.accentLight : theme.colors.accentDark;
-          const stroke = (isCr || isTemp) ? theme.colors.accentDark : theme.colors.primaryDark;;
+
+          let markerMode = "default";
+          if (isDestination) {
+            markerMode = "destination";
+          } else if (isSearchHitCR) {
+            markerMode = "searchCR";
+          } else if (isSearchHitGoogle) {
+            markerMode = "searchGoogle";
+          } else if (isCr) {
+            markerMode = "cr";
+          } else if (isTemp) {
+            markerMode = "temp";
+          }
+
+          const markerStyles = {
+            destination: {
+              fill: theme.colors.primaryDark,
+              circle: theme.colors.primaryDark,
+              stroke: theme.colors.primaryLight,
+            },
+            searchCR: {
+              fill: theme.colors.accent,
+              circle: theme.colors.accent,
+              stroke: theme.colors.danger,
+            },
+            searchGoogle: {
+              fill: theme.colors.primaryLight,
+              circle: theme.colors.primaryLight,
+              stroke: theme.colors.primaryDark,
+            },
+            cr: {
+              fill: theme.colors.accentMid,
+              circle: theme.colors.accentLight,
+              stroke: theme.colors.accentDark,
+            },
+            temp: {
+              fill: theme.colors.primaryLight,
+              circle: theme.colors.primaryLight,
+              stroke: theme.colors.primaryDark,
+            },
+            default: {
+              fill: theme.colors.primaryLight,
+              circle: theme.colors.accentDark,
+              stroke: theme.colors.primaryDark,
+            },
+          };
+
+          const { fill, circle, stroke } = markerStyles[markerMode];
 
           return (
             <Marker
@@ -843,6 +911,12 @@ export default function MapScreenRN({ mapKey }) {
           <Text style={styles.noticeText}>{searchNotice.message}</Text>
         </View>
       )}
+      {postbox && (
+        <View style={styles.postbox}>
+          <Text style={styles.postboxTitle}>{postbox.title}</Text>
+          <Text style={styles.postboxText}>{postbox.message}</Text>
+        </View>
+      )}
 
       <SearchBar
         value={searchInput}
@@ -878,6 +952,16 @@ export default function MapScreenRN({ mapKey }) {
             clearTempIfSafe();
           }}
           onNavigate={handleNavigate}
+          onPlaceCreated={(name, newCrId) => {
+            // Show feedback
+            setPostbox({
+              title: "Place added",
+              message: `${name} has been added to Coffee Rider`,
+            });
+
+            // Switch selection to the real CR place
+            setSelectedPlaceId(newCrId);
+          }}
         />
       )}
     </View>
@@ -923,6 +1007,29 @@ const styles = StyleSheet.create({
   noticeText: {
     fontSize: 13,
     color: "#e5e7eb",
+  },
+  postbox: {
+    position: "absolute",
+    top: 70,
+    left: 16,
+    right: 16,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#064e3b", // dark green
+    zIndex: 2000,
+    elevation: 6,
+  },
+
+  postboxTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6ee7b7", // mint
+    marginBottom: 2,
+  },
+
+  postboxText: {
+    fontSize: 13,
+    color: "#ecfdf5",
   },
 
 });
