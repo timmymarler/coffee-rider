@@ -306,8 +306,9 @@ export default function MapScreenRN({ mapKey }) {
   const [crPlaces, setCrPlaces] = useState([]);
   const [googlePois, setGooglePois] = useState([]);
 
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const filtersActive = filters.categories.size > 0 || filters.amenities.size > 0;
+  const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
+  const filtersActive = appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0;
   const [userLocation, setUserLocation] = useState(null);
 
   const [mapRegion, setMapRegion] = useState(null);
@@ -335,7 +336,6 @@ export default function MapScreenRN({ mapKey }) {
   const [searchNotice, setSearchNotice] = useState(null);
   const [postbox, setPostbox] = useState(null);
   const isSearchActive = !!activeQuery;
-
 
 
   useEffect(() => {
@@ -664,12 +664,17 @@ export default function MapScreenRN({ mapKey }) {
 
     let list = crPlaces.filter((p) => inRegion(p, paddedRegion));
 
-    if (filters.categories.size || filters.amenities.size) {
-      list = list.filter((p) => applyFilters(p, filters));
-    }
+      if (
+        appliedFilters.categories.size ||
+        appliedFilters.amenities.size
+      ) {
+        list = list.filter((p) =>
+          applyFilters(p, appliedFilters)
+        );
+      }
 
     return list;
-  }, [crPlaces, paddedRegion, filters]);
+  }, [crPlaces, paddedRegion, appliedFilters]);
 
   const searchMarkers = useMemo(() => {
     if (!activeQuery) return [];
@@ -874,7 +879,7 @@ export default function MapScreenRN({ mapKey }) {
           <Text style={styles.filterSection}>Categories</Text>
           <View style={styles.iconGrid}>
             {FILTER_CATEGORIES.map((c) => {
-              const active = filters.categories.has(c.key);
+              const active = draftFilters.categories.has(c.key);
 
               return (
                 <TouchableOpacity
@@ -884,7 +889,7 @@ export default function MapScreenRN({ mapKey }) {
                     active && styles.iconButtonActive,
                   ]}
                   onPress={() =>
-                    setFilters((prev) => ({
+                    setDraftFilters((prev) => ({
                       ...prev,
                       categories: toggleFilter(prev.categories, c.key),
                     }))
@@ -915,7 +920,7 @@ export default function MapScreenRN({ mapKey }) {
 
           <View style={styles.iconGrid}>
             {FILTER_AMENITIES.map((a) => {
-              const active = filters.amenities.has(a.key);
+              const active = draftFilters.amenities.has(a.key);
 
               return (
                 <TouchableOpacity
@@ -925,11 +930,11 @@ export default function MapScreenRN({ mapKey }) {
                     active && styles.iconButtonActive,
                   ]}
                   onPress={() =>
-                    setFilters((prev) => ({
+                    setDraftFilters((prev) => ({
                       ...prev,
                       amenities: toggleFilter(prev.amenities, a.key),
-                    }))
-                  }
+                    })
+                  )}
                 >
                   <MaterialCommunityIcons
                     name={AMENITY_ICON_MAP[a.key] || "check"}
@@ -951,14 +956,21 @@ export default function MapScreenRN({ mapKey }) {
 
           <TouchableOpacity
             style={styles.filterClear}
-            onPress={() => setFilters(EMPTY_FILTERS)}
+            onPress={() => {
+              setDraftFilters(EMPTY_FILTERS);
+              setAppliedFilters(EMPTY_FILTERS);
+              setShowFilters(false);
+            }}
           >
             <Text style={styles.filterClearText}>Clear filters</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.filterDone}
-            onPress={() => setShowFilters(false)}
+            onPress={() => {
+              setAppliedFilters(draftFilters);
+              setShowFilters(false);
+            }}
           >
             <Text style={styles.filterDoneText}>Done</Text>
           </TouchableOpacity>
