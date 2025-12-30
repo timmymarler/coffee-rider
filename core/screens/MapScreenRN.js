@@ -443,25 +443,11 @@ export default function MapScreenRN({ mapKey }) {
   }
 
   function clearSearch() {
-    // Search UI
+    setActiveQuery("");
+    setGooglePois([]);
     setSearchInput("");
     setActiveQuery("");
-    setSearchOrigin(null);
-    setSearchNotice(null);
-    lastSearchRef.current = "";
 
-    // 🔥 All Google / transient data
-    setGooglePois([]);
-    setTempCrPlace(null);
-
-    // Selection tied to search
-    setSelectedPlaceId(null);
-
-    // Optional but recommended:
-    // if routing was to a Google place, clear it too
-    setRouteDestinationId(null);
-    setRouteCoords([]);
-    setRouteMeta(null);
   }
 
   /* Used for Follow Me mode */
@@ -641,89 +627,38 @@ export default function MapScreenRN({ mapKey }) {
 
   const paddedRegion = useMemo(() => expandRegion(mapRegion, 1.4), [mapRegion]);
 
-  const visiblePlaces = useMemo(() => {
+  const crMarkers = useMemo(() => {
+    if (!paddedRegion) return [];
 
-    if (!mapRegion || !paddedRegion) return [];
-    const dedupedGoogle = dedupeByProximity(crPlaces, googlePois);
-    const searchActive = !!activeQuery;
-    const isSearchHit = (place) =>
-      searchActive && matchesQuery(place, activeQuery);
+    let list = crPlaces.filter((p) => inRegion(p, paddedRegion));
 
-    // Base candidates: (optional temp CR) + CR + Google
-    let candidates = tempCrPlace
-      ? [tempCrPlace, ...crPlaces, ...dedupedGoogle]
-      : [...crPlaces, ...dedupedGoogle];
-
-    // Always apply region culling (buffered), but NEVER cull:
-    // - temp promoted place
-    // - route destination
-    candidates = candidates.filter((p) => {
-      if (tempCrPlace && p.id === tempCrPlace.id) return true;
-      if (routeDestinationId && p.id === routeDestinationId) return true;
-      return inRegion(p, paddedRegion);
-    });
-
-    // Hard filters (if any)
     if (filters.categories.size || filters.amenities.size) {
-      candidates = candidates.filter((p) => applyFilters(p, filters));
+      list = list.filter((p) => applyFilters(p, filters));
     }
 
-    // CR first (includes temp because we set source="cr"), then Google
-    const cr = candidates.filter((p) => p.source === "cr");
-    const google = candidates.filter((p) => p.source !== "cr");
+    return list;
+  }, [crPlaces, paddedRegion, filters]);
 
-    const byRating = (a, b) => (b.rating || 0) - (a.rating || 0);
-    cr.sort(byRating);
-    google.sort(byRating);
+  const searchMarkers = useMemo(() => {
+    if (!activeQuery) return [];
+    if (!paddedRegion) return [];
 
-    let result = [...cr, ...google].slice(0, 20);
-
-    // Force include selected place
-    if (selectedPlaceId) {
-      const forced = candidates.find((p) => p.id === selectedPlaceId);
-      if (forced && !result.some((p) => p.id === forced.id)) {
-        result.push(forced);
-      }
-    }
-
-    // Force include route destination
-    if (routeDestinationId) {
-      const forced = candidates.find((p) => p.id === routeDestinationId);
-      if (forced && !result.some((p) => p.id === forced.id)) {
-        result.push(forced);
-      }
-    }
-
-    // 🔍 Force include search hits (ONLY while search is active)
-    if (searchActive) {
-      const searchHits = candidates.filter((p) =>
-        matchesQuery(p, activeQuery)
-      );
-
-      for (const p of searchHits) {
-        if (!result.some((r) => r.id === p.id)) {
-          result.push(p);
-        }
-      }
-    }
-
-    return result;
-  }, [
-    crPlaces,
-    googlePois,
-    mapRegion,
-    paddedRegion,
-    filters,
-    selectedPlaceId,
-    tempCrPlace,
-    routeDestinationId,
-    activeQuery,
-  ]);
+    return googlePois.filter((p) => inRegion(p, paddedRegion));
+  }, [googlePois, paddedRegion, activeQuery]);
 
   const selectedPlace = useMemo(() => {
     if (!selectedPlaceId) return null;
-    return visiblePlaces.find((p) => p.id === selectedPlaceId) || null;
-  }, [selectedPlaceId, visiblePlaces]);
+
+    if (tempCrPlace && tempCrPlace.id === selectedPlaceId) {
+      return tempCrPlace;
+    }
+
+    return (
+      crMarkers.find((p) => p.id === selectedPlaceId) ||
+      searchMarkers.find((p) => p.id === selectedPlaceId) ||
+      null
+    );
+  }, [selectedPlaceId, crMarkers, searchMarkers, tempCrPlace]);
 
   /* ------------------------------------------------------------ */
   /* ROUTING                                                      */
@@ -782,6 +717,83 @@ export default function MapScreenRN({ mapKey }) {
   /* ------------------------------------------------------------ */
   /* RENDER                                                       */
   /* ------------------------------------------------------------ */
+  const renderMarker = (poi) => {
+    const category = poi.category || "unknown";
+    const icon = getIconForCategory(category);
+
+    const isCr = poi.source === "cr" && !poi._temp;
+    const isDestination = routeDestinationId && poi.id === routeDestinationId;
+    const isTemp = !!poi._temp;
+
+    const isSearchHitCR = activeQuery && isCr && matchesQuery(poi, activeQuery);
+    const isSearchHitGoogle = activeQuery && !isCr && matchesQuery(poi, activeQuery);
+
+    let markerMode = "default";
+    if (isDestination) markerMode = "destination";
+    else if (isSearchHitCR) markerMode = "searchCR";
+    else if (isSearchHitGoogle) markerMode = "searchGoogle";
+    else if (isCr) markerMode = "cr";
+    else if (isTemp) markerMode = "temp";
+
+    const markerStyles = {
+      destination: {
+        fill: theme.colors.primaryDark,
+        circle: theme.colors.primaryDark,
+        stroke: theme.colors.primaryLight,
+      },
+      searchCR: {
+        fill: theme.colors.accent,
+        circle: theme.colors.accent,
+        stroke: theme.colors.danger,
+      },
+      searchGoogle: {
+        fill: theme.colors.primaryLight,
+        circle: theme.colors.primaryLight,
+        stroke: theme.colors.primaryDark,
+      },
+      cr: {
+        fill: theme.colors.accentMid,
+        circle: theme.colors.accentLight,
+        stroke: theme.colors.accentDark,
+      },
+      temp: {
+        fill: theme.colors.primaryLight,
+        circle: theme.colors.primaryLight,
+        stroke: theme.colors.primaryDark,
+      },
+      default: {
+        fill: theme.colors.primaryLight,
+        circle: theme.colors.accentDark,
+        stroke: theme.colors.primaryDark,
+      },
+    };
+
+    const { fill, circle, stroke } = markerStyles[markerMode];
+
+    return (
+      <Marker
+        key={`${poi.source}-${poi.id}`}
+        coordinate={{ latitude: poi.latitude, longitude: poi.longitude }}
+        onPress={(e) => {
+          e.stopPropagation?.();
+
+          if (poi.source === "google") {
+            if (!capabilities.canSearchGoogle) return;
+            const temp = promoteGoogleToTempCr(poi);
+            if (temp) setSelectedPlaceId(temp.id);
+            return;
+          }
+
+          setSelectedPlaceId(poi.id);
+        }}
+        anchor={{ x: 0.5, y: 1 }}
+        zIndex={isDestination ? 1000 : 1}
+        tracksViewChanges={true}
+      >
+        <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
+      </Marker>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -809,92 +821,9 @@ export default function MapScreenRN({ mapKey }) {
           longitudeDelta: 0.15,
         }}
       >
-        {visiblePlaces.map((poi) => {
-          const category = poi.category || "unknown";
-          const icon = getIconForCategory(category);
-          const isCr = poi.source === "cr" && !poi._temp;
-          const isDestination = routeDestinationId && poi.id === routeDestinationId;
-          const isTemp = !!poi._temp;
-          const isSearchHitCR =
-            isSearchActive && isCr && matchesQuery(poi, activeQuery);
-          const isSearchHitGoogle =
-            isSearchActive && !isCr && matchesQuery(poi, activeQuery);
 
-
-          let markerMode = "default";
-          if (isDestination) {
-            markerMode = "destination";
-          } else if (isSearchHitCR) {
-            markerMode = "searchCR";
-          } else if (isSearchHitGoogle) {
-            markerMode = "searchGoogle";
-          } else if (isCr) {
-            markerMode = "cr";
-          } else if (isTemp) {
-            markerMode = "temp";
-          }
-
-          const markerStyles = {
-            destination: {
-              fill: theme.colors.primaryDark,
-              circle: theme.colors.primaryDark,
-              stroke: theme.colors.primaryLight,
-            },
-            searchCR: {
-              fill: theme.colors.accent,
-              circle: theme.colors.accent,
-              stroke: theme.colors.danger,
-            },
-            searchGoogle: {
-              fill: theme.colors.primaryLight,
-              circle: theme.colors.primaryLight,
-              stroke: theme.colors.primaryDark,
-            },
-            cr: {
-              fill: theme.colors.accentMid,
-              circle: theme.colors.accentLight,
-              stroke: theme.colors.accentDark,
-            },
-            temp: {
-              fill: theme.colors.primaryLight,
-              circle: theme.colors.primaryLight,
-              stroke: theme.colors.primaryDark,
-            },
-            default: {
-              fill: theme.colors.primaryLight,
-              circle: theme.colors.accentDark,
-              stroke: theme.colors.primaryDark,
-            },
-          };
-
-          const { fill, circle, stroke } = markerStyles[markerMode];
-
-          return (
-            <Marker
-              key={`${poi.source}-${poi.id}`}
-              coordinate={{ latitude: poi.latitude, longitude: poi.longitude }}
-              onPress={(e) => {
-                e.stopPropagation?.();
-
-              if (poi.source === "google") {
-                if (!capabilities.canSearchGoogle) return;
-                const temp = promoteGoogleToTempCr(poi);
-                if (temp) setSelectedPlaceId(temp.id);
-                return;
-              }
-
-                // CR or temp (already promoted)
-                setSelectedPlaceId(poi.id);
-
-              }}
-              anchor={{ x: 0.5, y: 1 }}
-              zIndex={isDestination ? 1000 : 1}
-              tracksViewChanges={true}
-            >
-              <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
-            </Marker>
-          );
-        })}
+        {crMarkers.map(renderMarker)}
+        {searchMarkers.map(renderMarker)}
 
         <Polyline
           coordinates={routeCoords}
