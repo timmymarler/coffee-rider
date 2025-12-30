@@ -2,7 +2,7 @@ import { db } from "@config/firebase";
 import { TabBarContext } from "@context/TabBarContext";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 
 import PlaceCard from "../map/components/PlaceCard";
@@ -20,6 +20,7 @@ import { openNativeNavigation } from "../map/utils/navigation";
 
 import { AuthContext } from "@context/AuthContext";
 import { getCapabilities } from "@core/roles/getCapabilities";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 
 
@@ -41,6 +42,30 @@ const CATEGORY_ICON_MAP = {
   scooters: "moped",
   unknown: "map-marker",
 };
+
+const FILTER_CATEGORIES = [
+  { key: "cafe", label: "Cafés", icon: "coffee" },
+  { key: "restaurant", label: "Food", icon: "silverware-fork-knife" },
+  { key: "pub", label: "Pubs", icon: "beer" },
+  { key: "bikes", label: "Bike Shop", icon: "motorbike" },
+  { key: "fuel", label: "Fuel", icon: "gas-station" },
+  { key: "parking", label: "Parking", icon: "parking" },
+  { key: "scenic", label: "Scenic", icon: "forest" },
+];
+
+const AMENITY_ICON_MAP = {
+  motorcycle_parking: "motorbike",
+  toilets: "toilet",
+  outdoor_seating: "table-picnic",
+  ev_charger: "ev-station",
+};
+
+/* Rider focussed for now - add theme specific later */
+const FILTER_AMENITIES = [
+  { key: "motorcycle_parking", label: "Bike parking" },
+  { key: "toilets", label: "Toilets" },
+  { key: "outdoor_seating", label: "Outdoor seating" },
+];
 
 /* ------------------------------------------------------------------ */
 /* FILTER STATE                                                       */
@@ -132,6 +157,12 @@ function matchesQuery(place, query) {
   const address = place.address?.toLowerCase() || "";
 
   return title.includes(q) || address.includes(q);
+}
+
+function toggleFilter(set, value) {
+  const next = new Set(set);
+  next.has(value) ? next.delete(value) : next.add(value);
+  return next;
 }
 
 /* ------------------------------------------------------------------ */
@@ -276,6 +307,7 @@ export default function MapScreenRN({ mapKey }) {
   const [googlePois, setGooglePois] = useState([]);
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const filtersActive = filters.categories.size > 0 || filters.amenities.size > 0;
   const [userLocation, setUserLocation] = useState(null);
 
   const [mapRegion, setMapRegion] = useState(null);
@@ -805,7 +837,10 @@ export default function MapScreenRN({ mapKey }) {
         showsMyLocationButton={false}
         onRegionChangeComplete={handleRegionChangeComplete}
         onPress={() => {
-          // Only clear selection if no active route
+          if (showFilters) {
+            setShowFilters(false);
+            return;
+          }
           if (!routeCoords.length) {
             setSelectedPlaceId(null);
             clearTempIfSafe();
@@ -833,6 +868,102 @@ export default function MapScreenRN({ mapKey }) {
         />
       </MapView>
       
+      {showFilters && (
+        <View style={styles.filterPanel}>
+
+          <Text style={styles.filterSection}>Categories</Text>
+          <View style={styles.iconGrid}>
+            {FILTER_CATEGORIES.map((c) => {
+              const active = filters.categories.has(c.key);
+
+              return (
+                <TouchableOpacity
+                  key={c.key}
+                  style={[
+                    styles.iconButton,
+                    active && styles.iconButtonActive,
+                  ]}
+                  onPress={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      categories: toggleFilter(prev.categories, c.key),
+                    }))
+                  }
+                >
+                  <SvgPin
+                    icon={c.icon}
+                    size={32}
+                    fill={active ? theme.colors.accent : theme.colors.primaryLight}
+                    circle={active ? theme.colors.accent : theme.colors.accentDark}
+                    stroke={active ? theme.colors.primaryDark : theme.colors.primaryDark}
+                  />
+
+                  <Text
+                    style={[
+                      styles.iconLabel,
+                      active && styles.iconLabelActive,
+                    ]}
+                  >
+                    {c.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={styles.filterSection}>Amenities</Text>
+
+          <View style={styles.iconGrid}>
+            {FILTER_AMENITIES.map((a) => {
+              const active = filters.amenities.has(a.key);
+
+              return (
+                <TouchableOpacity
+                  key={a.key}
+                  style={[
+                    styles.iconButton,
+                    active && styles.iconButtonActive,
+                  ]}
+                  onPress={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      amenities: toggleFilter(prev.amenities, a.key),
+                    }))
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name={AMENITY_ICON_MAP[a.key] || "check"}
+                    size={22}
+                    color={active ? theme.colors.accent : theme.colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.iconLabel,
+                      active && styles.iconLabelActive,
+                    ]}
+                  >
+                    {a.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <TouchableOpacity
+            style={styles.filterClear}
+            onPress={() => setFilters(EMPTY_FILTERS)}
+          >
+            <Text style={styles.filterClearText}>Clear filters</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.filterDone}
+            onPress={() => setShowFilters(false)}
+          >
+            <Text style={styles.filterDoneText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       
       {searchNotice && (
         <View style={styles.noticeBox}>
@@ -852,9 +983,11 @@ export default function MapScreenRN({ mapKey }) {
         onChange={setSearchInput}
         onSubmit={(query) => {
           setActiveQuery(query);
-          setSearchOrigin(mapRegion); // 🔒 snapshot once
+          setSearchOrigin(mapRegion);
         }}
         onClear={clearSearch}
+        onFilterPress={() => setShowFilters(true)}
+        filtersActive={filtersActive}
       />
 
       {selectedPlace && (
@@ -959,6 +1092,98 @@ const styles = StyleSheet.create({
   postboxText: {
     fontSize: 13,
     color: "#ecfdf5",
+  },
+  
+  filterPanel: {
+    position: "absolute",
+    top: 100,
+    right: 12,
+    bottom: 100,
+    width: 220,
+    backgroundColor: theme.colors.primaryLight,
+    padding: 12,
+    borderRadius: 16,
+    zIndex: 3000,
+    elevation: 8,
+    backgroundColor: theme.colors.surfaceOverlay || "rgba(15,23,42,0.8)",
+  },
+
+  filterSection: {
+    marginTop: 12,
+    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: "500",
+    color: theme.colors.accentMid,
+  },
+
+  filterRow: {
+    paddingVertical: 10,
+  },
+
+  filterLabel: {
+    fontSize: 14,
+    color: theme.colors.primaryLight,
+  },
+
+  filterLabelActive: {
+    color: theme.colors.accentMid,
+    fontWeight: "600",
+  },
+
+  filterClear: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: theme.colors.accentDark,
+    alignItems: "center",
+  },
+
+  filterClearText: {
+    color: theme.colors.primaryDark,
+  },
+
+  filterDone: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: theme.colors.primaryDark,
+    alignItems: "center",
+  },
+
+  filterDoneText: {
+    color: theme.colors.accentDark,
+    fontWeight: "600",
+  },
+
+  iconGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+
+  iconButton: {
+    width: "48%",
+    alignItems: "center",
+    paddingVertical: 10,
+    marginBottom: 8,
+    borderRadius: 12,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+
+  iconButtonActive: {
+    backgroundColor: theme.colors.surfaceHighlight,
+  },
+
+  iconLabel: {
+    marginTop: 4,
+    fontSize: 11,
+    color: theme.colors.accentDark,
+    textAlign: "center",
+  },
+
+  iconLabelActive: {
+    color: theme.colors.accent,
+    fontWeight: "600",
   },
 
 });

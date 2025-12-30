@@ -15,6 +15,7 @@ export function SearchBar({
   isLoading = false,
   onClear,
   onFilterPress,
+  filtersActive = false,
 }) {
   const styles = createStyles(theme);
 
@@ -83,7 +84,7 @@ export function SearchBar({
           <Ionicons
             name="options"
             size={20}
-            color={theme.colors.primaryDark}
+            color={filtersActive ? theme.colors.accent : theme.colors.primaryLight}
           />
         </TouchableOpacity>
       </View>

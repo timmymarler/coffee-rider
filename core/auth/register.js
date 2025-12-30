@@ -27,9 +27,11 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+
 
   async function handleRegister() {
-    if (!email || !password || !confirmPassword) {
+    if (!displayName.trim() || !email || !password || !confirmPassword) {
       Alert.alert("Missing details", "Please complete all fields.");
       return;
     }
@@ -62,6 +64,7 @@ export default function RegisterScreen() {
       uid: user.uid,
       email: user.email,
       role: "user",
+      displayName: displayName.trim(),
       createdAt: serverTimestamp(),
     });
 
@@ -75,6 +78,19 @@ export default function RegisterScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
+        {/* Display Name */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Display Name</Text>
+          <TextInput
+            value={displayName}
+            onChangeText={setDisplayName}
+            placeholder="How others see you"
+            autoCapitalize="words"
+            placeholderTextColor={colors.textMuted}
+            style={styles.input}
+          />
+        </View>
+
         {/* Email */}
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>
