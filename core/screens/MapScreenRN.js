@@ -774,18 +774,18 @@ export default function MapScreenRN({ mapKey }) {
 
     const markerStyles = {
       destination: {
-        fill: theme.colors.primaryDark,
-        circle: theme.colors.primaryDark,
-        stroke: theme.colors.primaryLight,
+        fill: theme.colors.primary,
+        circle: theme.colors.accentMid,
+        stroke: theme.colors.danger,
       },
       searchCR: {
         fill: theme.colors.accent,
-        circle: theme.colors.accent,
-        stroke: theme.colors.danger,
+        circle: theme.colors.accentLight,
+        stroke: theme.colors.primaryLight,
       },
       searchGoogle: {
-        fill: theme.colors.primaryLight,
-        circle: theme.colors.primaryLight,
+        fill: theme.colors.primaryMid,
+        circle: theme.colors.accentLight,
         stroke: theme.colors.primaryDark,
       },
       cr: {
@@ -794,12 +794,12 @@ export default function MapScreenRN({ mapKey }) {
         stroke: theme.colors.accentDark,
       },
       temp: {
-        fill: theme.colors.primaryLight,
-        circle: theme.colors.primaryLight,
+        fill: theme.colors.primaryMid,
+        circle: theme.colors.accentDark,
         stroke: theme.colors.primaryDark,
       },
       default: {
-        fill: theme.colors.primaryLight,
+        fill: theme.colors.primaryMid,
         circle: theme.colors.accentDark,
         stroke: theme.colors.primaryDark,
       },

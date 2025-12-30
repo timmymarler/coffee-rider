@@ -15,7 +15,7 @@ export default function SvgPin({
   fill = theme.colors.primaryLight,
   stroke = theme.colors.primaryLight,
   circle = theme.colors.accentDark,
-  icon = "local-cafe",
+  icon = "map-marker",
   iconColor = "#000",
 }) {
   const iconSize = size * 0.45;

@@ -345,31 +345,27 @@ export default function PlaceCard({
 
   };
 
-  const handleSaveRating = async () => {
+  const handleSaveRating = async (ratingValue) => {
     if (!capabilities.canRate) return;
-    if (!uid || !place?.id || !selectedRating) return;
+    if (!uid || !place?.id || !ratingValue) return;
 
     const placeRef = doc(db, "places", place.id);
 
-    // Clone existing users map (or start fresh)
     const existingUsers = place.crRatings?.users || {};
     const nextUsers = {
       ...existingUsers,
       [uid]: {
-        rating: selectedRating,
+        rating: ratingValue,
         createdAt: existingUsers[uid]?.createdAt || serverTimestamp(),
         createdBy: uid,
       },
     };
 
-    // Recompute aggregates
     const ratings = Object.values(nextUsers).map((u) => u.rating);
     const count = ratings.length;
     const average =
       count > 0
-        ? Math.round(
-            (ratings.reduce((sum, r) => sum + r, 0) / count) * 10
-          ) / 10
+        ? Math.round((ratings.reduce((sum, r) => sum + r, 0) / count) * 10) / 10
         : 0;
 
     await updateDoc(placeRef, {
@@ -381,11 +377,7 @@ export default function PlaceCard({
     });
 
     // Optimistic UI update
-    place.crRatings = {
-      users: nextUsers,
-      average,
-      count,
-    };
+    place.crRatings = { users: nextUsers, average, count };
   };
 
   /* ------------------------------------------------------------------ */
@@ -519,19 +511,63 @@ export default function PlaceCard({
                 </Text>
               </View>
             ) : null}
-
-            {/* CR rating (REAL CR ONLY) */}
-            {isRealCr && crAverageRating !== null ? (
-              <View style={styles.ratingRow}>
-                <Text style={styles.ratingValue}>
-                  ★ {crAverageRating.toFixed(1)}
-                </Text>
-                <Text style={styles.ratingMeta}>
-                  ({crRatingCount})
-                </Text>
-              </View>
-            ) : null}
           </View>
+
+          {/* CR rating: single 5-star row (overall + user overlay) */}
+          {isRealCr && (
+            <View style={[styles.ratingRow, { marginTop: 6 }]}>
+              <View style={styles.rateRow}>
+                {(() => {
+                  const overallStars =
+                    crAverageRating && crRatingCount > 0 ? Math.round(crAverageRating) : 0;
+
+                  // Use selectedRating for immediate UI feedback; fall back to stored userCrRating
+                  const userStars = canRate ? (selectedRating || userCrRating || 0) : 0;
+
+                  return [1, 2, 3, 4, 5].map((v) => {
+                    const isUserFilled = userStars >= v;
+                    const isOverallFilled = overallStars >= v;
+
+                    const name = isUserFilled || isOverallFilled ? "star" : "star-outline";
+                    const color = isUserFilled
+                      ? theme.colors.primaryLight
+                      : theme.colors.primaryMid;
+
+                    const Star = (
+                      <MaterialCommunityIcons
+                        name={name}
+                        size={22}
+                        color={color}
+                        style={{ marginRight: 2 }}
+                      />
+                    );
+
+                    // Only tappable for users who can rate
+                    return canRate ? (
+                      <TouchableOpacity
+                        key={v}
+                        style={styles.starButton}
+                        onPress={() => {
+                          setSelectedRating(v);
+                          handleSaveRating(v);
+                        }}
+                      >
+                        {Star}
+                      </TouchableOpacity>
+                    ) : (
+                      <View key={v} style={{ paddingHorizontal: 2 }}>
+                        {Star}
+                      </View>
+                    );
+                  });
+                })()}
+              </View>
+
+              <Text style={[styles.ratingMeta, { marginLeft: 8 }]}>
+                ({crRatingCount || 0})
+              </Text>
+            </View>
+          )}
 
           {/* Suitability */}
           <Text style={styles.crLabel}>Suitability</Text>
