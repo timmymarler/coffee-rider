@@ -1,11 +1,12 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
+import { router } from "expo-router";
 import {
   ActivityIndicator,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
 export function SearchBar({
@@ -84,9 +85,21 @@ export function SearchBar({
           <Ionicons
             name="options"
             size={20}
-            color={filtersActive ? theme.colors.accent : theme.colors.primaryLight}
+            color={filtersActive ? theme.colors.accentMid : theme.colors.primaryLight}
           />
         </TouchableOpacity>
+
+        {/* Help button */}
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => router.push("/help")}
+        >
+          <MaterialCommunityIcons
+            name="help-circle-outline"
+            size={22}
+            color={theme.colors.accentMid}
+          />
+        </TouchableOpacity>        
       </View>
 
     </View>
@@ -141,5 +154,21 @@ function createStyles(theme) {
       shadowOffset: { width: 0, height: 2 },
       elevation: 4,
     },
+
+    iconButton: {
+      marginLeft: 8,
+      width: 41,
+      height: 41,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.colors.primaryDark,
+      shadowColor: theme.colors.accentMid,
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 4,
+    },
+
   });
 }

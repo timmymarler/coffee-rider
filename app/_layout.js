@@ -2,7 +2,6 @@
 
 import AuthProvider from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
-//import { mapRef } from "@core/map/utils/mapRef";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { Tabs, usePathname, useRouter } from "expo-router";
@@ -36,8 +35,8 @@ function FloatingTabBar({ state }) {
   const tabs = [
     { name: "map", icon: "map" },
     { name: "saved-routes", icon: "git-branch" },
+    { name: "groups", icon: "people" },
     { name: "profile", icon: "person" },
-    { name: "help", icon: "help" },
   ];
 
   return (
@@ -182,8 +181,8 @@ export default function Layout() {
           >
             <Tabs.Screen name="map" />
             <Tabs.Screen name="saved-routes" />
+            <Tabs.Screen name="groups" />
             <Tabs.Screen name="profile" />
-            <Tabs.Screen name="help" />
           </Tabs>
         </TabBarProvider>
       </AuthProvider>
