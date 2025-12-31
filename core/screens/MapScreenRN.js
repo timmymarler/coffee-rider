@@ -21,10 +21,17 @@ import { openNativeNavigation } from "../map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
 import { getCapabilities } from "@core/roles/getCapabilities";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
+import { useCallback } from "react";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 
-
+const INITIAL_REGION = {
+  latitude: 52.136,
+  longitude: -0.467,
+  latitudeDelta: 0.15,
+  longitudeDelta: 0.15,
+};
 
 const ENABLE_GOOGLE_AUTO_FETCH = false;
 
@@ -305,7 +312,7 @@ async function fetchNearbyPois(latitude, longitude, radius) {
 /* MAIN SCREEN                                                        */
 /* ------------------------------------------------------------------ */
 
-export default function MapScreenRN({ mapKey }) {
+export default function MapScreenRN() {
   const mapRef = useRef();
 
   const [crPlaces, setCrPlaces] = useState([]);
@@ -316,7 +323,7 @@ export default function MapScreenRN({ mapKey }) {
   const filtersActive = appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0;
   const [userLocation, setUserLocation] = useState(null);
 
-  const [mapRegion, setMapRegion] = useState(null);
+  const [mapRegion, setMapRegion] = useState(INITIAL_REGION);
 
   // Selected marker/placecard
   const [selectedPlaceId, setSelectedPlaceId] = useState(null);
@@ -341,7 +348,35 @@ export default function MapScreenRN({ mapKey }) {
   const [searchNotice, setSearchNotice] = useState(null);
   const [postbox, setPostbox] = useState(null);
   const isSearchActive = !!activeQuery;
+  const [mapKey, setMapKey] = useState(0);
 
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (!userLocation) return;
+
+    // Let the MapView mount first
+    const id = setTimeout(() => {
+      mapRef.current?.animateCamera(
+        {
+          center: {
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+          },
+          zoom: 13,
+        },
+        { duration: 500 }
+      );
+
+    }, 50);
+
+    return () => clearTimeout(id);
+  }, [mapKey, userLocation]);
+  
+  useFocusEffect(
+    useCallback(() => {
+      setMapKey((k) => k + 1);
+    }, [])
+  );
 
   useEffect(() => {
     setMapActions({
@@ -505,23 +540,14 @@ export default function MapScreenRN({ mapKey }) {
   }
 
   const resetMapState = () => {
-    // Filters (must be Sets)
-    if (typeof setDraftFilters === "function") {
-      setDraftFilters({
-        categories: new Set(),
-        amenities: new Set(),
-      });
-    }
+    setDraftFilters(EMPTY_FILTERS);
+    setAppliedFilters(EMPTY_FILTERS);
 
-    // Search (clear results, not text)
     clearSearch();
-
-    // Map / UI state
     setSelectedPlaceId(null);
     setTempCrPlace(null);
-    clearRoute(null);
+    clearRoute();
     setFollowUser(false);
-
   };
 
   async function doTextSearch({ query, latitude, longitude, radius = 50000 }) {
@@ -689,17 +715,21 @@ export default function MapScreenRN({ mapKey }) {
 
     let list = crPlaces.filter((p) => inRegion(p, paddedRegion));
 
-      if (
-        appliedFilters.categories.size ||
-        appliedFilters.amenities.size
-      ) {
-        list = list.filter((p) =>
-          applyFilters(p, appliedFilters)
-        );
-      }
+    if (
+      appliedFilters.categories.size ||
+      appliedFilters.amenities.size
+    ) {
+      list = list.filter((p) =>
+        applyFilters(p, appliedFilters)
+      );
+    }
 
     return list;
-  }, [crPlaces, paddedRegion, appliedFilters]);
+  }, [
+    crPlaces,
+    paddedRegion,
+    appliedFilters,
+  ]);
 
   const searchMarkers = useMemo(() => {
     if (!activeQuery) return [];
@@ -838,7 +868,6 @@ export default function MapScreenRN({ mapKey }) {
         coordinate={{ latitude: poi.latitude, longitude: poi.longitude }}
         onPress={(e) => {
           e.stopPropagation?.();
-
           if (poi.source === "google") {
             if (!capabilities.canSearchGoogle) return;
             const temp = promoteGoogleToTempCr(poi);
@@ -850,7 +879,6 @@ export default function MapScreenRN({ mapKey }) {
         }}
         anchor={{ x: 0.5, y: 1 }}
         zIndex={isDestination ? 1000 : 1}
-        tracksViewChanges={true}
       >
         <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
       </Marker>
@@ -879,12 +907,7 @@ export default function MapScreenRN({ mapKey }) {
         onPanDrag={() => {
           if (followUser) setFollowUser(false);
         }}
-        initialRegion={{
-          latitude: 52.136,
-          longitude: -0.467,
-          latitudeDelta: 0.15,
-          longitudeDelta: 0.15,
-        }}
+        initialRegion={INITIAL_REGION}
       >
 
         {crMarkers.map(renderMarker)}
