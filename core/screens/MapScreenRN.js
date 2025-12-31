@@ -26,6 +26,9 @@ import theme from "@themes";
 import { useCallback } from "react";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 
+const AUTO_CENTER_ZOOM_IN = 15.5;   // when centering on user
+const AUTO_CENTER_ZOOM_OUT = 13.5; // context zoom
+
 const INITIAL_REGION = {
   latitude: 52.136,
   longitude: -0.467,
@@ -357,14 +360,15 @@ export default function MapScreenRN() {
     // Let the MapView mount first
     const id = setTimeout(() => {
       mapRef.current?.animateCamera(
-        {
-          center: {
-            latitude: userLocation.latitude,
-            longitude: userLocation.longitude,
-          },
-          zoom: 13,
+        
+      {
+        center: {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
         },
-        { duration: 500 }
+        zoom: AUTO_CENTER_ZOOM_IN,
+      },
+      { duration: 500 }
       );
 
     }, 50);
@@ -456,7 +460,7 @@ export default function MapScreenRN() {
             latitude: userLocation.latitude,
             longitude: userLocation.longitude,
           },
-          zoom: 16,
+          zoom: AUTO_CENTER_ZOOM_IN,
         },
         { duration: 600 }
       );
@@ -677,7 +681,7 @@ export default function MapScreenRN() {
               latitude: crMatch.latitude,
               longitude: crMatch.longitude,
             },
-            zoom: 16,
+            zoom: AUTO_CENTER_ZOOM_IN,
           },
           { duration: 600 }
         );
