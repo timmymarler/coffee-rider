@@ -2,7 +2,7 @@ import { db } from "@config/firebase";
 import { TabBarContext } from "@context/TabBarContext";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 
 import PlaceCard from "../map/components/PlaceCard";
@@ -22,6 +22,7 @@ import { AuthContext } from "@context/AuthContext";
 import { getCapabilities } from "@core/roles/getCapabilities";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
+import { RIDER_CATEGORIES } from "../config/categories/rider";
 
 
 
@@ -43,15 +44,7 @@ const CATEGORY_ICON_MAP = {
   unknown: "map-marker",
 };
 
-const FILTER_CATEGORIES = [
-  { key: "cafe", label: "Cafés", icon: "coffee" },
-  { key: "restaurant", label: "Food", icon: "silverware-fork-knife" },
-  { key: "pub", label: "Pubs", icon: "beer" },
-  { key: "bikes", label: "Bike Shop", icon: "motorbike" },
-  { key: "fuel", label: "Fuel", icon: "gas-station" },
-  { key: "parking", label: "Parking", icon: "parking" },
-  { key: "scenic", label: "Scenic", icon: "forest" },
-];
+const FILTER_CATEGORIES = RIDER_CATEGORIES;
 
 const AMENITY_ICON_MAP = {
   motorcycle_parking: "motorbike",
@@ -75,6 +68,18 @@ const EMPTY_FILTERS = {
   categories: new Set(),
   amenities: new Set(),
 };
+
+const DEFAULT_FILTERS = {
+  categories: [],
+  amenities: [],
+};
+
+const DEFAULT_MAP_STATE = {
+  followUser: false,
+  selectedPlace: null,
+  route: null,
+};
+
 
 /* ------------------------------------------------------------------ */
 /* HELPERS                                                            */
@@ -499,6 +504,26 @@ export default function MapScreenRN({ mapKey }) {
     );
   }
 
+  const resetMapState = () => {
+    // Filters (must be Sets)
+    if (typeof setDraftFilters === "function") {
+      setDraftFilters({
+        categories: new Set(),
+        amenities: new Set(),
+      });
+    }
+
+    // Search (clear results, not text)
+    clearSearch();
+
+    // Map / UI state
+    setSelectedPlaceId(null);
+    setTempCrPlace(null);
+    clearRoute(null);
+    setFollowUser(false);
+
+  };
+
   async function doTextSearch({ query, latitude, longitude, radius = 50000 }) {
     if (!capabilities?.canSearchGoogle) {
       console.log("[GOOGLE] doTextSearch blocked by capability");
@@ -875,85 +900,89 @@ export default function MapScreenRN({ mapKey }) {
       
       {showFilters && (
         <View style={styles.filterPanel}>
+          <ScrollView
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.filterSection}>Categories</Text>
+            <View style={styles.iconGrid}>
+              {FILTER_CATEGORIES.map((c) => {
+                const active = draftFilters.categories.has(c.key);
 
-          <Text style={styles.filterSection}>Categories</Text>
-          <View style={styles.iconGrid}>
-            {FILTER_CATEGORIES.map((c) => {
-              const active = draftFilters.categories.has(c.key);
-
-              return (
-                <TouchableOpacity
-                  key={c.key}
-                  style={[
-                    styles.iconButton,
-                    active && styles.iconButtonActive,
-                  ]}
-                  onPress={() =>
-                    setDraftFilters((prev) => ({
-                      ...prev,
-                      categories: toggleFilter(prev.categories, c.key),
-                    }))
-                  }
-                >
-                  <SvgPin
-                    icon={c.icon}
-                    size={32}
-                    fill={active ? theme.colors.accent : theme.colors.primaryLight}
-                    circle={active ? theme.colors.accent : theme.colors.accentDark}
-                    stroke={active ? theme.colors.primaryDark : theme.colors.primaryDark}
-                  />
-
-                  <Text
+                return (
+                  <TouchableOpacity
+                    key={c.key}
                     style={[
-                      styles.iconLabel,
-                      active && styles.iconLabelActive,
+                      styles.iconButton,
+                      active && styles.iconButtonActive,
                     ]}
+                    onPress={() =>
+                      setDraftFilters((prev) => ({
+                        ...prev,
+                        categories: toggleFilter(prev.categories, c.key),
+                      }))
+                    }
                   >
-                    {c.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                    <SvgPin
+                      icon={c.icon}
+                      size={32}
+                      fill={active ? theme.colors.accent : theme.colors.primaryLight}
+                      circle={active ? theme.colors.accent : theme.colors.accentDark}
+                      stroke={active ? theme.colors.primaryDark : theme.colors.primaryDark}
+                    />
 
-          <Text style={styles.filterSection}>Amenities</Text>
+                    <Text
+                      style={[
+                        styles.iconLabel,
+                        active && styles.iconLabelActive,
+                      ]}
+                    >
+                      {c.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
-          <View style={styles.iconGrid}>
-            {FILTER_AMENITIES.map((a) => {
-              const active = draftFilters.amenities.has(a.key);
+            <Text style={styles.filterSection}>Amenities</Text>
 
-              return (
-                <TouchableOpacity
-                  key={a.key}
-                  style={[
-                    styles.iconButton,
-                    active && styles.iconButtonActive,
-                  ]}
-                  onPress={() =>
-                    setDraftFilters((prev) => ({
-                      ...prev,
-                      amenities: toggleFilter(prev.amenities, a.key),
-                    })
-                  )}
-                >
-                  <MaterialCommunityIcons
-                    name={AMENITY_ICON_MAP[a.key] || "check"}
-                    size={22}
-                    color={active ? theme.colors.accent : theme.colors.textSecondary}
-                  />
-                  <Text
+            <View style={styles.iconGrid}>
+              {FILTER_AMENITIES.map((a) => {
+                const active = draftFilters.amenities.has(a.key);
+
+                return (
+                  <TouchableOpacity
+                    key={a.key}
                     style={[
-                      styles.iconLabel,
-                      active && styles.iconLabelActive,
+                      styles.iconButton,
+                      active && styles.iconButtonActive,
                     ]}
+                    onPress={() =>
+                      setDraftFilters((prev) => ({
+                        ...prev,
+                        amenities: toggleFilter(prev.amenities, a.key),
+                      })
+                    )}
                   >
-                    {a.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
+                    <MaterialCommunityIcons
+                      name={AMENITY_ICON_MAP[a.key] || "check"}
+                      size={22}
+                      color={active ? theme.colors.accent : theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.iconLabel,
+                        active && styles.iconLabelActive,
+                      ]}
+                    >
+                      {a.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
           <TouchableOpacity
             style={styles.filterClear}
             onPress={() => {
@@ -974,6 +1003,19 @@ export default function MapScreenRN({ mapKey }) {
           >
             <Text style={styles.filterDoneText}>Done</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.resetButton}
+            onPress={resetMapState}
+          >
+            <MaterialCommunityIcons
+              name="restart"
+              size={18}
+              color={theme.colors.primaryLight}
+            />
+            <Text style={styles.resetButtonText}>Reset map</Text>
+          </TouchableOpacity>
+
         </View>
       )}
       
@@ -1176,8 +1218,8 @@ const styles = StyleSheet.create({
   iconButton: {
     width: "48%",
     alignItems: "center",
-    paddingVertical: 10,
-    marginBottom: 8,
+    paddingVertical: 4,
+    marginBottom: 4,
     borderRadius: 12,
     backgroundColor: theme.colors.surfaceMuted,
   },
@@ -1195,6 +1237,25 @@ const styles = StyleSheet.create({
 
   iconLabelActive: {
     color: theme.colors.accent,
+    fontWeight: "600",
+  },
+
+  resetButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    marginTop: 10,
+    borderRadius: 8,
+    backgroundColor: theme.colors.primaryDark,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryMid,
+  },
+
+  resetButtonText: {
+    marginLeft: 8,
+    color: theme.colors.primaryLight,
+    fontSize: 14,
     fontWeight: "600",
   },
 

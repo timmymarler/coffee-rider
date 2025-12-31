@@ -3,6 +3,7 @@ import { AuthContext } from "@context/AuthContext";
 import { getCapabilities } from "@core/roles/getCapabilities";
 import { uploadImage } from "@core/utils/uploadImage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Picker } from "@react-native-picker/picker";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
 import {
@@ -18,7 +19,9 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { RIDER_CATEGORIES } from "../../config/categories/rider";
 
+const PLACE_CATEGORIES = RIDER_CATEGORIES;
 const screenWidth = Dimensions.get("window").width;
 /* ------------------------------------------------------------------ */
 /* CONSTANTS                                                          */
@@ -114,7 +117,8 @@ export default function PlaceCard({
   const [ratingInput, setRatingInput] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [localPlace, setLocalPlace] = useState(place);
-
+  const [category, setCategory] = useState("cafe");
+  
   const [suitabilityState, setSuitabilityState] = useState(() => ({
     ...defaultSuitability,
     ...(place.suitability || {}),
@@ -267,7 +271,7 @@ export default function PlaceCard({
     try {
       const placeRef = await addDoc(collection(db, "places"), {
         name,
-        category: manualCategory ?? place.category ?? null,
+        category: category || "cafe",
         location: { latitude, longitude },
         suitability: suitabilityState,
         amenities,
@@ -466,12 +470,33 @@ export default function PlaceCard({
           <Text style={styles.title}>
             {isManualOnly ? "Save this place" : place.title}
           </Text>
+
           {/* Category */}
-          {place.category ? (
-            <Text style={styles.ratingMeta}>
-              {place.category.charAt(0).toUpperCase() + place.category.slice(1)}
-            </Text>
-          ) : null}
+          <View style={styles.categoryRow}>
+            {isEditable ? (
+              <Picker
+                selectedValue={category}
+                onValueChange={(value) => setCategory(value)}
+                style={styles.categoryPicker}
+                dropdownIconColor={theme.colors.primaryLight}
+              >
+                {PLACE_CATEGORIES.map((c) => (
+                  <Picker.Item
+                    key={c.key}
+                    label={c.label}
+                    value={c.key}
+                    color={theme.colors.primaryLight}
+                  />
+                ))}
+              </Picker>
+            ) : (
+              <Text style={styles.categoryText}>
+                {PLACE_CATEGORIES.find(c => c.key === place.category)?.label
+                  ?? place.category}
+              </Text>
+            )}
+          </View>
+
           {/* Address */}
           {(place.address || place.formattedAddress) ? (
             <Text style={styles.subText}>
@@ -878,7 +903,24 @@ function createStyles(theme) {
       fontSize: 13,
       color: theme.colors.accentMid,
       textAlign: "center",
-    }
+    },
+
+    categoryRow: {
+      marginTop: 6,
+      marginBottom: 4,
+    },
+
+    categoryText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.primaryLight,
+    },
+
+    categoryPicker: {
+      height: 55,
+      color: theme.colors.primaryLight,
+      backgroundColor: theme.colors.primaryDark,
+    },
     
   };
 }
