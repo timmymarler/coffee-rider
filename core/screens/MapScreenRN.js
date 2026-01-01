@@ -352,28 +352,39 @@ export default function MapScreenRN() {
   const [postbox, setPostbox] = useState(null);
   const isSearchActive = !!activeQuery;
   const [mapKey, setMapKey] = useState(0);
+  const cameraModeRef = useRef("idle"); // "idle" | "auto" | "follow"
+
 
   useEffect(() => {
-    if (!mapRef.current) return;
-    if (!userLocation) return;
+    if (!mapRef.current || !userLocation) return;
 
-    // Let the MapView mount first
-    const id = setTimeout(() => {
+    cameraModeRef.current = "auto";
+
+    const t1 = setTimeout(() => {
       mapRef.current?.animateCamera(
-        
-      {
-        center: {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
+        {
+          center: {
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+          },
+          zoom: AUTO_CENTER_ZOOM_IN,
         },
-        zoom: AUTO_CENTER_ZOOM_IN,
-      },
-      { duration: 500 }
+        { duration: 400 }
       );
 
+      const t2 = setTimeout(() => {
+        mapRef.current?.animateCamera(
+          { zoom: AUTO_CENTER_ZOOM_OUT },
+          { duration: 500 }
+        );
+
+        cameraModeRef.current = "idle"; // 🔑 release control
+      }, 450);
+
+      return () => clearTimeout(t2);
     }, 50);
 
-    return () => clearTimeout(id);
+    return () => clearTimeout(t1);
   }, [mapKey, userLocation]);
   
   useFocusEffect(
@@ -452,19 +463,19 @@ export default function MapScreenRN() {
   /* ------------------------------------------------------------ */
 
   useEffect(() => {
+    if (!followUser) return;
+    if (!mapRef.current || !userLocation) return;
+    if (cameraModeRef.current !== "follow") return;
 
-    if (!followUser || !userLocation || !mapRef.current) return;
-      mapRef.current?.animateCamera(
-        {
-          center: {
-            latitude: userLocation.latitude,
-            longitude: userLocation.longitude,
-          },
-          zoom: AUTO_CENTER_ZOOM_IN,
+    mapRef.current.animateCamera(
+      {
+        center: {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
         },
-        { duration: 600 }
-      );
-
+      },
+      { duration: 250 }
+    );
   }, [userLocation, followUser]);
 
   /* ------------------------------------------------------------ */
@@ -528,19 +539,34 @@ export default function MapScreenRN() {
 
   /* Used for Follow Me mode */
   function toggleFollowMe() {
+    cameraModeRef.current = "follow";
     setFollowUser((prev) => !prev);
   }
 
+  function enableFollowMe() {
+    cameraModeRef.current = "follow";
+    setFollowUser(true);
+  }
+
   function recentreToCurrentPosition() {
-    mapRef.current?.animateToRegion(
+    if (!mapRef.current || !userLocation) return;
+
+    cameraModeRef.current = "auto";
+
+    mapRef.current.animateCamera(
       {
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
+        center: {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+        },
+        zoom: AUTO_CENTER_ZOOM_OUT,
       },
-      300
+      { duration: 400 }
     );
+
+    setTimeout(() => {
+      cameraModeRef.current = "idle";
+    }, 450);
   }
 
   const resetMapState = () => {
@@ -908,7 +934,9 @@ export default function MapScreenRN() {
             clearTempIfSafe();
           }
         }}
+        
         onPanDrag={() => {
+          cameraModeRef.current = "idle";
           if (followUser) setFollowUser(false);
         }}
         initialRegion={INITIAL_REGION}
