@@ -13,9 +13,8 @@ import { classifyPoi } from "../map/classify/classifyPois";
 import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
 import { decode } from "@mapbox/polyline";
-import { fetchRoute } from "../map/utils/fetchRoute";
-//import { mapRef } from "../map/utils/mapRef"; // adjust path if needed
 import { SearchBar } from "../map/components/SearchBar";
+import { fetchRoute } from "../map/utils/fetchRoute";
 import { openNativeNavigation } from "../map/utils/navigation";
 
 import { AuthContext } from "@context/AuthContext";
@@ -28,14 +27,6 @@ import { RIDER_CATEGORIES } from "../config/categories/rider";
 
 const RECENTER_ZOOM = 12;
 const FOLLOW_ZOOM = 17; // closer, more “navigation” feel
-
-const INITIAL_REGION = {
-  latitude: 52.136,
-  longitude: -0.467,
-  latitudeDelta: 0.15,
-  longitudeDelta: 0.15,
-};
-
 const ENABLE_GOOGLE_AUTO_FETCH = false;
 
 /* ------------------------------------------------------------------ */
@@ -326,7 +317,7 @@ export default function MapScreenRN() {
   const filtersActive = appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0;
   const [userLocation, setUserLocation] = useState(null);
 
-  const [mapRegion, setMapRegion] = useState(INITIAL_REGION);
+  const [mapRegion, setMapRegion] = useState(userLocation);
 
   // Selected marker/placecard
   const [selectedPlaceId, setSelectedPlaceId] = useState(null);
@@ -391,15 +382,29 @@ export default function MapScreenRN() {
   /* ------------------------------------------------------------ */
   /* USER LOCATION                                                */
   /* ------------------------------------------------------------ */
-  function recenterOnUser({ zoom = null } = {}) {
-    if (!mapRef.current || !userLocation) return;
+  async function ensureUserLocation() {
+    if (userLocation) return userLocation;
+
+    try {
+      const current = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setUserLocation(current.coords);
+      return current.coords;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function recenterOnUser({ zoom = null } = {}) {
+    if (!mapRef.current) return;
+
+    const coords = await ensureUserLocation();
+    if (!coords) return;
 
     mapRef.current.animateCamera(
       {
-        center: {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-        },
+        center: { latitude: coords.latitude, longitude: coords.longitude },
         ...(zoom !== null ? { zoom } : {}),
       },
       { duration: 350 }
@@ -407,6 +412,7 @@ export default function MapScreenRN() {
   }
 
   function handleRecentre() {
+    console.log("Handle Recentre");
     setFollowUser(false);
     recenterOnUser({ zoom: RECENTER_ZOOM });
   }
@@ -414,15 +420,19 @@ export default function MapScreenRN() {
   /* ------------------------------------------------------------ */
   /* FOLLOW MODE                                                  */
   /* ------------------------------------------------------------ */
-  function toggleFollowMe() {
-    setFollowUser(prev => {
-      const next = !prev;
-      if (next) {
-        skipNextFollowTickRef.current = true;
-        recenterOnUser({ zoom: FOLLOW_ZOOM });
-      }
-      return next;
-    });
+  async function toggleFollowMe() {
+    // Turning OFF: do nothing else
+    if (followUser) {
+      setFollowUser(false);
+      return;
+    }
+
+    // Turning ON: recenter + zoom FIRST
+    skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
+    await recenterOnUser({ zoom: FOLLOW_ZOOM });
+
+    // Now enable follow mode
+    setFollowUser(true);
   }
 
   useEffect(() => {
@@ -457,11 +467,19 @@ export default function MapScreenRN() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
 
+      // 1️⃣ IMMEDIATE location (fixes first tap issue)
+      const current = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      setUserLocation(current.coords);
+
+      // 2️⃣ CONTINUOUS updates (Follow Me)
       subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.Balanced,
-          timeInterval: 1000,      // 1s updates
-          distanceInterval: 5,     // or every ~5m
+          timeInterval: 1000,
+          distanceInterval: 5,
         },
         (location) => {
           setUserLocation(location.coords);
@@ -874,42 +892,50 @@ export default function MapScreenRN() {
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        key={mapKey}
-        style={StyleSheet.absoluteFill}
-        showsUserLocation
-        showsMyLocationButton={false}
-        onRegionChangeComplete={handleRegionChangeComplete}
-        onPress={() => {
-          if (showFilters) {
-            setShowFilters(false);
-            return;
-          }
-          if (!routeCoords.length) {
-            setSelectedPlaceId(null);
-            clearTempIfSafe();
-          }
-        }}
-        
-        onPanDrag={() => {
-          if (followUser) setFollowUser(false);
-        }}
-        
-        initialRegion={INITIAL_REGION}
-      >
+      {userLocation ? (
+        <MapView
+          ref={mapRef}
+          key={mapKey}
+          style={StyleSheet.absoluteFill}
+          showsUserLocation
+          showsMyLocationButton={false}
+          onRegionChangeComplete={handleRegionChangeComplete}
+          onPress={() => {
+            if (showFilters) {
+              setShowFilters(false);
+              return;
+            }
+            if (!routeCoords.length) {
+              setSelectedPlaceId(null);
+              clearTempIfSafe();
+            }
+          }}
+          
+          onPanDrag={() => {
+            if (followUser) setFollowUser(false);
+          }}
+              
+          initialRegion={{
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+            latitudeDelta: 0.15,
+            longitudeDelta: 0.15,
+          }}      
+        >
 
-        {crMarkers.map(renderMarker)}
-        {searchMarkers.map(renderMarker)}
+          {crMarkers.map(renderMarker)}
+          {searchMarkers.map(renderMarker)}
 
-        <Polyline
-          coordinates={routeCoords}
-          strokeWidth={4}
-          strokeColor="#2563eb"
-          zIndex={1000}
-        />
-      </MapView>
-      
+          <Polyline
+            coordinates={routeCoords}
+            strokeWidth={4}
+            strokeColor="#2563eb"
+            zIndex={1000}
+          />
+        </MapView>
+      ) : (
+        <View style={{ flex: 1 }} />  // or a spinner/skeleton later
+      )}      
       {showFilters && (
         <View style={styles.filterPanel}>
           <ScrollView
