@@ -26,8 +26,8 @@ import theme from "@themes";
 import { useCallback } from "react";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 
-const AUTO_CENTER_ZOOM_IN = 15.5;   // when centering on user
-const AUTO_CENTER_ZOOM_OUT = 13.5; // context zoom
+const RECENTER_ZOOM = 12;
+const FOLLOW_ZOOM = 17; // closer, more “navigation” feel
 
 const INITIAL_REGION = {
   latitude: 52.136,
@@ -352,55 +352,14 @@ export default function MapScreenRN() {
   const [postbox, setPostbox] = useState(null);
   const isSearchActive = !!activeQuery;
   const [mapKey, setMapKey] = useState(0);
-  const cameraModeRef = useRef("idle"); // "idle" | "auto" | "follow"
 
+  const skipNextFollowTickRef = useRef(false);
 
-  useEffect(() => {
-    if (!mapRef.current || !userLocation) return;
-
-    cameraModeRef.current = "auto";
-
-    const t1 = setTimeout(() => {
-      mapRef.current?.animateCamera(
-        {
-          center: {
-            latitude: userLocation.latitude,
-            longitude: userLocation.longitude,
-          },
-          zoom: AUTO_CENTER_ZOOM_IN,
-        },
-        { duration: 400 }
-      );
-
-      const t2 = setTimeout(() => {
-        mapRef.current?.animateCamera(
-          { zoom: AUTO_CENTER_ZOOM_OUT },
-          { duration: 500 }
-        );
-
-        cameraModeRef.current = "idle"; // 🔑 release control
-      }, 450);
-
-      return () => clearTimeout(t2);
-    }, 50);
-
-    return () => clearTimeout(t1);
-  }, [mapKey, userLocation]);
-  
   useFocusEffect(
     useCallback(() => {
       setMapKey((k) => k + 1);
     }, [])
   );
-
-  useEffect(() => {
-    setMapActions({
-      recenter: recentreToCurrentPosition,
-      toggleFollow: toggleFollowMe,
-      isFollowing: () => followUser,
-    });
-  }, [followUser, userLocation]);
-
 
   /* ------------------------------------------------------------ */
   /* LOAD CR PLACES                                               */
@@ -432,6 +391,64 @@ export default function MapScreenRN() {
   /* ------------------------------------------------------------ */
   /* USER LOCATION                                                */
   /* ------------------------------------------------------------ */
+  function recenterOnUser({ zoom = null } = {}) {
+    if (!mapRef.current || !userLocation) return;
+
+    mapRef.current.animateCamera(
+      {
+        center: {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+        },
+        ...(zoom !== null ? { zoom } : {}),
+      },
+      { duration: 350 }
+    );
+  }
+
+  function handleRecentre() {
+    setFollowUser(false);
+    recenterOnUser({ zoom: RECENTER_ZOOM });
+  }
+
+  /* ------------------------------------------------------------ */
+  /* FOLLOW MODE                                                  */
+  /* ------------------------------------------------------------ */
+  function toggleFollowMe() {
+    setFollowUser(prev => {
+      const next = !prev;
+      if (next) {
+        skipNextFollowTickRef.current = true;
+        recenterOnUser({ zoom: FOLLOW_ZOOM });
+      }
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    if (!followUser) return;
+    if (!userLocation) return;
+
+    if (skipNextFollowTickRef.current) {
+      skipNextFollowTickRef.current = false;
+      return;
+    }
+
+    recenterOnUser(); // center only
+  }, [userLocation, followUser]);
+
+
+  useEffect(() => {
+    setMapActions({
+      recenter: handleRecentre,
+      toggleFollow: toggleFollowMe,
+      isFollowing: () => followUser,
+    });
+
+    return () => {
+      setMapActions(null);
+    };
+  }, [followUser]);
 
   useEffect(() => {
     let subscription;
@@ -457,26 +474,6 @@ export default function MapScreenRN() {
     };
   }, []);
 
-  
-  /* ------------------------------------------------------------ */
-  /* FOLLOW MODE                                                  */
-  /* ------------------------------------------------------------ */
-
-  useEffect(() => {
-    if (!followUser) return;
-    if (!mapRef.current || !userLocation) return;
-    if (cameraModeRef.current !== "follow") return;
-
-    mapRef.current.animateCamera(
-      {
-        center: {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-        },
-      },
-      { duration: 250 }
-    );
-  }, [userLocation, followUser]);
 
   /* ------------------------------------------------------------ */
   /* FETCH GOOGLE POIS ON REGION CHANGE                            */
@@ -538,36 +535,7 @@ export default function MapScreenRN() {
   }
 
   /* Used for Follow Me mode */
-  function toggleFollowMe() {
-    cameraModeRef.current = "follow";
-    setFollowUser((prev) => !prev);
-  }
 
-  function enableFollowMe() {
-    cameraModeRef.current = "follow";
-    setFollowUser(true);
-  }
-
-  function recentreToCurrentPosition() {
-    if (!mapRef.current || !userLocation) return;
-
-    cameraModeRef.current = "auto";
-
-    mapRef.current.animateCamera(
-      {
-        center: {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-        },
-        zoom: AUTO_CENTER_ZOOM_OUT,
-      },
-      { duration: 400 }
-    );
-
-    setTimeout(() => {
-      cameraModeRef.current = "idle";
-    }, 450);
-  }
 
   const resetMapState = () => {
     setDraftFilters(EMPTY_FILTERS);
@@ -640,14 +608,6 @@ export default function MapScreenRN() {
     return () => clearTimeout(timer);
   }, [postbox]);
 
-  useEffect(() => {
-    setMapActions({
-      recenter: recentreToCurrentPosition,
-      toggleFollow: toggleFollowMe,
-      isFollowing: () => followUser,
-    });
-  }, [followUser, userLocation]);
-
   const lastSearchRef = useRef("");
 
   useEffect(() => {
@@ -707,7 +667,6 @@ export default function MapScreenRN() {
               latitude: crMatch.latitude,
               longitude: crMatch.longitude,
             },
-            zoom: AUTO_CENTER_ZOOM_IN,
           },
           { duration: 600 }
         );
@@ -832,8 +791,6 @@ export default function MapScreenRN() {
       waypoints: [], // ready for future Pro routes
     });
 
-    setFollowUser(true);
-    
   }
 
   /* ------------------------------------------------------------ */
@@ -936,9 +893,9 @@ export default function MapScreenRN() {
         }}
         
         onPanDrag={() => {
-          cameraModeRef.current = "idle";
           if (followUser) setFollowUser(false);
         }}
+        
         initialRegion={INITIAL_REGION}
       >
 
