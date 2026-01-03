@@ -1,5 +1,8 @@
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
+import { GOOGLE_PHOTO_LIMITS, PHOTO_POLICY } from "@core/config/photoPolicy";
+import { buildGooglePhotoUrl } from "@core/google/buildGooglePhotoUrl";
+import { fetchLegacyPlacePhotos } from "@core/google/fetchLegacyPlacePhotos";
 import { getCapabilities } from "@core/roles/getCapabilities";
 import { uploadImage } from "@core/utils/uploadImage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -21,6 +24,7 @@ import {
 } from "react-native";
 import { RIDER_CATEGORIES } from "../../config/categories/rider";
 
+const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 const PLACE_CATEGORIES = RIDER_CATEGORIES;
 const screenWidth = Dimensions.get("window").width;
 /* ------------------------------------------------------------------ */
@@ -83,6 +87,12 @@ export default function PlaceCard({
   const currentUid = user?.uid || null;
   const isManualOnly = place?.source === "manual";
   const isGoogle = place?.source === "google";
+  // 🔑 NORMALISE Google place id (ABSOLUTELY REQUIRED)
+  const googlePlaceId =
+    place.googlePlaceId ||
+    (place.source === "google" && place.id) ||
+    null;
+
   const isGoogleNew = place?.source === "google-new";
   const isCr = place?.source === "cr";
   const isRealCr = place.source === "cr" && !place._temp;
@@ -92,10 +102,11 @@ export default function PlaceCard({
       ? place.crRatings.users[uid].rating
       : 0;
   const [selectedRating, setSelectedRating] = useState(userCrRating);
-  const canAddPlace = place.source !== "cr" && !place._justAdded;
+  const canAddPlace =
+    (place.source === "google" || place._temp === true) &&
+    !place._justAdded;
   const isCrPlace = place.source === "cr";
   const isEditable = place.source !== "cr"; // add flow only (for now)
-
 
   useEffect(() => {
     setSelectedRating(userCrRating);
@@ -178,14 +189,6 @@ export default function PlaceCard({
     return null;
   }, [hasRoute, routeMeta, distanceMiles]);
 
-  const photos = useMemo(() => {
-    return [
-      ...(Array.isArray(place.photos) ? place.photos : []),
-      ...(Array.isArray(place.googlePhotoUrls)
-        ? place.googlePhotoUrls
-        : []),
-    ].filter(Boolean);
-  }, [place]);
 
   const googleRating =
     place.googleRating ?? place.rating ?? null;
@@ -193,6 +196,34 @@ export default function PlaceCard({
     place.googleUserRatingsTotal ?? place.userRatingsTotal ?? 0;
   const crAverageRating = place.crRatings?.average ?? null;
   const crRatingCount = place.crRatings?.count ?? 0;
+
+  const photos = useMemo(() => {
+    const policy = PHOTO_POLICY[role] || PHOTO_POLICY.guest;
+
+    const crPhotos = Array.isArray(place.photos?.cr)
+      ? place.photos.cr
+      : [];
+
+    const googlePhotos = Array.isArray(place.photos?.google)
+      ? place.photos.google
+          .map(buildGooglePhotoUrl)
+          .filter(Boolean)
+          .slice(0, GOOGLE_PHOTO_LIMITS.maxPhotosPerPlace)
+      : [];
+
+    if (!policy.viewCrPhotos && !policy.viewGooglePhotos) {
+      return [];
+    }
+
+    return [
+      ...(policy.viewCrPhotos ? crPhotos : []),
+      ...(policy.viewGooglePhotos ? googlePhotos : []),
+    ];
+  }, [place.photos, role]);
+
+  const photoPolicy = PHOTO_POLICY[role] || PHOTO_POLICY.guest;
+  const crPhotoCount = Array.isArray(place.photos) ? place.photos.length : 0;
+  const canUploadPhoto = photoPolicy.maxCrUploads > crPhotoCount;
 
   /* ------------------------------------------------------------------ */
   /* HELPERS                                                           */
@@ -257,7 +288,6 @@ export default function PlaceCard({
     const selectedAmenities = Object.values(amenitiesState).some(Boolean);
     if (!selectedAmenities) {
       console.log("[SAVE PLACE] no amenities selected");
-      return;
     }
 
     const name = manualName.trim() || place.title || "Untitled place";
@@ -267,7 +297,15 @@ export default function PlaceCard({
     const amenities = Object.entries(amenitiesState)
       .filter(([, enabled]) => enabled)
       .map(([uiKey]) => AMENITY_KEY_MAP[uiKey]);
+    
+      let googlePhotoRefs = [];
 
+    if (googlePlaceId) {
+      googlePhotoRefs = await fetchLegacyPlacePhotos(
+        googlePlaceId,
+        apiKey
+      );
+    }
     try {
       const placeRef = await addDoc(collection(db, "places"), {
         name,
@@ -275,12 +313,20 @@ export default function PlaceCard({
         location: { latitude, longitude },
         suitability: suitabilityState,
         amenities,
-        googlePhotoUrls: place.googlePhotoUrls || [],
+
+        photos: {
+          cr: [],
+          google: googlePhotoRefs,   // ✅ THIS is what PlaceCard reads
+        },
+
+        googlePlaceId,
         googleRating: place.rating ?? null,
         googleUserRatingsTotal: place.userRatingsTotal ?? 0,
+
         createdAt: serverTimestamp(),
         createdBy: currentUid,
         source: "cr",
+
         crRatings:
           ratingInput > 0
             ? {
@@ -295,7 +341,7 @@ export default function PlaceCard({
                 },
               }
             : { average: null, count: 0, users: {} },
-      });
+        });
 
       // 🔔 notify parent (THIS is what triggers postbox)
       onPlaceCreated?.(name, placeRef.id);
@@ -339,12 +385,15 @@ export default function PlaceCard({
     const cacheBustedUrl = `${url}?v=${Date.now()}`;
 
     await updateDoc(doc(db, "places", place.id), {
-      photos: arrayUnion(cacheBustedUrl),
+      "photos.cr": arrayUnion(cacheBustedUrl),
     });
 
     setLocalPlace(prev => ({
       ...prev,
-      photos: [...(prev.photos || []), cacheBustedUrl],
+      photos: {
+        ...prev.photos,
+        cr: [...(prev.photos?.cr || []), cacheBustedUrl],
+      },
     }));
 
   };
@@ -400,7 +449,8 @@ export default function PlaceCard({
         <View style={styles.photoContainer}>
           <ScrollView
             horizontal
-            pagingEnabled
+            snapToInterval={screenWidth}
+            decelerationRate="fast"
             showsHorizontalScrollIndicator={false}
             style={{ width: screenWidth, height: 180 }}
             onScroll={(e) =>
@@ -419,9 +469,8 @@ export default function PlaceCard({
 
         {/* Floating action bar */}
         <View style={styles.photoActionBar}>
-          {isCr && currentUid && (
+          {isCr && currentUid && canUploadPhoto && (
             <TouchableOpacity
-              /* Add photo */
               style={styles.photoActionButton}
               onPress={handleAddPhoto}
             >
@@ -652,7 +701,6 @@ export default function PlaceCard({
             ))}
           </View>
 
-
             {canAddPlace && (
               <TouchableOpacity
                 style={styles.primaryButton}
@@ -699,7 +747,13 @@ function createStyles(theme) {
       zIndex: 10,
     },
     photoContainer: { height: 150 },
-    photo: { width: screenWidth, height: 150 },
+    photo: {
+      width: screenWidth - 32,
+      height: 180,
+      marginHorizontal: 16,
+      borderRadius: 8,
+      resizeMode: "cover",
+    },
     info: { padding: 12 },
     title: {
       fontSize: 18,

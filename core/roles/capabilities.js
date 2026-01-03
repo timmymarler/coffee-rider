@@ -15,6 +15,7 @@ export const ROLE_CAPABILITIES = {
     canShareLocation: false,
     canSearchCR: false,
     canSearchGoogle: false,
+    canViewGooglePhotos: false,
   },
 
   user: {
@@ -33,6 +34,7 @@ export const ROLE_CAPABILITIES = {
     canShareLocation: false,
     canSearchCR: true,
     canSearchGoogle: false,
+    canViewGooglePhotos: true,
   },
 
   pro: {
@@ -51,6 +53,7 @@ export const ROLE_CAPABILITIES = {
     canShareLocation: true,
     canSearchCR: true,
     canSearchGoogle: true,
+    canViewGooglePhotos: true,
   },
 
   admin: {
@@ -72,5 +75,6 @@ export const ROLE_CAPABILITIES = {
     canModerateUsers: true,
     canSearchCR: true,
     canSearchGoogle: true,
+    canViewGooglePhotos: true,
   }
 };

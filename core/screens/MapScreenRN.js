@@ -18,6 +18,7 @@ import { fetchRoute } from "../map/utils/fetchRoute";
 import { openNativeNavigation } from "../map/utils/navigation";
 
 import { AuthContext } from "@context/AuthContext";
+import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
 import { getCapabilities } from "@core/roles/getCapabilities";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -27,7 +28,7 @@ import { RIDER_CATEGORIES } from "../config/categories/rider";
 
 const RECENTER_ZOOM = 12;
 const FOLLOW_ZOOM = 17; // closer, more “navigation” feel
-const ENABLE_GOOGLE_AUTO_FETCH = false;
+const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 /* ------------------------------------------------------------------ */
 /* CATEGORY → ICON MAP                                                */
@@ -186,7 +187,7 @@ const INCLUDED_TYPES = [
   "gas_station",
 ];
 
-async function doNearbyRequest({ latitude, longitude, radius, includedTypes }) {
+async function doNearbyRequest({ latitude, longitude, radius, includedTypes, capabilities }) {
   const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
   if (!apiKey) {
@@ -194,22 +195,29 @@ async function doNearbyRequest({ latitude, longitude, radius, includedTypes }) {
     return { places: [], error: "Missing API key" };
   }
 
+  const fieldMask = [
+    "places.id",
+    "places.displayName",
+    "places.formattedAddress",
+    "places.location",
+    "places.types",
+    "places.rating",
+    "places.userRatingCount",
+    "places.regularOpeningHours",
+  ];
+
+  // Only Pro/Admin may request photo metadata
+  if (capabilities.canViewGooglePhotos) {
+    fieldMask.push("places.photos");
+  }
+
+
   const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": [
-        "places.id",
-        "places.displayName",
-        "places.formattedAddress",
-        "places.location",
-        "places.types",
-        "places.photos",
-        "places.rating",
-        "places.userRatingCount",
-        "places.regularOpeningHours",
-      ].join(","),
+      "X-Goog-FieldMask": fieldMask.join(","),
     },
     body: JSON.stringify({
       locationRestriction: {
@@ -239,11 +247,16 @@ async function doNearbyRequest({ latitude, longitude, radius, includedTypes }) {
   return { places: json?.places || [], error: null };
 }
 
-function mapGooglePlace(place) {
-  const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
-
+function mapGooglePlace(place, capabilities) {
   const types = Array.isArray(place.types) ? place.types : [];
   const category = classifyPoi({ types });
+  const googlePhotoRefs =
+    capabilities?.canViewGooglePhotos && Array.isArray(place.photos)
+      ? place.photos
+          .map((p) => p.name || p.photo_reference)
+          .filter(Boolean)
+          .slice(0, GOOGLE_PHOTO_LIMITS.maxPhotosPerPlace)
+      : [];
 
   return {
     id: place.id,
@@ -256,48 +269,54 @@ function mapGooglePlace(place) {
     rating: place.rating,
     userRatingsTotal: place.userRatingCount,
     regularOpeningHours: place.regularOpeningHours,
-    googlePhotoUrls:
-      place.photos?.map(
-        (p) =>
-          `https://places.googleapis.com/v1/${p.name}/media?maxWidthPx=800&key=${apiKey}`
-      ) || [],
+    googlePhotoRefs, // ✅ now defined
     source: "google",
     amenities: [],
   };
 }
 
-async function fetchNearbyPois(latitude, longitude, radius) {
+async function fetchNearbyPois(latitude, longitude, radius, capabilities) {
   const attempt = await doNearbyRequest({
     latitude,
     longitude,
     radius,
     includedTypes: INCLUDED_TYPES,
+    capabilities,
   });
 
   if (attempt.error) {
     const all = [];
+
     for (const t of INCLUDED_TYPES) {
       const one = await doNearbyRequest({
         latitude,
         longitude,
         radius,
         includedTypes: [t],
+        capabilities, // 🔒 REQUIRED
       });
+
       if (one.error) {
         console.log(`[GOOGLE] type "${t}" failed:`, one.error);
         continue;
       }
+
       all.push(...(one.places || []));
     }
 
-    const mapped = dedupeById(all.map(mapGooglePlace).filter((p) => p.latitude && p.longitude));
+    const mapped = dedupeById(
+      all
+        .map(p => mapGooglePlace(p, capabilities)) // 🔒 REQUIRED
+        .filter(p => p.latitude && p.longitude)
+    );
+
     console.log("[GOOGLE] nearby fallback places:", mapped.length);
     return mapped;
   }
 
   const mapped = (attempt.places || [])
-    .map(mapGooglePlace)
-    .filter((p) => p.latitude && p.longitude);
+    .map(p => mapGooglePlace(p, capabilities))
+    .filter(p => p.latitude && p.longitude);
 
   return mapped;
 }
@@ -412,7 +431,6 @@ export default function MapScreenRN() {
   }
 
   function handleRecentre() {
-    console.log("Handle Recentre");
     setFollowUser(false);
     recenterOnUser({ zoom: RECENTER_ZOOM });
   }
@@ -507,9 +525,10 @@ export default function MapScreenRN() {
       region.latitudeDelta < 0.03 ? 800 :
       region.latitudeDelta < 0.08 ? 1500 :
       3000;
-
-    const pois = await fetchNearbyPois(region.latitude, region.longitude, radius);
-    setGooglePois(pois);
+// Google nearby auto-fetch disabled by design.
+// Text search is the only Google entry point.
+//    const pois = await fetchNearbyPois(region.latitude, region.longitude, radius, capabilities);
+//    setGooglePois(pois);
   };
 
   /* ------------------------------------------------------------ */
@@ -520,16 +539,34 @@ export default function MapScreenRN() {
     if (!googlePlace) return null;
 
     const temp = {
-      ...googlePlace,
+      // Core CR identity
       id: `temp-${googlePlace.id}`,
-      source: "google",   // treat like CR for visibility/priority
-      _temp: true,        // flag for us
-      _googleId: googlePlace.id,
+      source: "cr",              // ✅ MUST be "cr"
+      _temp: true,
+
+      // Location & display
+      title: googlePlace.title,
+      latitude: googlePlace.latitude,
+      longitude: googlePlace.longitude,
+
+      // CR fields
+      photos: [],                // no CR photos yet
+      amenities: [],
+
+      // 🔑 The critical join key
+      googlePlaceId: googlePlace.id,
+
+      // Google-only ephemeral data
+      googlePhotoRefs: googlePlace.googlePhotoRefs ?? [],
+      googleRating: googlePlace.rating,
+      googleUserRatingsTotal: googlePlace.userRatingsTotal,
+      regularOpeningHours: googlePlace.regularOpeningHours,
     };
 
     setTempCrPlace(temp);
     return temp;
   }
+
 
   function clearTempIfSafe() {
     // Keep the temp place if it is the current route destination (so it doesn’t vanish mid-route).
@@ -577,23 +614,27 @@ export default function MapScreenRN() {
       console.log("[GOOGLE] Missing API key");
       return [];
     }
+    const fieldMask = [
+      "places.id",
+      "places.displayName",
+      "places.formattedAddress",
+      "places.location",
+      "places.types",
+      "places.rating",
+      "places.userRatingCount",
+      "places.regularOpeningHours",
+    ];
+
+    if (capabilities.canViewGooglePhotos) {
+      fieldMask.push("places.photos");
+    }
 
     const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": [
-          "places.id",
-          "places.displayName",
-          "places.formattedAddress",
-          "places.location",
-          "places.types",
-          "places.photos",
-          "places.rating",
-          "places.userRatingCount",
-          "places.regularOpeningHours",
-        ].join(","),
+        "X-Goog-FieldMask": fieldMask.join(","),
       },
       body: JSON.stringify({
         textQuery: query,
@@ -613,7 +654,9 @@ export default function MapScreenRN() {
       return [];
     }
 
-    return (json?.places || []).map(mapGooglePlace).filter(p => p.latitude && p.longitude);
+    return (json?.places || [])
+      .map((p) => mapGooglePlace(p, capabilities))
+      .filter(p => p.latitude && p.longitude);
   }
 
   useEffect(() => {
@@ -745,19 +788,47 @@ export default function MapScreenRN() {
     return googlePois.filter((p) => inRegion(p, paddedRegion));
   }, [googlePois, paddedRegion, activeQuery]);
 
+
   const selectedPlace = useMemo(() => {
+
+console.log("[DEBUG GOOGLE POOLS]", {
+  googlePois: googlePois.length,
+  searchMarkers: searchMarkers.length,
+});
+
     if (!selectedPlaceId) return null;
 
+    // 1️⃣ Temp Google-promoted place
     if (tempCrPlace && tempCrPlace.id === selectedPlaceId) {
       return tempCrPlace;
     }
 
-    return (
-      crMarkers.find((p) => p.id === selectedPlaceId) ||
-      searchMarkers.find((p) => p.id === selectedPlaceId) ||
-      null
-    );
+    // 2️⃣ CR place
+    const crPlace = crMarkers.find(p => p.id === selectedPlaceId);
+    if (crPlace) {
+      const googleMatch = crPlace.googlePlaceId
+        ? searchMarkers.find(
+            g =>
+              g.source === "google" &&
+              g.id === crPlace.googlePlaceId
+          )
+        : null;
+
+      return {
+        ...crPlace,
+        googlePhotoRefs: googleMatch?.googlePhotoRefs ?? [],
+        googleRating: googleMatch?.rating ?? crPlace.googleRating,
+        googleUserRatingsTotal:
+          googleMatch?.userRatingsTotal ?? crPlace.googleUserRatingsTotal,
+        regularOpeningHours:
+          googleMatch?.regularOpeningHours ?? crPlace.regularOpeningHours,
+      };
+    }
+
+    // 3️⃣ Google-only place
+    return searchMarkers.find(p => p.id === selectedPlaceId) || null;
   }, [selectedPlaceId, crMarkers, searchMarkers, tempCrPlace]);
+
 
   /* ------------------------------------------------------------ */
   /* ROUTING                                                      */
@@ -875,6 +946,12 @@ export default function MapScreenRN() {
           e.stopPropagation?.();
           if (poi.source === "google") {
             if (!capabilities.canSearchGoogle) return;
+console.log("[PLACECARD PLACE SHAPE]", {
+  source: poi.source,
+  temp: poi._temp,
+  googleRefs: poi.googlePhotoRefs?.length,
+});
+
             const temp = promoteGoogleToTempCr(poi);
             if (temp) setSelectedPlaceId(temp.id);
             return;
