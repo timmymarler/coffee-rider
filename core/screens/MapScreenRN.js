@@ -261,7 +261,7 @@ function mapGooglePlace(place, capabilities) {
   return {
     id: place.id,
     title: place.displayName?.text || "",
-    address: place.formattedAddress || "",
+    address: place.formattedAddress || null,
     latitude: place.location?.latitude,
     longitude: place.location?.longitude,
     googleTypes: types,
@@ -546,6 +546,7 @@ export default function MapScreenRN() {
 
       // Location & display
       title: googlePlace.title,
+      address: googlePlace.address,
       latitude: googlePlace.latitude,
       longitude: googlePlace.longitude,
 
@@ -646,6 +647,7 @@ export default function MapScreenRN() {
         },
         maxResultCount: 20,
       }),
+      
     });
 
     const json = await res.json();
@@ -697,8 +699,6 @@ export default function MapScreenRN() {
         latitudeDelta < 0.03 ? 15000 :
         latitudeDelta < 0.08 ? 30000 :
         50000;
-
-      console.log("[SEARCH] Text search:", activeQuery);
 
       const results = await doTextSearch({
         query: activeQuery,
@@ -790,11 +790,6 @@ export default function MapScreenRN() {
 
 
   const selectedPlace = useMemo(() => {
-
-console.log("[DEBUG GOOGLE POOLS]", {
-  googlePois: googlePois.length,
-  searchMarkers: searchMarkers.length,
-});
 
     if (!selectedPlaceId) return null;
 
@@ -946,12 +941,6 @@ console.log("[DEBUG GOOGLE POOLS]", {
           e.stopPropagation?.();
           if (poi.source === "google") {
             if (!capabilities.canSearchGoogle) return;
-console.log("[PLACECARD PLACE SHAPE]", {
-  source: poi.source,
-  temp: poi._temp,
-  googleRefs: poi.googlePhotoRefs?.length,
-});
-
             const temp = promoteGoogleToTempCr(poi);
             if (temp) setSelectedPlaceId(temp.id);
             return;

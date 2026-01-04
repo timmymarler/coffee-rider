@@ -2,7 +2,6 @@ import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { GOOGLE_PHOTO_LIMITS, PHOTO_POLICY } from "@core/config/photoPolicy";
 import { buildGooglePhotoUrl } from "@core/google/buildGooglePhotoUrl";
-import { fetchLegacyPlacePhotos } from "@core/google/fetchLegacyPlacePhotos";
 import { getCapabilities } from "@core/roles/getCapabilities";
 import { uploadImage } from "@core/utils/uploadImage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -10,9 +9,10 @@ import { Picker } from "@react-native-picker/picker";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
 import {
-  addDoc,
   arrayUnion,
-  collection, doc, serverTimestamp, updateDoc
+  doc, serverTimestamp,
+  setDoc,
+  updateDoc
 } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useState } from "react";
 import {
@@ -61,7 +61,6 @@ const AMENITY_KEY_MAP = {
   outdoorSeating: "outdoor_seating",
 };
 
-
 /* ------------------------------------------------------------------ */
 
 export default function PlaceCard({
@@ -75,6 +74,32 @@ export default function PlaceCard({
   onRoute,
   onNavigate,
 }) {
+  const safePlace = {
+    ...place,
+
+    photos: place.photos ?? { cr: [], google: [] },
+    amenities: Array.isArray(place.amenities) ? place.amenities : [],
+    suitability: Array.isArray(place.suitability) ? place.suitability : [],
+    crRatings: place.crRatings ?? {
+      average: null,
+      count: 0,
+      users: {},
+    },
+    latitude:
+      typeof place.latitude === "number"
+        ? place.latitude
+        : place.location?.latitude ?? null,
+    longitude:
+      typeof place.longitude === "number"
+        ? place.longitude
+        : place.location?.longitude ?? null,
+    address:
+      place.address ||
+      place.formattedAddress ||
+      place.vicinity ||
+      null,
+
+};
 
   const styles = createStyles(theme);
 
@@ -89,24 +114,24 @@ export default function PlaceCard({
   const isGoogle = place?.source === "google";
   // 🔑 NORMALISE Google place id (ABSOLUTELY REQUIRED)
   const googlePlaceId =
-    place.googlePlaceId ||
-    (place.source === "google" && place.id) ||
+    safePlace.googlePlaceId ||
+    (safePlace.source === "google" && safePlace.id) ||
     null;
 
   const isGoogleNew = place?.source === "google-new";
   const isCr = place?.source === "cr";
-  const isRealCr = place.source === "cr" && !place._temp;
+  const isRealCr = safePlace.source === "cr" && !safePlace._temp;
   const uid = user?.uid;
   const userCrRating =
-    uid && place.crRatings?.users?.[uid]?.rating
-      ? place.crRatings.users[uid].rating
+    uid && safePlace.crRatings?.users?.[uid]?.rating
+      ? safePlace.crRatings.users[uid].rating
       : 0;
   const [selectedRating, setSelectedRating] = useState(userCrRating);
   const canAddPlace =
-    (place.source === "google" || place._temp === true) &&
-    !place._justAdded;
-  const isCrPlace = place.source === "cr";
-  const isEditable = place.source !== "cr"; // add flow only (for now)
+    (safePlace.source === "google" || safePlace._temp === true);
+
+  const isCrPlace = safePlace.source === "cr";  
+  //const isEditable = safePlace.source === "google" || safePlace._temp === true ; // add flow only (for now)
 
   useEffect(() => {
     setSelectedRating(userCrRating);
@@ -117,11 +142,15 @@ export default function PlaceCard({
   /* ------------------------------------------------------------------ */
 
   const [manualName, setManualName] = useState(
-    isGoogleNew ? place.title ?? "" : ""
+    isGoogleNew ? safePlace.title ?? "" : ""
   );
 
   const [manualCategory, setManualCategory] = useState(
-    isGoogleNew ? place.category ?? null : null
+    isGoogleNew ? safePlace.category ?? null : null
+  );
+  const formattedAddress = useMemo(
+    () => formatAddress(place.address),
+    [place.address]
   );
 
   const [commentText, setCommentText] = useState("");
@@ -129,17 +158,25 @@ export default function PlaceCard({
   const [photoIndex, setPhotoIndex] = useState(0);
   const [localPlace, setLocalPlace] = useState(place);
   const [category, setCategory] = useState("cafe");
-  
-  const [suitabilityState, setSuitabilityState] = useState(() => ({
-    ...defaultSuitability,
-    ...(place.suitability || {}),
-  }));
+  const [addError, setAddError] = useState(null);
+
+  const [suitabilityState, setSuitabilityState] = useState(() => {
+    const state = { ...defaultSuitability };
+
+    if (Array.isArray(safePlace.suitability)) {
+      safePlace.suitability.forEach((key) => {
+        if (key in state) state[key] = true;
+      });
+    }
+
+    return state;
+  });
 
   const [amenitiesState, setAmenitiesState] = useState(() => {
     const state = { ...defaultAmenities };
 
     if (Array.isArray(place?.amenities)) {
-      place.amenities.forEach((storedKey) => {
+      safePlace.amenities.forEach((storedKey) => {
         const uiKey = Object.keys(AMENITY_KEY_MAP).find(
           (k) => AMENITY_KEY_MAP[k] === storedKey
         );
@@ -154,23 +191,29 @@ export default function PlaceCard({
   /* DERIVED DATA                                                      */
   /* ------------------------------------------------------------------ */
 
-  const distanceMiles = useMemo(() => {    
-    if (!userLocation || !place.latitude || !place.longitude) return null;
+  const distanceMiles = useMemo(() => {
+    if (
+      !userLocation ||
+      typeof safePlace.latitude !== "number" ||
+      typeof safePlace.longitude !== "number"
+    ) {
+      return null;
+    }
 
     const toRad = (v) => (v * Math.PI) / 180;
     const R = 6371;
 
-    const dLat = toRad(place.latitude - userLocation.latitude);
-    const dLng = toRad(place.longitude - userLocation.longitude);
+    const dLat = toRad(safePlace.latitude - userLocation.latitude);
+    const dLng = toRad(safePlace.longitude - userLocation.longitude);
     const lat1 = toRad(userLocation.latitude);
-    const lat2 = toRad(place.latitude);
+    const lat2 = toRad(safePlace.latitude);
 
     const a =
       Math.sin(dLat / 2) ** 2 +
       Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
 
-    return ((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)))*0.62).toFixed(1);
-  }, [userLocation, place]);
+    return ((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))) * 0.62).toFixed(1);
+  }, [userLocation, safePlace.latitude, safePlace.longitude]);
   
   const distanceText = useMemo(() => {
     if (hasRoute && routeMeta?.distanceMeters && routeMeta?.durationSeconds) {
@@ -190,22 +233,20 @@ export default function PlaceCard({
   }, [hasRoute, routeMeta, distanceMiles]);
 
 
-  const googleRating =
-    place.googleRating ?? place.rating ?? null;
-  const googleRatingCount =
-    place.googleUserRatingsTotal ?? place.userRatingsTotal ?? 0;
-  const crAverageRating = place.crRatings?.average ?? null;
-  const crRatingCount = place.crRatings?.count ?? 0;
+  const googleRating = safePlace.googleRating ?? safePlace.rating ?? null;
+  const googleRatingCount = safePlace.googleUserRatingsTotal ?? safePlace.userRatingsTotal ?? 0;
+  const crAverageRating = safePlace.crRatings?.average ?? null;
+  const crRatingCount = safePlace.crRatings?.count ?? 0;
 
   const photos = useMemo(() => {
     const policy = PHOTO_POLICY[role] || PHOTO_POLICY.guest;
 
-    const crPhotos = Array.isArray(place.photos?.cr)
-      ? place.photos.cr
+    const crPhotos = Array.isArray(safePlace.photos?.cr)
+      ? safePlace.photos.cr
       : [];
 
-    const googlePhotos = Array.isArray(place.photos?.google)
-      ? place.photos.google
+    const googlePhotos = Array.isArray(safePlace.photos?.google)
+      ? safePlace.photos.google
           .map(buildGooglePhotoUrl)
           .filter(Boolean)
           .slice(0, GOOGLE_PHOTO_LIMITS.maxPhotosPerPlace)
@@ -219,10 +260,10 @@ export default function PlaceCard({
       ...(policy.viewCrPhotos ? crPhotos : []),
       ...(policy.viewGooglePhotos ? googlePhotos : []),
     ];
-  }, [place.photos, role]);
+  }, [safePlace.photos, role]);
 
   const photoPolicy = PHOTO_POLICY[role] || PHOTO_POLICY.guest;
-  const crPhotoCount = Array.isArray(place.photos) ? place.photos.length : 0;
+  const crPhotoCount = Array.isArray(safePlace.photos) ? safePlace.photos.length : 0;
   const canUploadPhoto = photoPolicy.maxCrUploads > crPhotoCount;
 
   /* ------------------------------------------------------------------ */
@@ -279,75 +320,107 @@ export default function PlaceCard({
     );
   }
 
+  function defaultAmenitiesFromPlace(place) {
+    const base = { ...defaultAmenities };
+
+    if (Array.isArray(place.amenities)) {
+      place.amenities.forEach((a) => {
+        if (a in base) base[a] = true;
+      });
+    }
+
+    return base;
+  }
+
+  function formatAddress(address) {
+    if (!address) return null;
+
+    // Split on commas and trim
+    const parts = address.split(",").map(p => p.trim());
+
+    return {
+      line1: parts[0] || null,
+      line2: parts.slice(1).join(", ") || null,
+    };
+  }
+
+
   /* ------------------------------------------------------------------ */
   /* SAVE PLACE                                                        */
   /* ------------------------------------------------------------------ */
 
   const handleSavePlace = async () => {
 
-    const selectedAmenities = Object.values(amenitiesState).some(Boolean);
-    if (!selectedAmenities) {
-      console.log("[SAVE PLACE] no amenities selected");
-    }
-
-    const name = manualName.trim() || place.title || "Untitled place";
-    const { latitude, longitude } = place;
-    if (!latitude || !longitude) return;
-
-    const amenities = Object.entries(amenitiesState)
-      .filter(([, enabled]) => enabled)
-      .map(([uiKey]) => AMENITY_KEY_MAP[uiKey]);
-    
-      let googlePhotoRefs = [];
-
-    if (googlePlaceId) {
-      googlePhotoRefs = await fetchLegacyPlacePhotos(
-        googlePlaceId,
-        apiKey
-      );
-    }
     try {
-      const placeRef = await addDoc(collection(db, "places"), {
-        name,
-        category: category || "cafe",
-        location: { latitude, longitude },
-        suitability: suitabilityState,
+      setAddError(null);
+      const isNewPlace = place.source === "google" || place._temp === true;
+
+      const resolvedAddress =
+        safePlace.address ||
+        safePlace.formattedAddress ||
+        safePlace.vicinity ||
+        null;
+
+      const amenities = Object.entries(amenitiesState)
+        .filter(([, enabled]) => enabled)
+        .map(([uiKey]) => AMENITY_KEY_MAP[uiKey])
+        .filter(Boolean);
+
+      if (amenities.length === 0) {
+        setAddError("Please select at least one amenity before adding this place.");
+        return;
+      }
+
+      const suitability = Object.entries(suitabilityState)
+        .filter(([, enabled]) => enabled)
+        .map(([key]) => key);
+
+      const name = manualName?.trim() || safePlace.title;
+      const latitude = safePlace.latitude;
+      const longitude = safePlace.longitude;
+
+      if (typeof latitude !== "number" || typeof longitude !== "number") {
+        setAddError("Location data missing for this place.");
+        return;
+      }
+
+      const docId = googlePlaceId || safePlace.id;
+      const placeRef = doc(db, "places", docId);
+
+      const payload = {
+        title: name,
+        category,
         amenities,
-
-        photos: {
-          cr: [],
-          google: googlePhotoRefs,   // ✅ THIS is what PlaceCard reads
-        },
-
-        googlePlaceId,
-        googleRating: place.rating ?? null,
-        googleUserRatingsTotal: place.userRatingsTotal ?? 0,
-
-        createdAt: serverTimestamp(),
-        createdBy: currentUid,
+        suitability,
+        latitude: safePlace.latitude,
+        longitude: safePlace.longitude,
+        address: resolvedAddress,
         source: "cr",
+        googlePlaceId,            // important
+        updatedAt: serverTimestamp(),
+      };
 
-        crRatings:
-          ratingInput > 0
-            ? {
-                average: ratingInput,
-                count: 1,
-                users: {
-                  [currentUid]: {
-                    rating: ratingInput,
-                    createdAt: serverTimestamp(),
-                    createdBy: currentUid,
-                  },
-                },
-              }
-            : { average: null, count: 0, users: {} },
-        });
+      if (googlePlaceId) {
+        // Google places: always CREATE (idempotent)
+        await setDoc(
+          placeRef,
+          {
+            ...payload,
+            createdAt: serverTimestamp(),
+            createdBy: uid,
+          },
+          { merge: false } // important
+        );
+      } else {
+        // Existing CR places
+        await updateDoc(placeRef, payload);
+      }
 
-      // 🔔 notify parent (THIS is what triggers postbox)
-      onPlaceCreated?.(name, placeRef.id);
-
+      onPlaceCreated?.(docId);
+      
     } catch (err) {
-      console.log("[SAVE PLACE] failed", err);
+      console.error("[SAVE PLACE] failed", err);
+      setAddError("Failed to save place. Please try again.");
     }
   };
 
@@ -378,13 +451,13 @@ export default function PlaceCard({
     const { url } = await uploadImage({
       user,
       type: "place",
-      placeId: place.id,
+      placeId: safePlace.id,
       imageBase64: asset.base64,
     });
 
     const cacheBustedUrl = `${url}?v=${Date.now()}`;
 
-    await updateDoc(doc(db, "places", place.id), {
+    await updateDoc(doc(db, "places", safePlace.id), {
       "photos.cr": arrayUnion(cacheBustedUrl),
     });
 
@@ -402,9 +475,9 @@ export default function PlaceCard({
     if (!capabilities.canRate) return;
     if (!uid || !place?.id || !ratingValue) return;
 
-    const placeRef = doc(db, "places", place.id);
+    const placeRef = doc(db, "places", safePlace.id);
 
-    const existingUsers = place.crRatings?.users || {};
+    const existingUsers = safePlace.crRatings?.users || {};
     const nextUsers = {
       ...existingUsers,
       [uid]: {
@@ -430,7 +503,7 @@ export default function PlaceCard({
     });
 
     // Optimistic UI update
-    place.crRatings = { users: nextUsers, average, count };
+    safePlace.crRatings = { users: nextUsers, average, count };
   };
 
   /* ------------------------------------------------------------------ */
@@ -517,12 +590,12 @@ export default function PlaceCard({
       >      
         <View style={styles.info}>
           <Text style={styles.title}>
-            {isManualOnly ? "Save this place" : place.title}
+            {isManualOnly ? "Save this place" : safePlace.title}
           </Text>
 
           {/* Category */}
           <View style={styles.categoryRow}>
-            {isEditable ? (
+            {canAddPlace ? (
               <Picker
                 selectedValue={category}
                 onValueChange={(value) => setCategory(value)}
@@ -540,18 +613,27 @@ export default function PlaceCard({
               </Picker>
             ) : (
               <Text style={styles.categoryText}>
-                {PLACE_CATEGORIES.find(c => c.key === place.category)?.label
-                  ?? place.category}
+                {PLACE_CATEGORIES.find(c => c.key === safePlace.category)?.label
+                  ?? safePlace.category}
               </Text>
             )}
           </View>
 
           {/* Address */}
-          {(place.address || place.formattedAddress) ? (
-            <Text style={styles.subText}>
-              {place.address || place.formattedAddress} 
-            </Text>
-          ) : null}
+          {formattedAddress && (
+            <View style={styles.addressContainer}>
+              {formattedAddress.line1 && (
+                <Text style={styles.addressLine1}>
+                  {formattedAddress.line1}
+                </Text>
+              )}
+              {formattedAddress.line2 && (
+                <Text style={styles.addressLine2}>
+                  {formattedAddress.line2}
+                </Text>
+              )}
+            </View>
+          )}
           {distanceMiles && (
             <Text style={styles.subText}>
               {/* {distanceMiles} miles away (straight line distance) */}
@@ -559,10 +641,10 @@ export default function PlaceCard({
             </Text>
           )}
           {/* Opening Hours (Google only) */}
-          {place.regularOpeningHours?.weekdayDescriptions?.length ? (
+          {safePlace.regularOpeningHours?.weekdayDescriptions?.length ? (
             <View style={styles.openingHours}>
               <Text style={styles.crLabel}>Opening Hours</Text>
-              {place.regularOpeningHours.weekdayDescriptions.map((line) => (
+              {safePlace.regularOpeningHours.weekdayDescriptions.map((line) => (
                 <Text key={line} style={styles.subText}>
                   {line}
                 </Text>
@@ -642,64 +724,82 @@ export default function PlaceCard({
               </Text>
             </View>
           )}
+          {safePlace.source === "google" && (
+            <Text style={styles.helperText}>
+              Select suitability & amenities before saving
+            </Text>
+          )}
 
           {/* Suitability */}
-          <Text style={styles.crLabel}>Suitability</Text>
-          <View style={styles.amenitiesRow}>
-            {Object.keys(defaultSuitability).map((key) => (
-              <TouchableOpacity
-                key={key}
-                disabled={!isEditable}
-                onPress={() => isEditable && toggleSuitability(key)}
-                style={{ opacity: isEditable ? 1 : 0.5 }}
-              >
-                {amenityIcon(
-                  suitabilityState[key],
-                  key === "bikers"
-                    ? "motorbike"
-                    : key === "scooters"
-                    ? "moped"
-                    : key === "cyclists"
-                    ? "bike"
-                    : key === "walkers"
-                    ? "walk"
-                    : key === "cars"
-                    ? "car"
-                    : "car-electric"
-                )}
-              </TouchableOpacity>
-            ))}
+          <View
+            style={[
+              styles.editableSection,
+              safePlace.source === "google" && styles.editableHighlight,
+            ]}
+          >
+            <Text style={styles.crLabel}>Suitability</Text>
+            <View style={styles.amenitiesRow}>
+              {Object.keys(defaultSuitability).map((key) => (
+                <TouchableOpacity
+                  key={key}
+                  disabled={!canAddPlace}
+                  onPress={() => canAddPlace && toggleSuitability(key)}
+                  style={{ opacity: canAddPlace ? 1 : 0.5 }}
+                >
+                  {amenityIcon(
+                    suitabilityState[key],
+                    key === "bikers"
+                      ? "motorbike"
+                      : key === "scooters"
+                      ? "moped"
+                      : key === "cyclists"
+                      ? "bike"
+                      : key === "walkers"
+                      ? "walk"
+                      : key === "cars"
+                      ? "car"
+                      : "car-electric"
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+            {/* Amenities */}
+            <Text style={styles.crLabel}>Amenities</Text>
+            <View style={styles.amenitiesRow}>
+              {Object.keys(defaultAmenities).map((key) => (
+                <TouchableOpacity
+                  key={key}
+                  disabled={!canAddPlace}
+                  onPress={() => canAddPlace && toggleAmenity(key)}
+                  style={{ opacity: canAddPlace ? 1 : 0.5 }}
+                >
+                  {amenityIcon(
+                    amenitiesState[key],
+                    key === "parking"
+                      ? "parking"
+                      : key === "motorcycleParking"
+                      ? "motorbike"
+                      : key === "evCharger"
+                      ? "ev-plug-ccs2"
+                      : key === "toilets"
+                      ? "toilet"
+                      : key === "petFriendly"
+                      ? "dog-side"
+                      : key === "disabledAccess"
+                      ? "wheelchair-accessibility"
+                      : "table-picnic"
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-
-          {/* Amenities */}
-          <Text style={styles.crLabel}>Amenities</Text>
-          <View style={styles.amenitiesRow}>
-            {Object.keys(defaultAmenities).map((key) => (
-              <TouchableOpacity
-                key={key}
-                disabled={!isEditable}
-                onPress={() => isEditable && toggleAmenity(key)}
-                style={{ opacity: isEditable ? 1 : 0.5 }}
-              >
-                {amenityIcon(
-                  amenitiesState[key],
-                  key === "parking"
-                    ? "parking"
-                    : key === "motorcycleParking"
-                    ? "motorbike"
-                    : key === "evCharger"
-                    ? "ev-plug-ccs2"
-                    : key === "toilets"
-                    ? "toilet"
-                    : key === "petFriendly"
-                    ? "dog-side"
-                    : key === "disabledAccess"
-                    ? "wheelchair-accessibility"
-                    : "table-picnic"
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
+            {addError && (
+              <View style={styles.savedHint}>
+                <Text style={{ color: theme.colors.accentMid }}>
+                  {addError}
+                </Text>
+              </View>
+            )}
 
             {canAddPlace && (
               <TouchableOpacity
@@ -967,7 +1067,7 @@ function createStyles(theme) {
     categoryText: {
       fontSize: 14,
       fontWeight: "600",
-      color: theme.colors.primaryLight,
+      color: theme.colors.text,
     },
 
     categoryPicker: {
@@ -976,5 +1076,26 @@ function createStyles(theme) {
       backgroundColor: theme.colors.primaryDark,
     },
     
+    editableHighlight: {
+      backgroundColor: "rgba(255, 200, 0, 0.08)",
+      borderWidth: 1,
+      borderColor: "rgba(255, 200, 0, 0.4)",
+      borderRadius: 8,
+      padding: 8,
+    },
+
+    addressContainer: {
+      marginTop: 4,
+      marginBottom: 8,
+    },
+    addressLine1: {
+      fontSize: 14,
+      fontWeight: "500",
+      color: theme.colors.textMuted,
+    },
+    addressLine2: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
   };
 }
