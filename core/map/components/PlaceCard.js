@@ -569,8 +569,10 @@ export default function PlaceCard({
             /* Route / Clear Route */
             style={styles.photoActionButton}
             onPress={() => {
-              if (hasRoute) onClearRoute?.();
-              else onRoute?.(place);
+              if (hasRoute) 
+                  onClearRoute?.();
+              else 
+                  onRoute?.(place);
             }}
           >
             <MaterialCommunityIcons

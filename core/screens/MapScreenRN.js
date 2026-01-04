@@ -26,6 +26,10 @@ import theme from "@themes";
 import { useCallback } from "react";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 
+import useWaypoints from "@core/map/waypoints/useWaypoints";
+import WaypointsList from "@core/map/waypoints/WaypointsList";
+
+
 const RECENTER_ZOOM = 12;
 const FOLLOW_ZOOM = 17; // closer, more “navigation” feel
 const ENABLE_GOOGLE_AUTO_FETCH = true;
@@ -364,6 +368,12 @@ export default function MapScreenRN() {
   const [mapKey, setMapKey] = useState(0);
 
   const skipNextFollowTickRef = useRef(false);
+  const {
+    waypoints,
+    addFromPlace,
+    addFromMapPress,
+    clearWaypoints,
+  } = useWaypoints();
 
   useFocusEffect(
     useCallback(() => {
@@ -980,7 +990,10 @@ export default function MapScreenRN() {
           onPanDrag={() => {
             if (followUser) setFollowUser(false);
           }}
-              
+          onLongPress={(e) => {
+            addFromMapPress(e.nativeEvent.coordinate);
+            console.log("[WAYPOINTS] added from map press");
+          }}              
           initialRegion={{
             latitude: userLocation.latitude,
             longitude: userLocation.longitude,
@@ -1135,6 +1148,8 @@ export default function MapScreenRN() {
           <Text style={styles.postboxText}>{postbox.message}</Text>
         </View>
       )}
+      
+      <WaypointsList />
 
       <SearchBar
         value={searchInput}
@@ -1181,6 +1196,11 @@ export default function MapScreenRN() {
 
             // Switch selection to the real CR place
             setSelectedPlaceId(newCrId);
+          }}
+          onAddWaypoint={(placeArg) => {
+            addFromPlace(placeArg);
+            console.log("[WAYPOINTS] added from place:", placeArg.title);
+            console.log("[WAYPOINTS] current:", waypoints);
           }}
         />
       )}
