@@ -2,7 +2,7 @@ import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { GOOGLE_PHOTO_LIMITS, PHOTO_POLICY } from "@core/config/photoPolicy";
 import { buildGooglePhotoUrl } from "@core/google/buildGooglePhotoUrl";
-import { getCapabilities } from "@core/roles/getCapabilities";
+import { getCapabilities } from "@core/roles/capabilities";
 import { uploadImage } from "@core/utils/uploadImage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";

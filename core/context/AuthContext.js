@@ -10,7 +10,7 @@ import {
 } from "firebase/auth";
 import { createContext, useEffect, useState } from "react";
 
-import { getCapabilities } from "@core/roles/getCapabilities";
+import { getCapabilities } from "@core/roles/capabilities";
 import {
   ensureUserDocument,
   getUserProfile

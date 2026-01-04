@@ -3,7 +3,7 @@ import { useContext } from "react";
 import { Dimensions, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AuthContext } from "@context/AuthContext";
-import { getCapabilities } from "@core/roles/getCapabilities";
+import { getCapabilities } from "@core/roles/capabilities";
 import theme from "@themes";
 import SvgPin from "../map/components/SvgPin";
 

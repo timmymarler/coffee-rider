@@ -19,7 +19,7 @@ import { openNativeNavigation } from "../map/utils/navigation";
 
 import { AuthContext } from "@context/AuthContext";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
-import { getCapabilities } from "@core/roles/getCapabilities";
+import { getCapabilities } from "@core/roles/capabilities";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
@@ -383,7 +383,7 @@ export default function MapScreenRN() {
 
   const hasWaypoints = waypoints.length > 0;
   const showFloatingNavigate =
-    capabilities.canRoute &&
+    capabilities.canCreateRoutes &&
     hasWaypoints &&
     !selectedPlace;
 
@@ -1067,7 +1067,7 @@ export default function MapScreenRN() {
             if (followUser) setFollowUser(false);
           }}
           onLongPress={(e) => {
-            if (!capabilities.canRoute) return;
+            if (!capabilities.canCreateRoutes) return;
             addFromMapPress(e.nativeEvent.coordinate);
           }}
           initialRegion={{
@@ -1080,7 +1080,7 @@ export default function MapScreenRN() {
 
           {crMarkers.map(renderMarker)}
           {searchMarkers.map(renderMarker)}
-          {capabilities.canRoute &&
+          {capabilities.canCreateRoutes &&
             waypoints.map((wp, index) => (
               <Marker
                 key={`wp-${index}`}
@@ -1094,8 +1094,8 @@ export default function MapScreenRN() {
                 </View>
               </Marker>
             ))}
-            
-            {capabilities.canRoute &&
+
+            {capabilities.canCreateRoutes &&
               routeCoords.length === 0 &&
               waypointLine.length > 1 && (
                 <Polyline
