@@ -31,3 +31,37 @@ export async function openNativeNavigation({ destination, waypoints = [] }) {
     console.warn("[NAVIGATION] Failed to open navigation:", err);
   }
 }
+
+export function openNavigationWithWaypoints({ origin, waypoints }) {
+  if (!origin || !waypoints?.length) return;
+
+  // Single destination → existing behaviour
+  if (waypoints.length === 1) {
+    return openNativeNavigation({
+      destination: {
+        latitude: waypoints[0].lat,
+        longitude: waypoints[0].lng,
+      },
+    });
+  }
+
+  // Multi-stop → Google Maps
+  const originStr = `${origin.latitude},${origin.longitude}`;
+  const destination = waypoints[waypoints.length - 1];
+  const destinationStr = `${destination.lat},${destination.lng}`;
+
+  const stops = waypoints.slice(0, -1);
+
+  const waypointsParam = stops
+    .map(wp => `${wp.lat},${wp.lng}`)
+    .join("|");
+
+  const url =
+    `https://www.google.com/maps/dir/?api=1` +
+    `&origin=${originStr}` +
+    `&destination=${destinationStr}` +
+    `&waypoints=${waypointsParam}` +
+    `&travelmode=driving`;
+
+  Linking.openURL(url);
+}

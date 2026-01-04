@@ -2,7 +2,7 @@ import theme from "@themes";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import useWaypoints from "./useWaypoints";
 
-export default function WaypointsList() {
+export default function WaypointsList({ onClearAll }) {
   const { waypoints, removeWaypoint, clearWaypoints } = useWaypoints();
 
   if (!waypoints.length) return null;
@@ -11,7 +11,7 @@ export default function WaypointsList() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Waypoints</Text>
-        <TouchableOpacity onPress={clearWaypoints}>
+          <TouchableOpacity onPress={onClearAll}>
           <Text style={styles.clear}>Clear</Text>
         </TouchableOpacity>
       </View>

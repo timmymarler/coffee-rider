@@ -26,6 +26,7 @@ import theme from "@themes";
 import { useCallback } from "react";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 
+import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 
@@ -374,6 +375,17 @@ export default function MapScreenRN() {
     addFromMapPress,
     clearWaypoints,
   } = useWaypoints();
+  
+  function clearNavigationIntent() {
+    clearWaypoints();
+    clearRoute();
+  }
+
+  const hasWaypoints = waypoints.length > 0;
+  const showFloatingNavigate =
+    capabilities.canRoute &&
+    hasWaypoints &&
+    !selectedPlace;
 
   useFocusEffect(
     useCallback(() => {
@@ -610,7 +622,7 @@ export default function MapScreenRN() {
     clearSearch();
     setSelectedPlaceId(null);
     setTempCrPlace(null);
-    clearRoute();
+    clearNavigationIntent();
     setFollowUser(false);
   };
 
@@ -874,18 +886,82 @@ export default function MapScreenRN() {
     });
   }
 
-  function handleNavigate(place) {
-    if (!place || !userLocation) return;
+  function getActiveDestination() {
+    if (!routeDestinationId) return null;
 
-    openNativeNavigation({
-      destination: {
-        latitude: place.latitude,
-        longitude: place.longitude,
-      },
-      waypoints: [], // ready for future Pro routes
-    });
+    // 1️⃣ Temp promoted Google place
+    if (tempCrPlace?.id === routeDestinationId) {
+      return tempCrPlace;
+    }
 
+    // 2️⃣ Any CR place (NOT region-filtered)
+    const cr = crPlaces.find(p => p.id === routeDestinationId);
+    if (cr) return cr;
+
+    // 3️⃣ Fallback: selectedPlace (edge safety)
+    if (selectedPlace?.id === routeDestinationId) {
+      return selectedPlace;
+    }
+
+    return null;
   }
+
+  function handleNavigate(place) {
+    if (!userLocation) return;
+
+    const destination = place || getActiveDestination();
+
+    // No waypoints → normal navigation
+    if (!waypoints.length) {
+      if (!destination) return;
+
+      openNativeNavigation({
+        destination: {
+          latitude: destination.latitude,
+          longitude: destination.longitude,
+        },
+      });
+      return;
+    }
+
+    // Waypoints exist → append destination if present
+    const navigationWaypoints = [...waypoints];
+
+    if (destination) {
+      const last = navigationWaypoints[navigationWaypoints.length - 1];
+
+      const isAlreadyLast =
+        last &&
+        last.lat === destination.latitude &&
+        last.lng === destination.longitude;
+
+      if (!isAlreadyLast) {
+        navigationWaypoints.push({
+          lat: destination.latitude,
+          lng: destination.longitude,
+          title: destination.title || "Destination",
+          source: "destination",
+        });
+      }
+    }
+
+    openNavigationWithWaypoints({
+      origin: userLocation,
+      waypoints: navigationWaypoints,
+    });
+  }
+
+  const waypointLine = useMemo(() => {
+    if (!userLocation || waypoints.length === 0) return [];
+
+    return [
+      { latitude: userLocation.latitude, longitude: userLocation.longitude },
+      ...waypoints.map(wp => ({
+        latitude: wp.lat,
+        longitude: wp.lng,
+      })),
+    ];
+  }, [userLocation, waypoints]);
 
   /* ------------------------------------------------------------ */
   /* RENDER                                                       */
@@ -991,9 +1067,9 @@ export default function MapScreenRN() {
             if (followUser) setFollowUser(false);
           }}
           onLongPress={(e) => {
+            if (!capabilities.canRoute) return;
             addFromMapPress(e.nativeEvent.coordinate);
-            console.log("[WAYPOINTS] added from map press");
-          }}              
+          }}
           initialRegion={{
             latitude: userLocation.latitude,
             longitude: userLocation.longitude,
@@ -1004,11 +1080,37 @@ export default function MapScreenRN() {
 
           {crMarkers.map(renderMarker)}
           {searchMarkers.map(renderMarker)}
+          {capabilities.canRoute &&
+            waypoints.map((wp, index) => (
+              <Marker
+                key={`wp-${index}`}
+                coordinate={{ latitude: wp.lat, longitude: wp.lng }}
+                anchor={{ x: 0.5, y: 0.5 }}
+                zIndex={500}
+                tracksViewChanges={false}
+              >
+                <View style={styles.waypointPin}>
+                  <Text style={styles.waypointIndex}>{index + 1}</Text>
+                </View>
+              </Marker>
+            ))}
+            
+            {capabilities.canRoute &&
+              routeCoords.length === 0 &&
+              waypointLine.length > 1 && (
+                <Polyline
+                  coordinates={waypointLine}
+                  strokeWidth={2.5}
+                  strokeColor={theme.colors.primary}
+                  lineDashPattern={[8, 6]}
+                  zIndex={200}
+                />
+            )}
 
           <Polyline
             coordinates={routeCoords}
             strokeWidth={4}
-            strokeColor="#2563eb"
+            strokeColor={theme.colors.primary}
             zIndex={1000}
           />
         </MapView>
@@ -1148,8 +1250,22 @@ export default function MapScreenRN() {
           <Text style={styles.postboxText}>{postbox.message}</Text>
         </View>
       )}
-      
-      <WaypointsList />
+
+      <WaypointsList onClearAll={clearNavigationIntent} />
+
+      {showFloatingNavigate && (
+        <TouchableOpacity
+          style={styles.navigateButton}
+          onPress={() => handleNavigate(null)}
+        >
+          <MaterialCommunityIcons
+            name="navigation"
+            size={22}
+            color={theme.colors.primaryDark}
+          />
+          <Text style={styles.navigateButtonText}>Navigate</Text>
+        </TouchableOpacity>
+      )}
 
       <SearchBar
         value={searchInput}
@@ -1199,8 +1315,6 @@ export default function MapScreenRN() {
           }}
           onAddWaypoint={(placeArg) => {
             addFromPlace(placeArg);
-            console.log("[WAYPOINTS] added from place:", placeArg.title);
-            console.log("[WAYPOINTS] current:", waypoints);
           }}
         />
       )}
@@ -1381,6 +1495,42 @@ const styles = StyleSheet.create({
     color: theme.colors.primaryLight,
     fontSize: 14,
     fontWeight: "600",
+  },
+
+  navigateButton: {
+    position: "absolute",
+    right: 16,
+    bottom: 110, // above tab bar
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: theme.colors.accent,
+    elevation: 6,
+    zIndex: 2500,
+  },
+
+  navigateButtonText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.primaryDark,
+  },
+
+  waypointPin: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#2563eb", // map blue
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  waypointIndex: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#ffffff",
   },
 
 });
