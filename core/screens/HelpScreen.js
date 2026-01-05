@@ -63,7 +63,6 @@ export default function HelpScreen() {
       {/* -------------------------------------------------- */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Map controls</Text>
-
         <View style={styles.controlRow}>
           <MaterialCommunityIcons
             name="crosshairs-gps"
@@ -76,7 +75,6 @@ export default function HelpScreen() {
             back to your current location.
           </Text>
         </View>
-
         <View style={styles.controlRow}>
           <MaterialCommunityIcons
             name="navigation"
@@ -89,7 +87,6 @@ export default function HelpScreen() {
             centred on you as you move. Dragging the map will turn this off.
           </Text>
         </View>
-
         <View style={styles.controlRow}>
           <MaterialCommunityIcons
             name="navigation"
@@ -101,10 +98,62 @@ export default function HelpScreen() {
             <Text style={styles.controlLabel}>Follow Me (Active)</Text> — when you enable Follow Me, the icon will turn red
           </Text>
         </View>
+        <Text style={styles.sectionTitle}>Map actions</Text>
+        <View style={styles.legendRow}>
+          <SvgPin {...markerStyles.cr} size={24} />
+          <Text style={styles.legendText}>
+            <Text style={styles.controlLabel}>Place Details</Text> - Tap any marker to open the Place Card. There you can see details including category, address, distance, 
+            photos  (add your own to enhance the listing), suitability, amenities and you can see the 
+            default route and load your navigation software.
+          </Text>
+        </View>
+        <View style={styles.legendRow}>
+          <View style={styles.waypointPin}></View>
+          <Text style={styles.legendText}>
+            <Text style={styles.controlLabel}>Way Points</Text> - Long Press on any marker (or any location) and immediately show the suggested route and load your navigation software 
+            from the main screen. Want to route via different places? Long Press on the map to add way points.
+          </Text>
+        </View>
       </View>
 
       {/* -------------------------------------------------- */}
-      {/* MARKER ICONS                                       */}
+      {/* MAP MARKERS                                        */}
+      {/* -------------------------------------------------- */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Map markers</Text>
+
+        <View style={styles.legendRow}>
+          <SvgPin {...markerStyles.cr} size={34} />
+          <Text style={styles.legendText}>
+            Coffee Rider places — added by the community and always shown on the map.
+          </Text>
+        </View>
+
+        <View style={styles.legendRow}>
+          <SvgPin {...markerStyles.searchCR} size={34} />
+          <Text style={styles.legendText}>
+            Highlighted Coffee Rider places — match your current search.
+          </Text>
+        </View>
+
+        <View style={styles.legendRow}>
+          <SvgPin {...markerStyles.searchGoogle} size={34} />
+          <Text style={styles.legendText}>
+            Search results — temporary places from Google that disappear when search
+            is cleared.
+          </Text>
+        </View>
+
+        <View style={styles.legendRow}>
+          <SvgPin {...markerStyles.destination} size={34} />
+          <Text style={styles.legendText}>
+            Destination — the place you are navigating to or routing towards.
+          </Text>
+        </View>
+      </View>
+
+      {/* -------------------------------------------------- */}
+      {/* Place Categories                                   */}
       {/* -------------------------------------------------- */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Place categories</Text>
@@ -148,41 +197,49 @@ export default function HelpScreen() {
       </View>
 
       {/* -------------------------------------------------- */}
-      {/* MAP MARKERS                                        */}
+      {/* Place Amenities                                   */}
       {/* -------------------------------------------------- */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Map markers</Text>
-
-        <View style={styles.legendRow}>
-          <SvgPin {...markerStyles.cr} size={34} />
-          <Text style={styles.legendText}>
-            Coffee Rider places — added by the community and always shown on the map.
+        <Text style={styles.sectionTitle}>Place amenities</Text>
+          <Text style={styles.controlText}>
+            <Text style={styles.controlLabel}>Amenities Icons</Text> — different icons will appear in the markers 
+            to identify the various different amenities that are available at the place you are viewing.
           </Text>
+        <View style={styles.legendRow}>
+          <MaterialCommunityIcons name="parking" size={22} color={theme.colors.primaryDark} />
+          <Text style={styles.legendText}>Has its own car park</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <SvgPin {...markerStyles.searchCR} size={34} />
-          <Text style={styles.legendText}>
-            Highlighted Coffee Rider places — match your current search.
-          </Text>
+          <MaterialCommunityIcons name="motorbike" size={22} color={theme.colors.primaryDark} />
+          <Text style={styles.legendText}>Parking suitable for bikes and scooters</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <SvgPin {...markerStyles.searchGoogle} size={34} />
-          <Text style={styles.legendText}>
-            Search results — temporary places from Google that disappear when search
-            is cleared.
-          </Text>
+          <MaterialCommunityIcons name="ev-station" size={22} color={theme.colors.primaryDark} />
+          <Text style={styles.legendText}>Has EV charging points</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <SvgPin {...markerStyles.destination} size={34} />
-          <Text style={styles.legendText}>
-            Destination — the place you are navigating to or routing towards.
-          </Text>
+          <MaterialCommunityIcons name="toilet" size={22} color={theme.colors.primaryDark} />
+          <Text style={styles.legendText}>Has toilets on site</Text>
+        </View>
+
+        <View style={styles.legendRow}>
+          <MaterialCommunityIcons name="dog-side" size={22} color={theme.colors.primaryDark} />
+          <Text style={styles.legendText}>Pet Friendly</Text>
+        </View>
+
+        <View style={styles.legendRow}>
+          <MaterialCommunityIcons name="wheelchair" size={22} color={theme.colors.primaryDark} />
+          <Text style={styles.legendText}>Wheelchar accessible</Text>
+        </View>
+
+        <View style={styles.legendRow}>
+          <MaterialCommunityIcons name="table-picnic" size={22} color={theme.colors.primaryDark} />
+          <Text style={styles.legendText}>Has outside seating</Text>
         </View>
       </View>
-
 
       {/* -------------------------------------------------- */}
       {/* FEATURE HINTS                                     */}
@@ -413,6 +470,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.primaryDark,
     lineHeight: 20,
+  },
+  waypointPin: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#2563eb", // map blue
+    justifyContent: "center",
+    alignItems: "center",
   },
 
 });
