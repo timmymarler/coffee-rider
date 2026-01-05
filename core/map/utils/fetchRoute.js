@@ -44,8 +44,10 @@ export async function fetchRoute({ origin, destination, waypoints = [] }) {
 
           // 🔑 ADD THIS
           intermediates,
-
           travelMode: "DRIVE",
+          routeModifiers: {
+            avoidHighways: true,   // 🚫 motorways
+          },          
         }),
       }
     );

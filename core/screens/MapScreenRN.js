@@ -25,7 +25,7 @@ import theme from "@themes";
 import { useCallback } from "react";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 
-import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
+import { openNativeNavigation, openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 
@@ -385,6 +385,7 @@ export default function MapScreenRN() {
   const [routeClearedByUser, setRouteClearedByUser] = useState(false);
   const routeRequestId = useRef(0);
   const [routeVersion, setRouteVersion] = useState(0);
+  const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
 
 // state
 
@@ -608,6 +609,7 @@ export default function MapScreenRN() {
     setRouteDestination(null);
     clearWaypoints();
     setRouteCoords([]);            // ✅ clear polyline HERE
+    setRouteDistanceMeters(null);
 
   }
 
@@ -949,6 +951,10 @@ useEffect(() => {
       })),
     });
 
+    if (result?.distance) {
+      setRouteDistanceMeters(result.distance);
+    }
+
     if (!result?.polyline) return;
     if (requestId !== routeRequestId.current) return;
 
@@ -958,51 +964,69 @@ useEffect(() => {
     }));
 
     setRouteCoords(decoded);
-
+    // 🔑 ADD THIS
+    setRouteMeta({
+      distanceMeters: result.distanceMeters ?? result.distance,
+      durationSeconds: result.durationSeconds ?? result.duration,
+    });
+    
     mapRef.current?.fitToCoordinates(decoded, {
       edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
       animated: true,
     });
   }
 
-  function handleNavigate(place) {
+  function handleNavigate(placeOverride = null) {
+    const destination = placeOverride || routeDestination;
+
     if (!userLocation) return;
 
-    const destination = place || routeDestination;
-
     // ─────────────────────────────
-    // MODE A: Destination exists
+    // Case 1: Destination exists
     // ─────────────────────────────
     if (destination) {
+      // No waypoints → simple navigation
+      if (!waypoints.length) {
+        openNativeNavigation({
+          destination: {
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+          },
+        });
+        return;
+      }
+
+      // Waypoints → intermediates + destination
       openNavigationWithWaypoints({
         origin: userLocation,
-        destination: {
-          latitude: destination.latitude,
-          longitude: destination.longitude,
-        },
-        waypoints: waypoints.map(wp => ({
-          lat: wp.lat ?? wp.latitude,
-          lng: wp.lng ?? wp.longitude,
-          title: wp.title,
-        })),
+        waypoints: [
+          ...waypoints.map(wp => ({
+            lat: wp.lat,
+            lng: wp.lng,
+            title: wp.title,
+          })),
+          {
+            lat: destination.latitude,
+            lng: destination.longitude,
+            title: destination.title || "Destination",
+          },
+        ],
       });
       return;
     }
 
     // ─────────────────────────────
-    // MODE B: Waypoints only
+    // Case 2: No destination, waypoints only
+    // (navigate to last waypoint)
     // ─────────────────────────────
-    if (waypoints.length > 0) {
-      const final = waypoints[waypoints.length - 1];
-      const via = waypoints.slice(0, -1);
-
+    if (waypoints.length) {
       openNavigationWithWaypoints({
         origin: userLocation,
-        destination: {
-          latitude: final.lat,
-          longitude: final.lng,
-        },
-        waypoints: via,
+        waypoints: waypoints.map(wp => ({
+          lat: wp.lat,
+          lng: wp.lng,
+          title: wp.title,
+        })),
       });
     }
   }
