@@ -216,10 +216,9 @@ export default function HelpScreen() {
         <Text style={styles.sectionTitle}>Guests - What you can do</Text>
           <>
             <Text style={styles.bullet}>• View Coffee Rider places on the map</Text>
-            <Text style={styles.bullet}>
-              • Search previously added Coffee Rider cafés and meeting spots
-            </Text>
-            <Text style={styles.bullet}>• View place details, photos and ratings</Text>
+            <Text style={styles.bullet}>• Search previously added Coffee Rider cafés and meeting spots</Text>
+            <Text style={styles.bullet}>• View place details and ratings</Text>
+            <Text style={styles.bullet}>• See the suggested route to your destination</Text>
           </>
 
         <Text style={styles.sectionTitle}>Standard Users - What you can do</Text>

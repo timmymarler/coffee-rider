@@ -1,6 +1,5 @@
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
-import { GOOGLE_PHOTO_LIMITS, PHOTO_POLICY } from "@core/config/photoPolicy";
 import { buildGooglePhotoUrl } from "@core/google/buildGooglePhotoUrl";
 import { getCapabilities } from "@core/roles/capabilities";
 import { uploadImage } from "@core/utils/uploadImage";
@@ -12,6 +11,7 @@ import {
   arrayUnion,
   doc, serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc
 } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useState } from "react";
@@ -27,6 +27,8 @@ import { RIDER_CATEGORIES } from "../../config/categories/rider";
 const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 const PLACE_CATEGORIES = RIDER_CATEGORIES;
 const screenWidth = Dimensions.get("window").width;
+const MAX_USER_PHOTOS_PER_PLACE = 2;
+
 /* ------------------------------------------------------------------ */
 /* CONSTANTS                                                          */
 /* ------------------------------------------------------------------ */
@@ -190,6 +192,27 @@ export default function PlaceCard({
   /* ------------------------------------------------------------------ */
   /* DERIVED DATA                                                      */
   /* ------------------------------------------------------------------ */
+  // --- CR photo ownership & limits ---
+
+  const crPhotos = Array.isArray(safePlace.photos?.cr)
+    ? safePlace.photos.cr
+    : [];
+
+  const myCrPhotos = uid
+    ? crPhotos.filter(p => p.createdBy === uid)
+    : [];
+
+  // Upload permission:
+  // - must be allowed to upload at all
+  // - Pro/Admin: unlimited
+  // - User: max 2 per place
+  const canUploadCrPhoto =
+    capabilities.canUploadPhotos &&
+    (
+      capabilities.isAdmin ||
+      capabilities.canCreateRoutes || // Pro
+      myCrPhotos.length < MAX_USER_PHOTOS_PER_PLACE // User
+    );
 
   const distanceMiles = useMemo(() => {
     if (
@@ -237,34 +260,37 @@ export default function PlaceCard({
   const googleRatingCount = safePlace.googleUserRatingsTotal ?? safePlace.userRatingsTotal ?? 0;
   const crAverageRating = safePlace.crRatings?.average ?? null;
   const crRatingCount = safePlace.crRatings?.count ?? 0;
+  
+  const rawGooglePhotos = useMemo(() => {
+    return Array.isArray(safePlace.photos?.google)
+      ? safePlace.photos.google.map(buildGooglePhotoUrl).filter(Boolean)
+      : [];
+  }, [safePlace.photos]);
 
   const photos = useMemo(() => {
-    const policy = PHOTO_POLICY[role] || PHOTO_POLICY.guest;
-
     const crPhotos = Array.isArray(safePlace.photos?.cr)
       ? safePlace.photos.cr
       : [];
 
-    const googlePhotos = Array.isArray(safePlace.photos?.google)
-      ? safePlace.photos.google
-          .map(buildGooglePhotoUrl)
-          .filter(Boolean)
-          .slice(0, GOOGLE_PHOTO_LIMITS.maxPhotosPerPlace)
-      : [];
+    let googlePhotos = [];
 
-    if (!policy.viewCrPhotos && !policy.viewGooglePhotos) {
-      return [];
+    switch (capabilities.googlePhotoAccess) {
+      case "full":
+        googlePhotos = rawGooglePhotos;
+        break;
+
+      case "limited":
+        googlePhotos = rawGooglePhotos.slice(0, 2);
+        break;
+
+      case "none":
+      default:
+        googlePhotos = [];
     }
 
-    return [
-      ...(policy.viewCrPhotos ? crPhotos : []),
-      ...(policy.viewGooglePhotos ? googlePhotos : []),
-    ];
-  }, [safePlace.photos, role]);
+    return [...crPhotos, ...googlePhotos];
+  }, [safePlace.photos, rawGooglePhotos, capabilities.googlePhotoAccess]);
 
-  const photoPolicy = PHOTO_POLICY[role] || PHOTO_POLICY.guest;
-  const crPhotoCount = Array.isArray(safePlace.photos) ? safePlace.photos.length : 0;
-  const canUploadPhoto = photoPolicy.maxCrUploads > crPhotoCount;
 
   /* ------------------------------------------------------------------ */
   /* HELPERS                                                           */
@@ -430,6 +456,13 @@ export default function PlaceCard({
 
   const handleAddPhoto = async () => {
     if (!user || !place?.id) return;
+    if (!canUploadCrPhoto) {
+      showPostBox({
+        type: "info",
+        message: "Free users can upload up to 2 photos per place. Upgrade to Pro for unlimited uploads.",
+      });
+      return;
+    }
 
     const { status } =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -457,15 +490,22 @@ export default function PlaceCard({
 
     const cacheBustedUrl = `${url}?v=${Date.now()}`;
 
+    const newPhoto = {
+      url: cacheBustedUrl,
+      createdBy: user.uid,
+      createdAt: Timestamp.now(),
+    };
+
     await updateDoc(doc(db, "places", safePlace.id), {
-      "photos.cr": arrayUnion(cacheBustedUrl),
+      "photos.cr": arrayUnion(newPhoto),
+      updatedAt: serverTimestamp(),
     });
 
     setLocalPlace(prev => ({
       ...prev,
       photos: {
         ...prev.photos,
-        cr: [...(prev.photos?.cr || []), cacheBustedUrl],
+        cr: [...(prev.photos?.cr || []), newPhoto],
       },
     }));
 
@@ -535,14 +575,26 @@ export default function PlaceCard({
             }
           >
             {photos.map((p, i) => (
-              <Image key={i} source={{ uri: p }} style={styles.photo} />
+              <Image
+                key={p.url ?? i}
+                source={{ uri: p.url }}
+                style={styles.photo}
+              />
             ))}
+
           </ScrollView>
+          {capabilities.googlePhotoAccess === "limited" &&
+          rawGooglePhotos.length > 2 && (
+            <Text style={styles.upgradeHint}>
+              More photos available with Pro
+            </Text>
+          )}
+
         </View>
 
         {/* Floating action bar */}
         <View style={styles.photoActionBar}>
-          {isCr && currentUid && canUploadPhoto && (
+          {isCr && currentUid && canUploadCrPhoto && (
             <TouchableOpacity
               style={styles.photoActionButton}
               onPress={handleAddPhoto}
