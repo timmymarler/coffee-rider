@@ -1,6 +1,18 @@
-export async function fetchRoute({ origin, destination }) {
+export async function fetchRoute({ origin, destination, waypoints = [] }) {
   try {
     const key = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+    const intermediates =
+      Array.isArray(waypoints) && waypoints.length > 0
+        ? waypoints.map(wp => ({
+            location: {
+              latLng: {
+                latitude: wp.latitude ?? wp.lat,
+                longitude: wp.longitude ?? wp.lng,
+              },
+            },
+          }))
+        : undefined;
 
     const response = await fetch(
       "https://routes.googleapis.com/directions/v2:computeRoutes",
@@ -29,6 +41,10 @@ export async function fetchRoute({ origin, destination }) {
               },
             },
           },
+
+          // 🔑 ADD THIS
+          intermediates,
+
           travelMode: "DRIVE",
         }),
       }
