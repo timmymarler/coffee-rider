@@ -70,7 +70,7 @@ export default function PlaceCard({
   onClose,
   userLocation,
   hasRoute = false,
-  routeMeta=null,
+  routeMeta = null,
   onPlaceCreated,
   onClearRoute = null,
   onRoute,
@@ -213,7 +213,7 @@ export default function PlaceCard({
       capabilities.canCreateRoutes || // Pro
       myCrPhotos.length < MAX_USER_PHOTOS_PER_PLACE // User
     );
-
+  const canPreviewSingleRoute = capabilities.canPreviewSingleRoute;
   const distanceMiles = useMemo(() => {
     if (
       !userLocation ||
@@ -616,23 +616,24 @@ export default function PlaceCard({
               />
             </TouchableOpacity>
           )}
-
-          <TouchableOpacity
-            /* Route / Clear Route */
-            style={styles.photoActionButton}
-            onPress={() => {
-              if (hasRoute) 
-                  onClearRoute?.();
-              else 
-                  onRoute?.(place);
-            }}
-          >
-            <MaterialCommunityIcons
-              name={hasRoute ? "map-marker-off" : "map-marker-path"}
-              size={18}
-              color="#fff"
-            />
-          </TouchableOpacity>
+          {canPreviewSingleRoute && (
+            <TouchableOpacity
+              /* Route / Clear Route */
+              style={styles.photoActionButton}
+              onPress={() => {
+                if (hasRoute) 
+                    onClearRoute?.();
+                else 
+                    onRoute?.(place);
+              }}
+            >
+              <MaterialCommunityIcons
+                name={hasRoute ? "map-marker-off" : "map-marker-path"}
+                size={18}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 

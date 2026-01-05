@@ -15,7 +15,6 @@ import { applyFilters } from "../map/filters/applyFilters";
 import { decode } from "@mapbox/polyline";
 import { SearchBar } from "../map/components/SearchBar";
 import { fetchRoute } from "../map/utils/fetchRoute";
-import { openNativeNavigation } from "../map/utils/navigation";
 
 import { AuthContext } from "@context/AuthContext";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
@@ -351,7 +350,6 @@ export default function MapScreenRN() {
 
   // Routing
   const [routeCoords, setRouteCoords] = useState([]);
-  const [routeDestinationId, setRouteDestinationId] = useState(null);
 
   const hasRoute = routeCoords.length > 0;
   const [routeMeta, setRouteMeta] = useState(null);
@@ -376,16 +374,23 @@ export default function MapScreenRN() {
     clearWaypoints,
   } = useWaypoints();
   
-  function clearNavigationIntent() {
-    clearWaypoints();
-    clearRoute();
-  }
-
   const hasWaypoints = waypoints.length > 0;
   const showFloatingNavigate =
     capabilities.canCreateRoutes &&
     hasWaypoints &&
     !selectedPlace;
+  const [routingActive, setRoutingActive] = useState(false);
+  const [routeDestination, setRouteDestination] = useState(null);
+  const [routeDestinationId, setRouteDestinationId] = useState(null);
+  const [routeClearedByUser, setRouteClearedByUser] = useState(false);
+  const routeRequestId = useRef(0);
+  const [routeVersion, setRouteVersion] = useState(0);
+
+// state
+
+  function clearNavigationIntent() {
+    clearRoute();
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -593,15 +598,17 @@ export default function MapScreenRN() {
 
   function clearTempIfSafe() {
     // Keep the temp place if it is the current route destination (so it doesn’t vanish mid-route).
-    if (tempCrPlace && routeDestinationId === tempCrPlace.id) return;
+    if (tempCrPlace && routeDestination === tempCrPlace.id) return;
     setTempCrPlace(null);
   }
 
   function clearRoute() {
-    setRouteCoords([]);
-    setRouteDestinationId(null);
-    setTempCrPlace(null);   // ✅ THIS is the missing piece
-    setRouteMeta(null);
+    routeRequestId.current += 1;   // invalidate in-flight requests
+    setRoutingActive(false);
+    setRouteDestination(null);
+    clearWaypoints();
+    setRouteCoords([]);            // ✅ clear polyline HERE
+
   }
 
   function clearSearch() {
@@ -776,6 +783,25 @@ export default function MapScreenRN() {
     return () => { cancelled = true; };
   }, [activeQuery, searchOrigin]);
 
+useEffect(() => {
+  if (routeClearedByUser) return;
+  if (!userLocation) return;
+
+  const hasInputs =
+    routeDestination !== null || waypoints.length > 0;
+
+  if (!hasInputs) {
+    if (routeCoords.length > 0) {
+      setRouteCoords([]);
+    }
+    return;
+  }
+
+  const requestId = ++routeRequestId.current;
+  buildRoute({ requestId });
+}, [routeDestination, waypoints, routeClearedByUser, userLocation]);
+
+
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
   /* ------------------------------------------------------------ */
@@ -852,32 +878,85 @@ export default function MapScreenRN() {
   /* ------------------------------------------------------------ */
 
   async function handleRoute(place) {
-    if (!place) return;
+    routeRequestId.current += 1;
+    const requestId = routeRequestId.current;
+
+    setRoutingActive(true);
+    setRouteDestination(place);
+
+    await buildRoute({ destinationOverride: place, requestId });
+  }
+
+  function getActiveDestination() {
+    if (!routeDestination) return null;
+
+    // 1️⃣ Temp promoted Google place
+    if (tempCrPlace?.id === routeDestination) {
+      return tempCrPlace;
+    }
+
+    // 2️⃣ Any CR place (NOT region-filtered)
+    const cr = crPlaces.find(p => p.id === routeDestination);
+    if (cr) return cr;
+
+    // 3️⃣ Fallback: selectedPlace (edge safety)
+    if (selectedPlace?.id === routeDestination) {
+      return selectedPlace;
+    }
+
+    return null;
+  }
+
+  async function buildRoute({ destinationOverride = null, requestId } = {}) {
     if (!userLocation) return;
 
-    setRouteDestinationId(place.id);
+    const destination =
+      destinationOverride ||
+      routeDestination ||
+      null;
+
+    if (!destination && waypoints.length === 0) return;
+
+    // ─────────────────────────────
+    // Determine final destination
+    // ─────────────────────────────
+    const finalDestination = destination
+      ? {
+          latitude: destination.latitude,
+          longitude: destination.longitude,
+        }
+      : {
+          latitude: waypoints[waypoints.length - 1].lat,
+          longitude: waypoints[waypoints.length - 1].lng,
+        };
+
+    // ─────────────────────────────
+    // Intermediates
+    // ─────────────────────────────
+    const intermediates = destination
+      ? waypoints
+      : waypoints.slice(0, -1);
 
     const result = await fetchRoute({
       origin: {
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,
       },
-      destination: {
-        latitude: place.latitude,
-        longitude: place.longitude,
-      },
+      destination: finalDestination,
+      waypoints: intermediates.map(wp => ({
+        latitude: wp.lat,
+        longitude: wp.lng,
+      })),
     });
 
     if (!result?.polyline) return;
+    if (requestId !== routeRequestId.current) return;
 
     const decoded = decode(result.polyline).map(([lat, lng]) => ({
       latitude: lat,
       longitude: lng,
     }));
-    setRouteMeta({
-      distanceMeters: result.distanceMeters,
-      durationSeconds: result.durationSeconds,
-    });
+
     setRouteCoords(decoded);
 
     mapRef.current?.fitToCoordinates(decoded, {
@@ -886,82 +965,47 @@ export default function MapScreenRN() {
     });
   }
 
-  function getActiveDestination() {
-    if (!routeDestinationId) return null;
-
-    // 1️⃣ Temp promoted Google place
-    if (tempCrPlace?.id === routeDestinationId) {
-      return tempCrPlace;
-    }
-
-    // 2️⃣ Any CR place (NOT region-filtered)
-    const cr = crPlaces.find(p => p.id === routeDestinationId);
-    if (cr) return cr;
-
-    // 3️⃣ Fallback: selectedPlace (edge safety)
-    if (selectedPlace?.id === routeDestinationId) {
-      return selectedPlace;
-    }
-
-    return null;
-  }
-
   function handleNavigate(place) {
     if (!userLocation) return;
 
-    const destination = place || getActiveDestination();
+    const destination = place || routeDestination;
 
-    // No waypoints → normal navigation
-    if (!waypoints.length) {
-      if (!destination) return;
-
-      openNativeNavigation({
+    // ─────────────────────────────
+    // MODE A: Destination exists
+    // ─────────────────────────────
+    if (destination) {
+      openNavigationWithWaypoints({
+        origin: userLocation,
         destination: {
           latitude: destination.latitude,
           longitude: destination.longitude,
         },
+        waypoints: waypoints.map(wp => ({
+          lat: wp.lat ?? wp.latitude,
+          lng: wp.lng ?? wp.longitude,
+          title: wp.title,
+        })),
       });
       return;
     }
 
-    // Waypoints exist → append destination if present
-    const navigationWaypoints = [...waypoints];
+    // ─────────────────────────────
+    // MODE B: Waypoints only
+    // ─────────────────────────────
+    if (waypoints.length > 0) {
+      const final = waypoints[waypoints.length - 1];
+      const via = waypoints.slice(0, -1);
 
-    if (destination) {
-      const last = navigationWaypoints[navigationWaypoints.length - 1];
-
-      const isAlreadyLast =
-        last &&
-        last.lat === destination.latitude &&
-        last.lng === destination.longitude;
-
-      if (!isAlreadyLast) {
-        navigationWaypoints.push({
-          lat: destination.latitude,
-          lng: destination.longitude,
-          title: destination.title || "Destination",
-          source: "destination",
-        });
-      }
+      openNavigationWithWaypoints({
+        origin: userLocation,
+        destination: {
+          latitude: final.lat,
+          longitude: final.lng,
+        },
+        waypoints: via,
+      });
     }
-
-    openNavigationWithWaypoints({
-      origin: userLocation,
-      waypoints: navigationWaypoints,
-    });
   }
-
-  const waypointLine = useMemo(() => {
-    if (!userLocation || waypoints.length === 0) return [];
-
-    return [
-      { latitude: userLocation.latitude, longitude: userLocation.longitude },
-      ...waypoints.map(wp => ({
-        latitude: wp.lat,
-        longitude: wp.lng,
-      })),
-    ];
-  }, [userLocation, waypoints]);
 
   /* ------------------------------------------------------------ */
   /* RENDER                                                       */
@@ -971,7 +1015,7 @@ export default function MapScreenRN() {
     const icon = getIconForCategory(category);
 
     const isCr = poi.source === "cr" && !poi._temp;
-    const isDestination = routeDestinationId && poi.id === routeDestinationId;
+    const isDestination = routeDestination && poi.id === routeDestination;
     const isTemp = !!poi._temp;
 
     const isSearchHitCR = activeQuery && isCr && matchesQuery(poi, activeQuery);
@@ -1095,24 +1139,23 @@ export default function MapScreenRN() {
               </Marker>
             ))}
 
-            {capabilities.canCreateRoutes &&
-              routeCoords.length === 0 &&
-              waypointLine.length > 1 && (
-                <Polyline
-                  coordinates={waypointLine}
-                  strokeWidth={2.5}
-                  strokeColor={theme.colors.primary}
-                  lineDashPattern={[8, 6]}
-                  zIndex={200}
-                />
-            )}
+            {/* Base route */}
+              <Polyline
+                key={`base-${routeVersion}`}
+                coordinates={routeCoords}
+                strokeWidth={6}
+                strokeColor={theme.colors.primaryMuted}
+                zIndex={900}
+              />
 
-          <Polyline
-            coordinates={routeCoords}
-            strokeWidth={4}
-            strokeColor={theme.colors.primary}
-            zIndex={1000}
-          />
+            {/* Active route */}
+              <Polyline
+                key={`active-${routeVersion}`}
+                coordinates={routeCoords}
+                strokeWidth={3}
+                strokeColor={theme.colors.primary}
+                zIndex={1000}
+              />
         </MapView>
       ) : (
         <View style={{ flex: 1 }} />  // or a spinner/skeleton later
