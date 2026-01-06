@@ -8,7 +8,9 @@ export async function saveRoute({
   waypoints,
   routeMeta,
 }) {
+  console.log("Saving route");
   if (!user || !destination) return;
+  console.log("User",user,"Destination",destination);
 
   return addDoc(collection(db, "routes"), {
     title,

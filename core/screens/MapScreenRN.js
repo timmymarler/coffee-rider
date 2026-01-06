@@ -25,6 +25,8 @@ import theme from "@themes";
 import { useCallback } from "react";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 
+import { ROUTE_VISIBILITY } from "@/core/map/routes/routeConstants";
+import { saveRoute } from "@/core/map/routes/saveRoute";
 import { openNativeNavigation, openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
@@ -359,7 +361,7 @@ export default function MapScreenRN() {
   const [searchInput, setSearchInput] = useState("");   // what user is typing
   const [activeQuery, setActiveQuery] = useState("");   // what we are actually searching
   const [searchOrigin, setSearchOrigin] = useState(null);
-  const { role = "guest" } = useContext(AuthContext);
+  const { user, role = "guest" } = useContext(AuthContext);
   const capabilities = getCapabilities(role);
   const [searchNotice, setSearchNotice] = useState(null);
   const [postbox, setPostbox] = useState(null);
@@ -403,11 +405,16 @@ export default function MapScreenRN() {
     }, [])
   );
 
-  function handleSaveRoute() {
-    console.log("SAVE ROUTE", {
-      routeDestination,
+  async function handleSaveRoute() {
+    if (!routeCoords.length || !user) return;
+
+    await saveRoute({
+      name: "Untitled route",
+      routeCoords,
       waypoints,
-      routeMeta,
+      destination: routeDestination,
+      visibility: ROUTE_VISIBILITY.PRIVATE,
+      user,
     });
   }
 
