@@ -386,7 +386,11 @@ export default function MapScreenRN() {
   const routeRequestId = useRef(0);
   const [routeVersion, setRouteVersion] = useState(0);
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
-
+  const routeFittedRef = useRef(false);
+  const canSaveRoute = 
+    capabilities.canSaveRoute &&
+    routeMeta &&
+    (routeDestination || waypoints.length > 0);
 // state
 
   function clearNavigationIntent() {
@@ -398,6 +402,14 @@ export default function MapScreenRN() {
       setMapKey((k) => k + 1);
     }, [])
   );
+
+  function handleSaveRoute() {
+    console.log("SAVE ROUTE", {
+      routeDestination,
+      waypoints,
+      routeMeta,
+    });
+  }
 
   /* ------------------------------------------------------------ */
   /* LOAD CR PLACES                                               */
@@ -610,7 +622,7 @@ export default function MapScreenRN() {
     clearWaypoints();
     setRouteCoords([]);            // ✅ clear polyline HERE
     setRouteDistanceMeters(null);
-
+    routeFittedRef.current = false;
   }
 
   function clearSearch() {
@@ -885,8 +897,8 @@ useEffect(() => {
 
     setRoutingActive(true);
     setRouteDestination(place);
-
     await buildRoute({ destinationOverride: place, requestId });
+    routeFittedRef.current = false; // Need to see if this works. Might need to go BEFORE buildRoute
   }
 
   function getActiveDestination() {
@@ -969,11 +981,15 @@ useEffect(() => {
       distanceMeters: result.distanceMeters ?? result.distance,
       durationSeconds: result.durationSeconds ?? result.duration,
     });
-    
-    mapRef.current?.fitToCoordinates(decoded, {
-      edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
-      animated: true,
-    });
+
+    if (!routeFittedRef.current) {
+      routeFittedRef.current = true;
+
+      mapRef.current?.fitToCoordinates(decoded, {
+        edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
+        animated: true,
+      });
+    }
   }
 
   function handleNavigate(placeOverride = null) {
@@ -1322,13 +1338,27 @@ useEffect(() => {
 
       {showFloatingNavigate && (
         <TouchableOpacity
+          style={styles.saveRouteButton}
+          onPress={() => handleSaveRoute(null)}
+        >
+          <MaterialCommunityIcons
+            name="map-marker-path"
+            size={22}
+            color={theme.colors.primaryDark}
+          />
+          <Text style={styles.saveRouteButtonText}>Save</Text>
+        </TouchableOpacity>
+      )}
+
+      {showFloatingNavigate && (
+        <TouchableOpacity
           style={styles.navigateButton}
           onPress={() => handleNavigate(null)}
         >
           <MaterialCommunityIcons
             name="navigation"
             size={22}
-            color={theme.colors.primaryDark}
+            color={theme.colors.text}
           />
           <Text style={styles.navigateButtonText}>Navigate</Text>
         </TouchableOpacity>
@@ -1573,7 +1603,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 24,
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.primary,
     elevation: 6,
     zIndex: 2500,
   },
@@ -1582,8 +1612,30 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     fontWeight: "600",
+    color: theme.colors.text,
+  },
+
+  saveRouteButton: {
+    position: "absolute",
+    right: 16,
+    bottom: 160, // above tab bar
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: theme.colors.accent,
+    elevation: 6,
+    zIndex: 2500,
+  },
+
+  saveRouteButtonText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: "600",
     color: theme.colors.primaryDark,
   },
+
 
   waypointPin: {
     width: 18,
