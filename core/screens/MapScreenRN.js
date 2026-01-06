@@ -25,12 +25,10 @@ import theme from "@themes";
 import { useCallback } from "react";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 
-import { ROUTE_VISIBILITY } from "@/core/map/routes/routeConstants";
 import { saveRoute } from "@/core/map/routes/saveRoute";
 import { openNativeNavigation, openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
-
 
 const RECENTER_ZOOM = 12;
 const FOLLOW_ZOOM = 17; // closer, more “navigation” feel
@@ -393,6 +391,9 @@ export default function MapScreenRN() {
     capabilities.canSaveRoute &&
     routeMeta &&
     (routeDestination || waypoints.length > 0);
+  const [lastEncodedPolyline, setLastEncodedPolyline] = useState(null);
+
+
 // state
 
   function clearNavigationIntent() {
@@ -407,15 +408,51 @@ export default function MapScreenRN() {
 
   async function handleSaveRoute() {
     if (!routeCoords.length || !user) return;
+    if (!user) {
+      setPostbox({
+        type: "info",
+        message: "You need to be logged in to save routes.",
+      });
+      return;
+    }
+
+    const destination = getFinalDestination();
 
     await saveRoute({
-      name: "Untitled route",
-      routeCoords,
-      waypoints,
-      destination: routeDestination,
-      visibility: ROUTE_VISIBILITY.PRIVATE,
       user,
+      visibility: "private", // change later via UI
+      origin: {
+        lat: userLocation.latitude,
+        lng: userLocation.longitude,
+      },
+      destination: destination
+        ? {
+            lat: destination.latitude ?? destination.lat,
+            lng: destination.longitude ?? destination.lng,
+            title: destination.title ?? null,
+            placeId: destination.id ?? null,
+          }
+        : null,
+      waypoints: waypoints.map(wp => ({
+        lat: wp.latitude ?? wp.lat,
+        lng: wp.longitude ?? wp.lng,
+        title: wp.title ?? null,
+        source: wp.source ?? "manual",
+      })),
+      routeMeta,
+      polyline: lastEncodedPolyline, // see note below
     });
+    setPostbox({
+      type: "success",
+      message: "Route saved successfully.",
+    });
+
+  }
+
+  function getFinalDestination() {
+    if (routeDestination) return routeDestination;
+    if (waypoints.length > 0) return waypoints[waypoints.length - 1];
+    return null;
   }
 
   /* ------------------------------------------------------------ */
@@ -997,6 +1034,8 @@ useEffect(() => {
         animated: true,
       });
     }
+    setLastEncodedPolyline(result.polyline);
+  
   }
 
   function handleNavigate(placeOverride = null) {
@@ -1473,8 +1512,8 @@ const styles = StyleSheet.create({
     right: 16,
     padding: 12,
     borderRadius: 10,
-    backgroundColor: "#064e3b", // dark green
-    zIndex: 2000,
+    backgroundColor: theme.colors.secondaryMid, // dark green
+    zIndex: 9999,
     elevation: 6,
   },
 
