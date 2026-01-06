@@ -1,20 +1,18 @@
 import { AuthContext } from "@context/AuthContext";
-import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
+import { TabBarContext } from "@context/TabBarContext";
 import { useContext, useEffect, useState } from "react";
 import MapScreenRN from "../core/screens/MapScreenRN";
 
 export default function Map() {
   const { user } = useContext(AuthContext);
+  const { mapReloadKey } = useContext(TabBarContext);
   const [mapKey, setMapKey] = useState(0);
 
   useEffect(() => {
-    // Force MapView remount when auth changes
     setMapKey((k) => k + 1);
-  }, [user?.uid]);
+  }, [user?.uid, mapReloadKey]); // 👈 THIS is what was missing
 
   return (
-    <WaypointsProvider>
-      <MapScreenRN mapKey={mapKey} />
-    </WaypointsProvider>
+    <MapScreenRN key={mapKey} /> // 👈 key, not prop
   );
 }

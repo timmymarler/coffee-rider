@@ -28,7 +28,9 @@ import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { saveRoute } from "@/core/map/routes/saveRoute";
 import { openNativeNavigation, openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
+import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
+import { doc, getDoc } from "firebase/firestore";
 
 const RECENTER_ZOOM = 12;
 const FOLLOW_ZOOM = 17; // closer, more “navigation” feel
@@ -393,6 +395,12 @@ export default function MapScreenRN() {
     (routeDestination || waypoints.length > 0);
   const [lastEncodedPolyline, setLastEncodedPolyline] = useState(null);
 
+  const {
+    pendingSavedRouteId,
+    setPendingSavedRouteId,
+  } = useContext(WaypointsContext);
+  const mapReadyRef = useRef(false);
+  const pendingFitRef = useRef(null);
 
 // state
 
@@ -405,7 +413,6 @@ export default function MapScreenRN() {
       setMapKey((k) => k + 1);
     }, [])
   );
-
   async function handleSaveRoute() {
     if (!routeCoords.length || !user) return;
     if (!user) {
@@ -614,6 +621,13 @@ export default function MapScreenRN() {
 //    const pois = await fetchNearbyPois(region.latitude, region.longitude, radius, capabilities);
 //    setGooglePois(pois);
   };
+  
+  useEffect(() => {
+    if (!pendingSavedRouteId) return;
+
+    loadSavedRouteById(pendingSavedRouteId);
+    setPendingSavedRouteId(null);
+  }, [pendingSavedRouteId]);
 
   /* ------------------------------------------------------------ */
   /* TEMP PROMOTION (GOOGLE -> TEMP CR)                            */
@@ -841,23 +855,23 @@ export default function MapScreenRN() {
     return () => { cancelled = true; };
   }, [activeQuery, searchOrigin]);
 
-useEffect(() => {
-  if (routeClearedByUser) return;
-  if (!userLocation) return;
+  useEffect(() => {
+    if (routeClearedByUser) return;
+    if (!userLocation) return;
 
-  const hasInputs =
-    routeDestination !== null || waypoints.length > 0;
+    const hasInputs =
+      routeDestination !== null || waypoints.length > 0;
 
-  if (!hasInputs) {
-    if (routeCoords.length > 0) {
-      setRouteCoords([]);
+    if (!hasInputs) {
+      if (routeCoords.length > 0) {
+        setRouteCoords([]);
+      }
+      return;
     }
-    return;
-  }
 
-  const requestId = ++routeRequestId.current;
-  buildRoute({ requestId });
-}, [routeDestination, waypoints, routeClearedByUser, userLocation]);
+    const requestId = ++routeRequestId.current;
+    buildRoute({ requestId });
+  }, [routeDestination, waypoints, routeClearedByUser, userLocation]);
 
 
   /* ------------------------------------------------------------ */
@@ -1038,6 +1052,62 @@ useEffect(() => {
   
   }
 
+  async function loadSavedRouteById(routeId) {
+    const ref = doc(db, "routes", routeId);
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      console.warn("[MAP] saved route not found", routeId);
+      return;
+    }
+
+    const route = snap.data();
+
+    loadSavedRoute(route);
+  }
+
+  function loadSavedRoute(route) {
+    clearRoute();
+    clearWaypoints();
+
+    // Waypoints (normalise + rebuild)
+    if (Array.isArray(route.waypoints)) {
+      const normalisedWaypoints = route.waypoints.map((wp) => ({
+        latitude: wp.latitude ?? wp.lat,
+        longitude: wp.longitude ?? wp.lng,
+        title: wp.title ?? null,
+        source: wp.source ?? "saved",
+      }));
+
+      normalisedWaypoints.forEach((wp) => {
+        addFromPlace(wp);
+      });
+    }
+    if (route.destination) {
+      setRouteDestination({
+        latitude: route.destination.latitude ?? route.destination.lat,
+        longitude: route.destination.longitude ?? route.destination.lng,
+        title: route.destination.title ?? null,
+        id: route.destination.placeId ?? null,
+      });
+    }
+
+    if (route.routePolyline) {
+      const decoded = decode(route.routePolyline).map(([lat, lng]) => ({
+        latitude: lat,
+        longitude: lng,
+      }));
+
+      setRouteCoords(decoded);
+
+      // 🔑 use the pending-fit system you already built
+      pendingFitRef.current = decoded;
+      attemptRouteFit();
+    }
+
+    setRoutingActive(true);
+  }
+
   function handleNavigate(placeOverride = null) {
     const destination = placeOverride || routeDestination;
 
@@ -1091,6 +1161,20 @@ useEffect(() => {
         })),
       });
     }
+  }
+
+  function attemptRouteFit() {
+    if (!mapRef.current) return;
+    if (!mapReadyRef.current) return;
+    if (!pendingFitRef.current) return;
+
+    mapRef.current.fitToCoordinates(pendingFitRef.current, {
+      edgePadding: { top: 80, right: 80, bottom: 140, left: 80 },
+      animated: true,
+    });
+
+    pendingFitRef.current = null;
+    routeFittedRef.current = true;
   }
 
   /* ------------------------------------------------------------ */
@@ -1192,7 +1276,6 @@ useEffect(() => {
               clearTempIfSafe();
             }
           }}
-          
           onPanDrag={() => {
             if (followUser) setFollowUser(false);
           }}
@@ -1206,6 +1289,10 @@ useEffect(() => {
             latitudeDelta: 0.15,
             longitudeDelta: 0.15,
           }}      
+          onMapReady={() => {
+            mapReadyRef.current = true;
+            attemptRouteFit();
+          }}
         >
 
           {crMarkers.map(renderMarker)}

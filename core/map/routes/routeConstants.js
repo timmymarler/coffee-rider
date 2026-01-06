@@ -1,5 +1,5 @@
 export const ROUTE_VISIBILITY = {
-  PRIVATE: "private",
-  GROUP: "group",
-  PUBLIC: "public",
+  PRIVATE: 0,
+  GROUP: 1,
+  PUBLIC: 2,
 };

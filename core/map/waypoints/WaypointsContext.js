@@ -1,9 +1,10 @@
 import { createContext, useContext, useState } from "react";
 
-const WaypointsContext = createContext(null);
+export const WaypointsContext = createContext(null);
 
 export function WaypointsProvider({ children }) {
   const [waypoints, setWaypoints] = useState([]);
+  const [pendingSavedRouteId, setPendingSavedRouteId] = useState(null);
 
   function addWaypoint(waypoint) {
     setWaypoints(prev => [...prev, waypoint]);
@@ -34,6 +35,8 @@ export function WaypointsProvider({ children }) {
         removeWaypoint,
         reorderWaypoints,
         clearWaypoints,
+        pendingSavedRouteId,
+        setPendingSavedRouteId,
       }}
     >
       {children}

@@ -2,6 +2,7 @@
 
 import AuthProvider from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
+import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { Tabs, usePathname, useRouter } from "expo-router";
@@ -175,15 +176,17 @@ export default function Layout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
         <TabBarProvider>
-          <Tabs
-            screenOptions={{ headerShown: false }}
-            tabBar={(props) => <FloatingTabBar {...props} />}
-          >
-            <Tabs.Screen name="map" />
-            <Tabs.Screen name="saved-routes" />
-            <Tabs.Screen name="groups" />
-            <Tabs.Screen name="profile" />
-          </Tabs>
+          <WaypointsProvider>
+            <Tabs
+              screenOptions={{ headerShown: false }}
+              tabBar={(props) => <FloatingTabBar {...props} />}
+            >
+              <Tabs.Screen name="map" />
+              <Tabs.Screen name="saved-routes" />
+              <Tabs.Screen name="groups" />
+              <Tabs.Screen name="profile" />
+            </Tabs>
+          </WaypointsProvider>
         </TabBarProvider>
       </AuthProvider>
     </GestureHandlerRootView>
