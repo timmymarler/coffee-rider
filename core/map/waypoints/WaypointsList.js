@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
-    color: theme.colors.primaryLight,
+    color: theme.colors.accentDark,
     fontSize: 13,
     marginRight: 8,
   },
