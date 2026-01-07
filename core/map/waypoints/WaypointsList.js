@@ -34,9 +34,9 @@ export default function WaypointsList({ onClearAll }) {
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    top: 90,
+    top: 60,
     left: 12,
-    right: 12,
+    right: 26,
     backgroundColor: theme.colors.surfaceOverlay || "rgba(15,23,42,0.9)",
     borderRadius: 14,
     padding: 10,
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
-    color: theme.colors.accentDark,
+    color: theme.colors.text,
     fontSize: 13,
     marginRight: 8,
   },

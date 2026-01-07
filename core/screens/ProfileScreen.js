@@ -14,7 +14,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { doc, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Image, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import LoginScreen from "../auth/login";
 
 export default function ProfileScreen() {
@@ -135,9 +135,10 @@ export default function ProfileScreen() {
   // -----------------------------------
 
   return (
-    <CRScreen scroll padded>
+    <CRScreen scroll padded={false} style={styles.cardScreen}>
 
       {/* ---------------- HEADER CARD ---------------- */}
+      <View style={styles.cardWrap}>
       <CRCard
         style={{
           flexDirection: "row",
@@ -199,8 +200,10 @@ export default function ProfileScreen() {
           </View>
         </View>
       </CRCard>
+      </View>
 
       {/* ---------------- PROFILE DETAILS CARD ---------------- */}
+      <View style={styles.cardWrap}>
       <CRCard>
 
         <CRLabel>Display Name</CRLabel>
@@ -233,7 +236,12 @@ export default function ProfileScreen() {
               Saved ✓
             </Text>
           )}
-
+        </View>
+      </CRCard>
+      </View>
+      <View style={styles.cardWrap}>
+      <CRCard>
+        <View>
           <CRButton
             title={saving ? "Saving…" : "Save Changes"}
             loading={saving}
@@ -242,44 +250,10 @@ export default function ProfileScreen() {
           />
         </View>
       </CRCard>
-
-      {/* ---------------- ACCOUNT & SECURITY ---------------- */}
-      <CRCard>
-        <CRLabel>Account</CRLabel>
-          <View
-            style={{
-              marginTop: theme.spacing.xs,
-              paddingVertical: theme.spacing.sm,
-              paddingHorizontal: theme.spacing.md,
-              borderRadius: theme.radius.md,
-              backgroundColor: theme.colors.primaryDark,
-            }}
-          >
-          <Text
-            style={{
-              color: theme.colors.textMuted,
-              fontSize: theme.spacing.sm,
-              marginBottom: 2, // was too large before
-            }}
-          >
-            Signed in as
-          </Text>
-
-          <Text
-            style={{
-              color: theme.colors.textMuted,
-              fontSize: theme.spacing.md,
-              fontWeight: "500",
-              lineHeight: theme.spacing.lg,
-            }}
-          >
-            {email}
-          </Text>
-        </View>
-
-      </CRCard>
+      </View>
 
       {/* ---------------- ACCOUNT ACTIONS ---------------- */}
+      <View style={styles.cardWrap}>
       <CRCard>
         <CRButton
           title="Log Out"
@@ -287,7 +261,17 @@ export default function ProfileScreen() {
           onPress={logout}
         />
       </CRCard>
-
+      </View>
     </CRScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  cardWrap: {
+    marginHorizontal: 16,
+    marginBottom: theme.spacing.sm, 
+ },
+  cardScreen: {
+    paddingBottom: 42
+  }
+})

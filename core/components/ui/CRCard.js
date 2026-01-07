@@ -17,6 +17,7 @@ export function CRCard({ children, style }) {
           shadowRadius: 6,
           shadowOffset: { width: 0, height: 3 },
           elevation: 3,
+          width: "100%",
         },
         style,
       ]}

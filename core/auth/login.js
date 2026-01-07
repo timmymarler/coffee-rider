@@ -1,4 +1,6 @@
 // core/auth/login.js
+import { auth } from "@config/firebase";
+import theme from "@themes";
 import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
@@ -7,17 +9,14 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-
-import { auth } from "@config/firebase";
-import theme from "@themes";
 import AuthLayout from "./AuthLayout";
-
 export default function LoginScreen() {
   const router = useRouter();
   const { colors, spacing } = theme;
@@ -48,14 +47,20 @@ export default function LoginScreen() {
   }
 
   return (
+<KeyboardAvoidingView
+  style={{ flex: 1 }}
+  behavior={Platform.OS === "ios" ? "padding" : "height"}
+  keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+>
+  <ScrollView
+    contentContainerStyle={{ flexGrow: 1 }}
+    keyboardShouldPersistTaps="handled"
+  >
     <AuthLayout
       title="Welcome back"
       subtitle="Log in to Coffee Rider"
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        {/* Email */}
+      <View>{/* Email */}</View>
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -69,7 +74,7 @@ export default function LoginScreen() {
           />
         </View>
 
-        {/* Password */}
+        <View>{/* Password */}</View>
         <View style={styles.field}>
           <Text style={styles.label}>Password</Text>
           <TextInput
@@ -82,7 +87,7 @@ export default function LoginScreen() {
           />
         </View>
 
-        {/* Submit */}
+        <View>{/* Submit */}</View>
         <TouchableOpacity
           style={[
             styles.button,
@@ -98,7 +103,7 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Register link */}
+        <View>{/* Register link */}</View>
         <TouchableOpacity
           onPress={() => router.push("/auth/register")}
           style={{ marginTop: spacing.md, alignItems: "center" }}
@@ -107,8 +112,9 @@ export default function LoginScreen() {
             Don’t have an account? Register
           </Text>
         </TouchableOpacity>
-      </KeyboardAvoidingView>
     </AuthLayout>
+  </ScrollView>
+</KeyboardAvoidingView>
   );
 }
 

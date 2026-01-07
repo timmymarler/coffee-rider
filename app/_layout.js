@@ -2,6 +2,7 @@
 
 import AuthProvider from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
+import AppHeader from "@core/components/layout/AppHeader";
 import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
@@ -10,6 +11,7 @@ import { useContext, useEffect, useRef } from "react";
 import { Animated, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 
 function FloatingTabBar({ state }) {
   const router = useRouter();
@@ -177,6 +179,7 @@ export default function Layout() {
       <AuthProvider>
         <TabBarProvider>
           <WaypointsProvider>
+            <AppHeader />
             <Tabs
               screenOptions={{ headerShown: false }}
               tabBar={(props) => <FloatingTabBar {...props} />}

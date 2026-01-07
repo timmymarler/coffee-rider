@@ -1,6 +1,5 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import theme from "@themes";
-import { router } from "expo-router";
 import {
   ActivityIndicator,
   StyleSheet,
@@ -89,17 +88,6 @@ export function SearchBar({
           />
         </TouchableOpacity>
 
-        {/* Help button */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => router.push("/help")}
-        >
-          <MaterialCommunityIcons
-            name="help-circle-outline"
-            size={22}
-            color={theme.colors.accentMid}
-          />
-        </TouchableOpacity>        
       </View>
 
     </View>
@@ -110,7 +98,7 @@ function createStyles(theme) {
   return StyleSheet.create({
     container: {
       position: "absolute",
-      top: 40,
+      top: 10,
       left: 12,
       right: 30, // leaves room for filter button
       zIndex: 10,

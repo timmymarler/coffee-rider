@@ -1,3 +1,4 @@
+import { CRScreen } from "@core/components/ui/CRScreen";
 import { useSavedRoutes } from "@core/map/routes/useSavedRoutes"; // assuming this already exists
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -61,8 +62,6 @@ export default function SavedRoutesScreen() {
   function renderHeader() {
     return (
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Saved Routes</Text>
-
         <View style={styles.sortRow}>
           {SORT_OPTIONS.map((opt) => (
             <TouchableOpacity
@@ -133,50 +132,50 @@ export default function SavedRoutesScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.subtle}>Loading routes…</Text>
-      </View>
+      <CRScreen>
+        <View style={styles.center}>
+          <Text style={styles.subtle}>Loading routes…</Text>
+        </View>
+      </CRScreen>
     );
   }
 
   if (!sortedRoutes.length) {
     return (
-      <View style={styles.center}>
-        <MaterialCommunityIcons
-          name="map-marker-path"
-          size={48}
-          color={theme.colors.textMuted}
-        />
-        <Text style={styles.subtle}>No saved routes yet</Text>
-      </View>
+        <View style={styles.center}>
+          <MaterialCommunityIcons
+            name="map-marker-path"
+            size={48}
+            color={theme.colors.textMuted}
+          />
+          <Text style={styles.subtle}>No saved routes yet</Text>
+        </View>
     );
   }
 
   return (
-    <FlatList
-      data={sortedRoutes}
-      keyExtractor={(item) => item.id}
-      renderItem={renderItem}
-      ListHeaderComponent={renderHeader}
-      stickyHeaderIndices={[0]}
-      contentContainerStyle={styles.list}
-    />
+    <CRScreen  padded={false}>
+      <FlatList
+        data={sortedRoutes}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        ListHeaderComponent={renderHeader}
+        stickyHeaderIndices={[0]}
+        contentContainerStyle={styles.list}
+      />
+    </CRScreen>
   );
 }
 
 const styles = StyleSheet.create({
   list: {
     paddingBottom: 24,
-    backgroundColor: theme.colors.primaryLight
   },
 
   header: {
-    backgroundColor: theme.colors.primaryLight,
+    backgroundColor: theme.colors.background,
     paddingHorizontal: 16,
-    paddingTop: 12,
     paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.accentDark,
   },
 
   headerTitle: {
@@ -214,10 +213,10 @@ const styles = StyleSheet.create({
 
   card: {
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 8,
     padding: 14,
     borderRadius: 12,
-    backgroundColor: theme.colors.primaryMid,
+    backgroundColor: theme.colors.primaryDark
   },
 
   title: {
@@ -234,13 +233,13 @@ const styles = StyleSheet.create({
 
   meta: {
     fontSize: 13,
-    color: theme.colors.accentDark,
+    color: theme.colors.text,
   },
 
   subtle: {
     fontSize: 12,
-    color: theme.colors.accentDark,
-    marginTop: 6,
+    color: theme.colors.textMuted,
+    marginTop: 4,
   },
 
   center: {

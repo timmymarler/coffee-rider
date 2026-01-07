@@ -19,7 +19,7 @@ export function CRScreen({
       style={[
         {
           flex: 1,
-          backgroundColor: theme.colors.primaryBackground,
+          backgroundColor: theme.colors.background,
         },
         style,
       ]}
