@@ -5,8 +5,8 @@ export default function useWaypoints() {
     waypoints,
     addWaypoint,
     removeWaypoint,
-    reorderWaypoints,
     clearWaypoints,
+    reorderWaypoints,
   } = useWaypointsContext();
 
   function addFromPlace(place) {

@@ -2,6 +2,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import DraggableFlatList from "react-native-draggable-flatlist";
 import useWaypoints from "./useWaypoints";
 
 // IMPORTANT:
@@ -11,9 +12,12 @@ import useWaypoints from "./useWaypoints";
 
 export default function WaypointsList({ waypoints, onClearAll }) {
   // ⚠️ DO NOT destructure `waypoints` from context here
-  const { removeWaypoint, clearWaypoints } = useWaypoints();
-
   const [collapsed, setCollapsed] = useState(true);
+  const reorderableWaypoints = waypoints.filter(wp => !wp.isTerminal);
+  const destination = waypoints.find(wp => wp.isTerminal);
+  const {
+    reorderWaypoints, // ✅ MUST be destructured
+  } = useWaypoints();
 
   if (!waypoints?.length) return null;
 
@@ -38,30 +42,53 @@ export default function WaypointsList({ waypoints, onClearAll }) {
       </TouchableOpacity>
 
       {!collapsed && (
-        <View style={styles.list}>
-          {waypoints.map((wp, index) => (
-            <View
-              key={`${wp.latitude ?? wp.lat}-${wp.longitude ?? wp.lng}-${index}`}
-              style={[
-                styles.row,
-                wp.isTerminal && styles.destinationRow,
-              ]}
-            >
-              <Text style={styles.index}>{index + 1}</Text>
+        <DraggableFlatList
+          data={reorderableWaypoints}
+          keyExtractor={(item, index) =>
+            `${item.latitude}-${item.longitude}-${index}`
+          }
+          onDragEnd={({ from, to }) => {
+            if (from !== to) reorderWaypoints(from, to);
+          }}
+          renderItem={({ item, drag, isActive, getIndex }) => {
+            const index = getIndex();
 
-              <Text style={styles.label} numberOfLines={1}>
-                {wp.title || "Dropped pin"}
-              </Text>
+            console.log("[DEBUG] drag index:", index, typeof index);
 
-              {!wp.isTerminal && (
-                <TouchableOpacity onPress={() => removeWaypoint(index)}>
-                  <Text style={styles.remove}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ))}
+            return (
+              <TouchableOpacity
+                onLongPress={drag}
+                disabled={isActive}
+                style={[
+                  styles.row,
+                  isActive && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={styles.index}>{index + 1}</Text>
+
+                <Text style={styles.label} numberOfLines={1}>
+                  {item.title || "Dropped pin"}
+                </Text>
+
+                <MaterialCommunityIcons
+                  name="drag"
+                  size={18}
+                  color={theme.colors.textMuted}
+                />
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
+      {destination && (
+        <View style={[styles.row, styles.destinationRow]}>
+          <Text style={styles.index}>{reorderableWaypoints.length + 1}</Text>
+          <Text style={styles.label} numberOfLines={1}>
+            {destination.title}
+          </Text>
         </View>
       )}
+
     </View>
   );
 }
