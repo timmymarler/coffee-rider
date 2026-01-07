@@ -401,6 +401,17 @@ export default function MapScreenRN() {
   } = useContext(WaypointsContext);
   const mapReadyRef = useRef(false);
   const pendingFitRef = useRef(null);
+  
+  const displayWaypoints = useMemo(() => {
+    if (!routeDestination) return waypoints;
+    return [
+      ...waypoints,
+      {
+        ...routeDestination,
+        isTerminal: true,
+      },
+    ];
+  }, [waypoints, routeDestination]);
 
 // state
 
@@ -624,6 +635,7 @@ export default function MapScreenRN() {
   
   useEffect(() => {
     if (!pendingSavedRouteId) return;
+
     loadSavedRouteById(pendingSavedRouteId);
     setPendingSavedRouteId(null);
   }, [pendingSavedRouteId]);
@@ -980,6 +992,7 @@ export default function MapScreenRN() {
 
   async function buildRoute({ destinationOverride = null, requestId } = {}) {
     if (!userLocation) return;
+
     const destination =
       destinationOverride ||
       routeDestination ||
@@ -1051,15 +1064,14 @@ export default function MapScreenRN() {
   }
 
   async function loadSavedRouteById(routeId) {
-
     const ref = doc(db, "routes", routeId);
-
     const snap = await getDoc(ref);
 
     if (!snap.exists()) {
       console.warn("[MAP] saved route not found", routeId);
       return;
     }
+
     const route = snap.data();
 
     loadSavedRoute(route);
@@ -1069,47 +1081,28 @@ export default function MapScreenRN() {
     clearRoute();
     clearWaypoints();
 
-    const normalisedWaypoints = [];
-
-    // Intermediates
+    // Waypoints (normalise + rebuild)
     if (Array.isArray(route.waypoints)) {
-      route.waypoints.forEach((wp) => {
-        normalisedWaypoints.push({
-          latitude: wp.latitude ?? wp.lat,
-          longitude: wp.longitude ?? wp.lng,
-          title: wp.title ?? null,
-          source: wp.source ?? "saved",
-        });
+      const normalisedWaypoints = route.waypoints.map((wp) => ({
+        latitude: wp.latitude ?? wp.lat,
+        longitude: wp.longitude ?? wp.lng,
+        title: wp.title ?? null,
+        source: wp.source ?? "saved",
+      }));
+
+      normalisedWaypoints.forEach((wp) => {
+        addFromPlace(wp);
       });
     }
-
-    // Final destination MUST be part of routing path
     if (route.destination) {
-      const destination = {
+      setRouteDestination({
         latitude: route.destination.latitude ?? route.destination.lat,
         longitude: route.destination.longitude ?? route.destination.lng,
         title: route.destination.title ?? null,
-        source: "destination",
-      };
-
-      // 🔑 append destination as final node
-      normalisedWaypoints.push(destination);
-
-      // marker rendering
-      setRouteDestination({
-        latitude: destination.latitude,
-        longitude: destination.longitude,
-        title: destination.title,
         id: route.destination.placeId ?? null,
       });
     }
 
-    // Build routing waypoints
-    normalisedWaypoints.forEach((wp) => {
-      addFromPlace(wp);
-    });
-
-    // Snapshot polyline (optional visual)
     if (route.routePolyline) {
       const decoded = decode(route.routePolyline).map(([lat, lng]) => ({
         latitude: lat,
@@ -1117,6 +1110,8 @@ export default function MapScreenRN() {
       }));
 
       setRouteCoords(decoded);
+
+      // 🔑 use the pending-fit system you already built
       pendingFitRef.current = decoded;
       attemptRouteFit();
     }
@@ -1483,7 +1478,10 @@ export default function MapScreenRN() {
         </View>
       )}
 
-      <WaypointsList onClearAll={clearNavigationIntent} />
+      <WaypointsList
+        waypoints={displayWaypoints}
+        onClearAll={clearNavigationIntent}
+      />
 
       {showFloatingNavigate && (
         <TouchableOpacity
