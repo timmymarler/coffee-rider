@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
 
   text: {
     fontSize: 14,
-    color: theme.colors.textMuted,
+    color: theme.colors.accentMid,
     lineHeight: 20,
   },
 
@@ -410,13 +410,13 @@ const styles = StyleSheet.create({
 
   bullet: {
     fontSize: 14,
-    color: theme.colors.primaryDark,
+    color: theme.colors.accentDark,
     marginBottom: 6,
   },
 
   subText: {
     fontSize: 13,
-    color: theme.colors.primaryDark,
+    color: theme.colors.accentDark,
     marginBottom: 6,
   },
 
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
   controlText: {
     flex: 1,
     fontSize: 14,
-    color: theme.colors.primaryDark,
+    color: theme.colors.accentDark,
     lineHeight: 20,
   },
 
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
     fontSize: 14,
-    color: theme.colors.primaryDark,
+    color: theme.colors.accentDark,
     lineHeight: 20,
   },
   waypointPin: {

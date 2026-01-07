@@ -64,8 +64,8 @@ export default function SavedRoutesScreen() {
               </Text>
 
               <Text style={{ color: theme.colors.textMuted }}>
-                {Math.round(item.distanceMeters / 1000)} km •{" "}
-                {Math.round(item.durationSeconds / 60)} mins
+                {Math.round((item.distanceMeters / 1000)*0.62)} miles •{" "}
+                {Math.round(item.durationSeconds.substring(0,item.durationSeconds.length -1) / 60)} mins
               </Text>
             </View>
           </TouchableOpacity>
