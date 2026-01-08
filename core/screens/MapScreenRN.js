@@ -31,6 +31,7 @@ import useWaypoints from "@core/map/waypoints/useWaypoints";
 import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { doc, getDoc } from "firebase/firestore";
+import { getPlaceLabel } from "../lib/geocode";
 
 const RECENTER_ZOOM = 12;
 const FOLLOW_ZOOM = 17; // closer, more “navigation” feel
@@ -1188,6 +1189,17 @@ export default function MapScreenRN() {
     routeFittedRef.current = true;
   }
 
+  function findNearbyCrPlace(lat, lng, places, thresholdMeters = 40) {
+    return places.find(place => {
+      const dLat = lat - place.latitude;
+      const dLng = lng - place.longitude;
+
+      // rough distance check (good enough at small radius)
+      const distanceMeters = Math.sqrt(dLat * dLat + dLng * dLng) * 111_000;
+      return distanceMeters <= thresholdMeters;
+    }) || null;
+  }
+
   /* ------------------------------------------------------------ */
   /* RENDER                                                       */
   /* ------------------------------------------------------------ */
@@ -1290,9 +1302,36 @@ export default function MapScreenRN() {
           onPanDrag={() => {
             if (followUser) setFollowUser(false);
           }}
-          onLongPress={(e) => {
+          onLongPress={async (e) => {
             if (!capabilities.canCreateRoutes) return;
-            addFromMapPress(e.nativeEvent.coordinate);
+
+            const { latitude, longitude } = e.nativeEvent.coordinate;
+
+            // 1️⃣ Prefer CR place name if press is near one
+            const nearbyCrPlace = findNearbyCrPlace(
+              latitude,
+              longitude,
+              crPlaces // or whatever your CR places array is called
+            );
+
+            let label = null;
+
+            if (nearbyCrPlace) {
+              label = nearbyCrPlace.title || nearbyCrPlace.name;
+            } else {
+              // 2️⃣ Fallback to Google label
+              try {
+                label = await getPlaceLabel(latitude, longitude);
+              } catch (err) {
+                console.warn("[MAP] getPlaceLabel failed", err);
+              }
+            }
+
+            addFromMapPress({
+              latitude,
+              longitude,
+              geocodeResult: label,
+            });
           }}
           initialRegion={{
             latitude: userLocation.latitude,

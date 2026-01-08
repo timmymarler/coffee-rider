@@ -16,6 +16,7 @@ export default function WaypointsList({ waypoints, onClearAll }) {
   const reorderableWaypoints = waypoints.filter(wp => !wp.isTerminal);
   const destination = waypoints.find(wp => wp.isTerminal);
   const {
+    removeWaypoint,
     reorderWaypoints, // ✅ MUST be destructured
   } = useWaypoints();
 
@@ -53,12 +54,8 @@ export default function WaypointsList({ waypoints, onClearAll }) {
           renderItem={({ item, drag, isActive, getIndex }) => {
             const index = getIndex();
 
-            console.log("[DEBUG] drag index:", index, typeof index);
-
             return (
-              <TouchableOpacity
-                onLongPress={drag}
-                disabled={isActive}
+              <View
                 style={[
                   styles.row,
                   isActive && { opacity: 0.7 },
@@ -70,12 +67,26 @@ export default function WaypointsList({ waypoints, onClearAll }) {
                   {item.title || "Dropped pin"}
                 </Text>
 
-                <MaterialCommunityIcons
-                  name="drag"
-                  size={18}
-                  color={theme.colors.textMuted}
-                />
-              </TouchableOpacity>
+                {/* Remove button */}
+                <TouchableOpacity
+                  onPress={() => removeWaypoint(index)}
+                  hitSlop={10}
+                >
+                  <Text style={styles.remove}>✕</Text>
+                </TouchableOpacity>
+
+                {/* Drag handle */}
+                <TouchableOpacity
+                  onLongPress={drag}
+                  hitSlop={12}
+                >
+                  <MaterialCommunityIcons
+                    name="drag"
+                    size={18}
+                    color={theme.colors.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
             );
           }}
         />

@@ -9,6 +9,13 @@ export default function useWaypoints() {
     reorderWaypoints,
   } = useWaypointsContext();
 
+  function deriveWaypointTitle(label) {
+    if (typeof label === "string" && label.trim().length > 0) {
+      return label;
+    }
+    return "Dropped pin";
+  }
+
   function addFromPlace(place) {
     if (!place?.latitude || !place?.longitude) return;
 
@@ -20,13 +27,11 @@ export default function useWaypoints() {
     });
   }
 
-  function addFromMapPress(coordinate) {
-    if (!coordinate?.latitude || !coordinate?.longitude) return;
-
+  function addFromMapPress({ latitude, longitude, geocodeResult }) {
     addWaypoint({
-      lat: coordinate.latitude,
-      lng: coordinate.longitude,
-      title: "Dropped pin",
+      lat: latitude,
+      lng: longitude,
+      title: deriveWaypointTitle(geocodeResult),
       source: "manual",
     });
   }
