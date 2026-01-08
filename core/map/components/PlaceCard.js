@@ -607,7 +607,10 @@ export default function PlaceCard({
             <TouchableOpacity
               /* Navigate */
               style={[styles.photoActionButton, styles.primaryAction]}
-                onPress={() => onNavigate(place)}
+              onPress={() => {
+                onNavigate(place);
+                onClose(); // or setSelectedPlace(null)
+              }}            
             >
               <MaterialCommunityIcons
                 name="navigation-variant"
@@ -625,6 +628,7 @@ export default function PlaceCard({
                     onClearRoute?.();
                 else 
                     onRoute?.(place);
+                    onClose();
               }}
             >
               <MaterialCommunityIcons
