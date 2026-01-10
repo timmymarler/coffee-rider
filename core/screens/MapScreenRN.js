@@ -29,6 +29,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
 import { doc, getDoc } from "firebase/firestore";
 import { useCallback } from "react";
+import { Modal, Pressable } from "react-native";
 import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
@@ -368,6 +369,7 @@ export default function MapScreenRN() {
   const [searchOrigin, setSearchOrigin] = useState(null);
   const { user, role = "guest" } = useContext(AuthContext);
   const capabilities = getCapabilities(role);
+
   const [searchNotice, setSearchNotice] = useState(null);
   const [postbox, setPostbox] = useState(null);
   const isSearchActive = !!activeQuery;
@@ -378,17 +380,12 @@ export default function MapScreenRN() {
     waypoints,
     addFromPlace,
     addFromMapPress,
+    formatPoint,
     clearWaypoints,
   } = useWaypoints();
   
-  const hasWaypoints = waypoints.length > 0;
-  const showFloatingNavigate =
-    capabilities.canCreateRoutes &&
-    hasWaypoints &&
-    !selectedPlace;
   const [routingActive, setRoutingActive] = useState(false);
   const [routeDestination, setRouteDestination] = useState(null);
-  const [routeDestinationId, setRouteDestinationId] = useState(null);
   const [routeClearedByUser, setRouteClearedByUser] = useState(false);
   const routeRequestId = useRef(0);
   const [routeVersion, setRouteVersion] = useState(0);
@@ -417,6 +414,43 @@ export default function MapScreenRN() {
       },
     ];
   }, [waypoints, routeDestination]);
+  const [pendingMapPoint, setPendingMapPoint] = useState(null);
+  const [showAddPointMenu, setShowAddPointMenu] = useState(false);
+  const [manualStartPoint, setManualStartPoint] = useState(null);
+  const hasRouteIntent = routeDestination || waypoints.length > 0;
+
+  const closeAddPointMenu = () => {
+    setShowAddPointMenu(false);
+    setPendingMapPoint(null);
+  };
+
+  const handleAddWaypoint = () => {
+    setSelectedPlaceId(null);
+    addFromMapPress(pendingMapPoint);
+    closeAddPointMenu();
+  };
+
+  const handleSetStart = () => {
+    setSelectedPlaceId(null);
+    setFollowUser(false);
+    setManualStartPoint({
+      latitude: pendingMapPoint.latitude,
+      longitude: pendingMapPoint.longitude,
+    });
+    closeAddPointMenu();
+  };
+
+  const handleSetDestination = () => {
+    setSelectedPlaceId(null);
+    const point = formatPoint(pendingMapPoint);
+    setRouteDestination({
+      latitude: point.lat,
+      longitude: point.lng,
+      title: point.title,
+    });
+
+    closeAddPointMenu();
+  };
 
 // state
 
@@ -704,6 +738,7 @@ export default function MapScreenRN() {
     clearWaypoints();
     setRouteCoords([]);            // ✅ clear polyline HERE
     setRouteDistanceMeters(null);
+    setManualStartPoint(null); 
     routeFittedRef.current = false;
   }
 
@@ -1023,10 +1058,7 @@ export default function MapScreenRN() {
       : waypoints.slice(0, -1);
 
     const result = await fetchRoute({
-      origin: {
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-      },
+      origin: manualStartPoint || userLocation,
       destination: finalDestination,
       waypoints: intermediates.map(wp => ({
         latitude: wp.lat,
@@ -1308,11 +1340,10 @@ export default function MapScreenRN() {
 
             const { latitude, longitude } = e.nativeEvent.coordinate;
 
-            // 1️⃣ Prefer CR place name if press is near one
             const nearbyCrPlace = findNearbyCrPlace(
               latitude,
               longitude,
-              crPlaces // or whatever your CR places array is called
+              crPlaces
             );
 
             let label = null;
@@ -1320,7 +1351,6 @@ export default function MapScreenRN() {
             if (nearbyCrPlace) {
               label = nearbyCrPlace.title || nearbyCrPlace.name;
             } else {
-              // 2️⃣ Fallback to Google label
               try {
                 label = await getPlaceLabel(latitude, longitude);
               } catch (err) {
@@ -1328,12 +1358,16 @@ export default function MapScreenRN() {
               }
             }
 
-            addFromMapPress({
+            const payload = {
               latitude,
               longitude,
               geocodeResult: label,
-            });
+            };
+
+            setPendingMapPoint(payload);
+            setShowAddPointMenu(true);
           }}
+
           initialRegion={{
             latitude: userLocation.latitude,
             longitude: userLocation.longitude,
@@ -1348,6 +1382,21 @@ export default function MapScreenRN() {
 
           {crMarkers.map(renderMarker)}
           {searchMarkers.map(renderMarker)}
+          {manualStartPoint && (
+            <Marker
+              coordinate={manualStartPoint}
+              anchor={{ x: 0.5, y: 1 }}
+              zIndex={950}
+            >
+              <SvgPin
+                icon="flag-checkered"
+                fill={theme.colors.accent}
+                circle={theme.colors.primaryMid}
+                stroke={theme.colors.primaryDark}
+              />
+            </Marker>
+          )}
+
           {capabilities.canCreateRoutes &&
             waypoints.map((wp, index) => (
               <Marker
@@ -1552,7 +1601,7 @@ export default function MapScreenRN() {
         onClearAll={clearNavigationIntent}
       />
 
-      {showFloatingNavigate && (
+      {hasRouteIntent && (
         <TouchableOpacity
           style={styles.saveRouteButton}
           onPress={() => handleSaveRoute(null)}
@@ -1566,7 +1615,7 @@ export default function MapScreenRN() {
         </TouchableOpacity>
       )}
 
-      {showFloatingNavigate && (
+      {hasRouteIntent && (
         <TouchableOpacity
           style={styles.navigateButton}
           onPress={() => handleNavigate(null)}
@@ -1631,6 +1680,53 @@ export default function MapScreenRN() {
           }}
         />
       )}
+
+      <Modal visible={showAddPointMenu} transparent animationType="fade">
+        <View style={styles.pointMenuOverlay}>
+          <View style={styles.pointMenu}>
+            <Pressable
+              onPress={handleAddWaypoint}
+              style={({ pressed }) => [
+                styles.pointMenuItem,
+                pressed && { backgroundColor: theme.colors.primaryDark },
+              ]}
+            >
+                <Text style={styles.pointMenuText}>Add waypoint</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleSetStart}
+              style={({ pressed }) => [
+                styles.pointMenuItem,
+                pressed && { backgroundColor: theme.colors.primaryDark },
+              ]}
+            >
+              <Text style={styles.pointMenuText}>Add as start point</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleSetDestination}
+              style={({ pressed }) => [
+                styles.pointMenuItem,
+                pressed && { backgroundColor: theme.colors.primaryDark },
+              ]}
+            >
+              <Text style={styles.pointMenuText}>Add as destination</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={closeAddPointMenu}
+              style={({ pressed }) => [
+                styles.pointMenuItem,
+                pressed && { backgroundColor: theme.colors.primaryDark },
+              ]}
+            >
+              <Text style={styles.pointMenuCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -1847,6 +1943,46 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
     color: "#ffffff",
+  },
+
+  pointMenuOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+
+  pointMenu: {
+    width: "80%",
+    backgroundColor: theme.colors.primaryMid,
+    borderRadius: 14,
+    padding: 14,
+    elevation: 8,
+  },
+
+  pointMenuItem: {
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+
+  pointMenuText: {
+    color: theme.colors.textMuted,
+    fontSize: 16,
+    fontWeight: "500",
+  },
+
+  pointMenuCancel: {
+    paddingVertical: 14,
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderColor: theme.colors.primaryDark,
+  },
+
+  pointMenuCancelText: {
+    color: theme.colors.textMuted,
+    fontSize: 15,
+    textAlign: "center",
+    opacity: 0.8,
   },
 
 });

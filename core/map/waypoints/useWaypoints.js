@@ -36,10 +36,20 @@ export default function useWaypoints() {
     });
   }
 
+  function formatPoint({ latitude, longitude, geocodeResult }) {
+    return {
+      lat: latitude,
+      lng: longitude,
+      title: deriveWaypointTitle(geocodeResult),
+      source: "manual",
+    };
+  }
+
   return {
     waypoints,
     addFromPlace,
     addFromMapPress,
+    formatPoint,
     removeWaypoint,
     reorderWaypoints,
     clearWaypoints,
