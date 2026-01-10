@@ -8,13 +8,6 @@ const GEO_CACHE = {};
 
 // Main API
 export async function getPlaceLabel(lat, lng) {
-  console.log(
-  "[DEBUG] getPlaceLabel args",
-  lat,
-  lng,
-  typeof lat,
-  typeof lng
-);
 
   if (!GOOGLE_KEY) {
     console.warn("Missing EXPO_PUBLIC_GOOGLE_MAPS_API_KEY for geocoding.");

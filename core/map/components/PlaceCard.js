@@ -80,8 +80,13 @@ export default function PlaceCard({
     ...place,
 
     photos: place.photos ?? { cr: [], google: [] },
-    amenities: Array.isArray(place.amenities) ? place.amenities : [],
-    suitability: Array.isArray(place.suitability) ? place.suitability : [],
+    suitability: Array.isArray(place.suitability)
+      ? place.suitability
+      : Object.keys(place.suitability || {}),
+
+    amenities: Array.isArray(place.amenities)
+      ? place.amenities
+      : Object.keys(place.amenities || {}),
     crRatings: place.crRatings ?? {
       average: null,
       count: 0,
@@ -100,8 +105,7 @@ export default function PlaceCard({
       place.formattedAddress ||
       place.vicinity ||
       null,
-
-};
+  };
 
   const styles = createStyles(theme);
 
@@ -129,12 +133,11 @@ export default function PlaceCard({
       ? safePlace.crRatings.users[uid].rating
       : 0;
   const [selectedRating, setSelectedRating] = useState(userCrRating);
+
   const canAddPlace =
     (safePlace.source === "google" || safePlace._temp === true);
-
   const isCrPlace = safePlace.source === "cr";  
   //const isEditable = safePlace.source === "google" || safePlace._temp === true ; // add flow only (for now)
-
   useEffect(() => {
     setSelectedRating(userCrRating);
   }, [userCrRating, place?.id]);
@@ -162,32 +165,57 @@ export default function PlaceCard({
   const [category, setCategory] = useState("cafe");
   const [addError, setAddError] = useState(null);
 
-  const [suitabilityState, setSuitabilityState] = useState(() => {
-    const state = { ...defaultSuitability };
+  const [suitabilityState, setSuitabilityState] = useState(defaultSuitability);
+  const [amenitiesState, setAmenitiesState] = useState(defaultAmenities);
 
-    if (Array.isArray(safePlace.suitability)) {
-      safePlace.suitability.forEach((key) => {
+  const toggleFlagMap = (key, setState) => {
+    setState(prev => {
+      const currentlyOn = prev[key];
+
+      if (currentlyOn && !capabilities.isAdmin) {
+        return prev; // Pro cannot remove
+      }
+
+      return { ...prev, [key]: !currentlyOn };
+    });
+  };
+
+
+  useEffect(() => {
+    const state = { ...defaultSuitability };
+    if (Array.isArray(safePlace?.suitability)) {
+      safePlace.suitability.forEach(key => {
         if (key in state) state[key] = true;
       });
     }
+    setSuitabilityState(state);
+  }, [safePlace?.id]);
 
-    return state;
-  });
-
-  const [amenitiesState, setAmenitiesState] = useState(() => {
+  useEffect(() => {
     const state = { ...defaultAmenities };
 
-    if (Array.isArray(place?.amenities)) {
-      safePlace.amenities.forEach((storedKey) => {
+    if (Array.isArray(safePlace?.amenities)) {
+      safePlace.amenities.forEach((dbKey) => {
         const uiKey = Object.keys(AMENITY_KEY_MAP).find(
-          (k) => AMENITY_KEY_MAP[k] === storedKey
+          k => AMENITY_KEY_MAP[k] === dbKey
         );
-        if (uiKey) state[uiKey] = true;
+
+        if (uiKey && uiKey in state) {
+          state[uiKey] = true;
+        }
       });
     }
 
-    return state;
-  });
+    setAmenitiesState(state);
+  }, [safePlace?.id]);
+
+  const buildBooleanMapPayload = (stateObj) => {
+    const payload = {};
+    Object.keys(stateObj).forEach((k) => {
+      if (stateObj[k]) payload[k] = true;
+    });
+    return payload;
+  };
 
   /* ------------------------------------------------------------------ */
   /* DERIVED DATA                                                      */
@@ -309,12 +337,56 @@ export default function PlaceCard({
     return Number.isFinite(s) ? Math.round(s / 60) : null;
   }
 
-  const toggleSuitability = (key) => {
-    setSuitabilityState((prev) => ({ ...prev, [key]: !prev[key] }));
+  const toggleSuitability = async (key) => {
+    if (!safePlace?.id) {
+      return;
+    }
+
+    const next = {
+      ...suitabilityState,
+      [key]: !suitabilityState[key],
+    };
+
+    const payload = buildBooleanMapPayload(next);
+
+    try {
+      await updateDoc(doc(db, "places", safePlace.id), {
+        suitability: payload,
+        updatedAt: serverTimestamp(),
+      });
+
+    } catch (err) {
+      console.error("[SUITABILITY] save failed", err);
+    }
+
+    setSuitabilityState(next);
   };
 
-  const toggleAmenity = (key) => {
-    setAmenitiesState((prev) => ({ ...prev, [key]: !prev[key] }));
+  const toggleAmenity = async (key) => {
+    if (!safePlace?.id) return;
+
+    const next = {
+      ...amenitiesState,
+      [key]: !amenitiesState[key],
+    };
+
+    const payload = Object.entries(next)
+      .filter(([, enabled]) => enabled)
+      .map(([uiKey]) => AMENITY_KEY_MAP[uiKey])
+      .filter(Boolean);
+
+    try {
+      await updateDoc(doc(db, "places", safePlace.id), {
+        amenities: payload,
+        updatedAt: serverTimestamp(),
+      });
+
+      console.log("[AMENITIES] saved OK");
+    } catch (err) {
+      console.error("[AMENITIES] save failed", err);
+    }
+
+    setAmenitiesState(next);
   };
 
   const amenityIcon = (enabled, icon, type = "mc") => {
@@ -344,18 +416,6 @@ export default function PlaceCard({
         {!iconOnly && <Text style={styles.actionButtonText}>{label}</Text>}
       </TouchableOpacity>
     );
-  }
-
-  function defaultAmenitiesFromPlace(place) {
-    const base = { ...defaultAmenities };
-
-    if (Array.isArray(place.amenities)) {
-      place.amenities.forEach((a) => {
-        if (a in base) base[a] = true;
-      });
-    }
-
-    return base;
   }
 
   function formatAddress(address) {
@@ -801,9 +861,15 @@ export default function PlaceCard({
               {Object.keys(defaultSuitability).map((key) => (
                 <TouchableOpacity
                   key={key}
-                  disabled={!canAddPlace}
-                  onPress={() => canAddPlace && toggleSuitability(key)}
-                  style={{ opacity: canAddPlace ? 1 : 0.5 }}
+                  disabled={!capabilities.canUpdatePlaces}
+                  onPress={() => toggleSuitability(key)}
+                  style={{
+                    opacity:
+                      !capabilities.canCreateRoutes ||
+                      (!capabilities.isAdmin && suitabilityState[key])
+                        ? 0.6
+                        : 1
+                  }}
                 >
                   {amenityIcon(
                     suitabilityState[key],
@@ -828,9 +894,15 @@ export default function PlaceCard({
               {Object.keys(defaultAmenities).map((key) => (
                 <TouchableOpacity
                   key={key}
-                  disabled={!canAddPlace}
-                  onPress={() => canAddPlace && toggleAmenity(key)}
-                  style={{ opacity: canAddPlace ? 1 : 0.5 }}
+                  disabled={!capabilities.canUpdatePlaces}
+                  onPress={() => toggleAmenity(key)}
+                  style={{
+                    opacity:
+                      !capabilities.canCreateRoutes ||
+                      (!capabilities.isAdmin && amenitiesState[key])
+                        ? 0.6
+                        : 1
+                  }}
                 >
                   {amenityIcon(
                     amenitiesState[key],

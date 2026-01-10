@@ -12,6 +12,17 @@ export function applyFilters(poi, filters) {
     }
   }
 
+  // Suitability filter (CR Only)
+  if (poi.source === "cr" && filters.suitability.size > 0) {
+    if (!Array.isArray(poi.suitability)) return false;
+
+    for (const suitability of filters.suitability) {
+      if (!poi.suitability.includes(suitability)) {
+        return false;
+      }
+    }
+  }
+
   // Amenities filter (CR only)
   if (poi.source === "cr" && filters.amenities.size > 0) {
     if (!Array.isArray(poi.amenities)) return false;

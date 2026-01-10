@@ -57,6 +57,7 @@ export default function ProfileScreen() {
     return <LoginScreen />;
   }
 
+ 
   // -----------------------------------
   // Upload Avatar
   // -----------------------------------

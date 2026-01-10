@@ -16,21 +16,22 @@ import { decode } from "@mapbox/polyline";
 import { SearchBar } from "../map/components/SearchBar";
 import { fetchRoute } from "../map/utils/fetchRoute";
 
+import { saveRoute } from "@/core/map/routes/saveRoute";
+import { openNativeNavigation, openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
+import useWaypoints from "@core/map/waypoints/useWaypoints";
+import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
+import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
-import { useCallback } from "react";
-import { RIDER_CATEGORIES } from "../config/categories/rider";
-
-import { saveRoute } from "@/core/map/routes/saveRoute";
-import { openNativeNavigation, openNavigationWithWaypoints } from "@/core/map/utils/navigation";
-import useWaypoints from "@core/map/waypoints/useWaypoints";
-import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
-import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { doc, getDoc } from "firebase/firestore";
+import { useCallback } from "react";
+import { RIDER_AMENITIES } from "../config/amenities/rider";
+import { RIDER_CATEGORIES } from "../config/categories/rider";
+import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { getPlaceLabel } from "../lib/geocode";
 
 const RECENTER_ZOOM = 12;
@@ -40,6 +41,11 @@ const ENABLE_GOOGLE_AUTO_FETCH = true;
 /* ------------------------------------------------------------------ */
 /* CATEGORY → ICON MAP                                                */
 /* ------------------------------------------------------------------ */
+const SUITABILITY_ICON_MAP = {
+  bikers: "motorbike",
+  scooters: "moped",
+  cyclists: "bicycle",
+}
 
 const CATEGORY_ICON_MAP = {
   cafe: "coffee",
@@ -53,32 +59,30 @@ const CATEGORY_ICON_MAP = {
   unknown: "map-marker",
 };
 
-const FILTER_CATEGORIES = RIDER_CATEGORIES;
 
 const AMENITY_ICON_MAP = {
-  motorcycle_parking: "motorbike",
   toilets: "toilet",
   outdoor_seating: "table-picnic",
-  ev_charger: "ev-station",
+  parking: "parking",
 };
 
 /* Rider focussed for now - add theme specific later */
-const FILTER_AMENITIES = [
-  { key: "motorcycle_parking", label: "Bike parking" },
-  { key: "toilets", label: "Toilets" },
-  { key: "outdoor_seating", label: "Outdoor seating" },
-];
+const FILTER_SUITABILITIES = RIDER_SUITABILITY;
+const FILTER_CATEGORIES = RIDER_CATEGORIES;
+const FILTER_AMENITIES = RIDER_AMENITIES;
 
 /* ------------------------------------------------------------------ */
 /* FILTER STATE                                                       */
 /* ------------------------------------------------------------------ */
 
 const EMPTY_FILTERS = {
+  suitability: new Set(),
   categories: new Set(),
   amenities: new Set(),
 };
 
 const DEFAULT_FILTERS = {
+  suitability: [],
   categories: [],
   amenities: [],
 };
@@ -340,7 +344,7 @@ export default function MapScreenRN() {
 
   const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
-  const filtersActive = appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0;
+  const filtersActive = appliedFilters.suitability.size > 0 || appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0;
   const [userLocation, setUserLocation] = useState(null);
 
   const [mapRegion, setMapRegion] = useState(userLocation);
@@ -489,9 +493,17 @@ export default function MapScreenRN() {
           latitude: data.location?.latitude,
           longitude: data.location?.longitude,
           category: data.category || "unknown",
-          amenities: Array.isArray(data.amenities) ? data.amenities : [],
           rating: data.rating,
           ...data,
+
+          // NORMALISED AFTER spread
+          suitability: Array.isArray(data.suitability)
+            ? data.suitability
+            : Object.keys(data.suitability || {}),
+
+          amenities: Array.isArray(data.amenities)
+            ? data.amenities
+            : Object.keys(data.amenities || {}),
         };
       });
 
@@ -705,18 +717,6 @@ export default function MapScreenRN() {
 
   /* Used for Follow Me mode */
 
-
-  const resetMapState = () => {
-    setDraftFilters(EMPTY_FILTERS);
-    setAppliedFilters(EMPTY_FILTERS);
-
-    clearSearch();
-    setSelectedPlaceId(null);
-    setTempCrPlace(null);
-    clearNavigationIntent();
-    setFollowUser(false);
-  };
-
   async function doTextSearch({ query, latitude, longitude, radius = 50000 }) {
     if (!capabilities?.canSearchGoogle) {
       console.log("[GOOGLE] doTextSearch blocked by capability");
@@ -898,6 +898,7 @@ export default function MapScreenRN() {
     let list = crPlaces.filter((p) => inRegion(p, paddedRegion));
 
     if (
+      appliedFilters.suitability.size ||
       appliedFilters.categories.size ||
       appliedFilters.amenities.size
     ) {
@@ -1390,6 +1391,47 @@ export default function MapScreenRN() {
             contentContainerStyle={styles.filterScrollContent}
             showsVerticalScrollIndicator={false}
           >
+           
+            {/* SUITABILITY */}
+            <Text style={styles.filterSection}>Suitability</Text>
+            <View style={styles.iconGrid}>
+              {FILTER_SUITABILITIES.map((a) => {
+                const active = draftFilters.suitability.has(a.key);
+
+                return (
+                  <TouchableOpacity
+                    key={a.key}
+                    style={[
+                      styles.iconButton,
+                      active && styles.iconButtonActive,
+                    ]}
+                    onPress={() =>
+                      setDraftFilters((prev) => ({
+                        ...prev,
+                        suitability: toggleFilter(prev.suitability, a.key),
+                      })
+                    )}
+                  >
+                    <MaterialCommunityIcons
+                      name={SUITABILITY_ICON_MAP[a.key] || "check"}
+                      size={22}
+                      color={active ? theme.colors.accent : theme.colors.background}
+                    />
+                    <Text
+                      style={[
+                        styles.iconLabel,
+                        active && styles.iconLabelActive,
+                      ]}
+                    >
+                      {a.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            
+
+            {/* CATEGORIES */}
             <Text style={styles.filterSection}>Categories</Text>
             <View style={styles.iconGrid}>
               {FILTER_CATEGORIES.map((c) => {
@@ -1430,8 +1472,8 @@ export default function MapScreenRN() {
               })}
             </View>
 
+            {/* AMENITIES */}
             <Text style={styles.filterSection}>Amenities</Text>
-
             <View style={styles.iconGrid}>
               {FILTER_AMENITIES.map((a) => {
                 const active = draftFilters.amenities.has(a.key);
@@ -1453,7 +1495,7 @@ export default function MapScreenRN() {
                     <MaterialCommunityIcons
                       name={AMENITY_ICON_MAP[a.key] || "check"}
                       size={22}
-                      color={active ? theme.colors.accent : theme.colors.textSecondary}
+                      color={active ? theme.colors.accent : theme.colors.background}
                     />
                     <Text
                       style={[
@@ -1487,18 +1529,6 @@ export default function MapScreenRN() {
             }}
           >
             <Text style={styles.filterDoneText}>Done</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.resetButton}
-            onPress={resetMapState}
-          >
-            <MaterialCommunityIcons
-              name="restart"
-              size={18}
-              color={theme.colors.primaryLight}
-            />
-            <Text style={styles.resetButtonText}>Reset map</Text>
           </TouchableOpacity>
 
         </View>
@@ -1671,11 +1701,11 @@ const styles = StyleSheet.create({
   
   filterPanel: {
     position: "absolute",
-    top: 100,
+    top: 60,
     right: 12,
     bottom: 100,
     width: 220,
-    backgroundColor: theme.colors.primaryLight,
+    //backgroundColor: theme.colors.primaryMid || "rgba(15,23,42,0.8)",
     padding: 12,
     borderRadius: 16,
     zIndex: 3000,
@@ -1757,26 +1787,7 @@ const styles = StyleSheet.create({
   },
 
   iconLabelActive: {
-    color: theme.colors.accent,
-    fontWeight: "600",
-  },
-
-  resetButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    marginTop: 10,
-    borderRadius: 8,
-    backgroundColor: theme.colors.primaryDark,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryMid,
-  },
-
-  resetButtonText: {
-    marginLeft: 8,
-    color: theme.colors.primaryLight,
-    fontSize: 14,
+    color: theme.colors.accentMid,
     fontWeight: "600",
   },
 
