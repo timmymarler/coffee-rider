@@ -16,7 +16,9 @@ import {
 } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Dimensions,
+  FlatList,
   Image,
   Pressable, ScrollView, Text,
   TouchableOpacity,
@@ -27,7 +29,7 @@ import { RIDER_CATEGORIES } from "../../config/categories/rider";
 const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 const PLACE_CATEGORIES = RIDER_CATEGORIES;
 const screenWidth = Dimensions.get("window").width;
-const MAX_USER_PHOTOS_PER_PLACE = 1;
+const MAX_USER_PHOTOS_PER_PLACE = 2;
 const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
 /* ------------------------------------------------------------------ */
@@ -132,6 +134,8 @@ export default function PlaceCard({
   const googlePlaceId =
     safePlace.googlePlaceId ||
     (safePlace.source === "google" ? safePlace.id : null);
+  const isNewPlace =
+    safePlace._temp === true || safePlace.source === "google";
 
   const isGoogleNew = place?.source === "google-new";
   const isCr = place?.source === "cr";
@@ -151,7 +155,8 @@ export default function PlaceCard({
     setSelectedRating(userCrRating);
   }, [userCrRating, place?.id]);
 
-  /* ------------------------------------------------------------------ */
+
+    /* ------------------------------------------------------------------ */
   /* LOCAL STATE                                                        */
   /* ------------------------------------------------------------------ */
 
@@ -189,6 +194,14 @@ export default function PlaceCard({
     });
   };
 
+  const showNoGooglePhotosMessage =
+    capabilities.canViewGooglePhotos &&
+    googlePlaceId &&
+    googlePhotos.length === 0;
+console.log("GOOGLE ID", googlePlaceId);
+console.log("DETAILS RESPONSE", googlePhotos);
+console.log("Show message",showNoGooglePhotosMessage);
+console.log(googlePhotos.length);
 
   useEffect(() => {
     const state = { ...defaultSuitability };
@@ -366,7 +379,7 @@ export default function PlaceCard({
   /* HELPERS                                                           */
   /* ------------------------------------------------------------------ */
 
-  function buildGooglePhotoUrl(name, width = 800) {
+  function buildGooglePhotoUrl(name, width = 400) {
     return `https://places.googleapis.com/v1/${name}/media?maxWidthPx=${width}&key=${GOOGLE_KEY}`;
   }
 
@@ -497,10 +510,10 @@ export default function PlaceCard({
         .map(([uiKey]) => AMENITY_KEY_MAP[uiKey])
         .filter(Boolean);
 
-      if (amenities.length === 0) {
-        setAddError("Please select at least one amenity before adding this place.");
-        return;
-      }
+//      if (amenities.length === 0) {
+//        setAddError("Please select at least one amenity before adding this place.");
+//        return;
+//      }
 
       const suitability = Object.entries(suitabilityState)
         .filter(([, enabled]) => enabled)
@@ -622,6 +635,28 @@ export default function PlaceCard({
 
   };
 
+  async function findGoogleMatch(place) {
+    const query = `${place.title} ${place.address || ""}`;
+
+    const res = await fetch(
+      "https://places.googleapis.com/v1/places:searchText",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": GOOGLE_KEY,
+        },
+        body: JSON.stringify({
+          textQuery: query,
+          maxResultCount: 1,
+        }),
+      }
+    );
+
+    const json = await res.json();
+    return json.places?.[0] || null;
+  }
+
   const handleSaveRating = async (ratingValue) => {
     if (!capabilities.canRate) return;
     if (!uid || !place?.id || !ratingValue) return;
@@ -657,6 +692,29 @@ export default function PlaceCard({
     safePlace.crRatings = { users: nextUsers, average, count };
   };
 
+  const handleResyncWithGoogle = async () => {
+    try {
+      const match = await findGoogleMatch(safePlace);
+
+      if (!match?.id) {
+        Alert.alert("No match found", "Google could not find this place.");
+        return;
+      }
+
+      await updateDoc(doc(db, "places", safePlace.id), {
+        googlePlaceId: match.id,
+        googleSyncedAt: serverTimestamp(),
+      });
+
+      Alert.alert("Success", "Place linked with Google.");
+      onClose(); // reopen card to refresh
+
+    } catch (e) {
+      console.error("RESYNC FAIL", e);
+      Alert.alert("Error", "Failed to sync with Google.");
+    }
+  };
+
   /* ------------------------------------------------------------------ */
   /* RENDER                                                            */
   /* ------------------------------------------------------------------ */
@@ -671,11 +729,19 @@ export default function PlaceCard({
       {/* Photos */}
       <View style={styles.photoWrapper}>
         <View style={styles.photoContainer}>
-          <ScrollView
+          <FlatList
             horizontal
+            data={combinedPhotos}
+            keyExtractor={(item, i) =>
+              typeof item === "string" ? item : item.url || i.toString()
+            }
             snapToInterval={screenWidth}
             decelerationRate="fast"
             showsHorizontalScrollIndicator={false}
+            removeClippedSubviews
+            initialNumToRender={1}
+            maxToRenderPerBatch={2}
+            windowSize={3}
             style={{ width: screenWidth, height: 180 }}
             onScroll={(e) =>
               setPhotoIndex(
@@ -684,25 +750,26 @@ export default function PlaceCard({
                 )
               )
             }
-          >
-            {combinedPhotos.map((p, i) => {
-              const uri = typeof p === "string" ? p : p.url;
+            renderItem={({ item }) => {
+              const uri = typeof item === "string" ? item : item.url;
 
               return (
                 <Image
-                  key={i}
                   source={{ uri }}
                   style={styles.photo}
-                  onError={() => console.log("IMAGE FAIL", uri)}
-                />
+                />              
               );
-            })}
-
-          </ScrollView>
+            }}
+          />
           {capabilities.googlePhotoAccess === "limited" &&
           rawGooglePhotos.length > 2 && (
             <Text style={styles.upgradeHint}>
               More photos available with Pro
+            </Text>
+          )}
+          {showNoGooglePhotosMessage && (
+            <Text style={styles.noGooglePhotosHint}>
+              No Google photos available for this place
             </Text>
           )}
 
@@ -754,6 +821,15 @@ export default function PlaceCard({
               />
             </TouchableOpacity>
           )}
+          {!googlePlaceId && (
+            <TouchableOpacity
+              style={styles.photoActionButton}
+              onPress={handleResyncWithGoogle}
+            >
+              <MaterialCommunityIcons name="sync" size={18} color="#fff" />
+            </TouchableOpacity>
+          )}
+
         </View>
       </View>
 
@@ -905,81 +981,85 @@ export default function PlaceCard({
             </Text>
           )}
 
+
           {/* Suitability */}
-          <View
-            style={[
-              styles.editableSection,
-              safePlace.source === "google" && styles.editableHighlight,
-            ]}
-          >
-            <Text style={styles.crLabel}>Suitability</Text>
-            <View style={styles.amenitiesRow}>
-              {Object.keys(defaultSuitability).map((key) => (
-                <TouchableOpacity
-                  key={key}
-                  disabled={!capabilities.canUpdatePlaces}
-                  onPress={() => toggleSuitability(key)}
-                  style={{
-                    opacity:
-                      !capabilities.canCreateRoutes ||
-                      (!capabilities.isAdmin && suitabilityState[key])
-                        ? 0.6
-                        : 1
-                  }}
-                >
-                  {amenityIcon(
-                    suitabilityState[key],
-                    key === "bikers"
-                      ? "motorbike"
-                      : key === "scooters"
-                      ? "moped"
-                      : key === "cyclists"
-                      ? "bike"
-                      : key === "walkers"
-                      ? "walk"
-                      : key === "cars"
-                      ? "car"
-                      : "car-electric"
-                  )}
-                </TouchableOpacity>
-              ))}
+          {!isNewPlace && (
+            <View
+              style={[
+                styles.editableSection,
+                safePlace.source === "google" && styles.editableHighlight,
+              ]}
+            >
+              <Text style={styles.crLabel}>Meet-ups / Suitability</Text>
+              <View style={styles.amenitiesRow}>
+                {Object.keys(defaultSuitability).map((key) => (
+                  <TouchableOpacity
+                    key={key}
+                    disabled={!capabilities.canUpdatePlaces}
+                    onPress={() => toggleSuitability(key)}
+                    style={{
+                      opacity:
+                        !capabilities.canCreateRoutes ||
+                        (!capabilities.isAdmin && suitabilityState[key])
+                          ? 0.6
+                          : 1
+                    }}
+                  >
+                    {amenityIcon(
+                      suitabilityState[key],
+                      key === "bikers"
+                        ? "motorbike"
+                        : key === "scooters"
+                        ? "moped"
+                        : key === "cyclists"
+                        ? "bike"
+                        : key === "walkers"
+                        ? "walk"
+                        : key === "cars"
+                        ? "car"
+                        : "car-electric"
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            
+              {/* Amenities */}
+              <Text style={styles.crLabel}>Amenities</Text>
+              <View style={styles.amenitiesRow}>
+                {Object.keys(defaultAmenities).map((key) => (
+                  <TouchableOpacity
+                    key={key}
+                    disabled={!capabilities.canUpdatePlaces}
+                    onPress={() => toggleAmenity(key)}
+                    style={{
+                      opacity:
+                        !capabilities.canCreateRoutes ||
+                        (!capabilities.isAdmin && amenitiesState[key])
+                          ? 0.6
+                          : 1
+                    }}
+                  >
+                    {amenityIcon(
+                      amenitiesState[key],
+                      key === "parking"
+                        ? "parking"
+                        : key === "motorcycleParking"
+                        ? "motorbike"
+                        : key === "evCharger"
+                        ? "ev-plug-ccs2"
+                        : key === "toilets"
+                        ? "toilet"
+                        : key === "petFriendly"
+                        ? "dog-side"
+                        : key === "disabledAccess"
+                        ? "wheelchair-accessibility"
+                        : "table-picnic"
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
-            {/* Amenities */}
-            <Text style={styles.crLabel}>Amenities</Text>
-            <View style={styles.amenitiesRow}>
-              {Object.keys(defaultAmenities).map((key) => (
-                <TouchableOpacity
-                  key={key}
-                  disabled={!capabilities.canUpdatePlaces}
-                  onPress={() => toggleAmenity(key)}
-                  style={{
-                    opacity:
-                      !capabilities.canCreateRoutes ||
-                      (!capabilities.isAdmin && amenitiesState[key])
-                        ? 0.6
-                        : 1
-                  }}
-                >
-                  {amenityIcon(
-                    amenitiesState[key],
-                    key === "parking"
-                      ? "parking"
-                      : key === "motorcycleParking"
-                      ? "motorbike"
-                      : key === "evCharger"
-                      ? "ev-plug-ccs2"
-                      : key === "toilets"
-                      ? "toilet"
-                      : key === "petFriendly"
-                      ? "dog-side"
-                      : key === "disabledAccess"
-                      ? "wheelchair-accessibility"
-                      : "table-picnic"
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+          )}  
             {addError && (
               <View style={styles.savedHint}>
                 <Text style={{ color: theme.colors.accentMid }}>
@@ -987,7 +1067,7 @@ export default function PlaceCard({
                 </Text>
               </View>
             )}
-
+          
             {canAddPlace && (
               <TouchableOpacity
                 style={styles.primaryButton}
@@ -1035,11 +1115,9 @@ function createStyles(theme) {
     },
     photoContainer: { height: 150 },
     photo: {
-      width: screenWidth - 32,
-      height: 180,
-      marginHorizontal: 16,
-      borderRadius: 8,
-      resizeMode: "cover",
+      width: screenWidth,      
+      backgroundColor: "#000", // or theme dark
+      resizeMode: "contain"
     },
     info: { padding: 12 },
     title: {

@@ -780,9 +780,6 @@ export default function MapScreenRN() {
     if (capabilities.canViewGooglePhotos) {
       fieldMask.push("places.photos");
     }
-console.log("[GOOGLE] role:", role);
-console.log("[GOOGLE] canViewGooglePhotos:", capabilities.canViewGooglePhotos);
-console.log("[GOOGLE] fieldMask:", fieldMask);
 
     const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
@@ -1448,7 +1445,7 @@ console.log("[GOOGLE] fieldMask:", fieldMask);
           >
            
             {/* SUITABILITY */}
-            <Text style={styles.filterSection}>Suitability</Text>
+            <Text style={styles.filterSection}>Meet-ups / Suitability</Text>
             <View style={styles.iconGrid}>
               {FILTER_SUITABILITIES.map((a) => {
                 const active = draftFilters.suitability.has(a.key);
