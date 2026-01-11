@@ -1,4 +1,5 @@
 import { fetchGooglePhotoRefs } from "@/core/map/utils/fetchGooglePhotoRefs";
+import { formatWeekdayText, getOpeningStatus } from "@/core/map/utils/openingHours";
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { getCapabilities } from "@core/roles/capabilities";
@@ -25,6 +26,7 @@ import {
   View
 } from "react-native";
 import { RIDER_CATEGORIES } from "../../config/categories/rider";
+
 
 const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 const PLACE_CATEGORIES = RIDER_CATEGORIES;
@@ -81,6 +83,10 @@ export default function PlaceCard({
 }) {
   const [googlePhotos, setGooglePhotos] = useState([]);
   const [loadingGooglePhotos, setLoadingGooglePhotos] = useState(false);
+  const [hoursExpanded, setHoursExpanded] = useState(false);
+  const openingStatus = getOpeningStatus(place.regularOpeningHours);
+  const weekList = formatWeekdayText(place.regularOpeningHours);
+console.log("HOURS RAW:", place.regularOpeningHours);
 
   const safePlace = {
     ...place,
@@ -198,10 +204,6 @@ export default function PlaceCard({
     capabilities.canViewGooglePhotos &&
     googlePlaceId &&
     googlePhotos.length === 0;
-console.log("GOOGLE ID", googlePlaceId);
-console.log("DETAILS RESPONSE", googlePhotos);
-console.log("Show message",showNoGooglePhotosMessage);
-console.log(googlePhotos.length);
 
   useEffect(() => {
     const state = { ...defaultSuitability };
@@ -375,6 +377,7 @@ console.log(googlePhotos.length);
     return list;
   }, [heroGooglePhoto, safePlace.photos.cr]);
 
+
   /* ------------------------------------------------------------------ */
   /* HELPERS                                                           */
   /* ------------------------------------------------------------------ */
@@ -395,6 +398,7 @@ console.log(googlePhotos.length);
     return Number.isFinite(s) ? Math.round(s / 60) : null;
   }
 
+  
   const toggleSuitability = async (key) => {
     if (!safePlace?.id) {
       return;
@@ -891,17 +895,43 @@ console.log(googlePhotos.length);
               {distanceText}
             </Text>
           )}
+
           {/* Opening Hours (Google only) */}
-          {safePlace.regularOpeningHours?.weekdayDescriptions?.length ? (
-            <View style={styles.openingHours}>
-              <Text style={styles.crLabel}>Opening Hours</Text>
-              {safePlace.regularOpeningHours.weekdayDescriptions.map((line) => (
-                <Text key={line} style={styles.subText}>
-                  {line}
+          <TouchableOpacity
+            onPress={() => setHoursExpanded(v => !v)}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginTop: 12,
+            }}
+          >
+            <Text style={{ color: openingStatus.color, fontWeight: "600" }}>
+              🕒 {openingStatus.label}
+            </Text>
+
+            <MaterialCommunityIcons
+              name={hoursExpanded ? "chevron-up" : "chevron-down"}
+              size={22}
+              color="#888"
+            />
+          </TouchableOpacity>
+          {hoursExpanded && (
+            <View style={{ marginTop: 8 }}>
+              {weekList.map((d, i) => (
+                <Text
+                  key={i}
+                  style={{
+                    color: "#666",
+                    fontSize: 13,
+                    marginVertical: 2,
+                  }}
+                >
+                  {d}
                 </Text>
               ))}
             </View>
-          ) : null}
+          )}
 
           {/* Ratings */}
           <View style={styles.ratingsSection}>
