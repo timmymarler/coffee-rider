@@ -1,20 +1,17 @@
 // core/map/utils/mergePlaceData.js
 import { classifyPoi } from "../classify/classifyPois";
 
-export function buildGooglePhotoUrl(ref, apiKey) {
-  if (!ref || !apiKey) return null;
-  return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${ref}&key=${apiKey}`;
-}
-
-export function extractGooglePhotoUrls(googleResult, apiKey) {
+export function extractGooglePhotoRefs(googleResult) {
   if (!googleResult?.photos) return [];
   return googleResult.photos
     .slice(0, 6)
-    .map((p) => buildGooglePhotoUrl(p.photo_reference, apiKey))
+    .map(p => p.photo_reference)
     .filter(Boolean);
 }
 
 export function mergeCafeAndGoogle(cafe, google, googlePhotoUrls) {
+  console.log("GOOGLE RAW PHOTOS", google?.photos);
+
   if (!cafe && !google) return null;
 
   const category = google ? classifyPoi(google) : cafe?.category ?? "other";
@@ -83,8 +80,12 @@ export function mergeCafeAndGoogle(cafe, google, googlePhotoUrls) {
     priceLevel: google?.price_level ?? null,
     priceRange: cafe?.priceRange ?? null,
 
-    photos,
-    googlePhotoUrls: googlePhotoUrls || [],
+    photos: {
+      cr: Array.isArray(cafe?.photos) ? cafe.photos : [],
+      google: Array.isArray(google?.photos)
+        ? google.photos.map(p => p.photo_reference).filter(Boolean)
+        : []
+    },
 
     cafeId: cafe?.id || null,
     placeId: google?.place_id || cafe?.placeId || null,

@@ -37,6 +37,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         // Google photos
         googlePhotoAccess: "full",
+        canViewGooglePhotos: true,
 
         // Admin
         canEditAnyVenue: true,
@@ -66,6 +67,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canSearchGoogle: true,
 
         googlePhotoAccess: "full",
+        canViewGooglePhotos: true,
       };
 
     case CAPABILITY_LEVELS.USER:
@@ -90,6 +92,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canSearchGoogle: false,
 
         googlePhotoAccess: "limited",  // 1–2 photos per place
+        canViewGooglePhotos: true,
       };
 
     case CAPABILITY_LEVELS.GUEST:
@@ -115,6 +118,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canSearchGoogle: false,
 
         googlePhotoAccess: "none",
+        canViewGooglePhotos: false,
       };
   }
 }

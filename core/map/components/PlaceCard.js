@@ -1,6 +1,6 @@
+import { fetchGooglePhotoRefs } from "@/core/map/utils/fetchGooglePhotoRefs";
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
-import { buildGooglePhotoUrl } from "@core/google/buildGooglePhotoUrl";
 import { getCapabilities } from "@core/roles/capabilities";
 import { uploadImage } from "@core/utils/uploadImage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -27,7 +27,8 @@ import { RIDER_CATEGORIES } from "../../config/categories/rider";
 const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 const PLACE_CATEGORIES = RIDER_CATEGORIES;
 const screenWidth = Dimensions.get("window").width;
-const MAX_USER_PHOTOS_PER_PLACE = 2;
+const MAX_USER_PHOTOS_PER_PLACE = 1;
+const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
 /* ------------------------------------------------------------------ */
 /* CONSTANTS                                                          */
@@ -76,10 +77,20 @@ export default function PlaceCard({
   onRoute,
   onNavigate,
 }) {
+  const [googlePhotos, setGooglePhotos] = useState([]);
+  const [loadingGooglePhotos, setLoadingGooglePhotos] = useState(false);
+
   const safePlace = {
     ...place,
-
-    photos: place.photos ?? { cr: [], google: [] },
+    googlePlaceId: place.googlePlaceId || null,
+    photos: {
+      google: Array.isArray(place.googlePhotoRefs)
+        ? place.googlePhotoRefs
+        : [],
+      cr: Array.isArray(place.photos?.cr)
+        ? place.photos.cr
+        : [],
+    },
     suitability: Array.isArray(place.suitability)
       ? place.suitability
       : Object.keys(place.suitability || {}),
@@ -108,7 +119,6 @@ export default function PlaceCard({
   };
 
   const styles = createStyles(theme);
-
   const auth = useContext(AuthContext);
   const user = auth?.user || null;
   const role = auth?.profile?.role || "guest"; // or auth.role if that’s what you store
@@ -121,8 +131,7 @@ export default function PlaceCard({
   // 🔑 NORMALISE Google place id (ABSOLUTELY REQUIRED)
   const googlePlaceId =
     safePlace.googlePlaceId ||
-    (safePlace.source === "google" && safePlace.id) ||
-    null;
+    (safePlace.source === "google" ? safePlace.id : null);
 
   const isGoogleNew = place?.source === "google-new";
   const isCr = place?.source === "cr";
@@ -209,6 +218,23 @@ export default function PlaceCard({
     setAmenitiesState(state);
   }, [safePlace?.id]);
 
+  useEffect(() => {
+    if (!googlePlaceId) return;
+    if (!capabilities?.canViewGooglePhotos) return;
+    if (googlePhotos.length > 0) return;
+
+    let mounted = true;
+
+    async function loadPhotos() {
+      const refs = await fetchGooglePhotoRefs(googlePlaceId, 1);
+
+      if (mounted) setGooglePhotos(refs);
+    }
+
+    loadPhotos();
+    return () => (mounted = false);
+  }, [googlePlaceId, capabilities?.canViewGooglePhotos]);
+
   const buildBooleanMapPayload = (stateObj) => {
     const payload = {};
     Object.keys(stateObj).forEach((k) => {
@@ -290,9 +316,10 @@ export default function PlaceCard({
   const crRatingCount = safePlace.crRatings?.count ?? 0;
   
   const rawGooglePhotos = useMemo(() => {
-    return Array.isArray(safePlace.photos?.google)
-      ? safePlace.photos.google.map(buildGooglePhotoUrl).filter(Boolean)
-      : [];
+    if (!Array.isArray(safePlace.photos?.google)) return [];
+    return safePlace.photos.google
+      .map(ref => buildGooglePhotoUrl(ref))
+      .filter(Boolean);
   }, [safePlace.photos]);
 
   const photos = useMemo(() => {
@@ -319,11 +346,29 @@ export default function PlaceCard({
     return [...crPhotos, ...googlePhotos];
   }, [safePlace.photos, rawGooglePhotos, capabilities.googlePhotoAccess]);
 
+  const heroGooglePhoto =
+    googlePhotos.length > 0
+      ? buildGooglePhotoUrl(googlePhotos[0])
+      : null;
+
+  const combinedPhotos = useMemo(() => {
+    const list = [];
+    if (heroGooglePhoto) {
+      list.push(heroGooglePhoto); // string URL
+    }
+    if (Array.isArray(safePlace.photos.cr)) {
+      list.push(...safePlace.photos.cr);
+    }
+    return list;
+  }, [heroGooglePhoto, safePlace.photos.cr]);
 
   /* ------------------------------------------------------------------ */
   /* HELPERS                                                           */
   /* ------------------------------------------------------------------ */
 
+  function buildGooglePhotoUrl(name, width = 800) {
+    return `https://places.googleapis.com/v1/${name}/media?maxWidthPx=${width}&key=${GOOGLE_KEY}`;
+  }
 
   function metersToMiles(meters) {
     return meters ? (meters / 1609.34).toFixed(1) : null;
@@ -482,7 +527,13 @@ export default function PlaceCard({
         longitude: safePlace.longitude,
         address: resolvedAddress,
         source: "cr",
-        googlePlaceId,            // important
+        googlePlaceId,
+        photos: {
+          cr: [],
+          google: Array.isArray(place.googlePhotoRefs) && place.googlePhotoRefs.length
+            ? place.googlePhotoRefs
+            : (Array.isArray(googlePhotos) ? googlePhotos : []),        
+        },
         updatedAt: serverTimestamp(),
       };
 
@@ -634,13 +685,18 @@ export default function PlaceCard({
               )
             }
           >
-            {photos.map((p, i) => (
-              <Image
-                key={p.url ?? i}
-                source={{ uri: p.url }}
-                style={styles.photo}
-              />
-            ))}
+            {combinedPhotos.map((p, i) => {
+              const uri = typeof p === "string" ? p : p.url;
+
+              return (
+                <Image
+                  key={i}
+                  source={{ uri }}
+                  style={styles.photo}
+                  onError={() => console.log("IMAGE FAIL", uri)}
+                />
+              );
+            })}
 
           </ScrollView>
           {capabilities.googlePhotoAccess === "limited" &&

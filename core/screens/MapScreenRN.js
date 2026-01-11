@@ -265,7 +265,7 @@ function mapGooglePlace(place, capabilities) {
   const googlePhotoRefs =
     capabilities?.canViewGooglePhotos && Array.isArray(place.photos)
       ? place.photos
-          .map((p) => p.name || p.photo_reference)
+          .map((p) => p.name)
           .filter(Boolean)
           .slice(0, GOOGLE_PHOTO_LIMITS.maxPhotosPerPlace)
       : [];
@@ -367,7 +367,10 @@ export default function MapScreenRN() {
   const [searchInput, setSearchInput] = useState("");   // what user is typing
   const [activeQuery, setActiveQuery] = useState("");   // what we are actually searching
   const [searchOrigin, setSearchOrigin] = useState(null);
-  const { user, role = "guest" } = useContext(AuthContext);
+  
+  const auth = useContext(AuthContext);
+  const user = auth?.user || null;
+  const role = auth?.profile?.role || "guest";
   const capabilities = getCapabilities(role);
 
   const [searchNotice, setSearchNotice] = useState(null);
@@ -777,6 +780,9 @@ export default function MapScreenRN() {
     if (capabilities.canViewGooglePhotos) {
       fieldMask.push("places.photos");
     }
+console.log("[GOOGLE] role:", role);
+console.log("[GOOGLE] canViewGooglePhotos:", capabilities.canViewGooglePhotos);
+console.log("[GOOGLE] fieldMask:", fieldMask);
 
     const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
