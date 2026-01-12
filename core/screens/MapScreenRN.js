@@ -3,8 +3,7 @@ import { TabBarContext } from "@context/TabBarContext";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
-
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
 
@@ -455,6 +454,21 @@ export default function MapScreenRN() {
 
     closeAddPointMenu();
   };
+
+  const safeInitialRegion = userLocation
+    ? {
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.15,
+        longitudeDelta: 0.15,
+      }
+    : {
+        latitude: 51.5,
+        longitude: -0.1,
+        latitudeDelta: 0.15,
+        longitudeDelta: 0.15,
+      };
+
 
 // state
 
@@ -1348,7 +1362,7 @@ export default function MapScreenRN() {
   return (
     <View style={styles.container}>
       {userLocation ? (
-        <MapView
+        <MapView provider={PROVIDER_GOOGLE}
           ref={mapRef}
           key={mapKey}
           style={StyleSheet.absoluteFill}
@@ -1401,12 +1415,7 @@ export default function MapScreenRN() {
             setShowAddPointMenu(true);
           }}
 
-          initialRegion={{
-            latitude: userLocation.latitude,
-            longitude: userLocation.longitude,
-            latitudeDelta: 0.15,
-            longitudeDelta: 0.15,
-          }}      
+          initialRegion={safeInitialRegion}
           onMapReady={() => {
             mapReadyRef.current = true;
             attemptRouteFit();
