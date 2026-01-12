@@ -185,24 +185,27 @@ export default function Layout() {
       <AuthProvider>
         <TabBarProvider>
           <WaypointsProvider>
-            <AppHeader />
+            <View style={{ flex: 1 }}>
 
-            <Tabs
-              screenOptions={{ headerShown: false }}
-              tabBar={(props) => <FloatingTabBar {...props} />}
-            >
-              <Tabs.Screen name="map" />
-              <Tabs.Screen name="saved-routes" />
-              <Tabs.Screen name="groups" />
-              <Tabs.Screen name="profile" />
-            </Tabs>
+              <AppHeader />
 
-            <VersionGate
-              visible={!!versionGate}
-              forced={versionGate?.forced}
-              onClose={() => setVersionGate(null)}
-            />
+              <Tabs
+                screenOptions={{ headerShown: false }}
+                tabBar={(props) => <FloatingTabBar {...props} />}
+              >
+                <Tabs.Screen name="map" />
+                <Tabs.Screen name="saved-routes" />
+                <Tabs.Screen name="groups" />
+                <Tabs.Screen name="profile" />
+              </Tabs>
 
+              <VersionGate
+                visible={!!versionGate}
+                forced={versionGate?.forced}
+                onClose={() => setVersionGate(null)}
+              />
+
+            </View>
           </WaypointsProvider>
         </TabBarProvider>
       </AuthProvider>

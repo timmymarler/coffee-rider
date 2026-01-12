@@ -3,7 +3,7 @@ import { TabBarContext } from "@context/TabBarContext";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
 
@@ -32,6 +32,7 @@ import { Modal, Pressable } from "react-native";
 import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
+import { getPlaceLabel } from "../lib/geocode";
 
 const RECENTER_ZOOM = 12;
 const FOLLOW_ZOOM = 17; // closer, more “navigation” feel
@@ -1361,17 +1362,116 @@ export default function MapScreenRN() {
   return (
     <View style={styles.container}>
       {userLocation ? (
-<MapView
-  provider={PROVIDER_GOOGLE}
-  style={{ flex: 1 }}
-  initialRegion={{
-    latitude: 51.5,
-    longitude: -0.1,
-    latitudeDelta: 0.2,
-    longitudeDelta: 0.2,
-  }}
-  showsUserLocation
-/>
+        <MapView provider={PROVIDER_GOOGLE}
+          ref={mapRef}
+          key={mapKey}
+          style={StyleSheet.absoluteFill}
+          showsUserLocation
+          showsMyLocationButton={false}
+          onRegionChangeComplete={handleRegionChangeComplete}
+          onPress={() => {
+            if (showFilters) {
+              setShowFilters(false);
+              return;
+            }
+            if (!routeCoords.length) {
+              setSelectedPlaceId(null);
+              clearTempIfSafe();
+            }
+          }}
+          onPanDrag={() => {
+            if (followUser) setFollowUser(false);
+          }}
+          onLongPress={async (e) => {
+            if (!capabilities.canCreateRoutes) return;
+
+            const { latitude, longitude } = e.nativeEvent.coordinate;
+
+            const nearbyCrPlace = findNearbyCrPlace(
+              latitude,
+              longitude,
+              crPlaces
+            );
+
+            let label = null;
+
+            if (nearbyCrPlace) {
+              label = nearbyCrPlace.title || nearbyCrPlace.name;
+            } else {
+              try {
+                label = await getPlaceLabel(latitude, longitude);
+              } catch (err) {
+                console.warn("[MAP] getPlaceLabel failed", err);
+              }
+            }
+
+            const payload = {
+              latitude,
+              longitude,
+              geocodeResult: label,
+            };
+
+            setPendingMapPoint(payload);
+            setShowAddPointMenu(true);
+          }}
+
+          initialRegion={safeInitialRegion}
+          onMapReady={() => {
+            mapReadyRef.current = true;
+            attemptRouteFit();
+          }}
+        >
+
+          {crMarkers.map(renderMarker)}
+          {searchMarkers.map(renderMarker)}
+          {manualStartPoint && (
+            <Marker
+              coordinate={manualStartPoint}
+              anchor={{ x: 0.5, y: 1 }}
+              zIndex={950}
+            >
+              <SvgPin
+                icon="flag-checkered"
+                fill={theme.colors.accent}
+                circle={theme.colors.primaryMid}
+                stroke={theme.colors.primaryDark}
+              />
+            </Marker>
+          )}
+
+          {capabilities.canCreateRoutes &&
+            waypoints.map((wp, index) => (
+              <Marker
+                key={`wp-${index}`}
+                coordinate={{ latitude: wp.lat, longitude: wp.lng }}
+                anchor={{ x: 0.5, y: 0.5 }}
+                zIndex={500}
+                tracksViewChanges={false}
+              >
+                <View style={styles.waypointPin}>
+                  <Text style={styles.waypointIndex}>{index + 1}</Text>
+                </View>
+              </Marker>
+            ))}
+
+            {/* Base route */}
+              <Polyline
+                key={`base-${routeVersion}`}
+                coordinates={routeCoords}
+                strokeWidth={6}
+                strokeColor={theme.colors.primaryMuted}
+                zIndex={900}
+              />
+
+            {/* Active route */}
+              <Polyline
+                key={`active-${routeVersion}`}
+                coordinates={routeCoords}
+                strokeWidth={3}
+                strokeColor={theme.colors.primary}
+                zIndex={1000}
+              />
+        </MapView>
       ) : (
         <View style={{ flex: 1 }} />  // or a spinner/skeleton later
       )}      
