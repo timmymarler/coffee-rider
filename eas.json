@@ -8,18 +8,30 @@
     /* ------------------------------ RIDER ------------------------------ */
 
     "rider": {
-      "env": { "APP_NAME": "rider" }
+      "env": { "APP_NAME": "rider",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAFq43xqsPhcr_s1tuS1e7TTmme0t2SVGw",
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAFq43xqsPhcr_s1tuS1e7TTmme0t2SVGw",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyCreZstfHnXYWJx5QfaZdcWvoxNCMyLDHg",
+    }
     },
 
     "rider-dev": {
       "developmentClient": true,
-      "env": { "APP_NAME": "rider" },
+      "env": { "APP_NAME": "rider",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAFq43xqsPhcr_s1tuS1e7TTmme0t2SVGw",
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAFq43xqsPhcr_s1tuS1e7TTmme0t2SVGw",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyCreZstfHnXYWJx5QfaZdcWvoxNCMyLDHg",
+      },
       "environment": "development"
     },
 
     "rider-preview": {
       "android": { "buildType": "apk" },
-      "env": { "APP_NAME": "rider" }
+      "env": { "APP_NAME": "rider",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAFq43xqsPhcr_s1tuS1e7TTmme0t2SVGw",
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAFq43xqsPhcr_s1tuS1e7TTmme0t2SVGw",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyCreZstfHnXYWJx5QfaZdcWvoxNCMyLDHg",
+      },
     },
 
     /* ------------------------------ DRIVER ----------------------------- */
@@ -57,7 +69,12 @@
     /* ----------------------------- PRODUCTION -------------------------- */
 
     "production": {
-      "env": { "APP_NAME": "rider" }
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAFq43xqsPhcr_s1tuS1e7TTmme0t2SVGw",
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAFq43xqsPhcr_s1tuS1e7TTmme0t2SVGw",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyCreZstfHnXYWJx5QfaZdcWvoxNCMyLDHg",
+        "APP_NAME": "rider"
+      }      
     }
   },
 
