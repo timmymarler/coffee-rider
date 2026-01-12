@@ -17,6 +17,7 @@ export async function checkAppVersion() {
   const currentVersion =
     Constants.expoConfig?.version ||
     Constants.manifest?.version;
+console.log("APP VERSION:", currentVersion);
 
   if (!currentVersion) return null;
 

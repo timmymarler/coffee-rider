@@ -41,7 +41,7 @@ export default {
     name: DISPLAY_NAME[APP_NAME],
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
-    version: "1.5.3",
+    version: "1.5.4",
 
     icon: `${brandFolder}/icon.png`,
     splash: {
@@ -61,6 +61,7 @@ export default {
 
       googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
       googlePlacesApiKey: process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
+
 
       firebase: {
         apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
