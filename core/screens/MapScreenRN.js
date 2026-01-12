@@ -921,7 +921,7 @@ export default function MapScreenRN() {
 
     const requestId = ++routeRequestId.current;
     buildRoute({ requestId });
-  }, [routeDestination, waypoints, routeClearedByUser, userLocation]);
+  }, [routeDestination, waypoints, routeClearedByUser]);
 
 
   /* ------------------------------------------------------------ */
@@ -1031,6 +1031,7 @@ export default function MapScreenRN() {
   }
 
   async function buildRoute({ destinationOverride = null, requestId } = {}) {
+    if (!routeDestination && waypoints.length === 0) return;
     if (!userLocation) return;
 
     const destination =
