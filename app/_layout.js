@@ -3,15 +3,16 @@
 import AuthProvider from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import AppHeader from "@core/components/layout/AppHeader";
+import VersionGate from "@core/components/VersionGate";
 import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
+import { checkAppVersion } from "@core/utils/versionCheck";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { Tabs, usePathname, useRouter } from "expo-router";
-import { useContext, useEffect, useRef } from "react";
-import { Animated, TouchableOpacity, View } from "react-native";
+import { useContext, useEffect, useRef, useState } from "react";
+import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 
 function FloatingTabBar({ state }) {
   const router = useRouter();
@@ -89,8 +90,7 @@ function FloatingTabBar({ state }) {
       })}
 
       {isMapScreen && (
-      <>
-          {/* separator */}
+        <>
           <View
             style={{
               width: 1,
@@ -101,7 +101,6 @@ function FloatingTabBar({ state }) {
             }}
           />
 
-          {/* Re-centre */}
           <TouchableOpacity
             onPress={() => mapActions?.recenter()}
             style={{ paddingHorizontal: 6 }}
@@ -113,7 +112,6 @@ function FloatingTabBar({ state }) {
             />
           </TouchableOpacity>
 
-          {/* Follow Me */}
           <TouchableOpacity
             onPress={() => mapActions?.toggleFollow()}
             style={{ paddingHorizontal: 6 }}
@@ -131,10 +129,8 @@ function FloatingTabBar({ state }) {
         </>
       )}
 
-
       {!isMapScreen && (
-      <>
-          {/* separator */}
+        <>
           <View
             style={{
               width: 1,
@@ -145,10 +141,7 @@ function FloatingTabBar({ state }) {
             }}
           />
 
-          {/* Re-centre */}
-          <TouchableOpacity
-            style={{ paddingHorizontal: 6 }}
-          >
+          <TouchableOpacity style={{ paddingHorizontal: 6 }}>
             <MaterialCommunityIcons
               name="crosshairs-gps"
               size={22}
@@ -156,10 +149,7 @@ function FloatingTabBar({ state }) {
             />
           </TouchableOpacity>
 
-          {/* Follow Me */}
-          <TouchableOpacity
-            style={{ paddingHorizontal: 6 }}
-          >
+          <TouchableOpacity style={{ paddingHorizontal: 6 }}>
             <MaterialCommunityIcons
               name={"navigation-variant"}
               size={22}
@@ -168,18 +158,35 @@ function FloatingTabBar({ state }) {
           </TouchableOpacity>
         </>
       )}
-
     </Animated.View>
   );
 }
 
 export default function Layout() {
+  const [versionGate, setVersionGate] = useState(null);
+
+  useEffect(() => {
+    async function run() {
+      const res = await checkAppVersion();
+      if (!res) return;
+
+      if (res.compareMin < 0 || res.forceUpdate) {
+        setVersionGate({ forced: true });
+      } else if (res.compareLatest < 0) {
+        setVersionGate({ forced: false });
+      }
+    }
+
+    run();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
         <TabBarProvider>
           <WaypointsProvider>
             <AppHeader />
+
             <Tabs
               screenOptions={{ headerShown: false }}
               tabBar={(props) => <FloatingTabBar {...props} />}
@@ -189,9 +196,21 @@ export default function Layout() {
               <Tabs.Screen name="groups" />
               <Tabs.Screen name="profile" />
             </Tabs>
+
+            <VersionGate
+              visible={!!versionGate}
+              forced={versionGate?.forced}
+              onClose={() => setVersionGate(null)}
+            />
+
           </WaypointsProvider>
         </TabBarProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );
 }
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+})

@@ -542,8 +542,9 @@ export default function PlaceCard({
         latitude: safePlace.latitude,
         longitude: safePlace.longitude,
         address: resolvedAddress,
-        source: "cr",
+        source: place.source === "google" ? "google" : "cr",
         googlePlaceId,
+        openingHours: safePlace.openingHours || place.openingHours || null,
         photos: {
           cr: [],
           google: Array.isArray(place.googlePhotoRefs) && place.googlePhotoRefs.length
