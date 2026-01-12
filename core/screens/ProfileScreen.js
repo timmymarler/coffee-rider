@@ -12,10 +12,39 @@ import { uploadImage } from "@core/utils/uploadImage";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { doc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import LoginScreen from "../auth/login";
+
+  async function handleUpgrade() {
+    if (!user) return;
+
+    try {
+      const userRef = doc(db, "users", user.uid);
+
+      // Upgrade role
+      await updateDoc(userRef, {
+        role: "pro",
+        upgradedAt: Date.now(),
+      });
+
+      // Log upgrade request
+      await addDoc(collection(db, "upgradeRequests"), {
+        uid: user.uid,
+        email: user.email,
+        displayName: displayName || "",
+        requestedAt: Date.now(),
+        status: "pending",
+      });
+
+      await refreshProfile();
+
+    } catch (err) {
+      console.error("Upgrade failed:", err);
+    }
+  }
+
 
 export default function ProfileScreen() {
 
@@ -195,10 +224,18 @@ export default function ProfileScreen() {
           >
             {email}
           </Text>
-
           <View style={{ marginTop: theme.spacing.sm }}>
             <CRInfoBadge label={role.charAt(0).toUpperCase() + role.slice(1)} />
+            {role==="user" && (
+              <CRButton
+                title="Upgrade"
+                variant="primary"
+                onPress={handleUpgrade}
+              >
+              </CRButton>
+            )}
           </View>
+
         </View>
       </CRCard>
       </View>
@@ -274,5 +311,20 @@ const styles = StyleSheet.create({
  },
   cardScreen: {
     paddingBottom: 42
-  }
+  },
+
+  actionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.accentDark, // accentDark
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+
 })

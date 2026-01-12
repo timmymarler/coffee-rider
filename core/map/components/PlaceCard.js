@@ -86,7 +86,6 @@ export default function PlaceCard({
   const [hoursExpanded, setHoursExpanded] = useState(false);
   const openingStatus = getOpeningStatus(place.regularOpeningHours);
   const weekList = formatWeekdayText(place.regularOpeningHours);
-console.log("HOURS RAW:", place.regularOpeningHours);
 
   const safePlace = {
     ...place,

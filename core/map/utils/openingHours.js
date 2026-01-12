@@ -28,6 +28,7 @@ export function getOpeningStatus(openingHours) {
   }
 
   for (const p of todayPeriods) {
+    if (!p.open?.time || !p.close?.time) continue;
     const openMin =
       parseInt(p.open.time.slice(0, 2)) * 60 +
       parseInt(p.open.time.slice(2));
