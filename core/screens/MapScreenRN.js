@@ -17,7 +17,7 @@ import { SearchBar } from "../map/components/SearchBar";
 import { fetchRoute } from "../map/utils/fetchRoute";
 
 import { saveRoute } from "@/core/map/routes/saveRoute";
-import { openNativeNavigation, openNavigationWithWaypoints } from "@/core/map/utils/navigation";
+import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
@@ -377,6 +377,7 @@ export default function MapScreenRN() {
   const [postbox, setPostbox] = useState(null);
   const isSearchActive = !!activeQuery;
   const [mapKey, setMapKey] = useState(0);
+  const isLoadingSavedRouteRef = useRef(false);
 
   const skipNextFollowTickRef = useRef(false);
   const {
@@ -907,6 +908,7 @@ export default function MapScreenRN() {
 
   useEffect(() => {
     if (routeClearedByUser) return;
+    if (isLoadingSavedRouteRef.current) return;
     if (!userLocation) return;
 
     const hasInputs =
@@ -1118,6 +1120,14 @@ export default function MapScreenRN() {
   function loadSavedRoute(route) {
     clearRoute();
     clearWaypoints();
+    isLoadingSavedRouteRef.current = true;
+
+    if (route.origin) {
+      setManualStartPoint({
+        latitude: route.origin.lat,
+        longitude: route.origin.lng,
+      });
+    }
 
     // Waypoints (normalise + rebuild)
     if (Array.isArray(route.waypoints)) {
@@ -1155,12 +1165,23 @@ export default function MapScreenRN() {
     }
 
     setRoutingActive(true);
+    isLoadingSavedRouteRef.current = true;
   }
 
   function handleNavigate(placeOverride = null) {
     const destination = placeOverride || routeDestination;
-
     if (!userLocation) return;
+
+    // Build navigation waypoints starting with saved origin if present
+    const navWaypoints = [];
+
+    if (manualStartPoint) {
+      navWaypoints.push({
+        lat: manualStartPoint.latitude,
+        lng: manualStartPoint.longitude,
+        title: "Route start",
+      });
+    }
 
     // ─────────────────────────────
     // Case 1: Destination exists
@@ -1168,11 +1189,16 @@ export default function MapScreenRN() {
     if (destination) {
       // No waypoints → simple navigation
       if (!waypoints.length) {
-        openNativeNavigation({
-          destination: {
-            latitude: destination.latitude,
-            longitude: destination.longitude,
-          },
+        openNavigationWithWaypoints({
+          origin: userLocation,
+          waypoints: [
+            ...navWaypoints,
+            {
+              lat: destination.latitude,
+              lng: destination.longitude,
+              title: destination.title || "Destination",
+            },
+          ],
         });
         return;
       }
@@ -1181,6 +1207,7 @@ export default function MapScreenRN() {
       openNavigationWithWaypoints({
         origin: userLocation,
         waypoints: [
+          ...navWaypoints,
           ...waypoints.map(wp => ({
             lat: wp.lat,
             lng: wp.lng,
@@ -1198,16 +1225,18 @@ export default function MapScreenRN() {
 
     // ─────────────────────────────
     // Case 2: No destination, waypoints only
-    // (navigate to last waypoint)
     // ─────────────────────────────
     if (waypoints.length) {
       openNavigationWithWaypoints({
         origin: userLocation,
-        waypoints: waypoints.map(wp => ({
-          lat: wp.lat,
-          lng: wp.lng,
-          title: wp.title,
-        })),
+        waypoints: [
+          ...navWaypoints,
+          ...waypoints.map(wp => ({
+            lat: wp.lat,
+            lng: wp.lng,
+            title: wp.title,
+          })),
+        ],
       });
     }
   }
