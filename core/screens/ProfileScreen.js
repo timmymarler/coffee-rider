@@ -17,34 +17,6 @@ import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import LoginScreen from "../auth/login";
 
-  async function handleUpgrade() {
-    if (!user) return;
-
-    try {
-      const userRef = doc(db, "users", user.uid);
-
-      // Upgrade role
-      await updateDoc(userRef, {
-        role: "pro",
-        upgradedAt: Date.now(),
-      });
-
-      // Log upgrade request
-      await addDoc(collection(db, "upgradeRequests"), {
-        uid: user.uid,
-        email: user.email,
-        displayName: displayName || "",
-        requestedAt: Date.now(),
-        status: "pending",
-      });
-
-      await refreshProfile();
-
-    } catch (err) {
-      console.error("Upgrade failed:", err);
-    }
-  }
-
 
 export default function ProfileScreen() {
 
@@ -156,6 +128,34 @@ export default function ProfileScreen() {
     } catch (err) {
       console.error("Profile save error:", err);
       setSaving(false);
+    }
+  }
+
+  async function handleUpgrade() {
+    if (!user) return;
+
+    try {
+      const userRef = doc(db, "users", user.uid);
+
+      // Upgrade role
+      await updateDoc(userRef, {
+        role: "pro",
+        upgradedAt: Date.now(),
+      });
+
+      // Log upgrade request
+      await addDoc(collection(db, "upgradeRequests"), {
+        uid: user.uid,
+        email: user.email,
+        displayName: displayName || "",
+        requestedAt: Date.now(),
+        status: "pending",
+      });
+
+      await refreshProfile();
+
+    } catch (err) {
+      console.error("Upgrade failed:", err);
     }
   }
 
