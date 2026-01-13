@@ -3,13 +3,11 @@
 import AuthProvider from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import AppHeader from "@core/components/layout/AppHeader";
-import VersionGate from "@core/components/VersionGate";
 import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
-import { checkAppVersion } from "@core/utils/versionCheck";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { Tabs, usePathname, useRouter } from "expo-router";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef } from "react";
 import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -163,22 +161,6 @@ function FloatingTabBar({ state }) {
 }
 
 export default function Layout() {
-  const [versionGate, setVersionGate] = useState(null);
-
-  useEffect(() => {
-    async function run() {
-      const res = await checkAppVersion();
-      if (!res) return;
-
-      if (res.compareMin < 0 || res.forceUpdate) {
-        setVersionGate({ forced: true });
-      } else if (res.compareLatest < 0) {
-        setVersionGate({ forced: false });
-      }
-    }
-
-    run();
-  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -198,13 +180,6 @@ export default function Layout() {
                 <Tabs.Screen name="groups" />
                 <Tabs.Screen name="profile" />
               </Tabs>
-
-              <VersionGate
-                visible={!!versionGate}
-                forced={versionGate?.forced}
-                onClose={() => setVersionGate(null)}
-              />
-
             </View>
           </WaypointsProvider>
         </TabBarProvider>
