@@ -183,7 +183,7 @@ function LayoutContent() {
 
   // Show version modal when status changes and update is available
   useEffect(() => {
-    if (versionStatus?.hasUpdate && !versionModalDismissed) {
+    if (versionStatus && versionStatus.hasUpdate && !versionModalDismissed) {
       if (versionStatus.isRequired) {
         setShowVersionModal(true);
       } else if (!versionModalDismissed) {
@@ -194,7 +194,10 @@ function LayoutContent() {
 
   const handleDismissVersion = () => {
     setShowVersionModal(false);
-    setVersionModalDismissed(true);
+    // Small delay to ensure modal fully closes before updating dismissed state
+    setTimeout(() => {
+      setVersionModalDismissed(true);
+    }, 100);
   };
 
   const currentVersion = Constants.expoConfig?.version || "1.0.0";
@@ -211,7 +214,7 @@ function LayoutContent() {
         <Tabs.Screen name="profile" />
       </Tabs>
 
-      {versionStatus?.hasUpdate && (
+      {versionStatus && versionStatus.hasUpdate && (
         <VersionUpgradeModal
           visible={showVersionModal}
           isRequired={versionStatus.isRequired}

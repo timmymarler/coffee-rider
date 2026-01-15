@@ -112,7 +112,12 @@ export default function AuthProvider({ children }) {
           console.log("[VERSION] Update available:", status.versionInfo);
         }
       } catch (error) {
-        console.error("[VERSION] Error checking version:", error);
+        // Silently fail if offline or network error
+        if (error.code === 'unavailable' || error.message?.includes('offline')) {
+          console.log("[VERSION] Version check skipped (offline)");
+        } else {
+          console.error("[VERSION] Error checking version:", error);
+        }
       }
     }
 

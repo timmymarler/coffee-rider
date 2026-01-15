@@ -25,6 +25,7 @@ export function VersionUpgradeModal({
       transparent
       animationType="fade"
       onRequestClose={isRequired ? null : onDismiss}
+      pointerEvents={visible ? "auto" : "none"}
     >
       <View
         style={{

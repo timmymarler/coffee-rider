@@ -635,14 +635,20 @@ export default function MapScreenRN() {
     let subscription;
 
     (async () => {
+      console.log("[MAP] Requesting location permissions...");
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+      if (status !== "granted") {
+        console.warn("[MAP] Location permission denied");
+        return;
+      }
 
+      console.log("[MAP] Getting current position...");
       // 1️⃣ IMMEDIATE location (fixes first tap issue)
       const current = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
 
+      console.log("[MAP] Location set:", current.coords);
       setUserLocation(current.coords);
 
       // 2️⃣ CONTINUOUS updates (Follow Me)
@@ -659,6 +665,7 @@ export default function MapScreenRN() {
     })();
 
     return () => {
+      console.log("[MAP] Cleaning up location subscription");
       subscription?.remove();
     };
   }, []);
@@ -1465,7 +1472,15 @@ export default function MapScreenRN() {
               />
         </MapView>
       ) : (
-        <View style={{ flex: 1 }} />  // or a spinner/skeleton later
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.primaryDark }}>
+          <MaterialCommunityIcons name="map-marker-radius" size={48} color={theme.colors.primaryLight} />
+          <Text style={{ color: theme.colors.text, marginTop: 12, fontSize: 16 }}>Getting location...</Text>
+          <View style={{ marginTop: 16, flexDirection: 'row', gap: 8 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primaryLight, opacity: 0.3 }} />
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primaryLight, opacity: 0.6 }} />
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primaryLight, opacity: 1 }} />
+          </View>
+        </View>
       )}      
       {showFilters && (
         <View style={styles.filterPanel}>

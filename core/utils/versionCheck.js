@@ -9,7 +9,16 @@ import { doc, getDoc } from "firebase/firestore";
 export async function fetchVersionInfo(appName = "rider") {
   try {
     const docRef = doc(db, "versions", appName);
-    const docSnap = await getDoc(docRef);
+    
+    // Add a 3-second timeout to fail fast when offline
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('timeout')), 3000)
+    );
+    
+    const docSnap = await Promise.race([
+      getDoc(docRef),
+      timeoutPromise
+    ]);
 
     if (!docSnap.exists()) {
       console.warn("[VERSION] No version doc found for", appName);
@@ -18,6 +27,10 @@ export async function fetchVersionInfo(appName = "rider") {
 
     return docSnap.data();
   } catch (error) {
+    // Silently handle offline errors
+    if (error.code === 'unavailable' || error.message?.includes('offline') || error.message === 'timeout') {
+      return null;
+    }
     console.error("[VERSION] Failed to fetch version info:", error);
     return null;
   }
