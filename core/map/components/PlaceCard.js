@@ -1,4 +1,5 @@
 import { fetchGooglePhotoRefs } from "@/core/map/utils/fetchGooglePhotoRefs";
+import { fetchGoogleRating } from "@/core/map/utils/fetchGoogleRating";
 import { formatWeekdayText, getOpeningStatus } from "@/core/map/utils/openingHours";
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
@@ -8,20 +9,33 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
 import {
+  addDoc,
   arrayUnion,
-  doc, serverTimestamp,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  limit as fbLimit,
+  serverTimestamp,
   setDoc,
   Timestamp,
-  updateDoc
+  updateDoc,
 } from "firebase/firestore";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Modal,
-  Pressable, ScrollView, Text,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
   TouchableOpacity,
   View
 } from "react-native";
@@ -82,6 +96,8 @@ export default function PlaceCard({
   onNavigate,
 }) {
   const [googlePhotos, setGooglePhotos] = useState([]);
+  const [googleRatingLive, setGoogleRatingLive] = useState(null);
+  const [googleRatingCountLive, setGoogleRatingCountLive] = useState(null);
   const [loadingGooglePhotos, setLoadingGooglePhotos] = useState(false);
   const [hoursExpanded, setHoursExpanded] = useState(false);
   const openingStatus = getOpeningStatus(place.regularOpeningHours);
@@ -185,6 +201,13 @@ export default function PlaceCard({
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [addError, setAddError] = useState(null);
 
+  const [comments, setComments] = useState([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentsExpanded, setCommentsExpanded] = useState(false);
+
+  const scrollViewRef = useRef(null);
+  const commentInputRef = useRef(null);
+
   const [suitabilityState, setSuitabilityState] = useState(defaultSuitability);
   const [amenitiesState, setAmenitiesState] = useState(defaultAmenities);
 
@@ -236,19 +259,47 @@ export default function PlaceCard({
   useEffect(() => {
     if (!googlePlaceId) return;
     if (!capabilities?.canViewGooglePhotos) return;
-    if (googlePhotos.length > 0) return;
+    if (googlePhotos.length > 0 && googleRatingLive !== null) return;
 
     let mounted = true;
 
-    async function loadPhotos() {
-      const refs = await fetchGooglePhotoRefs(googlePlaceId, 1);
+    async function loadGoogleDetails() {
+      const [refs, ratingInfo] = await Promise.all([
+        googlePhotos.length > 0
+          ? Promise.resolve(googlePhotos)
+          : fetchGooglePhotoRefs(googlePlaceId, 1),
+        fetchGoogleRating(googlePlaceId),
+      ]);
 
-      if (mounted) setGooglePhotos(refs);
+      if (!mounted) return;
+
+      if (googlePhotos.length === 0) setGooglePhotos(refs || []);
+
+      if (ratingInfo) {
+        setGoogleRatingLive(ratingInfo.rating);
+        setGoogleRatingCountLive(ratingInfo.userRatingCount);
+      }
     }
 
-    loadPhotos();
+    loadGoogleDetails();
     return () => (mounted = false);
   }, [googlePlaceId, capabilities?.canViewGooglePhotos]);
+
+  useEffect(() => {
+    if (!safePlace?.id) return;
+
+    setLoadingComments(true);
+    const commentsRef = collection(db, "places", safePlace.id, "comments");
+    const q = query(commentsRef, orderBy("createdAt", "desc"), fbLimit(20));
+
+    const unsub = onSnapshot(q, (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setComments(rows);
+      setLoadingComments(false);
+    });
+
+    return () => unsub();
+  }, [safePlace?.id]);
 
   const buildBooleanMapPayload = (stateObj) => {
     const payload = {};
@@ -325,8 +376,13 @@ export default function PlaceCard({
   }, [hasRoute, routeMeta, distanceMiles]);
 
 
-  const googleRating = safePlace.googleRating ?? safePlace.rating ?? null;
-  const googleRatingCount = safePlace.googleUserRatingsTotal ?? safePlace.userRatingsTotal ?? 0;
+  const googleRating =
+    googleRatingLive ?? safePlace.googleRating ?? safePlace.rating ?? null;
+  const googleRatingCount =
+    googleRatingCountLive ??
+    safePlace.googleUserRatingsTotal ??
+    safePlace.userRatingsTotal ??
+    0;
   const crAverageRating = safePlace.crRatings?.average ?? null;
   const crRatingCount = safePlace.crRatings?.count ?? 0;
   
@@ -400,9 +456,7 @@ export default function PlaceCard({
 
   
   const toggleSuitability = async (key) => {
-    if (!safePlace?.id) {
-      return;
-    }
+    if (!safePlace?.id) return;
 
     const next = {
       ...suitabilityState,
@@ -490,6 +544,32 @@ export default function PlaceCard({
       line1: parts[0] || null,
       line2: parts.slice(1).join(", ") || null,
     };
+  }
+
+  function formatCommentDate(timestamp) {
+    if (!timestamp) return "";
+    
+    try {
+      const date = timestamp.toDate?.() || new Date(timestamp);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) return "just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+      
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+      });
+    } catch (e) {
+      return "";
+    }
   }
 
 
@@ -719,13 +799,35 @@ export default function PlaceCard({
     }
   };
 
+  const handleDeleteComment = async (commentId, commentCreatedBy) => {
+    const canDelete =
+      capabilities.isAdmin || (uid && uid === commentCreatedBy);
+
+    if (!canDelete) {
+      Alert.alert("Error", "You don't have permission to delete this comment.");
+      return;
+    }
+
+    try {
+      await deleteDoc(
+        doc(db, "places", safePlace.id, "comments", commentId)
+      );
+    } catch (err) {
+      console.error("[COMMENTS] failed to delete", err);
+      Alert.alert("Error", "Could not delete comment. Try again.");
+    }
+  };
+
   /* ------------------------------------------------------------------ */
   /* RENDER                                                            */
   /* ------------------------------------------------------------------ */
 
   return (
-    
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 60}
+    >
       <Pressable onPress={onClose} style={styles.closeButton}>
         <Ionicons name="close" size={22} color="#fff" />
       </Pressable>
@@ -839,8 +941,10 @@ export default function PlaceCard({
 
       {/* INFO */}
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >      
         <View style={styles.info}>
@@ -999,6 +1103,7 @@ export default function PlaceCard({
               </Text>
             </View>
           )}
+
           {safePlace.source === "google" && (
             <Text style={styles.helperText}>
               Select suitability & amenities before saving
@@ -1083,25 +1188,150 @@ export default function PlaceCard({
                 ))}
               </View>
             </View>
-          )}  
-            {addError && (
-              <View style={styles.savedHint}>
-                <Text style={{ color: theme.colors.accentMid }}>
-                  {addError}
-                </Text>
-              </View>
-            )}
+          )}
           
-            {canAddPlace && (
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handleSavePlace}
-              >
-                <Text style={styles.primaryButtonText}>
+          {addError && (
+            <View style={styles.savedHint}>
+              <Text style={{ color: theme.colors.accentMid }}>
+                {addError}
+              </Text>
+            </View>
+          )}
+        
+          {canAddPlace && (
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleSavePlace}
+            >
+              <Text style={styles.primaryButtonText}>
                   Add this place
                 </Text>
               </TouchableOpacity>
             )}
+
+          {/* Comments */}
+          <View
+            style={[
+              styles.editableSection,
+            ]}
+          >
+            <View style={styles.commentsHeader}>
+              <Text style={styles.crLabel}>Comments</Text>
+              {comments.length > 1 && (
+                <TouchableOpacity
+                  onPress={() => setCommentsExpanded(!commentsExpanded)}
+                >
+                  <Text style={styles.expandButtonText}>
+                    {commentsExpanded
+                      ? "Collapse"
+                      : `View all (${comments.length})`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {loadingComments ? (
+              <Text style={styles.commentMeta}>Loading comments...</Text>
+            ) : comments.length === 0 ? (
+              <Text style={styles.commentMeta}>No comments yet</Text>
+            ) : (
+              (() => {
+                const visibleComments = commentsExpanded
+                  ? comments
+                  : comments.slice(0, 1);
+
+                return visibleComments.map((c) => {
+                  const canDeleteComment =
+                    capabilities.isAdmin || (uid && uid === c.createdBy);
+
+                  return (
+                    <View key={c.id} style={styles.commentRow}>
+                      <View style={styles.commentHeader}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.commentAuthor}>
+                            {c.displayName || "Anonymous"}
+                          </Text>
+                          <Text style={styles.commentDate}>
+                            {formatCommentDate(c.createdAt)}
+                          </Text>
+                        </View>
+                        {canDeleteComment && (
+                          <TouchableOpacity
+                            onPress={() =>
+                              handleDeleteComment(c.id, c.createdBy)
+                            }
+                          >
+                            <MaterialCommunityIcons
+                              name="trash-can-outline"
+                              size={16}
+                              color={theme.colors.textMuted}
+                            />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      <Text style={styles.commentText}>{c.text}</Text>
+                    </View>
+                  );
+                });
+              })()
+            )}
+
+            {capabilities.canComment && uid && (
+              <View style={styles.commentInputRow}>
+                <TextInput
+                  ref={commentInputRef}
+                  style={styles.commentInput}
+                  placeholder="Add a comment"
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={commentText}
+                  onChangeText={setCommentText}
+                  multiline
+                  maxLength={500}
+                  onFocus={() => {
+                    // Scroll to bottom after keyboard opens
+                    setTimeout(() => {
+                      scrollViewRef.current?.scrollToEnd({ animated: true });
+                    }, 100);
+                  }}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.commentButton,
+                    !commentText.trim() && styles.commentButtonDisabled,
+                  ]}
+                  onPress={async () => {
+                    const text = commentText.trim();
+                    if (!text) return;
+
+                    const displayName =
+                      auth?.profile?.displayName ||
+                      user?.email ||
+                      "Anonymous";
+
+                    try {
+                      await addDoc(
+                        collection(db, "places", safePlace.id, "comments"),
+                        {
+                          text,
+                          createdAt: serverTimestamp(),
+                          createdBy: uid,
+                          displayName,
+                        }
+                      );
+
+                      setCommentText("");
+                    } catch (err) {
+                      console.error("[COMMENTS] failed to post", err);
+                      Alert.alert("Error", "Could not post comment. Try again.");
+                    }
+                  }}
+                  disabled={!commentText.trim()}
+                >
+                  <Text style={styles.commentButtonText}>Post</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
       </ScrollView>
 
@@ -1150,7 +1380,7 @@ export default function PlaceCard({
           </View>
         </Pressable>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -1165,11 +1395,12 @@ function createStyles(theme) {
       bottom: 100,
       left: 10,
       right: 10,
-      maxHeight: "65%",
+      maxHeight: "70%",
       backgroundColor: theme.colors.primaryDark,
       borderRadius: 16,
       overflow: "hidden",
       elevation: 10,
+      flex: 1,
     },
     closeButton: {
       position: "absolute",
@@ -1212,6 +1443,7 @@ function createStyles(theme) {
     },
     crLabel: {
       marginTop: 16,
+      marginBottom: 8,
       fontSize: 15,
       fontWeight: "600",
       color: theme.colors.accentDark,
@@ -1289,6 +1521,98 @@ function createStyles(theme) {
       marginTop: 12,
     },
 
+    commentsSection: {
+      marginTop: 16,
+    },
+
+    commentsHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 8,
+    },
+
+    expandButtonText: {
+      fontSize: 12,
+      color: theme.colors.primaryLight,
+      fontWeight: "500",
+    },
+
+    commentRow: {
+      marginTop: 8,
+      backgroundColor: theme.colors.primaryMid,
+      padding: 10,
+      borderRadius: 8,
+    },
+
+    commentHeader: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      marginBottom: 6,
+    },
+
+    commentAuthor: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.colors.accentDark,
+      flex: 1,
+    },
+
+    commentDate: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+    },
+
+    commentText: {
+      marginTop: 4,
+      fontSize: 13,
+      color: theme.colors.text,
+    },
+
+    commentMeta: {
+      marginTop: 6,
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+
+    commentInputRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      marginTop: 12,
+    },
+
+    commentInput: {
+      flex: 1,
+      minHeight: 40,
+      maxHeight: 120,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: theme.colors.primaryMid,
+      color: theme.colors.text,
+      textAlignVertical: "top",
+    },
+
+    commentButton: {
+      marginLeft: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 8,
+      backgroundColor: theme.colors.accentDark,
+      alignSelf: "flex-end",
+    },
+
+    commentButtonDisabled: {
+      opacity: 0.5,
+    },
+
+    commentButtonText: {
+      color: theme.colors.primaryDark,
+      fontWeight: "700",
+    },
+
     ratingRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -1312,7 +1636,7 @@ function createStyles(theme) {
     },
 
     scrollContent: {
-      paddingBottom: 16,
+      paddingBottom: 200,
     },
   
     rateRow: {

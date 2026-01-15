@@ -11,6 +11,9 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
   switch (role) {
     case CAPABILITY_LEVELS.ADMIN:
       return {
+        // Admin flag
+        isAdmin: true,
+
         // Core access
         canViewMap: true,
         canViewPlacecard: true,
@@ -47,6 +50,8 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
     case CAPABILITY_LEVELS.PRO:
       return {
+        isAdmin: false,
+
         canViewMap: true,
         canViewPlacecard: true,
 
@@ -72,6 +77,8 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
     case CAPABILITY_LEVELS.USER:
       return {
+        isAdmin: false,
+
         canViewMap: true,
         canViewPlacecard: true,
 
@@ -98,6 +105,8 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
     case CAPABILITY_LEVELS.GUEST:
     default:
       return {
+        isAdmin: false,
+
         canViewMap: true,
         canViewPlacecard: true,
 
