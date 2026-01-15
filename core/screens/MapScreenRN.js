@@ -1006,6 +1006,7 @@ export default function MapScreenRN() {
     routeRequestId.current += 1;
     const requestId = routeRequestId.current;
 
+    isLoadingSavedRouteRef.current = false;  // Allow rebuild when user starts new route
     setRoutingActive(true);
     setRouteDestination(place);
     await buildRoute({ destinationOverride: place, requestId });

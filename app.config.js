@@ -86,7 +86,7 @@ export default {
 
       config: {
         googleMaps: {
-          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyAFq43xqsPhcr_s1tuS1e7TTmme0t2SVGw"
         }
       },
       adaptiveIcon: {

@@ -2,19 +2,21 @@
 
 import { auth } from "@config/firebase";
 import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile
+    createUserWithEmailAndPassword,
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    signOut,
+    updateProfile
 } from "firebase/auth";
 import { createContext, useEffect, useState } from "react";
 
 import { getCapabilities } from "@core/roles/capabilities";
 import {
-  ensureUserDocument,
-  getUserProfile
+    ensureUserDocument,
+    getUserProfile
 } from "@firebaseLocal/users";
+import { fetchVersionInfo, checkVersionStatus } from "@core/utils/versionCheck";
+import Constants from "expo-constants";
 
 export const AuthContext = createContext(null);
 
@@ -22,6 +24,12 @@ export default function AuthProvider({ children }) {
   const [user, setUser] = useState(null);       // Firebase Auth user
   const [profile, setProfile] = useState(null); // Firestore profile doc (role, etc.)
   const [loading, setLoading] = useState(true);
+  const [versionStatus, setVersionStatus] = useState({
+    status: "current",
+    hasUpdate: false,
+    isRequired: false,
+    versionInfo: null,
+  });
 
   // ----------------------------------------
   // ACTIONS
@@ -85,6 +93,33 @@ export default function AuthProvider({ children }) {
   }, []);
 
   // ----------------------------------------
+  // VERSION CHECK
+  // ----------------------------------------
+  useEffect(() => {
+    async function checkVersion() {
+      try {
+        const appName = Constants.expoConfig?.extra?.appName || "rider";
+        const currentVersion = Constants.expoConfig?.version || "1.0.0";
+        
+        const versionInfo = await fetchVersionInfo(appName);
+        const status = checkVersionStatus(currentVersion, versionInfo);
+        
+        setVersionStatus(status);
+
+        if (status.isRequired) {
+          console.warn("[VERSION] Update required:", status.versionInfo);
+        } else if (status.hasUpdate) {
+          console.log("[VERSION] Update available:", status.versionInfo);
+        }
+      } catch (error) {
+        console.error("[VERSION] Error checking version:", error);
+      }
+    }
+
+    checkVersion();
+  }, []);
+
+  // ----------------------------------------
   // ROLE + CAPABILITIES
   // ----------------------------------------
   const role = profile?.role || "guest";
@@ -96,6 +131,7 @@ export default function AuthProvider({ children }) {
     role,
     capabilities,
     loading,
+    versionStatus,
     login,
     logout,
     register,

@@ -5,7 +5,6 @@ import { AuthContext } from "@context/AuthContext";
 import { getCapabilities } from "@core/roles/capabilities";
 import { uploadImage } from "@core/utils/uploadImage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Picker } from "@react-native-picker/picker";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
 import {
@@ -21,6 +20,7 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Modal,
   Pressable, ScrollView, Text,
   TouchableOpacity,
   View
@@ -182,6 +182,7 @@ export default function PlaceCard({
   const [photoIndex, setPhotoIndex] = useState(0);
   const [localPlace, setLocalPlace] = useState(place);
   const [category, setCategory] = useState("cafe");
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [addError, setAddError] = useState(null);
 
   const [suitabilityState, setSuitabilityState] = useState(defaultSuitability);
@@ -850,21 +851,15 @@ export default function PlaceCard({
           {/* Category */}
           <View style={styles.categoryRow}>
             {canAddPlace ? (
-              <Picker
-                selectedValue={category}
-                onValueChange={(value) => setCategory(value)}
-                style={styles.categoryPicker}
-                dropdownIconColor={theme.colors.primaryLight}
+              <TouchableOpacity
+                style={styles.categoryButton}
+                onPress={() => setCategoryModalVisible(true)}
               >
-                {PLACE_CATEGORIES.map((c) => (
-                  <Picker.Item
-                    key={c.key}
-                    label={c.label}
-                    value={c.key}
-                    color={theme.colors.primaryLight}
-                  />
-                ))}
-              </Picker>
+                <Text style={styles.categoryButtonText}>
+                  {PLACE_CATEGORIES.find(c => c.key === category)?.label ?? 'Select Category'}
+                </Text>
+                <MaterialCommunityIcons name="chevron-down" size={20} color={theme.colors.primaryLight} />
+              </TouchableOpacity>
             ) : (
               <Text style={styles.categoryText}>
                 {PLACE_CATEGORIES.find(c => c.key === safePlace.category)?.label
@@ -1109,6 +1104,52 @@ export default function PlaceCard({
             )}
         </View>
       </ScrollView>
+
+      {/* Category Selection Modal */}
+      <Modal
+        visible={categoryModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCategoryModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setCategoryModalVisible(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Select Category</Text>
+            <ScrollView style={styles.categoryList}>
+              {PLACE_CATEGORIES.map((c) => (
+                <TouchableOpacity
+                  key={c.key}
+                  style={[
+                    styles.categoryItem,
+                    category === c.key && styles.categoryItemSelected
+                  ]}
+                  onPress={() => {
+                    setCategory(c.key);
+                    setCategoryModalVisible(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.categoryItemText,
+                    category === c.key && styles.categoryItemTextSelected
+                  ]}>
+                    {c.label}
+                  </Text>
+                  {category === c.key && (
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={20}
+                      color={theme.colors.accentDark}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1390,6 +1431,70 @@ function createStyles(theme) {
     addressLine2: {
       fontSize: 13,
       color: theme.colors.textMuted,
+    },
+
+    categoryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: theme.colors.primaryMid,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLight,
+    },
+    categoryButtonText: {
+      fontSize: 14,
+      color: theme.colors.primaryLight,
+      flex: 1,
+    },
+
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    modalContent: {
+      backgroundColor: theme.colors.primaryDark,
+      borderRadius: 16,
+      padding: 20,
+      width: '100%',
+      maxWidth: 350,
+      maxHeight: '70%',
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.colors.text,
+      marginBottom: 16,
+      textAlign: 'center',
+    },
+    categoryList: {
+      maxHeight: 400,
+    },
+    categoryItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      marginBottom: 8,
+      backgroundColor: theme.colors.primaryMid,
+    },
+    categoryItemSelected: {
+      backgroundColor: theme.colors.accentLight,
+    },
+    categoryItemText: {
+      fontSize: 15,
+      color: theme.colors.text,
+    },
+    categoryItemTextSelected: {
+      fontWeight: '600',
+      color: theme.colors.accentDark,
     },
   };
 }

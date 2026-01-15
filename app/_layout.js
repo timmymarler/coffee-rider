@@ -1,16 +1,18 @@
 // app/_layout.js
 
-import AuthProvider from "@context/AuthContext";
+import AuthProvider, { AuthContext } from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import AppHeader from "@core/components/layout/AppHeader";
 import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
+import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { Tabs, usePathname, useRouter } from "expo-router";
-import { useContext, useEffect, useRef } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Animated, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Constants from "expo-constants";
 
 
 function FloatingTabBar({ state }) {
@@ -89,7 +91,7 @@ function FloatingTabBar({ state }) {
       })}
 
       {isMapScreen && (
-      <>
+        <>
           {/* separator */}
           <View
             style={{
@@ -131,9 +133,8 @@ function FloatingTabBar({ state }) {
         </>
       )}
 
-
       {!isMapScreen && (
-      <>
+        <>
           {/* separator */}
           <View
             style={{
@@ -173,6 +174,61 @@ function FloatingTabBar({ state }) {
   );
 }
 
+
+
+function LayoutContent() {
+  const [showVersionModal, setShowVersionModal] = useState(false);
+  const [versionModalDismissed, setVersionModalDismissed] = useState(false);
+  const { versionStatus } = useContext(AuthContext);
+
+  // Show version modal when status changes and update is available
+  useEffect(() => {
+    if (versionStatus?.hasUpdate && !versionModalDismissed) {
+      if (versionStatus.isRequired) {
+        setShowVersionModal(true);
+      } else if (!versionModalDismissed) {
+        setShowVersionModal(true);
+      }
+    }
+  }, [versionStatus, versionModalDismissed]);
+
+  const handleDismissVersion = () => {
+    setShowVersionModal(false);
+    setVersionModalDismissed(true);
+  };
+
+  const currentVersion = Constants.expoConfig?.version || "1.0.0";
+
+  return (
+    <>
+      <Tabs
+        screenOptions={{ headerShown: false }}
+        tabBar={(props) => <FloatingTabBar {...props} />}
+      >
+        <Tabs.Screen name="map" />
+        <Tabs.Screen name="saved-routes" />
+        <Tabs.Screen name="groups" />
+        <Tabs.Screen name="profile" />
+      </Tabs>
+
+      {versionStatus?.hasUpdate && (
+        <VersionUpgradeModal
+          visible={showVersionModal}
+          isRequired={versionStatus.isRequired}
+          currentVersion={currentVersion}
+          newVersion={versionStatus.versionInfo?.latestVersion || "unknown"}
+          releaseNotes={versionStatus.versionInfo?.releaseNotes}
+          onDismiss={handleDismissVersion}
+          storeUrl={
+            Constants.expoConfig?.extra?.storeUrl ||
+            "https://play.google.com/store/apps/details?id=com.timmy.marler.coffeerider"
+          }
+        />
+      )}
+    </>
+  );
+}
+
 export default function Layout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -180,15 +236,7 @@ export default function Layout() {
         <TabBarProvider>
           <WaypointsProvider>
             <AppHeader />
-            <Tabs
-              screenOptions={{ headerShown: false }}
-              tabBar={(props) => <FloatingTabBar {...props} />}
-            >
-              <Tabs.Screen name="map" />
-              <Tabs.Screen name="saved-routes" />
-              <Tabs.Screen name="groups" />
-              <Tabs.Screen name="profile" />
-            </Tabs>
+            <LayoutContent />
           </WaypointsProvider>
         </TabBarProvider>
       </AuthProvider>
