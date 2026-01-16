@@ -161,7 +161,7 @@ function FloatingTabBar({ state }) {
           >
             <MaterialCommunityIcons
               name="crosshairs-gps"
-              size={22}
+              size={28}
               color={theme.colors.primaryMid}
             />
           </TouchableOpacity>
@@ -172,7 +172,7 @@ function FloatingTabBar({ state }) {
           >
             <MaterialCommunityIcons
               name={"navigation-variant"}
-              size={22}
+              size={28}
               color={theme.colors.primaryMid}
             />
           </TouchableOpacity>

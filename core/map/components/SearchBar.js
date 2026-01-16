@@ -1,11 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import theme from "@themes";
 import {
-  ActivityIndicator,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    StyleSheet,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export function SearchBar({
