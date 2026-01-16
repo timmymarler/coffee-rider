@@ -98,6 +98,17 @@ export default function HelpScreen() {
             <Text style={styles.controlLabel}>Follow Me (Active)</Text> — when you enable Follow Me, the icon will turn red
           </Text>
         </View>
+        <View style={styles.controlRow}>
+          <MaterialCommunityIcons
+            name="refresh"
+            size={22}
+            color={theme.colors.accent}
+            style={styles.controlIcon}
+          />
+          <Text style={styles.controlText}>
+            <Text style={styles.controlLabel}>Refresh Route</Text> — when in Follow Me mode with an active route, long press the Follow Me icon to refresh your route from your current location. Perfect for getting back on track if you've gone off route.
+          </Text>
+        </View>
         <Text style={styles.sectionTitle}>Map actions</Text>
         <View style={styles.legendRow}>
           <SvgPin {...markerStyles.cr} size={24} />
