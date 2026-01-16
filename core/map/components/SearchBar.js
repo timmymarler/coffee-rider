@@ -34,7 +34,7 @@ export function SearchBar({
           >
             <Ionicons
               name="search"
-              size={18}
+              size={26}
               color={theme.colors.accentMid}
               style={{ marginRight: 8 }}
             />
@@ -68,7 +68,7 @@ export function SearchBar({
             <TouchableOpacity onPress={onClear}>
               <Ionicons
                 name="close-circle"
-                size={18}
+                size={26}
                 color={theme.colors.accentMid}
               />
             </TouchableOpacity>
@@ -83,7 +83,7 @@ export function SearchBar({
         >
           <Ionicons
             name="options"
-            size={20}
+            size={28}
             color={filtersActive ? theme.colors.accentMid : theme.colors.primaryLight}
           />
         </TouchableOpacity>
@@ -113,8 +113,8 @@ function createStyles(theme) {
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: theme.colors.primaryDark,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
       borderRadius: 12,
       shadowColor: theme.colors.accentMid,
       shadowOpacity: 0.2,
@@ -124,14 +124,14 @@ function createStyles(theme) {
     },
     searchInput: {
       flex: 1,
-      fontSize: 14,
+      fontSize: 16,
       paddingVertical: 0,
       marginRight: 6,
     },
     filterButton: {
       marginLeft: 8,
-      width: 41,
-      height: 41,
+      width: 52,
+      height: 52,
       borderRadius: 12,
       alignItems: "center",
       justifyContent: "center",
