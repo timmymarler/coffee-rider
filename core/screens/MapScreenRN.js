@@ -1747,7 +1747,7 @@ export default function MapScreenRN() {
           setSearchOrigin(mapRegion);
         }}
         onClear={clearSearch}
-        onFilterPress={() => setShowFilters(true)}
+        onFilterPress={() => setShowFilters(prev => !prev)}
         filtersActive={filtersActive}
       />
 
