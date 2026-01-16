@@ -1803,7 +1803,7 @@ export default function MapScreenRN() {
             >
               <MaterialCommunityIcons
                 name="map-marker-plus"
-                size={22}
+                size={26}
                 color={theme.colors.accent}
                 style={{ marginRight: 12 }}
               />
@@ -1819,7 +1819,7 @@ export default function MapScreenRN() {
             >
               <MaterialCommunityIcons
                 name="flag-triangle"
-                size={22}
+                size={26}
                 color={theme.colors.accent}
                 style={{ marginRight: 12 }}
               />
@@ -1835,7 +1835,7 @@ export default function MapScreenRN() {
             >
               <MaterialCommunityIcons
                 name="flag-checkered"
-                size={22}
+                size={26}
                 color={theme.colors.accent}
                 style={{ marginRight: 12 }}
               />
@@ -1867,7 +1867,7 @@ export default function MapScreenRN() {
             >
               <MaterialCommunityIcons
                 name="refresh"
-                size={24}
+                size={28}
                 color={theme.colors.accent}
                 style={{ marginRight: 12 }}
               />
@@ -2124,14 +2124,14 @@ const styles = StyleSheet.create({
   pointMenuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
     borderRadius: 10,
   },
 
   pointMenuText: {
     color: theme.colors.textMuted,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "500",
     flex: 1,
   },
@@ -2169,15 +2169,15 @@ const styles = StyleSheet.create({
   refreshMenuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
     borderRadius: 12,
     marginTop: 8,
   },
 
   refreshMenuText: {
     color: theme.colors.textMuted,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "500",
     flex: 1,
   },

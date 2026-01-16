@@ -70,7 +70,8 @@ export default function WaypointsList({ waypoints, onClearAll }) {
                 {/* Remove button */}
                 <TouchableOpacity
                   onPress={() => removeWaypoint(index)}
-                  hitSlop={10}
+                  hitSlop={12}
+                  style={{ paddingHorizontal: 8 }}
                 >
                   <Text style={styles.remove}>✕</Text>
                 </TouchableOpacity>
@@ -79,10 +80,11 @@ export default function WaypointsList({ waypoints, onClearAll }) {
                 <TouchableOpacity
                   onLongPress={drag}
                   hitSlop={12}
+                  style={{ paddingHorizontal: 8 }}
                 >
                   <MaterialCommunityIcons
                     name="drag"
-                    size={18}
+                    size={24}
                     color={theme.colors.textMuted}
                   />
                 </TouchableOpacity>
@@ -137,7 +139,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
+    paddingVertical: 10,
   },
   destinationRow: {
     borderTopWidth: 1,
@@ -153,12 +155,12 @@ const styles = StyleSheet.create({
   label: {
     flex: 1,
     color: theme.colors.text,
-    fontSize: 13,
+    fontSize: 14,
     marginRight: 8,
   },
   remove: {
     color: theme.colors.danger,
-    fontSize: 14,
-    paddingHorizontal: 6,
+    fontSize: 20,
+    fontWeight: "600",
   },
 });
