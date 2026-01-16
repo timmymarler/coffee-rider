@@ -1,8 +1,8 @@
 import { db } from "@config/firebase";
 import { TabBarContext } from "@context/TabBarContext";
 import { collection, onSnapshot } from "firebase/firestore";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 
 import PlaceCard from "../map/components/PlaceCard";
@@ -28,8 +28,6 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
 import { doc, getDoc } from "firebase/firestore";
-import { useCallback } from "react";
-import { Modal, Pressable } from "react-native";
 import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
@@ -401,6 +399,10 @@ export default function MapScreenRN() {
     (routeDestination || waypoints.length > 0);
   const [lastEncodedPolyline, setLastEncodedPolyline] = useState(null);
 
+  const [showSaveRouteModal, setShowSaveRouteModal] = useState(false);
+  const [saveRouteName, setSaveRouteName] = useState("");
+  const [currentLoadedRouteId, setCurrentLoadedRouteId] = useState(null);
+
   const {
     pendingSavedRouteId,
     setPendingSavedRouteId,
@@ -526,7 +528,7 @@ export default function MapScreenRN() {
       setMapKey((k) => k + 1);
     }, [])
   );
-  async function handleSaveRoute() {
+  async function handleSaveRoute(routeName) {
     if (!routeCoords.length || !user) return;
     if (!user) {
       setPostbox({
@@ -538,9 +540,15 @@ export default function MapScreenRN() {
 
     const destination = getFinalDestination();
 
+    // If no name provided and a route is currently loaded, update it
+    // If name provided or no loaded route, create a new one
+    const isUpdating = !routeName && currentLoadedRouteId;
+
     await saveRoute({
       user,
       visibility: "private", // change later via UI
+      name: routeName || undefined,
+      routeId: isUpdating ? currentLoadedRouteId : undefined,
       origin: {
         lat: userLocation.latitude,
         lng: userLocation.longitude,
@@ -562,10 +570,13 @@ export default function MapScreenRN() {
       routeMeta,
       polyline: lastEncodedPolyline, // see note below
     });
+    
     setPostbox({
       type: "success",
-      message: "Route saved successfully.",
+      message: isUpdating ? "Route updated successfully." : "Route saved successfully.",
     });
+    setShowSaveRouteModal(false);
+    setSaveRouteName("");
 
   }
 
@@ -812,6 +823,7 @@ export default function MapScreenRN() {
     setRouteDistanceMeters(null);
     setManualStartPoint(null); 
     routeFittedRef.current = false;
+    setCurrentLoadedRouteId(null);
   }
 
   function clearSearch() {
@@ -1184,6 +1196,7 @@ export default function MapScreenRN() {
     const route = snap.data();
 
     loadSavedRoute(route);
+    setCurrentLoadedRouteId(routeId);
   }
 
   function loadSavedRoute(route) {
@@ -1714,7 +1727,7 @@ export default function MapScreenRN() {
       {hasRouteIntent && (
         <TouchableOpacity
           style={styles.saveRouteButton}
-          onPress={() => handleSaveRoute(null)}
+          onPress={() => setShowSaveRouteModal(true)}
         >
           <MaterialCommunityIcons
             name="map-marker-path"
@@ -1886,6 +1899,51 @@ export default function MapScreenRN() {
             </Pressable>
           </View>
         </Pressable>
+      </Modal>
+
+      {/* Save Route Modal */}
+      <Modal
+        visible={showSaveRouteModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowSaveRouteModal(false);
+          setSaveRouteName("");
+        }}
+      >
+        <View style={styles.saveRouteModalOverlay}>
+          <View style={styles.saveRouteModalContent}>
+            <Text style={styles.saveRouteModalTitle}>Save Route</Text>
+            
+            <TextInput
+              style={styles.saveRouteInput}
+              placeholder={currentLoadedRouteId ? "Leave blank to update current route" : "Route name (optional)"}
+              placeholderTextColor={theme.colors.primaryLight}
+              value={saveRouteName}
+              onChangeText={setSaveRouteName}
+              returnKeyType="done"
+            />
+
+            <View style={styles.saveRouteModalButtons}>
+              <TouchableOpacity
+                style={[styles.saveRouteModalButton, styles.saveRouteModalButtonSave]}
+                onPress={() => handleSaveRoute(saveRouteName || undefined)}
+              >
+                <Text style={styles.saveRouteModalButtonText}>Save</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.saveRouteModalButton, styles.saveRouteModalButtonCancel]}
+                onPress={() => {
+                  setShowSaveRouteModal(false);
+                  setSaveRouteName("");
+                }}
+              >
+                <Text style={styles.saveRouteModalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
     </View>
@@ -2192,6 +2250,73 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: "center",
     opacity: 0.8,
+  },
+
+  saveRouteModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+
+  saveRouteModalContent: {
+    backgroundColor: theme.colors.primaryDark,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 32,
+  },
+
+  saveRouteModalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: theme.colors.accentMid,
+    marginBottom: 16,
+  },
+
+  saveRouteInput: {
+    backgroundColor: theme.colors.primaryMid,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    fontSize: 16,
+    color: theme.colors.accentMid,
+    borderWidth: 1,
+    borderColor: theme.colors.accentDark,
+  },
+
+  saveRouteModalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+
+  saveRouteModalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  saveRouteModalButtonSave: {
+    backgroundColor: theme.colors.accentDark,
+  },
+
+  saveRouteModalButtonCancel: {
+    backgroundColor: theme.colors.primaryMid,
+    borderWidth: 1,
+    borderColor: theme.colors.accentDark,
+  },
+
+  saveRouteModalButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.primaryDark,
+  },
+
+  saveRouteModalButtonTextCancel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.accentMid,
   },
 
 });
