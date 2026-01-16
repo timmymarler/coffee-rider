@@ -1491,6 +1491,7 @@ function createStyles(theme) {
       borderRadius: 16,
       overflow: "hidden",
       elevation: 10,
+      zIndex: 3000,
       flex: 1,
     },
     closeButton: {
