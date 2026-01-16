@@ -1,6 +1,6 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { Linking, Modal, Text, TouchableOpacity, View } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 export function VersionUpgradeModal({
   visible,
@@ -9,7 +9,7 @@ export function VersionUpgradeModal({
   newVersion,
   releaseNotes,
   onDismiss,
-  storeUrl = "https://drive.google.com/drive/folders/1w6FK9Vp7J3m2lgY7z9LRl2h8RxPFEuC8?usp=drive_link",
+  storeUrl = "https://drive.google.com/drive/folders/1w6FK9Vp7J3m2lgY7z9LRl2h8RxPFEuC8?usp=sharing",
 }) {
   const handleUpdate = async () => {
     try {
