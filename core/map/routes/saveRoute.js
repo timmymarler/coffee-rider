@@ -1,5 +1,5 @@
 import { db } from "@config/firebase";
-import { addDoc, collection, serverTimestamp, doc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/firestore";
 
 export async function saveRoute({
   user,
