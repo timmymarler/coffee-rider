@@ -491,6 +491,7 @@ export default function MapScreenRN() {
 
   const handleAddWaypoint = () => {
     setSelectedPlaceId(null);
+    isLoadingSavedRouteRef.current = false;
     addFromMapPress(pendingMapPoint);
     closeAddPointMenu();
   };
@@ -507,6 +508,7 @@ export default function MapScreenRN() {
 
   const handleSetDestination = () => {
     setSelectedPlaceId(null);
+    isLoadingSavedRouteRef.current = false;
     const point = formatPoint(pendingMapPoint);
     setRouteDestination({
       latitude: point.lat,
