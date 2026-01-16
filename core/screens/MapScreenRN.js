@@ -1958,7 +1958,7 @@ const styles = StyleSheet.create({
   
   filterPanel: {
     position: "absolute",
-    top: 60,
+    top: 68,
     right: 12,
     bottom: 100,
     width: 220,
