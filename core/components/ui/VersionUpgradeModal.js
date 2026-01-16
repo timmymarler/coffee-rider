@@ -9,7 +9,7 @@ export function VersionUpgradeModal({
   newVersion,
   releaseNotes,
   onDismiss,
-  storeUrl = "https://drive.google.com/drive/folders/1w6FK9Vp7J3m2lgY7z9LRl2h8RxPFEuC8?usp=sharing",
+  storeUrl = "https://drive.google.com/drive/folders/1w6FK9Vp7J3m2lgY7z9LRl2h8RxPFEuC8",
 }) {
   const handleUpdate = async () => {
     try {
