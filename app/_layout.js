@@ -3,16 +3,16 @@
 import AuthProvider, { AuthContext } from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import AppHeader from "@core/components/layout/AppHeader";
-import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
+import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
+import Constants from "expo-constants";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Animated, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Constants from "expo-constants";
 
 
 function FloatingTabBar({ state }) {
