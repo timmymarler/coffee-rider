@@ -1240,6 +1240,7 @@ export default function MapScreenRN() {
       }));
 
       setRouteCoords(decoded);
+      setLastEncodedPolyline(route.routePolyline);
 
       // 🔑 use the pending-fit system you already built
       pendingFitRef.current = decoded;
@@ -2255,15 +2256,17 @@ const styles = StyleSheet.create({
   saveRouteModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   saveRouteModalContent: {
     backgroundColor: theme.colors.primaryDark,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
     padding: 24,
     paddingBottom: 32,
+    width: "85%",
+    maxWidth: 350,
   },
 
   saveRouteModalTitle: {
