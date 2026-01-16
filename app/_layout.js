@@ -11,7 +11,7 @@ import Constants from "expo-constants";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Animated, TouchableOpacity, View } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 
@@ -116,20 +116,29 @@ function FloatingTabBar({ state }) {
           </TouchableOpacity>
 
           {/* Follow Me */}
-          <TouchableOpacity
-            onPress={() => mapActions?.toggleFollow()}
-            style={{ paddingHorizontal: 6 }}
-          >
-            <MaterialCommunityIcons
-              name={"navigation-variant"}
-              size={22}
-              color={
-                mapActions?.isFollowing()
-                  ? theme.colors.danger
-                  : theme.colors.primary
+          <LongPressGestureHandler
+            onActivated={() => {
+              if (mapActions?.isFollowing?.() && mapActions?.canRefreshRoute?.()) {
+                mapActions?.showRefreshMenu?.();
               }
-            />
-          </TouchableOpacity>
+            }}
+            minDurationMs={500}
+          >
+            <TouchableOpacity
+              onPress={() => mapActions?.toggleFollow()}
+              style={{ paddingHorizontal: 6 }}
+            >
+              <MaterialCommunityIcons
+                name={"navigation-variant"}
+                size={22}
+                color={
+                  mapActions?.isFollowing()
+                    ? theme.colors.danger
+                    : theme.colors.primary
+                }
+              />
+            </TouchableOpacity>
+          </LongPressGestureHandler>
         </>
       )}
 

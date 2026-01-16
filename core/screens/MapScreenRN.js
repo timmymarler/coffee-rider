@@ -421,11 +421,70 @@ export default function MapScreenRN() {
   const [pendingMapPoint, setPendingMapPoint] = useState(null);
   const [showAddPointMenu, setShowAddPointMenu] = useState(false);
   const [manualStartPoint, setManualStartPoint] = useState(null);
+  const [showRefreshRouteMenu, setShowRefreshRouteMenu] = useState(false);
   const hasRouteIntent = routeDestination || waypoints.length > 0;
 
   const closeAddPointMenu = () => {
     setShowAddPointMenu(false);
     setPendingMapPoint(null);
+  };
+
+  const closeRefreshRouteMenu = () => {
+    setShowRefreshRouteMenu(false);
+  };
+
+  const handleRefreshRouteToNextWaypoint = async () => {
+    closeRefreshRouteMenu();
+
+    // Must have user location and at least one waypoint
+    if (!userLocation || waypoints.length === 0) {
+      console.warn("[REFRESH] No user location or waypoints");
+      return;
+    }
+
+    try {
+      // Determine final destination (same as buildRoute logic)
+      const finalDestination = routeDestination
+        ? {
+            latitude: routeDestination.latitude,
+            longitude: routeDestination.longitude,
+          }
+        : {
+            latitude: waypoints[waypoints.length - 1].lat,
+            longitude: waypoints[waypoints.length - 1].lng,
+          };
+
+      // Route from current location through all waypoints to final destination
+      const result = await fetchRoute({
+        origin: userLocation,
+        destination: finalDestination,
+        waypoints: waypoints.map(wp => ({
+          latitude: wp.lat,
+          longitude: wp.lng,
+        })),
+      });
+
+      if (!result?.polyline) {
+        console.warn("[REFRESH] No polyline in result");
+        return;
+      }
+
+      const decoded = decode(result.polyline).map(([lat, lng]) => ({
+        latitude: lat,
+        longitude: lng,
+      }));
+
+      setRouteCoords(decoded);
+      setRouteDistanceMeters(result.distanceMeters ?? result.distance);
+      setRouteMeta({
+        distanceMeters: result.distanceMeters ?? result.distance,
+        durationSeconds: result.durationSeconds ?? result.duration,
+      });
+
+      console.log("[REFRESH] Route refreshed from current location");
+    } catch (error) {
+      console.error("[REFRESH] Error refreshing route:", error);
+    }
   };
 
   const handleAddWaypoint = () => {
@@ -624,12 +683,14 @@ export default function MapScreenRN() {
       recenter: handleRecentre,
       toggleFollow: toggleFollowMe,
       isFollowing: () => followUser,
+      showRefreshMenu: () => setShowRefreshRouteMenu(true),
+      canRefreshRoute: () => userLocation && waypoints.length > 0,
     });
 
     return () => {
       setMapActions(null);
     };
-  }, [followUser]);
+  }, [followUser, userLocation, waypoints]);
 
   useEffect(() => {
     let subscription;
@@ -1765,6 +1826,32 @@ export default function MapScreenRN() {
 
             <Pressable
               onPress={closeAddPointMenu}
+              style={({ pressed }) => [
+                styles.pointMenuItem,
+                pressed && { backgroundColor: theme.colors.primaryDark },
+              ]}
+            >
+              <Text style={styles.pointMenuCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showRefreshRouteMenu} transparent animationType="fade">
+        <View style={styles.pointMenuOverlay}>
+          <View style={styles.pointMenu}>
+            <Pressable
+              onPress={handleRefreshRouteToNextWaypoint}
+              style={({ pressed }) => [
+                styles.pointMenuItem,
+                pressed && { backgroundColor: theme.colors.primaryDark },
+              ]}
+            >
+              <Text style={styles.pointMenuText}>Refresh to next waypoint</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={closeRefreshRouteMenu}
               style={({ pressed }) => [
                 styles.pointMenuItem,
                 pressed && { backgroundColor: theme.colors.primaryDark },
