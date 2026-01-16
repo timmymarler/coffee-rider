@@ -231,10 +231,6 @@ function LayoutContent() {
           newVersion={versionStatus.versionInfo?.latestVersion || "unknown"}
           releaseNotes={versionStatus.versionInfo?.releaseNotes}
           onDismiss={handleDismissVersion}
-          storeUrl={
-            Constants.expoConfig?.extra?.storeUrl ||
-            "https://play.google.com/store/apps/details?id=com.timmy.marler.coffeerider"
-          }
         />
       )}
     </>
