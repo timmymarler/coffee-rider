@@ -436,9 +436,9 @@ export default function MapScreenRN() {
   const handleRefreshRouteToNextWaypoint = async () => {
     closeRefreshRouteMenu();
 
-    // Must have user location and at least one waypoint
-    if (!userLocation || waypoints.length === 0) {
-      console.warn("[REFRESH] No user location or waypoints");
+    // Must have user location and either waypoints or a destination
+    if (!userLocation || (!routeDestination && waypoints.length === 0)) {
+      console.warn("[REFRESH] No user location or route");
       return;
     }
 
@@ -684,13 +684,13 @@ export default function MapScreenRN() {
       toggleFollow: toggleFollowMe,
       isFollowing: () => followUser,
       showRefreshMenu: () => setShowRefreshRouteMenu(true),
-      canRefreshRoute: () => userLocation && waypoints.length > 0,
+      canRefreshRoute: () => userLocation && (waypoints.length > 0 || routeDestination),
     });
 
     return () => {
       setMapActions(null);
     };
-  }, [followUser, userLocation, waypoints]);
+  }, [followUser, userLocation, waypoints, routeDestination]);
 
   useEffect(() => {
     let subscription;
@@ -1801,7 +1801,13 @@ export default function MapScreenRN() {
                 pressed && { backgroundColor: theme.colors.primaryDark },
               ]}
             >
-                <Text style={styles.pointMenuText}>Add waypoint</Text>
+              <MaterialCommunityIcons
+                name="map-marker-plus"
+                size={22}
+                color={theme.colors.accent}
+                style={{ marginRight: 12 }}
+              />
+              <Text style={styles.pointMenuText}>Add waypoint</Text>
             </Pressable>
 
             <Pressable
@@ -1811,6 +1817,12 @@ export default function MapScreenRN() {
                 pressed && { backgroundColor: theme.colors.primaryDark },
               ]}
             >
+              <MaterialCommunityIcons
+                name="flag-triangle"
+                size={22}
+                color={theme.colors.accent}
+                style={{ marginRight: 12 }}
+              />
               <Text style={styles.pointMenuText}>Add as start point</Text>
             </Pressable>
 
@@ -1821,6 +1833,12 @@ export default function MapScreenRN() {
                 pressed && { backgroundColor: theme.colors.primaryDark },
               ]}
             >
+              <MaterialCommunityIcons
+                name="flag-checkered"
+                size={22}
+                color={theme.colors.accent}
+                style={{ marginRight: 12 }}
+              />
               <Text style={styles.pointMenuText}>Add as destination</Text>
             </Pressable>
 
@@ -1837,30 +1855,37 @@ export default function MapScreenRN() {
         </View>
       </Modal>
 
-      <Modal visible={showRefreshRouteMenu} transparent animationType="fade">
-        <View style={styles.pointMenuOverlay}>
-          <View style={styles.pointMenu}>
+      <Modal visible={showRefreshRouteMenu} transparent animationType="slide">
+        <Pressable style={styles.refreshMenuOverlay} onPress={closeRefreshRouteMenu}>
+          <View style={styles.refreshMenu}>
             <Pressable
               onPress={handleRefreshRouteToNextWaypoint}
               style={({ pressed }) => [
-                styles.pointMenuItem,
+                styles.refreshMenuItem,
                 pressed && { backgroundColor: theme.colors.primaryDark },
               ]}
             >
-              <Text style={styles.pointMenuText}>Refresh to next waypoint</Text>
+              <MaterialCommunityIcons
+                name="refresh"
+                size={24}
+                color={theme.colors.accent}
+                style={{ marginRight: 12 }}
+              />
+              <Text style={styles.refreshMenuText}>Refresh route from current location</Text>
             </Pressable>
 
             <Pressable
               onPress={closeRefreshRouteMenu}
               style={({ pressed }) => [
-                styles.pointMenuItem,
+                styles.refreshMenuItem,
+                styles.refreshMenuCancel,
                 pressed && { backgroundColor: theme.colors.primaryDark },
               ]}
             >
-              <Text style={styles.pointMenuCancelText}>Cancel</Text>
+              <Text style={styles.refreshMenuCancelText}>Cancel</Text>
             </Pressable>
           </View>
-        </View>
+        </Pressable>
       </Modal>
 
     </View>
@@ -2097,7 +2122,10 @@ const styles = StyleSheet.create({
   },
 
   pointMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 14,
+    paddingHorizontal: 12,
     borderRadius: 10,
   },
 
@@ -2105,6 +2133,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: 16,
     fontWeight: "500",
+    flex: 1,
   },
 
   pointMenuCancel: {
@@ -2115,6 +2144,50 @@ const styles = StyleSheet.create({
   },
 
   pointMenuCancelText: {
+    color: theme.colors.textMuted,
+    fontSize: 15,
+    textAlign: "center",
+    opacity: 0.8,
+  },
+
+  refreshMenuOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+
+  refreshMenu: {
+    backgroundColor: theme.colors.primaryMid,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 34,
+    paddingTop: 8,
+    paddingHorizontal: 16,
+    elevation: 8,
+  },
+
+  refreshMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+
+  refreshMenuText: {
+    color: theme.colors.textMuted,
+    fontSize: 16,
+    fontWeight: "500",
+    flex: 1,
+  },
+
+  refreshMenuCancel: {
+    justifyContent: "center",
+    marginTop: 4,
+  },
+
+  refreshMenuCancelText: {
     color: theme.colors.textMuted,
     fontSize: 15,
     textAlign: "center",
