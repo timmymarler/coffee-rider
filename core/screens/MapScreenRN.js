@@ -1003,7 +1003,7 @@ export default function MapScreenRN() {
 
     const requestId = ++routeRequestId.current;
     buildRoute({ requestId });
-  }, [routeDestination, waypoints, routeClearedByUser]);
+  }, [routeDestination, waypoints, routeClearedByUser, userLocation]);
 
 
   /* ------------------------------------------------------------ */
