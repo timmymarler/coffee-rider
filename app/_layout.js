@@ -52,9 +52,9 @@ function FloatingTabBar({ state }) {
         left: 15,
         right: 15,
         bottom: insets.bottom,
-        height: 40,
+        height: 56,
         backgroundColor: theme.colors.primaryDark,
-        borderRadius: 20,
+        borderRadius: 28,
         flexDirection: "row",
         justifyContent: "space-around",
         alignItems: "center",
@@ -78,12 +78,12 @@ function FloatingTabBar({ state }) {
               flex: 1,
               alignItems: "center",
               justifyContent: "center",
-              paddingVertical: 3,
+              paddingVertical: 6,
             }}
           >
             <Ionicons
               name={isFocused ? tab.icon : `${tab.icon}-outline`}
-              size={28}
+              size={32}
               color={color}
             />
           </TouchableOpacity>
