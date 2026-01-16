@@ -43,7 +43,6 @@ import {
 import { RIDER_CATEGORIES } from "../../config/categories/rider";
 
 
-const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 const PLACE_CATEGORIES = RIDER_CATEGORIES;
 const screenWidth = Dimensions.get("window").width;
 const MAX_USER_PHOTOS_PER_PLACE = 2;
