@@ -1,5 +1,6 @@
 import { fetchGooglePhotoRefs } from "@/core/map/utils/fetchGooglePhotoRefs";
 import { fetchGoogleRating } from "@/core/map/utils/fetchGoogleRating";
+import { getGoogleDetails } from "@/core/map/utils/getGoogleDetails";
 import { formatWeekdayText, getOpeningStatus } from "@/core/map/utils/openingHours";
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
@@ -100,44 +101,46 @@ export default function PlaceCard({
   const [googleRatingCountLive, setGoogleRatingCountLive] = useState(null);
   const [loadingGooglePhotos, setLoadingGooglePhotos] = useState(false);
   const [hoursExpanded, setHoursExpanded] = useState(false);
-  const openingStatus = getOpeningStatus(place.regularOpeningHours);
-  const weekList = formatWeekdayText(place.regularOpeningHours);
+  const [currentPlace, setCurrentPlace] = useState(place);
+  const openingStatus = getOpeningStatus(currentPlace.regularOpeningHours);
+  const weekList = formatWeekdayText(currentPlace.regularOpeningHours);
 
   const safePlace = {
-    ...place,
-    googlePlaceId: place.googlePlaceId || null,
+    ...currentPlace,
+    googlePlaceId: currentPlace.googlePlaceId || null,
+    regularOpeningHours: currentPlace.opening_hours || currentPlace.regularOpeningHours || null,
     photos: {
-      google: Array.isArray(place.googlePhotoRefs)
-        ? place.googlePhotoRefs
+      google: Array.isArray(currentPlace.googlePhotoRefs)
+        ? currentPlace.googlePhotoRefs
         : [],
-      cr: Array.isArray(place.photos?.cr)
-        ? place.photos.cr
+      cr: Array.isArray(currentPlace.photos?.cr)
+        ? currentPlace.photos.cr
         : [],
     },
-    suitability: Array.isArray(place.suitability)
-      ? place.suitability
-      : Object.keys(place.suitability || {}),
+    suitability: Array.isArray(currentPlace.suitability)
+      ? currentPlace.suitability
+      : Object.keys(currentPlace.suitability || {}),
 
-    amenities: Array.isArray(place.amenities)
-      ? place.amenities
-      : Object.keys(place.amenities || {}),
-    crRatings: place.crRatings ?? {
+    amenities: Array.isArray(currentPlace.amenities)
+      ? currentPlace.amenities
+      : Object.keys(currentPlace.amenities || {}),
+    crRatings: currentPlace.crRatings ?? {
       average: null,
       count: 0,
       users: {},
     },
     latitude:
-      typeof place.latitude === "number"
-        ? place.latitude
-        : place.location?.latitude ?? null,
+      typeof currentPlace.latitude === "number"
+        ? currentPlace.latitude
+        : currentPlace.location?.latitude ?? null,
     longitude:
-      typeof place.longitude === "number"
-        ? place.longitude
-        : place.location?.longitude ?? null,
+      typeof currentPlace.longitude === "number"
+        ? currentPlace.longitude
+        : currentPlace.location?.longitude ?? null,
     address:
-      place.address ||
-      place.formattedAddress ||
-      place.vicinity ||
+      currentPlace.address ||
+      currentPlace.formattedAddress ||
+      currentPlace.vicinity ||
       null,
   };
 
@@ -300,6 +303,24 @@ export default function PlaceCard({
 
     return () => unsub();
   }, [safePlace?.id]);
+
+  // Real-time listener for place document updates
+  useEffect(() => {
+    if (!place?.id) return;
+
+    const placeRef = doc(db, "places", place.id);
+    const unsub = onSnapshot(placeRef, (snap) => {
+      if (snap.exists()) {
+        // Merge listener data with original place to preserve all fields
+        setCurrentPlace({
+          ...place,
+          ...snap.data(),
+        });
+      }
+    });
+
+    return () => unsub();
+  }, [place?.id, place]);
 
   const buildBooleanMapPayload = (stateObj) => {
     const payload = {};
@@ -625,6 +646,7 @@ export default function PlaceCard({
         address: resolvedAddress,
         source: "cr",
         googlePlaceId,
+        regularOpeningHours: safePlace.regularOpeningHours || null,
         photos: {
           cr: [],
           google: Array.isArray(place.googlePhotoRefs) && place.googlePhotoRefs.length
@@ -791,11 +813,73 @@ export default function PlaceCard({
       });
 
       Alert.alert("Success", "Place linked with Google.");
-      onClose(); // reopen card to refresh
 
     } catch (e) {
       console.error("RESYNC FAIL", e);
       Alert.alert("Error", "Failed to sync with Google.");
+    }
+  };
+
+  const handleRefreshGoogleData = async () => {
+    if (!capabilities.isAdmin) {
+      Alert.alert("Error", "Only admins can refresh Google data.");
+      return;
+    }
+
+    if (!safePlace.googlePlaceId) {
+      Alert.alert("Error", "This place is not linked to Google Places.");
+      return;
+    }
+
+    try {
+      console.log("[REFRESH] Fetching Google data for:", safePlace.googlePlaceId);
+      
+      const googleData = await getGoogleDetails({
+        placeId: safePlace.googlePlaceId,
+      });
+
+      if (!googleData) {
+        console.error("[REFRESH] No data returned from getGoogleDetails");
+        Alert.alert("Error", "Could not fetch updated data from Google.");
+        return;
+      }
+
+      console.log("[REFRESH] Got Google data:", googleData);
+
+      // Extract and update relevant fields
+      const updatePayload = {
+        googleSyncedAt: serverTimestamp(),
+      };
+
+      if (googleData.photos?.length > 0) {
+        updatePayload["photos.google"] = googleData.photos.map(p => p.photo_reference);
+      }
+
+      if (googleData.rating) {
+        updatePayload.googleRating = googleData.rating;
+      }
+
+      if (googleData.user_ratings_total) {
+        updatePayload.googleUserRatingsTotal = googleData.user_ratings_total;
+      }
+
+      if (googleData.opening_hours) {
+        updatePayload.regularOpeningHours = googleData.opening_hours;
+      }
+
+      if (googleData.business_status) {
+        updatePayload.businessStatus = googleData.business_status;
+      }
+
+      console.log("[REFRESH] Updating with payload:", updatePayload);
+
+      await updateDoc(doc(db, "places", place.id), updatePayload);
+
+      Alert.alert("Success", "Google data updated!");
+
+    } catch (e) {
+      console.error("[REFRESH] Error:", e);
+      Alert.alert("Error", `Failed to refresh Google data: ${e.message}`);
     }
   };
 
@@ -933,6 +1017,14 @@ export default function PlaceCard({
               onPress={handleResyncWithGoogle}
             >
               <MaterialCommunityIcons name="sync" size={18} color="#fff" />
+            </TouchableOpacity>
+          )}
+          {capabilities.isAdmin && googlePlaceId && (
+            <TouchableOpacity
+              style={styles.photoActionButton}
+              onPress={handleRefreshGoogleData}
+            >
+              <MaterialCommunityIcons name="refresh" size={18} color="#fff" />
             </TouchableOpacity>
           )}
 
