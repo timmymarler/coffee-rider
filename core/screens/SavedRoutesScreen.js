@@ -1,15 +1,25 @@
 import { CRButton } from "@core/components/ui/CRButton";
 import { CRLabel } from "@core/components/ui/CRLabel";
 import { CRScreen } from "@core/components/ui/CRScreen";
-import { useAllUserGroups } from "@core/groups/hooks";
 import { AuthContext } from "@core/context/AuthContext";
+import { useAllUserGroups } from "@core/groups/hooks";
 import { RIDE_VISIBILITY, shareRoute } from "@core/map/routes/sharedRides";
 import { useSavedRoutes } from "@core/map/routes/useSavedRoutes"; // assuming this already exists
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
-import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { useRouter } from "expo-router";
-import { useContext } from "react";
+import { useContext, useMemo, useState } from "react";
+import {
+    Alert,
+    FlatList,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 // Icon fallback helper - tries MaterialCommunityIcons first, falls back to Ionicons
 function IconWithFallback({ mcIcon, ionIcon, size, color, style }) {
@@ -26,17 +36,6 @@ function IconWithFallback({ mcIcon, ionIcon, size, color, style }) {
     />
   );
 }
-import { useMemo, useState } from "react";
-import {
-    Alert,
-    FlatList,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
 
 const SORT_OPTIONS = [
   { key: "created", label: "Created" },
@@ -299,26 +298,29 @@ export default function SavedRoutesScreen() {
     );
   }
 
-  if (!sortedRoutes.length) {
-    return (
-        <View style={styles.center}>
-          <MaterialCommunityIcons
-            name="map-marker-path"
-            size={48}
-            color={theme.colors.textMuted}
-          />
-          <Text style={styles.subtle}>No saved routes yet</Text>
-        </View>
-    );
-  }
+  const emptyMessage = filterBy === "shared" 
+    ? "No shared routes"
+    : filterBy === "private"
+    ? "No private routes"
+    : "No saved routes yet";
 
   return (
-    <CRScreen  padded={false}>
+    <CRScreen padded={false}>
       <FlatList
         data={sortedRoutes}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         ListHeaderComponent={renderHeader}
+        ListEmptyComponent={
+          <View style={styles.center}>
+            <MaterialCommunityIcons
+              name="map-marker-path"
+              size={48}
+              color={theme.colors.textMuted}
+            />
+            <Text style={styles.subtle}>{emptyMessage}</Text>
+          </View>
+        }
         stickyHeaderIndices={[0]}
         contentContainerStyle={styles.list}
       />

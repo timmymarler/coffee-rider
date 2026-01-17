@@ -10,7 +10,7 @@ import theme from "@themes";
 import Constants from "expo-constants";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Alert, Animated, TouchableOpacity, View } from "react-native";
+import { Animated, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
