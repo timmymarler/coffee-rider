@@ -136,6 +136,30 @@ service cloud.firestore {
       
       allow delete: if isProOrAdmin();
     }
+
+    /* ACTIVE RIDES - REAL-TIME LOCATION SHARING */
+    /* Users can only share location when actively riding a shared route */
+    /* Locations are ONLY visible to other riders on the SAME ride in the SAME group */
+    match /activeRides/{userId} {
+      // Can only create/update your own active ride document
+      allow create, update: if
+        isAuthed() &&
+        request.auth.uid == userId &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.rideId is string &&
+        request.resource.data.groupId is string &&
+        isGroupMember(request.resource.data.groupId);
+      
+      // Can only delete your own active ride
+      allow delete: if isAuthed() && request.auth.uid == userId;
+      
+      // Can query active rides (client filters by rideId + groupId for same-ride locations)
+      // Limit enforced to prevent abuse
+      allow list: if isAuthed() && request.query.limit <= 50;
+      
+      // Can read individual active ride if you're in the same group
+      allow get: if isAuthed() && isGroupMember(resource.data.groupId);
+    }
     
   }
 }

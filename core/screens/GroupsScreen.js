@@ -6,6 +6,7 @@ import { AuthContext } from "@context/AuthContext";
 import { useAllUserGroups, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
 import { acceptInvite, createGroup, declineInvite, revokeInvite, sendInvite } from "@core/groups/service";
 import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
+import useActiveRide from "@core/map/routes/useActiveRide";
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import theme from "@themes";
 import { useRouter } from "expo-router";
@@ -36,6 +37,7 @@ export default function GroupsScreen() {
   const { routes: sharedRoutes, loading: routesLoading } = useGroupSharedRoutes(selectedGroupId);
   const { setPendingSavedRouteId } = useWaypointsContext();
   const { members, loading: membersLoading } = useGroupMembers(selectedGroupId);
+  const { activeRide, isStarting, startRide, endRide } = useActiveRide(user);
 
   // Auto-select first group when list loads and none selected
   useEffect(() => {
@@ -233,29 +235,89 @@ export default function GroupsScreen() {
                       No shared routes yet.
                     </Text>
                   ) : (
-                    sharedRoutes.map((route) => (
-                      <TouchableOpacity
-                        key={route.id}
-                        style={styles.routeItem}
-                        onPress={() => {
-                          setPendingSavedRouteId(route.id);
-                          router.push("/map");
-                        }}
-                      >
-                        <Text style={styles.routeName}>
-                          {route.name || route.title || route.destination?.title || "Untitled route"}
-                        </Text>
-                        {route.distanceMeters && (
-                          <Text style={styles.routeMeta}>
-                            {(route.distanceMeters / 1609).toFixed(1)} mi
-                            {route.waypoints?.length && ` · ${route.waypoints.length} stops`}
-                          </Text>
-                        )}
-                        {route.isActive && (
-                          <Text style={styles.routeActive}>● Active</Text>
-                        )}
-                      </TouchableOpacity>
-                    ))
+                    sharedRoutes.map((route) => {
+                      const isThisRideActive = activeRide?.rideId === route.id;
+                      
+                      return (
+                        <View key={route.id} style={styles.routeItem}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setPendingSavedRouteId(route.id);
+                              router.push("/map");
+                            }}
+                          >
+                            <Text style={styles.routeName}>
+                              {route.name || route.title || route.destination?.title || "Untitled route"}
+                            </Text>
+                            {route.distanceMeters && (
+                              <Text style={styles.routeMeta}>
+                                {(route.distanceMeters / 1609).toFixed(1)} mi
+                                {route.waypoints?.length && ` · ${route.waypoints.length} stops`}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                          
+                          <View style={{ marginTop: theme.spacing.sm }}>
+                            {isThisRideActive ? (
+                              <CRButton
+                                title="End Ride & Stop Sharing"
+                                variant="danger"
+                                onPress={() => {
+                                  Alert.alert(
+                                    "End Ride?",
+                                    "This will stop sharing your location with other riders.",
+                                    [
+                                      { text: "Cancel", style: "cancel" },
+                                      {
+                                        text: "End Ride",
+                                        style: "destructive",
+                                        onPress: endRide,
+                                      },
+                                    ]
+                                  );
+                                }}
+                              />
+                            ) : (
+                              <CRButton
+                                title={isStarting ? "Starting…" : "Start Ride & Share Location"}
+                                loading={isStarting}
+                                disabled={!!activeRide} // Disable if already on a different ride
+                                onPress={() => {
+                                  if (!selectedGroupId) {
+                                    Alert.alert("No group selected");
+                                    return;
+                                  }
+                                  
+                                  Alert.alert(
+                                    "Start Ride?",
+                                    "This will share your location with other riders on this route in real-time.",
+                                    [
+                                      { text: "Cancel", style: "cancel" },
+                                      {
+                                        text: "Start Ride",
+                                        onPress: () => {
+                                          startRide(
+                                            route.id,
+                                            selectedGroupId,
+                                            route.name || route.title || "Untitled Route"
+                                          );
+                                        },
+                                      },
+                                    ]
+                                  );
+                                }}
+                              />
+                            )}
+                            
+                            {activeRide && !isThisRideActive && (
+                              <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 4, textAlign: "center" }}>
+                                End current ride to start this one
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })
                   )}
                 </CRCard>
               </View>
