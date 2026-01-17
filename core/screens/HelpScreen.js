@@ -289,6 +289,51 @@ export default function HelpScreen() {
       </View>
 
       {/* -------------------------------------------------- */}
+      {/* GROUPS & SHARED ROUTES                             */}
+      {/* -------------------------------------------------- */}
+      {capabilities.canAccessGroups && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Groups & shared routes</Text>
+
+          <Text style={styles.subText}>
+            Groups let you organize rides with friends and share routes with your community.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Create a Group</Text> — Use the Groups tab to create a group for your riding community. Invite members by entering their email addresses.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Manage Members</Text> — Add, remove, or manage members in your group. Group owners can accept or decline member requests.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Share Routes</Text> — Save a route to your Saved Routes, then tap the Share button to choose visibility level and optionally share it with a specific group.
+          </Text>
+
+          <Text style={styles.subText}>
+            <Text style={styles.controlLabel}>Route visibility levels:</Text>
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Private</Text> — Only you can see this route. Perfect for personal routes.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Group</Text> — Share with members of a specific group. Group members can view and load this route.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Public</Text> — Anyone in Coffee Rider can see this route. Great for suggesting popular routes.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>View Shared Routes</Text> — Select a group in the Groups tab to see all routes shared with that group. Tap any route to load it on the map.
+          </Text>
+        </View>
+      )}
+
+      {/* -------------------------------------------------- */}
       {/* WHAT YOU CAN DO                                    */}
       {/* -------------------------------------------------- */}
       <View style={styles.section}>
