@@ -109,6 +109,17 @@ export default function HelpScreen() {
             <Text style={styles.controlLabel}>Refresh Route</Text> — when in Follow Me mode with an active route, long press the Follow Me icon to refresh your route from your current location. Perfect for getting back on track if you've gone off route.
           </Text>
         </View>
+        <View style={styles.controlRow}>
+          <MaterialCommunityIcons
+            name="home"
+            size={22}
+            color={theme.colors.primary}
+            style={styles.controlIcon}
+          />
+          <Text style={styles.controlText}>
+            <Text style={styles.controlLabel}>Route to Home</Text> — when not following, long press the Follow Me icon to create a route from your current location to your home address. Make sure you've added your home address in your Profile first. This will automatically enable Follow Me mode to guide you home.
+          </Text>
+        </View>
         <Text style={styles.sectionTitle}>Map actions</Text>
         <View style={styles.legendRow}>
           <SvgPin {...markerStyles.cr} size={24} />
