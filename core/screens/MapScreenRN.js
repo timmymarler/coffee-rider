@@ -3,7 +3,7 @@ import { TabBarContext } from "@context/TabBarContext";
 import { incMetric } from "@core/utils/devMetrics";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 
 import PlaceCard from "../map/components/PlaceCard";
@@ -1642,16 +1642,25 @@ export default function MapScreenRN() {
                 latitude: rider.latitude,
                 longitude: rider.longitude,
               }}
-              anchor={{ x: 0.5, y: 0.5 }}
+              anchor={{ x: 0.5, y: 1 }}
               zIndex={600}
-              tracksViewChanges={false}
             >
               <View style={styles.riderMarker}>
-                <MaterialCommunityIcons 
-                  name="account-circle" 
-                  size={32} 
-                  color={theme.colors.accent}
-                />
+                <View style={styles.riderIconContainer}>
+                  {rider.userAvatar ? (
+                    <Image
+                      source={{ uri: rider.userAvatar }}
+                      style={styles.riderAvatar}
+                    />
+                  ) : (
+                    <MaterialCommunityIcons 
+                      name="account-circle" 
+                      size={48} 
+                      color={theme.colors.accentLight}
+                    />
+                  )}
+                  <View style={styles.riderStatusDot} />
+                </View>
                 <View style={styles.riderLabel}>
                   <Text style={styles.riderName} numberOfLines={1}>
                     {rider.userName || 'Rider'}
@@ -2458,24 +2467,56 @@ const styles = StyleSheet.create({
   // Rider location markers
   riderMarker: {
     alignItems: "center",
+    justifyContent: "flex-end",
+  },
+
+  riderIconContainer: {
+    position: "relative",
+    width: 56,
+    height: 56,
+    alignItems: "center",
     justifyContent: "center",
+  },
+
+    riderAvatar: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+    },
+
+  riderStatusDot: {
+    position: "absolute",
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: theme.colors.success,
+    borderWidth: 2,
+    borderColor: theme.colors.background,
+    bottom: 0,
+    right: 0,
   },
 
   riderLabel: {
     backgroundColor: theme.colors.accent,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 4,
-    maxWidth: 120,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 8,
+    maxWidth: 140,
     borderWidth: 2,
-    borderColor: theme.colors.background,
+    borderColor: theme.colors.primaryDark,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
   },
 
   riderName: {
     color: theme.colors.primaryDark,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     textAlign: "center",
   },
+});
 
