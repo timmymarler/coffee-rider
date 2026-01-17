@@ -21,6 +21,8 @@ import { saveRoute } from "@/core/map/routes/saveRoute";
 import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
+import useActiveRide from "@core/map/routes/useActiveRide";
+import useActiveRideLocations from "@core/map/routes/useActiveRideLocations";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
 import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
@@ -396,6 +398,10 @@ export default function MapScreenRN() {
   const [routeVersion, setRouteVersion] = useState(0);
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
   const routeFittedRef = useRef(false);
+  
+  // Active ride & location sharing
+  const { activeRide } = useActiveRide(user);
+  const { riderLocations } = useActiveRideLocations(activeRide, user?.uid);
   const canSaveRoute = 
     capabilities.canSaveRoute &&
     routeMeta &&
@@ -1628,6 +1634,33 @@ export default function MapScreenRN() {
               </Marker>
             ))}
 
+          {/* Other riders' locations (real-time) */}
+          {riderLocations.map((rider) => (
+            <Marker
+              key={`rider-${rider.id}`}
+              coordinate={{
+                latitude: rider.latitude,
+                longitude: rider.longitude,
+              }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              zIndex={600}
+              tracksViewChanges={false}
+            >
+              <View style={styles.riderMarker}>
+                <MaterialCommunityIcons 
+                  name="account-circle" 
+                  size={32} 
+                  color={theme.colors.accent}
+                />
+                <View style={styles.riderLabel}>
+                  <Text style={styles.riderName} numberOfLines={1}>
+                    {rider.userName || 'Rider'}
+                  </Text>
+                </View>
+              </View>
+            </Marker>
+          ))}
+
             {/* Base route */}
               <Polyline
                 key={`base-${routeVersion}`}
@@ -2422,7 +2455,27 @@ const styles = StyleSheet.create({
     color: theme.colors.accentMid,
   },
 
-});
+  // Rider location markers
+  riderMarker: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
+  riderLabel: {
+    backgroundColor: theme.colors.accent,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 4,
+    maxWidth: 120,
+    borderWidth: 2,
+    borderColor: theme.colors.background,
+  },
 
+  riderName: {
+    color: theme.colors.primaryDark,
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
 
