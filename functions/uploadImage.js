@@ -6,19 +6,20 @@ if (!admin.apps.length) {
 }
 
 export const uploadImage = functions.https.onCall(async (data, context) => {
+  // httpsCallable automatically populates context.auth with the current user
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated');
   }
 
-  const { type, imageBase64, placeId } = data;
   const uid = context.auth.uid;
+  const { type, imageBase64, placeId } = data;
 
   // Log input for debugging
   console.log('[uploadImage] Called with:', {
+    uid,
     type,
     imageBase64Length: imageBase64?.length || 0,
     placeId,
-    uid,
   });
 
   // Validate inputs
@@ -62,4 +63,5 @@ export const uploadImage = functions.https.onCall(async (data, context) => {
     console.error('[uploadImage] Error:', error);
     throw new functions.https.HttpsError('internal', `Upload failed: ${error.message}`);
   }
+});
 });

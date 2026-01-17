@@ -85,7 +85,6 @@ export default function ProfileScreen() {
 
     // 🔥 NEW: call Cloud Function
     const { url } = await uploadImage({
-      user,
       type: "profile",
       imageBase64: asset.base64,
     });
