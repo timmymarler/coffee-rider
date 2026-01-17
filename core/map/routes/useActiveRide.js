@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, getDoc } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import * as Location from 'expo-location';
 import { incMetric } from '../../utils/devMetrics';
@@ -20,6 +20,18 @@ export default function useActiveRide(user) {
   const [error, setError] = useState(null);
   const locationSubscriptionRef = useRef(null);
   const lastUpdateRef = useRef(0);
+
+  // Normalize Storage URLs that might come back with the .firebasestorage.app host
+  const normalizeAvatarUrl = useCallback((url) => {
+    if (!url) return null;
+    // Fix bucket host typo in older stored URLs
+    let normalized = url.replace('firebasestorage.app', 'appspot.com');
+    // Some URLs might have double host segments, ensure standard pattern
+    if (normalized.includes('firebasestorage.googleapis.com') && normalized.includes('.appspot.com')) {
+      return normalized;
+    }
+    return normalized;
+  }, []);
 
   // Listen to user's own active ride document
   useEffect(() => {
@@ -76,6 +88,12 @@ export default function useActiveRide(user) {
           }
         }
 
+        // Fetch profile once for name/avatar to avoid reloading every update
+        const profileSnapshot = await getDoc(doc(db, 'users', user.uid));
+        const profileData = profileSnapshot.exists() ? profileSnapshot.data() : {};
+        const userName = profileData.displayName?.trim() || user.displayName || user.email || 'Rider';
+        const userAvatar = normalizeAvatarUrl(profileData.photoURL || profileData.avatarUrl || user.photoURL || null);
+
         // Watch location with 10-second interval
         locationSubscriptionRef.current = await Location.watchPositionAsync(
           {
@@ -100,6 +118,8 @@ export default function useActiveRide(user) {
                 {
                   latitude: location.coords.latitude,
                   longitude: location.coords.longitude,
+                  userName,
+                  userAvatar,
                   lastLocationUpdate: serverTimestamp(),
                 },
                 { merge: true }
@@ -148,6 +168,11 @@ export default function useActiveRide(user) {
       setError(null);
 
       try {
+        const profileSnapshot = await getDoc(doc(db, 'users', user.uid));
+        const profileData = profileSnapshot.exists() ? profileSnapshot.data() : {};
+              const userName = profileData.displayName?.trim() || user.displayName || user.email || 'Rider';
+              const userAvatar = normalizeAvatarUrl(profileData.photoURL || profileData.avatarUrl || user.photoURL || null);
+
         // Get current location
         const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
@@ -159,8 +184,8 @@ export default function useActiveRide(user) {
           rideId,
           groupId,
           routeName,
-          userName: user.displayName || user.email || 'Anonymous',
-          userAvatar: user.photoURL || null,
+          userName,
+          userAvatar,
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
           startedAt: serverTimestamp(),
