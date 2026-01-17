@@ -378,6 +378,7 @@ export default function MapScreenRN() {
   const isLoadingSavedRouteRef = useRef(false);
 
   const skipNextFollowTickRef = useRef(false);
+  const skipNextRegionChangeRef = useRef(false);
   const {
     waypoints,
     addFromPlace,
@@ -728,6 +729,7 @@ export default function MapScreenRN() {
       
       // Enable Follow Me mode to guide to home
       skipNextFollowTickRef.current = true;
+      skipNextRegionChangeRef.current = true;
       await recenterOnUser({ zoom: FOLLOW_ZOOM });
       setFollowUser(true);
       
@@ -814,9 +816,11 @@ export default function MapScreenRN() {
     setMapRegion(region);
     
     // Disable Follow Me mode when user manually moves the map
-    if (followUser) {
+    // But skip if this is an intentional programmatic zoom (e.g., from routeToHome)
+    if (followUser && !skipNextRegionChangeRef.current) {
       setFollowUser(false);
     }
+    skipNextRegionChangeRef.current = false;
     
     // Temporarily disable requests to Google Places
     if (!ENABLE_GOOGLE_AUTO_FETCH || !capabilities.canSearchGoogle) {
