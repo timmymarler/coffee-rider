@@ -5,6 +5,7 @@ import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import AppHeader from "@core/components/layout/AppHeader";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
 import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
+import { getAndResetSummary } from "@core/utils/devMetrics";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import Constants from "expo-constants";
@@ -256,6 +257,11 @@ function LayoutContent() {
 }
 
 export default function Layout() {
+  // Log metrics summary on app start
+  useEffect(() => {
+    getAndResetSummary();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>

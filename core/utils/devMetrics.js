@@ -31,3 +31,19 @@ export function logMetric(key, value) {
 export function resetMetrics() {
   counters = {};
 }
+
+/**
+ * Get current counters snapshot and reset for next session.
+ * Useful for per-session summaries.
+ */
+export function getAndResetSummary() {
+  if (!ENABLED) return null;
+  const snapshot = { ...counters };
+  console.log(
+    "%c[METRICS SUMMARY]",
+    "color: #4a90e2; font-weight: bold;",
+    snapshot
+  );
+  resetMetrics();
+  return snapshot;
+}
