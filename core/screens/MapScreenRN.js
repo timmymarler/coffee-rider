@@ -682,7 +682,9 @@ export default function MapScreenRN() {
   /* ROUTE TO HOME                                                */
   /* ------------------------------------------------------------ */
   async function routeToHome() {
+    console.log("[ROUTE_TO_HOME] Starting...");
     const homeAddress = auth?.profile?.homeAddress;
+    console.log("[ROUTE_TO_HOME] homeAddress:", homeAddress);
     
     if (!homeAddress || !homeAddress.trim()) {
       Alert.alert(
@@ -698,8 +700,10 @@ export default function MapScreenRN() {
     }
 
     try {
+      console.log("[ROUTE_TO_HOME] Geocoding address...");
       // Geocode the home address
       const homeCoords = await geocodeAddress(homeAddress);
+      console.log("[ROUTE_TO_HOME] Geocoded coords:", homeCoords);
       
       if (!homeCoords) {
         Alert.alert(
@@ -709,20 +713,19 @@ export default function MapScreenRN() {
         return;
       }
 
-      // Clear existing route and waypoints
+      console.log("[ROUTE_TO_HOME] Clearing waypoints and setting destination...");
+      // Clear existing waypoints and route
       clearWaypoints();
-      setRouteDestination(null);
       setRouteCoords([]);
+      routeFittedRef.current = false;
 
-      // Set home as destination
+      // Set home as destination - this will trigger buildRoute via useEffect
       setRouteDestination({
         latitude: homeCoords.lat,
         longitude: homeCoords.lng,
         name: "Home",
       });
-
-      // Trigger route calculation
-      setRoutingActive(true);
+      console.log("[ROUTE_TO_HOME] Destination set, route calculation should trigger");
     } catch (error) {
       console.error("Error routing to home:", error);
       Alert.alert("Error", "Failed to create route to home.");
