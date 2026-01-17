@@ -72,3 +72,45 @@ export async function getPlaceLabel(lat, lng) {
     return null;
   }
 }
+
+/**
+ * Geocode an address string to lat/lng coordinates
+ * @param {string} address - Address to geocode
+ * @returns {Promise<{lat: number, lng: number} | null>}
+ */
+export async function geocodeAddress(address) {
+  if (!GOOGLE_KEY) {
+    console.warn("Missing EXPO_PUBLIC_GOOGLE_MAPS_API_KEY for geocoding.");
+    return null;
+  }
+
+  if (!address || !address.trim()) {
+    return null;
+  }
+
+  try {
+    const url =
+      `https://maps.googleapis.com/maps/api/geocode/json` +
+      `?address=${encodeURIComponent(address.trim())}` +
+      `&key=${GOOGLE_KEY}`;
+
+    const res = await fetch(url);
+    const json = await res.json();
+
+    if (json?.results?.length > 0) {
+      const location = json.results[0].geometry?.location;
+      if (location?.lat != null && location?.lng != null) {
+        return {
+          lat: location.lat,
+          lng: location.lng,
+        };
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.error("Error geocoding address:", err);
+    return null;
+  }
+}
+

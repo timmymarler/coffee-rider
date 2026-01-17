@@ -10,7 +10,7 @@ import theme from "@themes";
 import Constants from "expo-constants";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Animated, TouchableOpacity, View } from "react-native";
+import { Alert, Animated, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -20,7 +20,7 @@ function FloatingTabBar({ state }) {
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(0)).current;
   const { hidden, mapActions } = useContext(TabBarContext);
-  const { capabilities } = useContext(AuthContext) || {};
+  const { capabilities, profile } = useContext(AuthContext) || {};
   const pathname = usePathname();
 
   const canAccessGroups = capabilities?.canAccessGroups === true;
@@ -130,8 +130,14 @@ function FloatingTabBar({ state }) {
           {/* Follow Me */}
           <LongPressGestureHandler
             onActivated={() => {
-              if (mapActions?.isFollowing?.() && mapActions?.canRefreshRoute?.()) {
-                mapActions?.showRefreshMenu?.();
+              if (mapActions?.isFollowing?.()) {
+                // When following: refresh route if possible
+                if (mapActions?.canRefreshRoute?.()) {
+                  mapActions?.showRefreshMenu?.();
+                }
+              } else {
+                // When NOT following: route to home
+                mapActions?.routeToHome?.();
               }
             }}
             minDurationMs={500}

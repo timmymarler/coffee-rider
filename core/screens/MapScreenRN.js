@@ -2,7 +2,7 @@ import { db } from "@config/firebase";
 import { TabBarContext } from "@context/TabBarContext";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 
 import PlaceCard from "../map/components/PlaceCard";
@@ -31,7 +31,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
-import { getPlaceLabel } from "../lib/geocode";
+import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 
 const RECENTER_ZOOM = 12;
 const FOLLOW_ZOOM = 17; // closer, more “navigation” feel
@@ -678,6 +678,57 @@ export default function MapScreenRN() {
     setFollowUser(true);
   }
 
+  /* ------------------------------------------------------------ */
+  /* ROUTE TO HOME                                                */
+  /* ------------------------------------------------------------ */
+  async function routeToHome() {
+    const homeAddress = auth?.profile?.homeAddress;
+    
+    if (!homeAddress || !homeAddress.trim()) {
+      Alert.alert(
+        "No Home Address",
+        "Please add your home address in the Profile screen to use this feature."
+      );
+      return;
+    }
+
+    if (!userLocation) {
+      Alert.alert("No Location", "Unable to determine your current location.");
+      return;
+    }
+
+    try {
+      // Geocode the home address
+      const homeCoords = await geocodeAddress(homeAddress);
+      
+      if (!homeCoords) {
+        Alert.alert(
+          "Invalid Address",
+          "Unable to find your home address. Please check it in your Profile settings."
+        );
+        return;
+      }
+
+      // Clear existing route and waypoints
+      clearWaypoints();
+      setRouteDestination(null);
+      setRouteCoords([]);
+
+      // Set home as destination
+      setRouteDestination({
+        latitude: homeCoords.lat,
+        longitude: homeCoords.lng,
+        name: "Home",
+      });
+
+      // Trigger route calculation
+      setRoutingActive(true);
+    } catch (error) {
+      console.error("Error routing to home:", error);
+      Alert.alert("Error", "Failed to create route to home.");
+    }
+  }
+
   useEffect(() => {
     if (!followUser) return;
     if (!userLocation) return;
@@ -698,12 +749,13 @@ export default function MapScreenRN() {
       isFollowing: () => followUser,
       showRefreshMenu: () => setShowRefreshRouteMenu(true),
       canRefreshRoute: () => userLocation && (waypoints.length > 0 || routeDestination),
+      routeToHome: routeToHome,
     });
 
     return () => {
       setMapActions(null);
     };
-  }, [followUser, userLocation, waypoints, routeDestination]);
+  }, [followUser, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress]);
 
   useEffect(() => {
     let subscription;

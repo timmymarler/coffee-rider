@@ -35,6 +35,7 @@ export default function ProfileScreen() {
   const [bio, setBio] = useState(profile?.bio || "");
   const [bike, setBike] = useState(profile?.bike || "");
   const [homeLocation, setHomeLocation] = useState(profile?.homeLocation || "");
+  const [homeAddress, setHomeAddress] = useState(profile?.homeAddress || "");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
@@ -45,6 +46,7 @@ export default function ProfileScreen() {
     setBio(profile?.bio || "");
     setBike(profile?.bike || "");
     setHomeLocation(profile?.homeLocation || "");
+    setHomeAddress(profile?.homeAddress || "");
   }, [profile]);
 
   const email = user?.email || "";
@@ -117,6 +119,7 @@ export default function ProfileScreen() {
         bio: bio.trim(),
         bike: bike.trim(),
         homeLocation: homeLocation.trim(),
+        homeAddress: homeAddress.trim(),
         updatedAt: Date.now(),
       });
 
@@ -252,6 +255,13 @@ export default function ProfileScreen() {
 
         <CRLabel style={{ marginTop: theme.spacing.md }}>Home Area</CRLabel>
         <CRInput value={homeLocation} onChangeText={setHomeLocation} />
+
+        <CRLabel style={{ marginTop: theme.spacing.md }}>Home Address</CRLabel>
+        <CRInput 
+          value={homeAddress} 
+          onChangeText={setHomeAddress} 
+          placeholder="123 Main St, City, Postcode"
+        />
 
         <CRLabel style={{ marginTop: theme.spacing.md }}>Rider Bio</CRLabel>
         <CRInput value={bio} onChangeText={setBio} multiline />
