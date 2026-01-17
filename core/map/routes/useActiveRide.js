@@ -113,17 +113,16 @@ export default function useActiveRide(user) {
 
             try {
               const activeRideRef = doc(db, 'activeRides', user.uid);
-              await setDoc(
-                activeRideRef,
-                {
-                  latitude: location.coords.latitude,
-                  longitude: location.coords.longitude,
-                  userName,
-                  userAvatar,
-                  lastLocationUpdate: serverTimestamp(),
-                },
-                { merge: true }
-              );
+              const payload = {
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+                lastLocationUpdate: serverTimestamp(),
+              };
+
+              if (userName) payload.userName = userName;
+              if (userAvatar) payload.userAvatar = userAvatar;
+
+              await setDoc(activeRideRef, payload, { merge: true });
               
               console.log('[useActiveRide] Location updated:', {
                 lat: location.coords.latitude.toFixed(6),
@@ -179,18 +178,21 @@ export default function useActiveRide(user) {
         });
 
         const activeRideRef = doc(db, 'activeRides', user.uid);
-        await setDoc(activeRideRef, {
+        const payload = {
           userId: user.uid,
           rideId,
           groupId,
           routeName,
-          userName,
-          userAvatar,
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
           startedAt: serverTimestamp(),
           lastLocationUpdate: serverTimestamp(),
-        });
+        };
+
+        if (userName) payload.userName = userName;
+        if (userAvatar) payload.userAvatar = userAvatar;
+
+        await setDoc(activeRideRef, payload, { merge: true });
 
         console.log('[useActiveRide] Started ride:', { rideId, groupId, routeName });
       } catch (err) {
