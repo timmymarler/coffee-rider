@@ -90,9 +90,20 @@ export default function ProfileScreen() {
       imageBase64: asset.base64,
     });
 
+    console.log('[ProfileScreen] URL from cloud function:', url);
+
     // Persist to Firestore
-    // 🔥 cache-busting
-    const cacheBustedUrl = `${url}?v=${Date.now()}`;
+    // 🔥 cache-busting (preserve existing query, e.g., alt=media&token=...)
+    // If no token present, add alt=media for public access
+    let finalUrl = url;
+    if (!url.includes('token=') && !url.includes('alt=media')) {
+      const separator = url.includes('?') ? '&' : '?';
+      finalUrl = `${url}${separator}alt=media`;
+    }
+    const separator = finalUrl.includes('?') ? '&' : '?';
+    const cacheBustedUrl = `${finalUrl}${separator}v=${Date.now()}`;
+
+    console.log('[ProfileScreen] Cache-busted URL to save:', cacheBustedUrl);
 
     await updateDoc(doc(db, "users", user.uid), {
       photoURL: cacheBustedUrl,
