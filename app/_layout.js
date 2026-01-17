@@ -20,7 +20,10 @@ function FloatingTabBar({ state }) {
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(0)).current;
   const { hidden, mapActions } = useContext(TabBarContext);
+  const { capabilities } = useContext(AuthContext) || {};
   const pathname = usePathname();
+
+  const canAccessGroups = capabilities?.canAccessGroups === true;
 
   const isMapScreen =
     pathname === "/map" ||
@@ -40,7 +43,7 @@ function FloatingTabBar({ state }) {
   const tabs = [
     { name: "map", icon: "map" },
     { name: "saved-routes", icon: "git-branch" },
-    { name: "groups", icon: "people" },
+    { name: "groups", icon: "people", disabled: !canAccessGroups },
     { name: "profile", icon: "person" },
   ];
 
@@ -68,17 +71,26 @@ function FloatingTabBar({ state }) {
     >
       {tabs.map((tab, index) => {
         const isFocused = state.index === index;
-        const color = isFocused ? activeColor : inactiveColor;
+        const isDisabled = tab.disabled === true;
+        const color = isDisabled
+          ? theme.colors.primaryMid
+          : isFocused
+            ? activeColor
+            : inactiveColor;
 
         return (
           <TouchableOpacity
             key={tab.name}
-            onPress={() => router.push(tab.name)}
+            onPress={() => {
+              if (isDisabled) return;
+              router.push(tab.name);
+            }}
             style={{
               flex: 1,
               alignItems: "center",
               justifyContent: "center",
               paddingVertical: 6,
+              opacity: isDisabled ? 0.6 : 1,
             }}
           >
             <Ionicons

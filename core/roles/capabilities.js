@@ -33,6 +33,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         // Routes
         canSaveRoutes: true,
         canShareRoutes: true,
+        canAccessGroups: true,
 
         // Search
         canSearchCR: true,
@@ -67,6 +68,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         canSaveRoutes: true,
         canShareRoutes: true,
+        canAccessGroups: true,
 
         canSearchCR: true,
         canSearchGoogle: true,
@@ -94,6 +96,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         canSaveRoutes: true,           // auto-saved, hidden
         canShareRoutes: false,
+        canAccessGroups: false,
 
         canSearchCR: true,
         canSearchGoogle: false,
@@ -122,6 +125,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         canSaveRoutes: false,
         canShareRoutes: false,
+        canAccessGroups: false,
 
         canSearchCR: true,
         canSearchGoogle: false,

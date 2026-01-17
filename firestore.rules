@@ -1,0 +1,125 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* Helpers */
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function hasRole(role) {
+      return isAuthed() && request.auth.token.role == role;
+    }
+
+    function isProOrAdmin() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','admin'];
+    }
+    
+    function isGroupMember(groupId) {
+      return isAuthed() &&
+        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+    
+    function isGroupOwner(groupId) {
+      return isAuthed() &&
+        get(/databases/$(database)/documents/groups/$(groupId)).data.ownerId == request.auth.uid;
+    }
+
+    /* VERSIONS */
+    match /versions/{docId} {
+      allow read: if true;
+      allow write: if hasRole('admin');
+    }
+
+    /* USERS */
+    match /users/{userId} {
+      allow create: if isAuthed() && request.auth.uid == userId;
+      allow read: if isAuthed();
+      allow update: if isAuthed() && request.auth.uid == userId;
+    }
+
+    /* UPGRADES */
+    match /upgradeRequests/{id} {
+      allow create: if isAuthed();
+      allow read, update, delete: if hasRole('admin');
+    }
+
+    /* PLACES */
+    match /places/{placeId} {
+      allow read: if true;
+      allow create: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthed() && (
+        request.auth.uid == resource.data.createdBy || hasRole('admin')
+      );
+      allow delete: if false;
+    }
+
+    match /places/{placeId}/comments/{commentId} {
+      allow read: if true;
+      allow create: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isAuthed() && (
+        request.auth.uid == resource.data.createdBy || hasRole('admin')
+      );
+    }
+
+    /* ROUTES */
+    match /routes/{routeId} {
+      allow read: if
+        resource.data.visibility == 2 ||
+        (isAuthed() && resource.data.createdBy == request.auth.uid) ||
+        (resource.data.visibility == 1 && isAuthed() && isGroupMember(resource.data.groupId));
+
+      allow create: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthed() && resource.data.createdBy == request.auth.uid;
+      allow write: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if false;
+    }
+
+    /* GROUPS */
+    match /groups/{groupId} {
+      allow create: if isProOrAdmin();
+      allow read: if isAuthed();
+      allow update, delete: if isGroupOwner(groupId);
+
+      match /members/{memberId} {
+        allow read: if isAuthed();
+        allow create: if isGroupOwner(groupId) || (isAuthed() && request.auth.uid == memberId);
+        allow update, delete: if isGroupOwner(groupId);
+      }
+    }
+
+    /* GROUPS - COLLECTION GROUP QUERY SUPPORT */
+    /* Allows useAllUserGroups collectionGroup(members) query where uid == request.auth.uid */
+    match /{path=**}/members/{memberId} {
+      allow read: if isAuthed() && (
+        request.auth.uid == memberId ||
+        resource.data.uid == request.auth.uid
+      );
+    }
+
+    /* INVITES */
+    match /groupInvites/{inviteId} {
+      allow create: if isProOrAdmin();
+
+      allow read: if isAuthed() &&
+        (request.auth.uid == resource.data.inviteeUid || 
+         request.auth.email == resource.data.inviteeEmail ||
+         isProOrAdmin());
+
+      allow update: if (
+        isAuthed() &&
+        request.auth.uid == resource.data.inviteeUid &&
+        resource.data.status == 'pending' &&
+        resource.data.expiresAt != null &&
+        request.time < resource.data.expiresAt &&
+        request.resource.data.status in ['accepted', 'declined']
+      ) || (
+        isProOrAdmin()
+      );
+      
+      allow delete: if isProOrAdmin();
+    }
+    
+  }
+}
