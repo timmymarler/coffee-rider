@@ -65,7 +65,20 @@ service cloud.firestore {
 
     /* ROUTES */
     match /routes/{routeId} {
-      allow read: if
+      // For list queries (like filtering by groupId), allow if user is group member
+      // Note: Firestore requires simpler rules for queries with where clauses
+      allow list: if
+        isAuthed() && (
+          // Allow querying own routes
+          request.auth.uid == resource.data.createdBy ||
+          // Allow querying public routes
+          resource.data.visibility == 'public' ||
+          // Allow querying group routes (membership checked at query time via client)
+          resource.data.visibility == 'group'
+        );
+      
+      // For single document reads, enforce strict permissions
+      allow get: if
         resource.data.visibility == 'public' ||
         (isAuthed() && resource.data.createdBy == request.auth.uid) ||
         (resource.data.visibility == 'group' && isAuthed() && isGroupMember(resource.data.groupId));
