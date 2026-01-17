@@ -11,6 +11,12 @@ export async function uploadImage({
     throw new Error("uploadImage called without user");
   }
 
+  console.log('[uploadImage] Calling function with:', {
+    type,
+    placeId,
+    imageBase64Length: imageBase64?.length || 0,
+  });
+
   const token = await user.getIdToken();
 
   const res = await fetch(FUNCTION_URL, {
@@ -26,10 +32,15 @@ export async function uploadImage({
     }),
   });
 
+  console.log('[uploadImage] Response status:', res.status);
+
   if (!res.ok) {
     const text = await res.text();
+    console.log('[uploadImage] Error response:', text);
     throw new Error(text);
   }
 
-  return res.json(); // { ok, path, url }
+  const result = await res.json();
+  console.log('[uploadImage] Success:', { path: result.path, urlLength: result.url?.length });
+  return result; // { ok, path, url }
 }
