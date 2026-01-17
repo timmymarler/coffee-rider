@@ -21,6 +21,9 @@ export function useAvailableSharedRides(userGroups = []) {
     }
 
     const unsubscribes = [];
+    const ridesMap = new Map();
+    let publicLoaded = false;
+    let groupLoaded = userGroups.length === 0; // if no groups, consider group loaded
 
     // 1. Public rides
     const publicQuery = query(
@@ -30,11 +33,12 @@ export function useAvailableSharedRides(userGroups = []) {
     );
 
     const unsubPublic = onSnapshot(publicQuery, snap => {
-      const publicRides = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setRides(prev => {
-        const nonPublic = prev.filter(r => r.visibility !== RIDE_VISIBILITY.PUBLIC);
-        return [...nonPublic, ...publicRides];
-      });
+      snap.docs.forEach(d => ridesMap.set(d.id, { id: d.id, ...d.data() }));
+      publicLoaded = true;
+      if (publicLoaded && groupLoaded) {
+        setRides(Array.from(ridesMap.values()));
+        setLoading(false);
+      }
     });
     unsubscribes.push(unsubPublic);
 
@@ -48,16 +52,17 @@ export function useAvailableSharedRides(userGroups = []) {
       );
 
       const unsubGroup = onSnapshot(groupQuery, snap => {
-        const groupRides = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setRides(prev => {
-          const nonGroup = prev.filter(r => r.visibility !== RIDE_VISIBILITY.GROUP);
-          return [...nonGroup, ...groupRides];
-        });
+        snap.docs.forEach(d => ridesMap.set(d.id, { id: d.id, ...d.data() }));
+        groupLoaded = true;
+        if (publicLoaded && groupLoaded) {
+          setRides(Array.from(ridesMap.values()));
+          setLoading(false);
+        }
       });
       unsubscribes.push(unsubGroup);
     }
 
-    setLoading(false);
+    // loading state will be set when both sources have loaded
 
     return () => unsubscribes.forEach(unsub => unsub?.());
   }, [user, userGroups]);

@@ -51,7 +51,9 @@ const FILTER_OPTIONS = [
 
 export default function SavedRoutesScreen() {
   const router = useRouter();
-  const { routes, loading } = useSavedRoutes();
+  // Include public routes only when filter is not strictly 'private'
+  const includePublic = filterBy !== "private";
+  const { routes, loading } = useSavedRoutes(includePublic);
   const { setPendingSavedRouteId } = useWaypointsContext();
   const { user } = useContext(AuthContext);
   const { groups } = useAllUserGroups(user?.uid);
