@@ -1,6 +1,7 @@
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { incMetric } from "@core/utils/devMetrics";
 import { useContext, useEffect, useState } from "react";
 import { RIDE_VISIBILITY } from "./sharedRides";
 
@@ -33,6 +34,8 @@ export function useAvailableSharedRides(userGroups = []) {
     );
 
     const unsubPublic = onSnapshot(publicQuery, snap => {
+      incMetric("useSharedRides:publicSnapshot");
+      incMetric("useSharedRides:publicDocs", snap.docs.length, 25);
       snap.docs.forEach(d => ridesMap.set(d.id, { id: d.id, ...d.data() }));
       publicLoaded = true;
       if (publicLoaded && groupLoaded) {
@@ -52,6 +55,8 @@ export function useAvailableSharedRides(userGroups = []) {
       );
 
       const unsubGroup = onSnapshot(groupQuery, snap => {
+        incMetric("useSharedRides:groupSnapshot");
+        incMetric("useSharedRides:groupDocs", snap.docs.length, 25);
         snap.docs.forEach(d => ridesMap.set(d.id, { id: d.id, ...d.data() }));
         groupLoaded = true;
         if (publicLoaded && groupLoaded) {

@@ -1,6 +1,7 @@
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { incMetric } from "@core/utils/devMetrics";
 import { useContext, useEffect, useState } from "react";
 
 export function useSavedRoutes(includePublic = false) {
@@ -41,6 +42,8 @@ export function useSavedRoutes(includePublic = false) {
     };
 
     const unsubUser = onSnapshot(userRoutesQuery, snap => {
+      incMetric("useSavedRoutes:userSnapshot");
+      incMetric("useSavedRoutes:userDocs", snap.docs.length, 25);
       snap.docs.forEach(doc => {
         routesMap.set(doc.id, { id: doc.id, ...doc.data() });
       });
@@ -50,6 +53,8 @@ export function useSavedRoutes(includePublic = false) {
 
     const unsubPublic = publicRoutesQuery
       ? onSnapshot(publicRoutesQuery, snap => {
+          incMetric("useSavedRoutes:publicSnapshot");
+          incMetric("useSavedRoutes:publicDocs", snap.docs.length, 25);
           snap.docs.forEach(doc => {
             routesMap.set(doc.id, { id: doc.id, ...doc.data() });
           });

@@ -1,6 +1,7 @@
 import { db } from "@config/firebase";
 import { TabBarContext } from "@context/TabBarContext";
 import { collection, onSnapshot } from "firebase/firestore";
+import { incMetric } from "@core/utils/devMetrics";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
@@ -597,6 +598,8 @@ export default function MapScreenRN() {
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "places"), (snapshot) => {
+      incMetric("MapScreen:placesSnapshot");
+      incMetric("MapScreen:placesDocs", snapshot.size, 25);
       const places = snapshot.docs.map((doc) => {
         const data = doc.data();
         return {

@@ -6,6 +6,7 @@ import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { getCapabilities } from "@core/roles/capabilities";
 import { uploadImage } from "@core/utils/uploadImage";
+import { incMetric } from "@core/utils/devMetrics";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
@@ -295,6 +296,8 @@ export default function PlaceCard({
     const q = query(commentsRef, orderBy("createdAt", "desc"), fbLimit(20));
 
     const unsub = onSnapshot(q, (snap) => {
+      incMetric("PlaceCard:commentsSnapshot");
+      incMetric("PlaceCard:commentsDocs", snap.docs.length, 25);
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setComments(rows);
       setLoadingComments(false);
@@ -309,6 +312,7 @@ export default function PlaceCard({
 
     const placeRef = doc(db, "places", place.id);
     const unsub = onSnapshot(placeRef, (snap) => {
+      incMetric("PlaceCard:placeSnapshot");
       if (snap.exists()) {
         // Merge listener data with original place to preserve all fields
         setCurrentPlace({
