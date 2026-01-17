@@ -66,13 +66,16 @@ service cloud.firestore {
     /* ROUTES */
     match /routes/{routeId} {
       allow read: if
-        resource.data.visibility == 2 ||
+        resource.data.visibility == 'public' ||
         (isAuthed() && resource.data.createdBy == request.auth.uid) ||
-        (resource.data.visibility == 1 && isAuthed() && isGroupMember(resource.data.groupId));
+        (resource.data.visibility == 'group' && isAuthed() && isGroupMember(resource.data.groupId));
 
       allow create: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isAuthed() && resource.data.createdBy == request.auth.uid;
-      allow write: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthed() && (
+        resource.data.createdBy == request.auth.uid ||
+        (resource.data.visibility == 'group' && isGroupMember(resource.data.groupId) && request.resource.data.participants != null) ||
+        hasRole('admin')
+      );
       allow delete: if false;
     }
 
