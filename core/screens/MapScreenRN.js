@@ -389,6 +389,7 @@ export default function MapScreenRN() {
   
   const [routingActive, setRoutingActive] = useState(false);
   const [routeDestination, setRouteDestination] = useState(null);
+  const [isHomeDestination, setIsHomeDestination] = useState(false);
   const [routeClearedByUser, setRouteClearedByUser] = useState(false);
   const routeRequestId = useRef(0);
   const [routeVersion, setRouteVersion] = useState(0);
@@ -516,6 +517,7 @@ export default function MapScreenRN() {
       longitude: point.lng,
       title: point.title,
     });
+    setIsHomeDestination(false);
 
     closeAddPointMenu();
   };
@@ -726,6 +728,7 @@ export default function MapScreenRN() {
         longitude: homeCoords.lng,
         name: "Home",
       });
+      setIsHomeDestination(true);
       
       // Enable Follow Me mode to guide to home
       skipNextFollowTickRef.current = true;
@@ -891,6 +894,7 @@ export default function MapScreenRN() {
     routeRequestId.current += 1;   // invalidate in-flight requests
     setRoutingActive(false);
     setRouteDestination(null);
+    setIsHomeDestination(false);
     clearWaypoints();
     setRouteCoords([]);            // ✅ clear polyline HERE
     setRouteDistanceMeters(null);
@@ -1597,7 +1601,7 @@ export default function MapScreenRN() {
               zIndex={950}
             >
               <SvgPin
-                icon="home"
+                icon={isHomeDestination ? "home" : "flag"}
                 fill={theme.colors.primary}
                 circle={theme.colors.accentMid}
                 stroke={theme.colors.danger}
