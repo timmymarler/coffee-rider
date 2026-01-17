@@ -330,6 +330,30 @@ export default function HelpScreen() {
           <Text style={styles.bullet}>
             <Text style={styles.controlLabel}>View Shared Routes</Text> — Select a group in the Groups tab to see all routes shared with that group. Tap any route to load it on the map.
           </Text>
+
+          <Text style={[styles.subText, { marginTop: 16 }]}>
+            <Text style={styles.controlLabel}>Real-time location sharing:</Text>
+          </Text>
+
+          <Text style={styles.subText}>
+            Share your live location with other riders while on a group ride. Your location is ONLY shared when you explicitly start a ride, and ONLY visible to riders on the same route in the same group.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Start a Ride</Text> — In the Groups tab, select a shared route and tap "Start Ride & Share Location". This begins real-time location sharing with other active riders on this route.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>See Other Riders</Text> — When your ride is active, you'll see markers on the map showing other riders who are also actively riding the same route. Their locations update every 10 seconds.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>End a Ride</Text> — Tap "End Ride & Stop Sharing" to stop sharing your location. Your location stops being shared immediately.
+          </Text>
+
+          <Text style={[styles.subText, { marginTop: 8, fontStyle: 'italic' }]}>
+            Privacy: Your location is never shared unless you start a ride. Only riders on the same route in the same group can see your location. Ending your ride immediately stops all location sharing.
+          </Text>
         </View>
       )}
 
