@@ -5,18 +5,21 @@ import { CRLabel } from "@components-ui/CRLabel";
 import { AuthContext } from "@context/AuthContext";
 import { useAllUserGroups, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
 import { acceptInvite, createGroup, declineInvite, revokeInvite, sendInvite } from "@core/groups/service";
+import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
+import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import theme from "@themes";
+import { useRouter } from "expo-router";
 import { useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function GroupsScreen() {
+  const router = useRouter();
   const { capabilities, user } = useContext(AuthContext) || {};
   const canAccessGroups = capabilities?.canAccessGroups === true;
-  const { invites, loading: invitesLoading, error: invitesError } = useInvitesEnriched(user?.uid, user?.email);
-  const { invites: sentInvites, loading: sentInvitesLoading } = useSentInvitesEnriched(user?.uid);
-  const { groups, loading: groupsLoading } = useAllUserGroups(user?.uid);
+  
+  // State declarations
   const [creating, setCreating] = useState(false);
   const [actingOnInvite, setActingOnInvite] = useState(null);
   const [revokingInvite, setRevokingInvite] = useState(null);
@@ -24,8 +27,15 @@ export default function GroupsScreen() {
   const [sendingInvite, setSendingInvite] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [groupName, setGroupName] = useState("");
-  const { members, loading: membersLoading } = useGroupMembers(selectedGroupId);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  
+  // Hooks
+  const { invites, loading: invitesLoading, error: invitesError } = useInvitesEnriched(user?.uid, user?.email);
+  const { invites: sentInvites, loading: sentInvitesLoading } = useSentInvitesEnriched(user?.uid);
+  const { groups, loading: groupsLoading } = useAllUserGroups(user?.uid);
+  const { routes: sharedRoutes, loading: routesLoading } = useGroupSharedRoutes(selectedGroupId);
+  const { setPendingSavedRouteId } = useWaypointsContext();
+  const { members, loading: membersLoading } = useGroupMembers(selectedGroupId);
 
   // Auto-select first group when list loads and none selected
   useEffect(() => {
@@ -204,6 +214,47 @@ export default function GroupsScreen() {
                           </Text>
                         </View>
                       </View>
+                    ))
+                  )}
+                </CRCard>
+              </View>
+            ),
+          },
+          {
+            key: "sharedRoutes",
+            content: (
+              <View style={styles.cardWrap}>
+                <CRCard>
+                  <CRLabel>Shared Routes</CRLabel>
+                  {routesLoading ? (
+                    <ActivityIndicator color={theme.colors.primary} />
+                  ) : sharedRoutes.length === 0 ? (
+                    <Text style={{ color: theme.colors.textMuted, marginTop: theme.spacing.md }}>
+                      No shared routes yet.
+                    </Text>
+                  ) : (
+                    sharedRoutes.map((route) => (
+                      <TouchableOpacity
+                        key={route.id}
+                        style={styles.routeItem}
+                        onPress={() => {
+                          setPendingSavedRouteId(route.id);
+                          router.push("/map");
+                        }}
+                      >
+                        <Text style={styles.routeName}>
+                          {route.name || route.title || route.destination?.title || "Untitled route"}
+                        </Text>
+                        {route.distanceMeters && (
+                          <Text style={styles.routeMeta}>
+                            {(route.distanceMeters / 1609).toFixed(1)} mi
+                            {route.waypoints?.length && ` · ${route.waypoints.length} stops`}
+                          </Text>
+                        )}
+                        {route.isActive && (
+                          <Text style={styles.routeActive}>● Active</Text>
+                        )}
+                      </TouchableOpacity>
                     ))
                   )}
                 </CRCard>
@@ -451,5 +502,30 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 12,
     marginTop: 2,
+  },
+  routeItem: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    marginTop: theme.spacing.sm,
+    borderRadius: 8,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  routeName: {
+    color: theme.colors.accentMid,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  routeMeta: {
+    color: theme.colors.text,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  routeActive: {
+    color: theme.colors.success,
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: "600",
   },
 });

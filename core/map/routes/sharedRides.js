@@ -1,17 +1,12 @@
-import {
-  doc,
-  updateDoc,
-  serverTimestamp,
-  collection,
-  query,
-  where,
-  onSnapshot,
-  getDoc,
-  arrayUnion,
-  arrayRemove,
-  Timestamp,
-} from "firebase/firestore";
 import { db } from "@config/firebase";
+import {
+    arrayUnion,
+    doc,
+    getDoc,
+    serverTimestamp,
+    Timestamp,
+    updateDoc
+} from "firebase/firestore";
 
 export const RIDE_VISIBILITY = {
   PRIVATE: "private",

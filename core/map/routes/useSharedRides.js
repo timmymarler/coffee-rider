@@ -1,7 +1,7 @@
 import { db } from "@config/firebase";
-import { useContext, useEffect, useState } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { AuthContext } from "@context/AuthContext";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { useContext, useEffect, useState } from "react";
 import { RIDE_VISIBILITY } from "./sharedRides";
 
 /**
@@ -144,4 +144,40 @@ export function useRideParticipation(routeId) {
   }, [user, routeId]);
 
   return { isParticipant, activeParticipants, loading };
+}
+
+/**
+ * Hook to get shared routes for a specific group
+ */
+export function useGroupSharedRoutes(groupId) {
+  const [routes, setRoutes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!groupId) {
+      setRoutes([]);
+      setLoading(false);
+      return;
+    }
+
+    const q = query(
+      collection(db, "routes"),
+      where("visibility", "==", RIDE_VISIBILITY.GROUP),
+      where("groupId", "==", groupId)
+    );
+
+    const unsubscribe = onSnapshot(q, snap => {
+      setRoutes(
+        snap.docs.map(d => ({
+          id: d.id,
+          ...d.data(),
+        }))
+      );
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [groupId]);
+
+  return { routes, loading };
 }
