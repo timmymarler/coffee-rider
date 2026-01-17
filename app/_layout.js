@@ -257,9 +257,12 @@ function LayoutContent() {
 }
 
 export default function Layout() {
-  // Log metrics summary on app start
+  // Log metrics summary when app goes to background or on unmount
   useEffect(() => {
-    getAndResetSummary();
+    return () => {
+      // Log on cleanup/app background
+      getAndResetSummary();
+    };
   }, []);
 
   return (

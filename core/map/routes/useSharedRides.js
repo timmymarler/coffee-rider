@@ -1,7 +1,7 @@
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { incMetric } from "@core/utils/devMetrics";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import { RIDE_VISIBILITY } from "./sharedRides";
 

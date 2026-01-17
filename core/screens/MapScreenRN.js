@@ -1,7 +1,7 @@
 import { db } from "@config/firebase";
 import { TabBarContext } from "@context/TabBarContext";
-import { collection, onSnapshot } from "firebase/firestore";
 import { incMetric } from "@core/utils/devMetrics";
+import { collection, onSnapshot } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
@@ -724,6 +724,7 @@ export default function MapScreenRN() {
       clearWaypoints();
       setRouteCoords([]);
       routeFittedRef.current = false;
+      setRouteClearedByUser(false); // Ensure route building is not blocked
 
       // Set home as destination - this will trigger buildRoute via useEffect
       setRouteDestination({
