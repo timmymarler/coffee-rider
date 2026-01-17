@@ -725,7 +725,13 @@ export default function MapScreenRN() {
         longitude: homeCoords.lng,
         name: "Home",
       });
-      console.log("[ROUTE_TO_HOME] Destination set, route calculation should trigger");
+      
+      // Enable Follow Me mode to guide to home
+      skipNextFollowTickRef.current = true;
+      await recenterOnUser({ zoom: FOLLOW_ZOOM });
+      setFollowUser(true);
+      
+      console.log("[ROUTE_TO_HOME] Destination set and Follow Me enabled");
     } catch (error) {
       console.error("Error routing to home:", error);
       Alert.alert("Error", "Failed to create route to home.");
@@ -806,6 +812,12 @@ export default function MapScreenRN() {
 
   const handleRegionChangeComplete = async (region) => {
     setMapRegion(region);
+    
+    // Disable Follow Me mode when user manually moves the map
+    if (followUser) {
+      setFollowUser(false);
+    }
+    
     // Temporarily disable requests to Google Places
     if (!ENABLE_GOOGLE_AUTO_FETCH || !capabilities.canSearchGoogle) {
       return;
@@ -881,6 +893,7 @@ export default function MapScreenRN() {
     setManualStartPoint(null); 
     routeFittedRef.current = false;
     setCurrentLoadedRouteId(null);
+    setFollowUser(false);          // Disable Follow Me when clearing route
   }
 
   function clearSearch() {
@@ -1566,6 +1579,24 @@ export default function MapScreenRN() {
                 fill={theme.colors.accent}
                 circle={theme.colors.primaryMid}
                 stroke={theme.colors.primaryDark}
+              />
+            </Marker>
+          )}
+
+          {routeDestination && (
+            <Marker
+              coordinate={{
+                latitude: routeDestination.latitude,
+                longitude: routeDestination.longitude,
+              }}
+              anchor={{ x: 0.5, y: 1 }}
+              zIndex={950}
+            >
+              <SvgPin
+                icon="home"
+                fill={theme.colors.primary}
+                circle={theme.colors.accentMid}
+                stroke={theme.colors.danger}
               />
             </Marker>
           )}
