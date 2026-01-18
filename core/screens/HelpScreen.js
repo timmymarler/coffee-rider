@@ -344,11 +344,27 @@ export default function HelpScreen() {
           </Text>
 
           <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Join a Ride</Text> — If a group ride is already active, open the shared route and tap "Join Ride" to appear to others. You can leave at any time.
+          </Text>
+
+          <Text style={styles.bullet}>
             <Text style={styles.controlLabel}>See Other Riders</Text> — When your ride is active, you'll see markers on the map showing other riders who are also actively riding the same route. Their locations update every 10 seconds.
           </Text>
 
           <Text style={styles.bullet}>
             <Text style={styles.controlLabel}>End a Ride</Text> — Tap "End Ride & Stop Sharing" to stop sharing your location. Your location stops being shared immediately.
+          </Text>
+
+          <Text style={[styles.subText, { marginTop: 12 }]}>
+            <Text style={styles.controlLabel}>Requirements:</Text> You must be signed in, a member of the selected group, and on a route shared to that group. Location permissions are required and should be set to "Allow while using the app".
+          </Text>
+
+          <Text style={[styles.subText, { marginTop: 4 }]}>
+            <Text style={styles.controlLabel}>Privacy:</Text> Location sharing only applies to group rides. Only riders on the same route in the same group can see your location. Ending your ride immediately stops all sharing.
+          </Text>
+
+          <Text style={[styles.subText, { marginTop: 4 }]}>
+            <Text style={styles.controlLabel}>Troubleshooting:</Text> If riders are not appearing: (1) confirm the ride is active, (2) ensure you are a group member, (3) check location permissions and GPS accuracy, (4) disable battery optimization for Coffee Rider on Android, and (5) verify network connectivity.
           </Text>
 
           <Text style={[styles.subText, { marginTop: 8, fontStyle: 'italic' }]}>
