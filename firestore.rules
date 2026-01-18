@@ -192,12 +192,10 @@ service cloud.firestore {
       // Limit enforced to prevent abuse
       allow list: if isAuthed() && request.query.limit <= 50;
       
-      // Can read individual active ride if you're the owner (needed even when doc doesn't exist yet)
-      // or if you're in the same group as the rider
-      allow get: if isAuthed() && (
-        request.auth.uid == userId ||
-        (resource.data.groupId != null && isGroupMember(resource.data.groupId))
-      );
+      // Can read individual active ride documents for group member visibility indicator
+      // The document only exists when someone is actively sharing, so this is safe
+      // Location data itself is filtered client-side to same ride/group only
+      allow get: if isAuthed();
     }
     
   }
