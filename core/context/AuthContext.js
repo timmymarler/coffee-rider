@@ -1,6 +1,6 @@
 // core/context/AuthContext.js
 
-import { auth } from "@config/firebase";
+import { auth, db } from "@config/firebase";
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -9,6 +9,7 @@ import {
   updateProfile
 } from "firebase/auth";
 import { createContext, useEffect, useState } from "react";
+import { doc, deleteDoc } from "firebase/firestore";
 
 import { getCapabilities } from "@core/roles/capabilities";
 import { checkVersionStatus, fetchVersionInfo } from "@core/utils/versionCheck";
@@ -38,6 +39,17 @@ export default function AuthProvider({ children }) {
   async function login(email, password) {
     const res = await signInWithEmailAndPassword(auth, email, password);
     await ensureUserDocument(res.user.uid, res.user);
+    
+    // Clear any stale active ride records on login
+    try {
+      await deleteDoc(doc(db, 'activeRides', res.user.uid));
+    } catch (err) {
+      // Silently fail if document doesn't exist or other error
+      if (err.code !== 'not-found') {
+        console.warn('[AuthContext] Error clearing stale activeRide on login:', err.message);
+      }
+    }
+    
     return res.user;
   }
 
@@ -53,6 +65,17 @@ export default function AuthProvider({ children }) {
     }
 
     await ensureUserDocument(res.user.uid, res.user);
+    
+    // Clear any stale active ride records on register (shouldn't exist, but be safe)
+    try {
+      await deleteDoc(doc(db, 'activeRides', res.user.uid));
+    } catch (err) {
+      // Silently fail if document doesn't exist
+      if (err.code !== 'not-found') {
+        console.warn('[AuthContext] Error clearing activeRide on register:', err.message);
+      }
+    }
+    
     return res.user;
   }
 

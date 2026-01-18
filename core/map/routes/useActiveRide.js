@@ -4,6 +4,20 @@ import { db } from '../../../config/firebase';
 import * as Location from 'expo-location';
 import { incMetric } from '../../utils/devMetrics';
 
+// Validate if an active ride record is still fresh
+// Rides older than 15 minutes are considered stale (likely abandoned)
+const STALE_RIDE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+export function isRideStale(activeRideData) {
+  if (!activeRideData) return true;
+  
+  const lastUpdated = activeRideData.lastUpdated?.toMillis?.() || activeRideData.lastUpdated;
+  if (!lastUpdated) return true; // No timestamp = stale
+  
+  const ageMs = Date.now() - lastUpdated;
+  return ageMs > STALE_RIDE_TIMEOUT_MS;
+}
+
 /**
  * Hook to manage user's active ride state and real-time location sharing
  * 
@@ -42,7 +56,15 @@ export default function useActiveRide(user) {
       (snapshot) => {
         incMetric('useActiveRide:snapshot');
         if (snapshot.exists()) {
-          setActiveRide({ id: snapshot.id, ...snapshot.data() });
+          const rideData = { id: snapshot.id, ...snapshot.data() };
+          // Check if the ride is stale - if so, treat as if it doesn't exist
+          if (isRideStale(rideData)) {
+            console.log('[useActiveRide] Detected stale ride record, clearing it');
+            deleteDoc(activeRideRef).catch(err => console.error('Error clearing stale ride:', err));
+            setActiveRide(null);
+          } else {
+            setActiveRide(rideData);
+          }
         } else {
           setActiveRide(null);
         }
@@ -117,6 +139,7 @@ export default function useActiveRide(user) {
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,
                 lastLocationUpdate: serverTimestamp(),
+                lastUpdated: serverTimestamp(),
               };
 
               if (userName) payload.userName = userName;
@@ -187,6 +210,7 @@ export default function useActiveRide(user) {
           longitude: location.coords.longitude,
           startedAt: serverTimestamp(),
           lastLocationUpdate: serverTimestamp(),
+          lastUpdated: serverTimestamp(),
         };
 
         if (userName) payload.userName = userName;
