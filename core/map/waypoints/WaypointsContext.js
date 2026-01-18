@@ -5,6 +5,7 @@ export const WaypointsContext = createContext(null);
 export function WaypointsProvider({ children }) {
   const [waypoints, setWaypoints] = useState([]);
   const [pendingSavedRouteId, setPendingSavedRouteId] = useState(null);
+  const [enableFollowMeAfterLoad, setEnableFollowMeAfterLoad] = useState(false);
 
   function addWaypoint(waypoint) {
     setWaypoints(prev => [...prev, waypoint]);
@@ -37,6 +38,8 @@ export function WaypointsProvider({ children }) {
         clearWaypoints,
         pendingSavedRouteId,
         setPendingSavedRouteId,
+        enableFollowMeAfterLoad,
+        setEnableFollowMeAfterLoad,
       }}
     >
       {children}

@@ -415,6 +415,8 @@ export default function MapScreenRN() {
   const {
     pendingSavedRouteId,
     setPendingSavedRouteId,
+    enableFollowMeAfterLoad,
+    setEnableFollowMeAfterLoad,
   } = useContext(WaypointsContext);
   const mapReadyRef = useRef(false);
   const pendingFitRef = useRef(null);
@@ -854,6 +856,17 @@ export default function MapScreenRN() {
 
     loadSavedRouteById(pendingSavedRouteId);
     setPendingSavedRouteId(null);
+    
+    // Enable Follow Me if requested (e.g., when starting an active ride)
+    if (enableFollowMeAfterLoad) {
+      setEnableFollowMeAfterLoad(false);
+      // Use a short delay to ensure route is loaded and map is ready
+      setTimeout(() => {
+        if (!followUser) {
+          toggleFollowMe();
+        }
+      }, 600);
+    }
   }, [pendingSavedRouteId]);
 
   /* ------------------------------------------------------------ */

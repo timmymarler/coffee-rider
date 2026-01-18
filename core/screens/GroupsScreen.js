@@ -37,7 +37,7 @@ export default function GroupsScreen() {
   const { invites: sentInvites, loading: sentInvitesLoading } = useSentInvitesEnriched(user?.uid);
   const { groups, loading: groupsLoading } = useAllUserGroups(user?.uid);
   const { routes: sharedRoutes, loading: routesLoading } = useGroupSharedRoutes(selectedGroupId);
-  const { setPendingSavedRouteId } = useWaypointsContext();
+  const { setPendingSavedRouteId, setEnableFollowMeAfterLoad } = useWaypointsContext();
   const { members, loading: membersLoading } = useGroupMembers(selectedGroupId);
   const { activeRide, isStarting, startRide, endRide } = useActiveRide(user);
 
@@ -304,16 +304,10 @@ export default function GroupsScreen() {
                                             route.name || route.title || "Untitled Route"
                                           );
                                           
-                                          // Switch to Maps tab
+                                          // Switch to Maps tab and enable Follow Me after route loads
                                           setPendingSavedRouteId(route.id);
+                                          setEnableFollowMeAfterLoad(true);
                                           router.push("/map");
-                                          
-                                          // Enable Follow Me mode after a short delay to let map load
-                                          setTimeout(() => {
-                                            if (mapActions?.toggleFollow && !mapActions?.isFollowing?.()) {
-                                              mapActions.toggleFollow();
-                                            }
-                                          }, 500);
                                         },
                                       },
                                     ]
