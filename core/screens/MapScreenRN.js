@@ -410,6 +410,25 @@ export default function MapScreenRN() {
     activeRideRef.current = activeRide;
     endRideRef.current = endRide;
   }, [activeRide, endRide, setActiveRide]);
+
+  // Zoom to route when active ride starts
+  useEffect(() => {
+    if (!activeRide || !mapRef.current || routeCoords.length === 0) {
+      return;
+    }
+
+    console.log('[MapScreenRN] Ride active and route loaded - zooming to fit');
+    mapRef.current.fitToCoordinates(
+      routeCoords.map(coord => ({
+        latitude: coord.latitude,
+        longitude: coord.longitude,
+      })),
+      {
+        edgePadding: { top: 120, right: 120, bottom: 280, left: 120 }, // Extra bottom padding for tab bar
+        animated: true,
+      }
+    );
+  }, [activeRide, routeCoords]);
   
   const canSaveRoute = 
     capabilities.canSaveRoute &&
