@@ -1908,12 +1908,14 @@ export default function MapScreenRN() {
         </View>
       )}
 
-      <WaypointsList
-        waypoints={displayWaypoints}
-        onClearAll={clearNavigationIntent}
-      />
+      {!followUser && !activeRide && (
+        <WaypointsList
+          waypoints={displayWaypoints}
+          onClearAll={clearNavigationIntent}
+        />
+      )}
 
-      {hasRouteIntent && (
+      {hasRouteIntent && !followUser && !activeRide && (
         <TouchableOpacity
           style={styles.saveRouteButton}
           onPress={() => setShowSaveRouteModal(true)}
