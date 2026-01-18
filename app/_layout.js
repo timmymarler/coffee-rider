@@ -27,6 +27,8 @@ function FloatingTabBar({ state }) {
   // Get endRide from map actions context - the map screen will provide it
   const endRide = useContext(TabBarContext).mapActions?.endRide;
 
+  console.log('[FloatingTabBar] activeRide from context:', activeRide?.rideId || 'null');
+
   const canAccessGroups = capabilities?.canAccessGroups === true;
 
   const isMapScreen =

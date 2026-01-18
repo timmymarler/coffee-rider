@@ -405,8 +405,11 @@ export default function MapScreenRN() {
   
   // Sync activeRide to TabBarContext so floating tab bar can access it
   useEffect(() => {
+    console.log('[MapScreenRN] activeRide changed:', activeRide?.rideId || 'null');
     setActiveRide(activeRide);
-  }, [activeRide, setActiveRide]);
+    activeRideRef.current = activeRide;
+    endRideRef.current = endRide;
+  }, [activeRide, endRide, setActiveRide]);
   
   const canSaveRoute = 
     capabilities.canSaveRoute &&
@@ -427,6 +430,8 @@ export default function MapScreenRN() {
   const mapReadyRef = useRef(false);
   const pendingFitRef = useRef(null);
   const activeRideOnFocusRef = useRef(null); // Track active ride state when screen is focused
+  const activeRideRef = useRef(null);
+  const endRideRef = useRef(null);
   
   const displayWaypoints = useMemo(() => {
     if (!routeDestination) return waypoints;
@@ -555,14 +560,13 @@ export default function MapScreenRN() {
     useCallback(() => {
       // Cleanup: Runs when screen loses focus
       return () => {
-        // Access current values via refs to avoid stale closures
-        if (activeRide && endRide) {
+        // Use refs to access current values without creating dependencies
+        if (activeRideRef.current && endRideRef.current) {
           console.log('[MapScreen] Leaving map screen - ending active ride');
-          endRide();
+          endRideRef.current();
         }
       };
-      // Don't include activeRide/endRide as dependencies to avoid re-running on every change
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      // Empty deps - cleanup runs on blur, current values accessed via refs
     }, [])
   );
 
@@ -570,9 +574,9 @@ export default function MapScreenRN() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
-        if (activeRide && endRide) {
+        if (activeRideRef.current && endRideRef.current) {
           console.log('[MapScreen] App going to background - ending active ride');
-          endRide();
+          endRideRef.current();
         }
       }
     });
@@ -580,7 +584,7 @@ export default function MapScreenRN() {
     return () => {
       subscription.remove();
     };
-  }, [activeRide, endRide]);
+  }, []);
   async function handleSaveRoute(routeName) {
     if (!routeCoords.length || !user) return;
     if (!user) {

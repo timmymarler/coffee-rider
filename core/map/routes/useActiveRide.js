@@ -63,9 +63,11 @@ export default function useActiveRide(user) {
             deleteDoc(activeRideRef).catch(err => console.error('Error clearing stale ride:', err));
             setActiveRide(null);
           } else {
+            console.log('[useActiveRide] Ride snapshot exists:', rideData.rideId);
             setActiveRide(rideData);
           }
         } else {
+          console.log('[useActiveRide] Ride snapshot does not exist - setting to null');
           setActiveRide(null);
         }
       },
