@@ -1668,7 +1668,7 @@ export default function MapScreenRN() {
                 </View>
               </View>
             </Marker>
-          ))}}
+          ))}
 
             {/* Base route */}
               <Polyline
