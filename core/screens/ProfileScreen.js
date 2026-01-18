@@ -39,6 +39,7 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
+  const [imageRefreshKey, setImageRefreshKey] = useState(0);  // Force image reload
   
   // Update when profile changes
   useEffect(() => {
@@ -140,7 +141,12 @@ export default function ProfileScreen() {
       }
 
       // Optional: update local UI state if you cache profile data
-      await refreshProfile();
+      console.log('[ProfileScreen] About to refresh profile...');
+      const refreshedProfile = await refreshProfile();
+      console.log('[ProfileScreen] Profile refreshed after avatar upload:', refreshedProfile?.photoURL);
+      // Force image reload by changing key
+      setImageRefreshKey(prev => prev + 1);
+      console.log('[ProfileScreen] Image refresh key incremented');
     } catch (error) {
       console.error('[ProfileScreen] Avatar upload error:', error);
     } finally {
@@ -227,6 +233,7 @@ export default function ProfileScreen() {
         {/* Avatar */}
         <TouchableOpacity onPress={handlePhotoUpload} disabled={uploading}>
           <Image
+            key={`avatar-${avatarUri}-${imageRefreshKey}`}
             source={{ uri: avatarUri }}
             style={{
               width: 96,
