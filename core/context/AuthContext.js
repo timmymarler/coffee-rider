@@ -10,6 +10,8 @@ import {
 } from "firebase/auth";
 import { deleteDoc, doc } from "firebase/firestore";
 import { createContext, useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppState } from "react-native";
 
 import { getCapabilities } from "@core/roles/capabilities";
 import { checkVersionStatus, fetchVersionInfo } from "@core/utils/versionCheck";
@@ -20,6 +22,9 @@ import {
 import Constants from "expo-constants";
 
 export const AuthContext = createContext(null);
+
+const SESSION_KEY = '@coffee_rider_session';
+const SESSION_EXPIRY_DAYS = 14; // 14 days of inactivity before auto-logout
 
 export default function AuthProvider({ children }) {
   const [user, setUser] = useState(null);       // Firebase Auth user
@@ -33,12 +38,81 @@ export default function AuthProvider({ children }) {
   });
 
   // ----------------------------------------
+  // SESSION PERSISTENCE
+  // ----------------------------------------
+
+  async function saveSession(firebaseUser) {
+    try {
+      const sessionData = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        lastUsed: Date.now(),
+        expiresAt: Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+      };
+      await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+      console.log('[AuthContext] Session saved');
+    } catch (err) {
+      console.error('[AuthContext] Error saving session:', err);
+    }
+  }
+
+  async function loadSession() {
+    try {
+      const stored = await AsyncStorage.getItem(SESSION_KEY);
+      if (!stored) return null;
+
+      const session = JSON.parse(stored);
+      const now = Date.now();
+
+      // Check if session has expired
+      if (now > session.expiresAt) {
+        console.log('[AuthContext] Session expired, clearing');
+        await AsyncStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+
+      console.log('[AuthContext] Valid session found for:', session.email);
+      return session;
+    } catch (err) {
+      console.error('[AuthContext] Error loading session:', err);
+      return null;
+    }
+  }
+
+  async function clearSession() {
+    try {
+      await AsyncStorage.removeItem(SESSION_KEY);
+      console.log('[AuthContext] Session cleared');
+    } catch (err) {
+      console.error('[AuthContext] Error clearing session:', err);
+    }
+  }
+
+  async function updateSessionLastUsed() {
+    try {
+      const stored = await AsyncStorage.getItem(SESSION_KEY);
+      if (stored) {
+        const session = JSON.parse(stored);
+        session.lastUsed = Date.now();
+        session.expiresAt = Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+        await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        console.log('[AuthContext] Session activity updated');
+      }
+    } catch (err) {
+      console.error('[AuthContext] Error updating session:', err);
+    }
+  }
+
+  // ----------------------------------------
   // ACTIONS
   // ----------------------------------------
 
   async function login(email, password) {
     const res = await signInWithEmailAndPassword(auth, email, password);
     await ensureUserDocument(res.user.uid, res.user);
+    
+    // Save session for persistence
+    await saveSession(res.user);
     
     // Clear any stale active ride records on login
     try {
@@ -54,6 +128,7 @@ export default function AuthProvider({ children }) {
   }
 
   async function logout() {
+    await clearSession();
     await signOut(auth);
   }
 
@@ -88,12 +163,21 @@ export default function AuthProvider({ children }) {
   }
 
   // ----------------------------------------
-  // AUTH STATE
+  // AUTH STATE & SESSION RESTORE
   // ----------------------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (!firebaseUser) {
+          // No Firebase user, but check for stored session
+          const session = await loadSession();
+          if (session) {
+            // Session still valid, stay logged in
+            // Firebase will re-auth if the session token is still good
+            setLoading(false);
+            return;
+          }
+
           setUser(null);
           setProfile(null);
           setLoading(false);
@@ -101,6 +185,7 @@ export default function AuthProvider({ children }) {
         }
 
         setUser(firebaseUser);
+        await saveSession(firebaseUser);
 
         await ensureUserDocument(firebaseUser.uid, firebaseUser);
         const profileData = await getUserProfile(firebaseUser.uid);
@@ -114,6 +199,18 @@ export default function AuthProvider({ children }) {
 
     return () => unsub();
   }, []);
+
+  // Track app foreground/background to update session activity
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (state) => {
+      if (state === 'active' && user) {
+        // App came to foreground, refresh session
+        await updateSessionLastUsed();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [user]);
 
   // ----------------------------------------
   // VERSION CHECK
