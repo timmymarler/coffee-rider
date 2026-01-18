@@ -55,6 +55,11 @@
 
 ---
 
-**Version:** 2.0.0  
-**Release Date:** January 17, 2026  
+**Version:** 2.0.1  
+**Release Date:** January 18, 2026  
 **Platform:** Android
+
+### Patch Highlights (2.0.1)
+- Security: Server-side gating for route sharing in Firestore rules (owners must be Pro/Admin to set visibility to Public/Group; group share requires membership)
+- Dev: Added `scripts/rules-test.js` to validate rules via emulator
+- Infra: Deployed updated rules to Firebase

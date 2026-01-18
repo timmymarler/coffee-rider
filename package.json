@@ -1,7 +1,7 @@
 {
   "name": "coffee-rider-v2",
   "main": "expo-router/entry",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -34,7 +34,6 @@
     "expo-symbols": "~1.0.7",
     "expo-system-ui": "~6.0.8",
     "expo-web-browser": "~15.0.9",
-    "firebase": "^12.6.0",
     "firebase-admin": "^13.6.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -52,10 +51,12 @@
     "react-native-worklets": "0.5.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
     "@types/react": "~19.1.0",
     "babel-plugin-module-resolver": "^5.0.2",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "firebase": "^12.8.0",
     "typescript": "~5.9.2"
   },
   "private": true
