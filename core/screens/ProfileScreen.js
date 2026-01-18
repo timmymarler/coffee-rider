@@ -12,7 +12,7 @@ import { uploadImage } from "@core/utils/uploadImage";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { addDoc, collection, doc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import LoginScreen from "../auth/login";
@@ -67,49 +67,82 @@ export default function ProfileScreen() {
   const handlePhotoUpload = async () => {
     if (!user) return;
 
-    const { status } =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") return;
+    setUploading(true);
+    try {
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        setUploading(false);
+        return;
+      }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,     // 🔥 enable crop UI
-      quality: 0.8,
-      base64: true,
-    });
+      const mediaTypeImages = ImagePicker.MediaType?.Images || ImagePicker.MediaTypeOptions.Images;
+      const mediaTypes = ImagePicker.MediaType ? [mediaTypeImages] : mediaTypeImages;
 
-    if (result.canceled) return;
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes,
+        allowsEditing: true,     // 🔥 enable crop UI
+        quality: 0.8,
+        base64: true,
+      });
 
-    const asset = result.assets[0];
-    if (!asset?.base64) return;
+      if (result.canceled) {
+        setUploading(false);
+        return;
+      }
 
-    // 🔥 NEW: call Cloud Function
-    const { url } = await uploadImage({
-      type: "profile",
-      imageBase64: asset.base64,
-    });
+      const asset = result.assets[0];
+      if (!asset?.base64) {
+        setUploading(false);
+        return;
+      }
 
-    console.log('[ProfileScreen] URL from cloud function:', url);
+      // 🔥 NEW: call Cloud Function
+      const { url } = await uploadImage({
+        type: "profile",
+        imageBase64: asset.base64,
+      });
 
-    // Persist to Firestore
-    // 🔥 cache-busting (preserve existing query, e.g., alt=media&token=...)
-    // If no token present, add alt=media for public access
-    let finalUrl = url;
-    if (!url.includes('token=') && !url.includes('alt=media')) {
-      const separator = url.includes('?') ? '&' : '?';
-      finalUrl = `${url}${separator}alt=media`;
+      console.log('[ProfileScreen] URL from cloud function:', url);
+
+      // Persist to Firestore
+      // 🔥 cache-busting (preserve existing query, e.g., alt=media&token=...)
+      // If no token present, add alt=media for public access
+      let finalUrl = url;
+      if (!url.includes('token=') && !url.includes('alt=media')) {
+        const separator = url.includes('?') ? '&' : '?';
+        finalUrl = `${url}${separator}alt=media`;
+      }
+      const separator = finalUrl.includes('?') ? '&' : '?';
+      const cacheBustedUrl = `${finalUrl}${separator}v=${Date.now()}`;
+
+      console.log('[ProfileScreen] Cache-busted URL to save:', cacheBustedUrl);
+
+      await updateDoc(doc(db, "users", user.uid), {
+        photoURL: cacheBustedUrl,
+      });
+
+      // Also update the active ride if user is currently riding
+      try {
+        const activeRideRef = doc(db, "activeRides", user.uid);
+        const activeRideSnap = await getDoc(activeRideRef);
+        if (activeRideSnap.exists()) {
+          console.log('[ProfileScreen] Updating active ride with new avatar');
+          await updateDoc(activeRideRef, {
+            userAvatar: cacheBustedUrl,
+          });
+        }
+      } catch (err) {
+        console.error('[ProfileScreen] Failed to update active ride:', err);
+      }
+
+      // Optional: update local UI state if you cache profile data
+      await refreshProfile();
+    } catch (error) {
+      console.error('[ProfileScreen] Avatar upload error:', error);
+    } finally {
+      setUploading(false);
     }
-    const separator = finalUrl.includes('?') ? '&' : '?';
-    const cacheBustedUrl = `${finalUrl}${separator}v=${Date.now()}`;
-
-    console.log('[ProfileScreen] Cache-busted URL to save:', cacheBustedUrl);
-
-    await updateDoc(doc(db, "users", user.uid), {
-      photoURL: cacheBustedUrl,
-    });
-
-    // Optional: update local UI state if you cache profile data
-    await refreshProfile();
   };
 
   // -----------------------------------
