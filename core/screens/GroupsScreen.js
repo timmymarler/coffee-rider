@@ -213,7 +213,8 @@ export default function GroupsScreen() {
                       {members.map((m) => {
                         const isCurrentUser = m.uid === user?.uid;
                         const isOwner = m.role === "owner";
-                        const canRemove = !isCurrentUser && !isOwner; // Can remove non-owner members
+                        const currentUserIsOwner = members.find(member => member.uid === user?.uid)?.role === "owner";
+                        const canRemove = currentUserIsOwner && !isCurrentUser && !isOwner; // Owner can remove non-owner members (except self)
                         
                         return (
                           <View key={m.uid} style={styles.memberItem}>
@@ -269,7 +270,7 @@ export default function GroupsScreen() {
                         );
                       })}
                       {/* Leave Group button - only for non-owners */}
-                      {!members.find(m => m.uid === user?.uid)?.role === "owner" && (
+                      {members.find(m => m.uid === user?.uid)?.role !== "owner" && (
                         <CRButton
                           title={leavingGroup ? "Leaving…" : "Leave Group"}
                           variant="danger"
