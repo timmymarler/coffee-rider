@@ -6,8 +6,8 @@ import { AuthContext } from "@context/AuthContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useAllUserGroups, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
 import { acceptInvite, createGroup, declineInvite, leaveGroup, removeGroupMember, revokeInvite, sendInvite } from "@core/groups/service";
-import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
 import useActiveRide from "@core/map/routes/useActiveRide";
+import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import theme from "@themes";
 import { useRouter } from "expo-router";
@@ -73,6 +73,22 @@ export default function GroupsScreen() {
   }
 
   const sections = [
+    {
+      key: "helpLink",
+      content: (
+        <View style={styles.cardWrap}>
+          <CRCard>
+            <Text style={{ color: theme.colors.textSecondary, marginBottom: theme.spacing.sm }}>
+              New to shared rides and live location?
+            </Text>
+            <CRButton
+              title="Shared Location Help"
+              onPress={() => router.push({ pathname: "/help", params: { section: "shared-location" } })}
+            />
+          </CRCard>
+        </View>
+      ),
+    },
     {
       key: "createGroup",
       content: (

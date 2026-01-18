@@ -1,18 +1,22 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useContext } from "react";
+import { useContext, useRef } from "react";
 import { Dimensions, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AuthContext } from "@context/AuthContext";
 import { getCapabilities } from "@core/roles/capabilities";
 import theme from "@themes";
 import SvgPin from "../map/components/SvgPin";
+import { useLocalSearchParams } from "expo-router";
 
 
 const { width: screenWidth } = Dimensions.get("window");
 
 export default function HelpScreen() {
+  const { section } = useLocalSearchParams?.() || {};
   const { role = "guest" } = useContext(AuthContext);
   const capabilities = getCapabilities(role);
+  const scrollRef = useRef(null);
+  const sharedSectionY = useRef(null);
   const markerStyles = {
     destination: {
       fill: theme.colors.primary,
@@ -37,7 +41,7 @@ export default function HelpScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView ref={scrollRef} contentContainerStyle={styles.container}>
       {/* -------------------------------------------------- */}
       {/* HEADER                                            */}
       {/* -------------------------------------------------- */}
@@ -292,7 +296,15 @@ export default function HelpScreen() {
       {/* GROUPS & SHARED ROUTES                             */}
       {/* -------------------------------------------------- */}
       {capabilities.canAccessGroups && (
-        <View style={styles.section}>
+        <View
+          style={styles.section}
+          onLayout={(e) => {
+            sharedSectionY.current = e.nativeEvent.layout.y;
+            if (section === "shared-location" && scrollRef.current && sharedSectionY.current != null) {
+              scrollRef.current.scrollTo({ y: Math.max(sharedSectionY.current - 12, 0), animated: true });
+            }
+          }}
+        >
           <Text style={styles.sectionTitle}>Groups & shared routes</Text>
 
           <Text style={styles.subText}>
