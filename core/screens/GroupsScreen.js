@@ -7,12 +7,13 @@ import { TabBarContext } from "@context/TabBarContext";
 import { useAllUserGroups, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
 import { acceptInvite, createGroup, declineInvite, leaveGroup, removeGroupMember, revokeInvite, sendInvite } from "@core/groups/service";
 import useActiveRide from "@core/map/routes/useActiveRide";
-import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
+import { useGroupSharedRoutes, useMembersActiveRides } from "@core/map/routes/useSharedRides";
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import theme from "@themes";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -42,6 +43,7 @@ export default function GroupsScreen() {
   const { setPendingSavedRouteId, setEnableFollowMeAfterLoad } = useWaypointsContext();
   const { members, loading: membersLoading } = useGroupMembers(selectedGroupId);
   const { activeRide, isStarting, startRide, endRide } = useActiveRide(user);
+  const { activeRides } = useMembersActiveRides(members?.map(m => m.uid) || []);
 
   // Auto-select first group when list loads and none selected
   useEffect(() => {
@@ -215,14 +217,24 @@ export default function GroupsScreen() {
                         const isOwner = m.role === "owner";
                         const currentUserIsOwner = members.find(member => member.uid === user?.uid)?.role === "owner";
                         const canRemove = currentUserIsOwner && !isCurrentUser && !isOwner; // Owner can remove non-owner members (except self)
+                        const hasActiveRide = activeRides[m.uid];
                         
                         return (
                           <View key={m.uid} style={styles.memberItem}>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.memberName}>
-                                {m.displayName || m.email || m.uid}
-                                {isCurrentUser ? " (you)" : ""}
-                              </Text>
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                <Text style={styles.memberName}>
+                                  {m.displayName || m.email || m.uid}
+                                  {isCurrentUser ? " (you)" : ""}
+                                </Text>
+                                {hasActiveRide && (
+                                  <MaterialCommunityIcons
+                                    name="crosshairs-gps"
+                                    size={14}
+                                    color={theme.colors.danger}
+                                  />
+                                )}
+                              </View>
                               <Text style={styles.memberRole}>
                                 {isOwner ? "Owner" : "Member"}
                               </Text>

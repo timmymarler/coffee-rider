@@ -1,7 +1,7 @@
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { incMetric } from "@core/utils/devMetrics";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import { RIDE_VISIBILITY } from "./sharedRides";
 
@@ -190,4 +190,47 @@ export function useGroupSharedRoutes(groupId) {
   }, [groupId]);
 
   return { routes, loading };
+}
+
+/**
+ * Hook to get active ride status for multiple users (e.g., group members)
+ * Returns a map of userIds to their active ride data
+ */
+export function useMembersActiveRides(memberUids = []) {
+  const [activeRides, setActiveRides] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!memberUids || memberUids.length === 0) {
+      setActiveRides({});
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribes = [];
+
+    // Subscribe to each member's active ride document
+    memberUids.forEach(uid => {
+      const activeRideRef = doc(db, 'activeRides', uid);
+      
+      const unsubscribe = onSnapshot(activeRideRef, snapshot => {
+        setActiveRides(prev => {
+          const updated = { ...prev };
+          if (snapshot.exists()) {
+            updated[uid] = snapshot.data();
+          } else {
+            delete updated[uid];
+          }
+          return updated;
+        });
+        setLoading(false);
+      });
+
+      unsubscribes.push(unsubscribe);
+    });
+
+    return () => unsubscribes.forEach(unsub => unsub?.());
+  }, [memberUids?.join(',')]); // Join to create stable dependency
+
+  return { activeRides, loading };
 }
