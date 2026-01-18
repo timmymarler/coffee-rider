@@ -3,7 +3,7 @@ import { TabBarContext } from "@context/TabBarContext";
 import { incMetric } from "@core/utils/devMetrics";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 
 import PlaceCard from "../map/components/PlaceCard";
@@ -400,7 +400,7 @@ export default function MapScreenRN() {
   const routeFittedRef = useRef(false);
   
   // Active ride & location sharing
-  const { activeRide } = useActiveRide(user);
+  const { activeRide, endRide } = useActiveRide(user);
   const { riderLocations } = useActiveRideLocations(activeRide, user?.uid);
   const canSaveRoute = 
     capabilities.canSaveRoute &&
@@ -542,6 +542,37 @@ export default function MapScreenRN() {
       setMapKey((k) => k + 1);
     }, [])
   );
+
+  // End active ride when leaving map screen
+  useFocusEffect(
+    useCallback(() => {
+      // Setup: When map screen is focused, do nothing special
+      
+      // Cleanup: When map screen loses focus (user tabs away), end the ride
+      return () => {
+        if (activeRide && endRide) {
+          console.log('[MapScreen] Leaving map screen - ending active ride');
+          endRide();
+        }
+      };
+    }, [activeRide, endRide])
+  );
+
+  // End active ride when app goes to background or is closed
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        if (activeRide && endRide) {
+          console.log('[MapScreen] App going to background - ending active ride');
+          endRide();
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [activeRide, endRide]);
   async function handleSaveRoute(routeName) {
     if (!routeCoords.length || !user) return;
     if (!user) {
