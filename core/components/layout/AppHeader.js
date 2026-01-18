@@ -19,10 +19,10 @@ export default function AppHeader() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const router = useRouter();
-  const { user, auth } = useContext(AuthContext);
+  const { user, profile } = useContext(AuthContext);
 
   const title = getTitleFromPath(pathname);
-  const userAvatar = auth?.profile?.avatar;
+  const userAvatar = profile?.photoURL || user?.photoURL;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
