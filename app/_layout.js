@@ -4,7 +4,6 @@ import AuthProvider, { AuthContext } from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import AppHeader from "@core/components/layout/AppHeader";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
-import useActiveRide from "@core/map/routes/useActiveRide";
 import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
 import { getAndResetSummary } from "@core/utils/devMetrics";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -21,10 +20,12 @@ function FloatingTabBar({ state }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(0)).current;
-  const { hidden, mapActions } = useContext(TabBarContext);
+  const { hidden, mapActions, activeRide } = useContext(TabBarContext);
   const { capabilities, profile, user } = useContext(AuthContext) || {};
-  const { activeRide, endRide } = useActiveRide(user);
   const pathname = usePathname();
+
+  // Get endRide from map actions context - the map screen will provide it
+  const endRide = useContext(TabBarContext).mapActions?.endRide;
 
   const canAccessGroups = capabilities?.canAccessGroups === true;
 
@@ -121,7 +122,7 @@ function FloatingTabBar({ state }) {
           {/* Re-centre / Stop Sharing */}
           <TouchableOpacity
             onPress={() => {
-              if (activeRide && endRide) {
+              if (activeRide && mapActions?.endRide) {
                 Alert.alert(
                   "Stop Sharing Location?",
                   "This will end your active ride and stop sharing your location with other riders.",
@@ -130,7 +131,7 @@ function FloatingTabBar({ state }) {
                     {
                       text: "Stop Sharing",
                       style: "destructive",
-                      onPress: endRide,
+                      onPress: mapActions.endRide,
                     },
                   ]
                 );

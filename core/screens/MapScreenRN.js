@@ -363,7 +363,7 @@ export default function MapScreenRN() {
   const hasRoute = routeCoords.length > 0;
   const [routeMeta, setRouteMeta] = useState(null);
   const [followUser, setFollowUser] = useState(false);
-  const { setMapActions } = useContext(TabBarContext);
+  const { setMapActions, setActiveRide } = useContext(TabBarContext);
   const [showFilters, setShowFilters] = useState(false);
   const [searchInput, setSearchInput] = useState("");   // what user is typing
   const [activeQuery, setActiveQuery] = useState("");   // what we are actually searching
@@ -402,6 +402,12 @@ export default function MapScreenRN() {
   // Active ride & location sharing
   const { activeRide, endRide } = useActiveRide(user);
   const { riderLocations } = useActiveRideLocations(activeRide, user?.uid);
+  
+  // Sync activeRide to TabBarContext so floating tab bar can access it
+  useEffect(() => {
+    setActiveRide(activeRide);
+  }, [activeRide, setActiveRide]);
+  
   const canSaveRoute = 
     capabilities.canSaveRoute &&
     routeMeta &&
@@ -809,12 +815,13 @@ export default function MapScreenRN() {
       showRefreshMenu: () => setShowRefreshRouteMenu(true),
       canRefreshRoute: () => userLocation && (waypoints.length > 0 || routeDestination),
       routeToHome: routeToHome,
+      endRide: endRide,
     });
 
     return () => {
       setMapActions(null);
     };
-  }, [followUser, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress]);
+  }, [followUser, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress, endRide]);
 
   useEffect(() => {
     let subscription;

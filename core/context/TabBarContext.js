@@ -9,6 +9,10 @@ export const TabBarContext = createContext({
   mapActions: null,
   setMapActions: () => {},
 
+  // Map state
+  activeRide: null,
+  setActiveRide: () => {},
+
   // NEW: map remount trigger
   reloadMap: () => {},
   mapReloadKey: 0,
@@ -17,6 +21,7 @@ export const TabBarContext = createContext({
 export function TabBarProvider({ children }) {
   const [hidden, setHidden] = useState(false);
   const [mapActions, setMapActions] = useState(null);
+  const [activeRide, setActiveRide] = useState(null);
 
   // NEW
   const [mapReloadKey, setMapReloadKey] = useState(0);
@@ -37,6 +42,8 @@ export function TabBarProvider({ children }) {
         show,
         mapActions,
         setMapActions,
+        activeRide,
+        setActiveRide,
 
         // NEW
         reloadMap,
