@@ -22,7 +22,12 @@ export default function AppHeader() {
   const { user, profile } = useContext(AuthContext);
 
   const title = getTitleFromPath(pathname);
-  const userAvatar = profile?.photoURL || user?.photoURL;
+  const userAvatar =
+    profile?.photoURL ||
+    profile?.avatarUrl ||
+    profile?.avatar ||
+    user?.photoURL ||
+    null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -54,6 +59,7 @@ export default function AppHeader() {
               <Image
                 source={{ uri: userAvatar }}
                 style={styles.avatarImage}
+                resizeMode="cover"
               />
             ) : (
               <MaterialCommunityIcons
