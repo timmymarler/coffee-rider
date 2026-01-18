@@ -4,6 +4,7 @@ import AuthProvider, { AuthContext } from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import AppHeader from "@core/components/layout/AppHeader";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
+import useActiveRide from "@core/map/routes/useActiveRide";
 import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
 import { getAndResetSummary } from "@core/utils/devMetrics";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -11,7 +12,7 @@ import theme from "@themes";
 import Constants from "expo-constants";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Animated, TouchableOpacity, View } from "react-native";
+import { Alert, Animated, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -21,7 +22,8 @@ function FloatingTabBar({ state }) {
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(0)).current;
   const { hidden, mapActions } = useContext(TabBarContext);
-  const { capabilities, profile } = useContext(AuthContext) || {};
+  const { capabilities, profile, user } = useContext(AuthContext) || {};
+  const { activeRide, endRide } = useActiveRide(user);
   const pathname = usePathname();
 
   const canAccessGroups = capabilities?.canAccessGroups === true;
@@ -116,15 +118,32 @@ function FloatingTabBar({ state }) {
             }}
           />
 
-          {/* Re-centre */}
+          {/* Re-centre / Stop Sharing */}
           <TouchableOpacity
-            onPress={() => mapActions?.recenter()}
+            onPress={() => {
+              if (activeRide && endRide) {
+                Alert.alert(
+                  "Stop Sharing Location?",
+                  "This will end your active ride and stop sharing your location with other riders.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Stop Sharing",
+                      style: "destructive",
+                      onPress: endRide,
+                    },
+                  ]
+                );
+              } else {
+                mapActions?.recenter();
+              }
+            }}
             style={{ paddingHorizontal: 6 }}
           >
             <MaterialCommunityIcons
               name="crosshairs-gps"
               size={28}
-              color={theme.colors.primary}
+              color={activeRide ? theme.colors.danger : theme.colors.primary}
             />
           </TouchableOpacity>
 
