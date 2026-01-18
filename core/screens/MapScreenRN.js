@@ -11,6 +11,7 @@ import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
 
 import * as Location from "expo-location";
+import * as KeepAwake from "expo-keep-awake";
 import { classifyPoi } from "../map/classify/classifyPois";
 import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
@@ -855,6 +856,20 @@ export default function MapScreenRN() {
 
     recenterOnUser(); // center only
   }, [userLocation, followUser]);
+
+  // Keep screen awake during Follow Me or active ride
+  useEffect(() => {
+    if (followUser || activeRide) {
+      KeepAwake.activateKeepAwake();
+      console.log('[MAP] Screen keep-awake activated (Follow Me or active ride)');
+      return () => {
+        // Keep awake will be deactivated when both Follow Me and active ride end
+      };
+    } else {
+      KeepAwake.deactivateKeepAwake();
+      console.log('[MAP] Screen keep-awake deactivated');
+    }
+  }, [followUser, activeRide]);
 
 
   useEffect(() => {
