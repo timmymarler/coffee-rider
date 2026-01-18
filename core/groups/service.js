@@ -133,6 +133,10 @@ export async function acceptInvite({ inviteId, userId }) {
     inviteeUid: invite.inviteeUid || userId,
   });
 
+  // Small delay to allow Firestore listener to process the status change
+  // and remove the accepted invite from the pending list
+  await new Promise(resolve => setTimeout(resolve, 100));
+
   return { groupId: invite.groupId };
 }
 

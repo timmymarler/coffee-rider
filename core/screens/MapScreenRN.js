@@ -388,6 +388,9 @@ export default function MapScreenRN() {
 
   const skipNextFollowTickRef = useRef(false);
   const skipNextRegionChangeRef = useRef(false);
+  const isAnimatingRef = useRef(false); // Track if we're doing a programmatic animation
+  const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
+  const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
   const {
     waypoints,
     addFromPlace,
@@ -717,6 +720,7 @@ export default function MapScreenRN() {
     const coords = await ensureUserLocation();
     if (!coords) return;
 
+    isAnimatingRef.current = true;
     mapRef.current.animateCamera(
       {
         center: { latitude: coords.latitude, longitude: coords.longitude },
@@ -724,20 +728,42 @@ export default function MapScreenRN() {
       },
       { duration: 350 }
     );
+    // Reset flag after animation completes
+    setTimeout(() => { isAnimatingRef.current = false; }, 400);
   }
 
   function handleRecentre() {
+    // Explicitly disable Follow Me when user taps the red recenter button
     setFollowUser(false);
+    clearFollowMeInactivityTimeout();
     recenterOnUser({ zoom: RECENTER_ZOOM });
+  }
+
+  function clearFollowMeInactivityTimeout() {
+    if (followMeInactivityRef.current) {
+      clearTimeout(followMeInactivityRef.current);
+      followMeInactivityRef.current = null;
+    }
+  }
+
+  function resetFollowMeInactivityTimeout() {
+    clearFollowMeInactivityTimeout();
+    if (followUser) {
+      followMeInactivityRef.current = setTimeout(() => {
+        console.log('[MAP] Follow Me disabled after 15 minutes of inactivity');
+        setFollowUser(false);
+      }, 15 * 60 * 1000); // 15 minutes
+    }
   }
 
   /* ------------------------------------------------------------ */
   /* FOLLOW MODE                                                  */
   /* ------------------------------------------------------------ */
   async function toggleFollowMe() {
-    // Turning OFF: do nothing else
+    // Turning OFF: clear inactivity timeout
     if (followUser) {
       setFollowUser(false);
+      clearFollowMeInactivityTimeout();
       return;
     }
 
@@ -746,8 +772,9 @@ export default function MapScreenRN() {
     skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
     await recenterOnUser({ zoom: FOLLOW_ZOOM });
 
-    // Now enable follow mode
+    // Now enable follow mode and start 15-minute inactivity timer
     setFollowUser(true);
+    resetFollowMeInactivityTimeout();
   }
 
   /* ------------------------------------------------------------ */
@@ -822,6 +849,10 @@ export default function MapScreenRN() {
       return;
     }
 
+    // Reset inactivity timeout on each location update while Follow Me is active
+    // This keeps Follow Me on as long as the user is moving
+    resetFollowMeInactivityTimeout();
+
     recenterOnUser(); // center only
   }, [userLocation, followUser]);
 
@@ -878,6 +909,7 @@ export default function MapScreenRN() {
     return () => {
       console.log("[MAP] Cleaning up location subscription");
       subscription?.remove();
+      clearFollowMeInactivityTimeout(); // Clean up inactivity timeout on unmount
     };
   }, []);
 
@@ -889,10 +921,14 @@ export default function MapScreenRN() {
   const handleRegionChangeComplete = async (region) => {
     setMapRegion(region);
     
-    // Disable Follow Me mode when user manually moves the map
-    // But skip if this is an intentional programmatic zoom (e.g., from routeToHome)
-    if (followUser && !skipNextRegionChangeRef.current) {
+    // Disable Follow Me only on user pan, not on programmatic animations
+    // isAnimatingRef detects our own recenterOnUser() calls
+    // skipNextRegionChangeRef catches route-to-home and toggle-on animations
+    if (followUser && !isAnimatingRef.current && !skipNextRegionChangeRef.current) {
+      console.log('[MAP] User manually panned - disabling Follow Me');
+      lastUserPanTimeRef.current = Date.now();
       setFollowUser(false);
+      clearFollowMeInactivityTimeout();
     }
     skipNextRegionChangeRef.current = false;
     
