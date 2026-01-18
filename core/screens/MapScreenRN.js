@@ -1943,17 +1943,19 @@ export default function MapScreenRN() {
         </TouchableOpacity>
       )}
 
-      <SearchBar
-        value={searchInput}
-        onChange={setSearchInput}
-        onSubmit={(query) => {
-          setActiveQuery(query);
-          setSearchOrigin(mapRegion);
-        }}
-        onClear={clearSearch}
-        onFilterPress={() => setShowFilters(prev => !prev)}
-        filtersActive={filtersActive}
-      />
+      {!followUser && !activeRide && (
+        <SearchBar
+          value={searchInput}
+          onChange={setSearchInput}
+          onSubmit={(query) => {
+            setActiveQuery(query);
+            setSearchOrigin(mapRegion);
+          }}
+          onClear={clearSearch}
+          onFilterPress={() => setShowFilters(prev => !prev)}
+          filtersActive={filtersActive}
+        />
+      )}
 
       {selectedPlace && (
         <PlaceCard
