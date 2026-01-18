@@ -120,12 +120,7 @@ export default function useActiveRide(user) {
               };
 
               if (userName) payload.userName = userName;
-              if (userAvatar) {
-                payload.userAvatar = userAvatar;
-                console.log('[useActiveRide] Sending avatar:', userAvatar);
-              } else {
-                console.log('[useActiveRide] No avatar to send');
-              }
+              if (userAvatar) payload.userAvatar = userAvatar;
 
               await setDoc(activeRideRef, payload, { merge: true });
               

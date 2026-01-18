@@ -31,10 +31,6 @@ export default function ProfileScreen() {
     user?.photoURL ||
     "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
 
-  console.log('[ProfileScreen] Render - profile.photoURL:', profile?.photoURL);
-  console.log('[ProfileScreen] Render - user.photoURL:', user?.photoURL);
-  console.log('[ProfileScreen] Render - avatarUri:', avatarUri);
-
   const [displayName, setDisplayName] = useState(profile?.displayName || user?.displayName || "");
   const [bio, setBio] = useState(profile?.bio || "");
   const [bike, setBike] = useState(profile?.bike || "");
@@ -53,12 +49,6 @@ export default function ProfileScreen() {
     setHomeLocation(profile?.homeLocation || "");
     setHomeAddress(profile?.homeAddress || "");
   }, [profile]);
-
-  // Log avatarUri changes
-  useEffect(() => {
-    console.log('[ProfileScreen] avatarUri changed:', avatarUri);
-    console.log('[ProfileScreen] imageRefreshKey:', imageRefreshKey);
-  }, [avatarUri, imageRefreshKey]);
 
   const email = user?.email || "";
   const role = profile?.role || "user";
@@ -151,12 +141,9 @@ export default function ProfileScreen() {
       }
 
       // Optional: update local UI state if you cache profile data
-      console.log('[ProfileScreen] About to refresh profile...');
-      const refreshedProfile = await refreshProfile();
-      console.log('[ProfileScreen] Profile refreshed after avatar upload:', refreshedProfile?.photoURL);
+      await refreshProfile();
       // Force image reload by changing key
       setImageRefreshKey(prev => prev + 1);
-      console.log('[ProfileScreen] Image refresh key incremented');
     } catch (error) {
       console.error('[ProfileScreen] Avatar upload error:', error);
     } finally {
@@ -251,8 +238,6 @@ export default function ProfileScreen() {
               borderRadius: 48,
               marginRight: theme.spacing.lg,
             }}
-            onLoad={() => console.log('[ProfileScreen] Image loaded successfully:', avatarUri)}
-            onError={(error) => console.error('[ProfileScreen] Image failed to load:', error.nativeEvent, 'URI:', avatarUri)}
           />
 
           {uploading && (

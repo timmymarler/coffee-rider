@@ -1635,13 +1635,7 @@ export default function MapScreenRN() {
             ))}
 
           {/* Other riders' locations (real-time) */}
-          {riderLocations.map((rider) => {
-            if (rider.userAvatar) {
-              console.log('[MapScreen] Rendering rider', rider.id, 'with avatar:', rider.userAvatar);
-            } else {
-              console.log('[MapScreen] Rendering rider', rider.id, 'without avatar');
-            }
-            return (
+          {riderLocations.map((rider) => (
             <Marker
               key={`rider-${rider.id}`}
               coordinate={{
@@ -1674,8 +1668,7 @@ export default function MapScreenRN() {
                 </View>
               </View>
             </Marker>
-          );
-          })}}
+          ))}}
 
             {/* Base route */}
               <Polyline

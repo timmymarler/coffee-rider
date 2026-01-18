@@ -61,7 +61,6 @@ export const uploadImage = functions.https.onCall(async (request, context) => {
       : `placePhotos/${placeId}/${Date.now()}.jpg`;
 
     const bucket = admin.storage().bucket();
-    console.log('[uploadImage] Using bucket:', bucket.name);
     const file = bucket.file(path);
 
     // Upload the image
@@ -69,29 +68,14 @@ export const uploadImage = functions.https.onCall(async (request, context) => {
       metadata: { contentType: 'image/jpeg' }
     });
 
-    console.log('[uploadImage] Uploaded file to:', path);
-
-    // Check if file exists
-    const [exists] = await file.exists();
-    console.log('[uploadImage] File exists after upload:', exists);
-
-    if (!exists) {
-      throw new Error('File was not created successfully');
-    }
-
     // Make file public so we can get a simple public URL
-    console.log('[uploadImage] Making file public...');
     await file.makePublic();
-    console.log('[uploadImage] File made public successfully');
     
     // Use the bucket name from the actual bucket object
     const actualBucketName = bucket.name;
-    console.log('[uploadImage] Actual bucket name:', actualBucketName);
     
     // Construct the public URL with the correct bucket
     const publicUrl = `https://storage.googleapis.com/${actualBucketName}/${path}`;
-    
-    console.log('[uploadImage] Generated public URL:', publicUrl);
 
     return { ok: true, path, url: publicUrl };
   } catch (error) {
