@@ -11,11 +11,21 @@ const STALE_RIDE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 export function isRideStale(activeRideData) {
   if (!activeRideData) return true;
   
+  // If no lastUpdated timestamp, the ride is in-flight (being created) - NOT stale
   const lastUpdated = activeRideData.lastUpdated?.toMillis?.() || activeRideData.lastUpdated;
-  if (!lastUpdated) return true; // No timestamp = stale
+  if (!lastUpdated) {
+    console.log('[isRideStale] No timestamp found - ride is in-flight, marking as fresh');
+    return false; // In-flight rides are NOT stale
+  }
   
   const ageMs = Date.now() - lastUpdated;
-  return ageMs > STALE_RIDE_TIMEOUT_MS;
+  const isStale = ageMs > STALE_RIDE_TIMEOUT_MS;
+  
+  if (isStale) {
+    console.log('[isRideStale] Ride is stale - age:', Math.round(ageMs / 1000), 'seconds');
+  }
+  
+  return isStale;
 }
 
 /**
@@ -58,8 +68,9 @@ export default function useActiveRide(user) {
         if (snapshot.exists()) {
           const rideData = { id: snapshot.id, ...snapshot.data() };
           // Check if the ride is stale - if so, treat as if it doesn't exist
+          // Only delete if it has a valid timestamp AND is older than timeout
           if (isRideStale(rideData)) {
-            console.log('[useActiveRide] Detected stale ride record, clearing it');
+            console.log('[useActiveRide] Detected stale ride record (timestamp:', rideData.lastUpdated, '), clearing it');
             deleteDoc(activeRideRef).catch(err => console.error('Error clearing stale ride:', err));
             setActiveRide(null);
           } else {
