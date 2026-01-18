@@ -410,25 +410,6 @@ export default function MapScreenRN() {
     activeRideRef.current = activeRide;
     endRideRef.current = endRide;
   }, [activeRide, endRide, setActiveRide]);
-
-  // Zoom to route when active ride starts
-  useEffect(() => {
-    if (!activeRide || !mapRef.current || routeCoords.length === 0) {
-      return;
-    }
-
-    console.log('[MapScreenRN] Ride active and route loaded - zooming to fit');
-    mapRef.current.fitToCoordinates(
-      routeCoords.map(coord => ({
-        latitude: coord.latitude,
-        longitude: coord.longitude,
-      })),
-      {
-        edgePadding: { top: 120, right: 120, bottom: 280, left: 120 }, // Extra bottom padding for tab bar
-        animated: true,
-      }
-    );
-  }, [activeRide, routeCoords]);
   
   const canSaveRoute = 
     capabilities.canSaveRoute &&
@@ -923,12 +904,13 @@ export default function MapScreenRN() {
     // Enable Follow Me if requested (e.g., when starting an active ride)
     if (enableFollowMeAfterLoad) {
       setEnableFollowMeAfterLoad(false);
-      // Use a short delay to ensure route is loaded and map is ready
+      // Use a delay to ensure route is fully loaded, fitted, and map is ready
       setTimeout(() => {
-        if (!followUser) {
+        if (!followUser && userLocation) {
+          console.log('[MAP] Enabling Follow Me after route load');
           toggleFollowMe();
         }
-      }, 600);
+      }, 1200); // Increased delay to let route fit complete
     }
   }, [pendingSavedRouteId]);
 
@@ -1336,7 +1318,8 @@ export default function MapScreenRN() {
       durationSeconds: result.durationSeconds ?? result.duration,
     });
 
-    if (!routeFittedRef.current) {
+    // Only auto-fit if not already fitted AND not in Follow Me mode
+    if (!routeFittedRef.current && !followUser) {
       routeFittedRef.current = true;
 
       mapRef.current?.fitToCoordinates(decoded, {
@@ -1492,6 +1475,7 @@ export default function MapScreenRN() {
     if (!mapRef.current) return;
     if (!mapReadyRef.current) return;
     if (!pendingFitRef.current) return;
+    if (followUser) return; // Don't interrupt Follow Me mode
 
     mapRef.current.fitToCoordinates(pendingFitRef.current, {
       edgePadding: { top: 80, right: 80, bottom: 140, left: 80 },
