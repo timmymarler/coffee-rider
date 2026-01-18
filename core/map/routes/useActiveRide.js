@@ -26,10 +26,9 @@ export default function useActiveRide(user) {
     if (!url) return null;
     // Fix bucket host typo in older stored URLs
     let normalized = url.replace('firebasestorage.app', 'appspot.com');
-    // Some URLs might have double host segments, ensure standard pattern
-    if (normalized.includes('firebasestorage.googleapis.com') && normalized.includes('.appspot.com')) {
-      return normalized;
-    }
+
+    // Ensure cache-busting preserves existing query params (alt=media&token=...)
+    // If the URL already has a cache buster appended as ?v=..., leave as is; we only normalize host
     return normalized;
   }, []);
 
@@ -88,11 +87,10 @@ export default function useActiveRide(user) {
           }
         }
 
-        // Fetch profile once for name/avatar to avoid reloading every update
+        // Fetch profile once for name
         const profileSnapshot = await getDoc(doc(db, 'users', user.uid));
         const profileData = profileSnapshot.exists() ? profileSnapshot.data() : {};
         const userName = profileData.displayName?.trim() || user.displayName || user.email || 'Rider';
-        const userAvatar = normalizeAvatarUrl(profileData.photoURL || profileData.avatarUrl || user.photoURL || null);
 
         // Watch location with 10-second interval
         locationSubscriptionRef.current = await Location.watchPositionAsync(
@@ -113,6 +111,12 @@ export default function useActiveRide(user) {
 
             try {
               const activeRideRef = doc(db, 'activeRides', user.uid);
+              
+              // Fetch fresh avatar on each update to catch changes
+              const freshProfileSnapshot = await getDoc(doc(db, 'users', user.uid));
+              const freshProfileData = freshProfileSnapshot.exists() ? freshProfileSnapshot.data() : {};
+              const userAvatar = normalizeAvatarUrl(freshProfileData.photoURL || freshProfileData.avatarUrl || user.photoURL || null);
+              
               const payload = {
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,

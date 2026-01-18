@@ -127,10 +127,13 @@ export default function ProfileScreen() {
         const activeRideRef = doc(db, "activeRides", user.uid);
         const activeRideSnap = await getDoc(activeRideRef);
         if (activeRideSnap.exists()) {
-          console.log('[ProfileScreen] Updating active ride with new avatar');
+          console.log('[ProfileScreen] Active ride exists, updating with new avatar:', cacheBustedUrl);
           await updateDoc(activeRideRef, {
             userAvatar: cacheBustedUrl,
           });
+          console.log('[ProfileScreen] Active ride updated successfully');
+        } else {
+          console.log('[ProfileScreen] No active ride document for user:', user.uid);
         }
       } catch (err) {
         console.error('[ProfileScreen] Failed to update active ride:', err);
