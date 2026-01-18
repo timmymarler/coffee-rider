@@ -74,22 +74,6 @@ export default function GroupsScreen() {
 
   const sections = [
     {
-      key: "helpLink",
-      content: (
-        <View style={styles.cardWrap}>
-          <CRCard>
-            <Text style={{ color: theme.colors.textSecondary, marginBottom: theme.spacing.sm }}>
-              New to shared rides and live location?
-            </Text>
-            <CRButton
-              title="Shared Location Help"
-              onPress={() => router.push({ pathname: "/help", params: { section: "shared-location" } })}
-            />
-          </CRCard>
-        </View>
-      ),
-    },
-    {
       key: "createGroup",
       content: (
         <View style={styles.cardWrap}>
