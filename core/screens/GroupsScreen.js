@@ -3,6 +3,7 @@ import { CRCard } from "@components-ui/CRCard";
 import { CRInput } from "@components-ui/CRInput";
 import { CRLabel } from "@components-ui/CRLabel";
 import { AuthContext } from "@context/AuthContext";
+import { TabBarContext } from "@context/TabBarContext";
 import { useAllUserGroups, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
 import { acceptInvite, createGroup, declineInvite, revokeInvite, sendInvite } from "@core/groups/service";
 import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
@@ -18,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function GroupsScreen() {
   const router = useRouter();
   const { capabilities, user } = useContext(AuthContext) || {};
+  const { mapActions } = useContext(TabBarContext);
   const canAccessGroups = capabilities?.canAccessGroups === true;
   
   // State declarations
@@ -295,12 +297,23 @@ export default function GroupsScreen() {
                                       { text: "Cancel", style: "cancel" },
                                       {
                                         text: "Start Ride",
-                                        onPress: () => {
-                                          startRide(
+                                        onPress: async () => {
+                                          await startRide(
                                             route.id,
                                             selectedGroupId,
                                             route.name || route.title || "Untitled Route"
                                           );
+                                          
+                                          // Switch to Maps tab
+                                          setPendingSavedRouteId(route.id);
+                                          router.push("/map");
+                                          
+                                          // Enable Follow Me mode after a short delay to let map load
+                                          setTimeout(() => {
+                                            if (mapActions?.toggleFollow && !mapActions?.isFollowing?.()) {
+                                              mapActions.toggleFollow();
+                                            }
+                                          }, 500);
                                         },
                                       },
                                     ]

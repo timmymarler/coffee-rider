@@ -267,11 +267,11 @@ export default function SavedRoutesScreen() {
             onPress={() => handleOpenRoute(item.id)}
           >
             <Ionicons
-              name="map"
+              name="map-outline"
               size={18}
               color={theme.colors.accentMid}
             />
-            <Text style={styles.actionLabel}>Open</Text>
+            <Text style={styles.actionLabel}>View on Map</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
