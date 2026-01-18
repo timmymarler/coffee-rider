@@ -83,11 +83,46 @@ service cloud.firestore {
         (isAuthed() && resource.data.createdBy == request.auth.uid) ||
         (resource.data.visibility == 'group' && isAuthed() && isGroupMember(resource.data.groupId));
 
+      // Route creation is allowed for any signed-in user creating their own document
       allow create: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
+
+      // Updates are allowed with stricter gating:
+      // - Owners can update general route fields
+      // - Changing visibility to 'public' or 'group' requires Pro/Admin
+      // - Group participants may update the participants array while a group ride is active
       allow update: if isAuthed() && (
-        resource.data.createdBy == request.auth.uid ||
-        (resource.data.visibility == 'group' && isGroupMember(resource.data.groupId) && request.resource.data.participants != null) ||
-        hasRole('admin')
+        // Admins can update
+        hasRole('admin') ||
+
+        // Group participant updates (only participants field)
+        (resource.data.visibility == 'group' &&
+         isGroupMember(resource.data.groupId) &&
+         request.resource.data.participants != null) ||
+
+        // Owner updates
+        (
+          resource.data.createdBy == request.auth.uid && (
+            // If changing visibility to public/group, require Pro/Admin
+            (
+              resource.data.visibility != request.resource.data.visibility &&
+              request.resource.data.visibility in ['public', 'group'] &&
+              isProOrAdmin() && (
+                // When sharing to group, groupId must be provided and user must be a member
+                (request.resource.data.visibility == 'group' ?
+                  (request.resource.data.groupId is string && isGroupMember(request.resource.data.groupId))
+                  : true)
+              )
+            ) ||
+
+            // Otherwise, owner can update when visibility stays the same or changes back to private
+            (
+              (
+                request.resource.data.visibility == resource.data.visibility ||
+                request.resource.data.visibility == 'private'
+              )
+            )
+          )
+        )
       );
       allow delete: if false;
     }
