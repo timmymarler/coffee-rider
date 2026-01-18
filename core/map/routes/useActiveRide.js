@@ -218,7 +218,9 @@ export default function useActiveRide(user) {
         if (userName) payload.userName = userName;
         if (userAvatar) payload.userAvatar = userAvatar;
 
+        console.log('[useActiveRide] Writing activeRide document:', payload);
         await setDoc(activeRideRef, payload, { merge: true });
+        console.log('[useActiveRide] Successfully wrote activeRide document');
 
         console.log('[useActiveRide] Started ride:', { rideId, groupId, routeName });
       } catch (err) {
