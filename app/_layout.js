@@ -21,7 +21,7 @@ function FloatingTabBar({ state }) {
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(0)).current;
   const { hidden, mapActions, activeRide } = useContext(TabBarContext);
-  const { capabilities, profile, user } = useContext(AuthContext) || {};
+  const { capabilities, user } = useContext(AuthContext) || {};
   const pathname = usePathname();
 
   // Get endRide from map actions context - the map screen will provide it
@@ -78,11 +78,14 @@ function FloatingTabBar({ state }) {
       {tabs.map((tab, index) => {
         const isFocused = state.index === index;
         const isDisabled = tab.disabled === true;
+        const isProfileTab = tab.name === "profile";
         const color = isDisabled
           ? theme.colors.primaryMid
           : isFocused
             ? activeColor
             : inactiveColor;
+
+        const outlineColor = isProfileTab && user ? theme.colors.accent : "transparent";
 
         return (
           <TouchableOpacity
@@ -99,11 +102,23 @@ function FloatingTabBar({ state }) {
               opacity: isDisabled ? 0.6 : 1,
             }}
           >
-            <Ionicons
-              name={isFocused ? tab.icon : `${tab.icon}-outline`}
-              size={32}
-              color={color}
-            />
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: outlineColor === "transparent" ? 0 : 2,
+                borderColor: outlineColor,
+              }}
+            >
+              <Ionicons
+                name={isFocused ? tab.icon : `${tab.icon}-outline`}
+                size={32}
+                color={color}
+              />
+            </View>
           </TouchableOpacity>
         );
       })}
