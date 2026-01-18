@@ -3,6 +3,7 @@ import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/fi
 
 export async function saveRoute({
   user,
+  capabilities,
   visibility = "private",
   name,
   origin,
@@ -13,6 +14,9 @@ export async function saveRoute({
   routeId, // if provided, will update instead of create
 }) {
   if (!user) throw new Error("User required to save route");
+  if (!capabilities?.canSaveRoutes) {
+    throw new Error("Saving routes requires appropriate permissions");
+  }
 
   const routeData = {
     origin,

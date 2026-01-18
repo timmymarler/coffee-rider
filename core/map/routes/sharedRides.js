@@ -25,7 +25,10 @@ export const PARTICIPANT_STATUS = {
  * @param {string} visibility - "private" | "group" | "public"
  * @param {string} groupId - Group ID if visibility is "group"
  */
-export async function shareRoute({ routeId, visibility, groupId = null }) {
+export async function shareRoute({ routeId, visibility, groupId = null, capabilities }) {
+  if (!capabilities?.canShareRoutes) {
+    throw new Error("Sharing routes requires Pro/Admin access");
+  }
   if (!routeId) throw new Error("routeId is required");
   if (!visibility || !Object.values(RIDE_VISIBILITY).includes(visibility)) {
     throw new Error("Invalid visibility");

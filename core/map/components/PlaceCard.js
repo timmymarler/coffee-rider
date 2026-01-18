@@ -172,7 +172,9 @@ export default function PlaceCard({
   const [selectedRating, setSelectedRating] = useState(userCrRating);
 
   const canAddPlace =
-    (safePlace.source === "google" || safePlace._temp === true);
+    (safePlace.source === "google" || safePlace._temp === true) &&
+    capabilities.canAddVenue === true &&
+    !!currentUid;
   const isCrPlace = safePlace.source === "cr";  
   //const isEditable = safePlace.source === "google" || safePlace._temp === true ; // add flow only (for now)
   useEffect(() => {
@@ -602,6 +604,10 @@ export default function PlaceCard({
   /* ------------------------------------------------------------------ */
 
   const handleSavePlace = async () => {
+    if (!capabilities.canAddVenue || !uid) {
+      setAddError("You need permission and a signed-in account to add places.");
+      return;
+    }
 
     try {
       setAddError(null);

@@ -15,12 +15,14 @@ import { useRouter } from "expo-router";
 import { addDoc, collection, doc, getDoc, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LoginScreen from "../auth/login";
 
 
 export default function ProfileScreen() {
 
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user, profile, loading, logout, refreshProfile } = useContext(AuthContext);
 
   // -----------------------------------
@@ -217,7 +219,11 @@ export default function ProfileScreen() {
   // -----------------------------------
 
   return (
-    <CRScreen scroll padded={false} style={styles.cardScreen}>
+    <CRScreen
+      scroll
+      padded={false}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+    >
 
       {/* ---------------- HEADER CARD ---------------- */}
       <View style={styles.cardWrap}>
@@ -339,25 +345,20 @@ export default function ProfileScreen() {
       </View>
       <View style={styles.cardWrap}>
       <CRCard>
-        <View>
+        <View style={styles.actionRow}>
           <CRButton
             title={saving ? "Saving…" : "Save Changes"}
             loading={saving}
             onPress={handleSaveProfile}
-            style={{ flex: 1 }}
+            style={[styles.actionButtonGrow, { marginRight: theme.spacing.sm }]}
+          />
+          <CRButton
+            title="Log Out"
+            variant="danger"
+            onPress={logout}
+            style={styles.actionButtonGrow}
           />
         </View>
-      </CRCard>
-      </View>
-
-      {/* ---------------- ACCOUNT ACTIONS ---------------- */}
-      <View style={styles.cardWrap}>
-      <CRCard>
-        <CRButton
-          title="Log Out"
-          variant="danger"
-          onPress={logout}
-        />
       </CRCard>
       </View>
     </CRScreen>
@@ -369,22 +370,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: theme.spacing.sm, 
  },
-  cardScreen: {
-    paddingBottom: 42
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 
-  actionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.colors.accentDark, // accentDark
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+  actionButtonGrow: {
+    flex: 1,
   },
 
 })

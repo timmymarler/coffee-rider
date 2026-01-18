@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, limit } from 'firebase/firestore';
+import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
 import { db } from '../../../config/firebase';
 import { incMetric } from '../../utils/devMetrics';
 

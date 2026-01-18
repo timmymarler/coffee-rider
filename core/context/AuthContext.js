@@ -2,20 +2,20 @@
 
 import { auth, db } from "@config/firebase";
 import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile
+    createUserWithEmailAndPassword,
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    signOut,
+    updateProfile
 } from "firebase/auth";
+import { deleteDoc, doc } from "firebase/firestore";
 import { createContext, useEffect, useState } from "react";
-import { doc, deleteDoc } from "firebase/firestore";
 
 import { getCapabilities } from "@core/roles/capabilities";
 import { checkVersionStatus, fetchVersionInfo } from "@core/utils/versionCheck";
 import {
-  ensureUserDocument,
-  getUserProfile
+    ensureUserDocument,
+    getUserProfile
 } from "@firebaseLocal/users";
 import Constants from "expo-constants";
 

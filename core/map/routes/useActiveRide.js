@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, getDoc } from 'firebase/firestore';
-import { db } from '../../../config/firebase';
 import * as Location from 'expo-location';
+import { deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { db } from '../../../config/firebase';
 import { incMetric } from '../../utils/devMetrics';
 
 // Validate if an active ride record is still fresh

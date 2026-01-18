@@ -46,20 +46,22 @@ const SORT_OPTIONS = [
 const FILTER_OPTIONS = [
   { key: "all", label: "All" },
   { key: "private", label: "Private" },
+  { key: "public", label: "Public" },
   { key: "shared", label: "Shared" },
 ];
 
 export default function SavedRoutesScreen() {
   const router = useRouter();
-  // Include public routes only when filter is not strictly 'private'
-  const includePublic = filterBy !== "private";
-  const { routes, loading } = useSavedRoutes(includePublic);
   const { setPendingSavedRouteId } = useWaypointsContext();
-  const { user } = useContext(AuthContext);
+  const { user, capabilities } = useContext(AuthContext);
   const { groups } = useAllUserGroups(user?.uid);
 
   const [sortBy, setSortBy] = useState("created");
   const [filterBy, setFilterBy] = useState("all");
+
+  // Include public routes when viewing all or explicitly public
+  const includePublic = filterBy === "all" || filterBy === "public";
+  const { routes, loading } = useSavedRoutes(includePublic);
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [selectedVisibility, setSelectedVisibility] = useState(RIDE_VISIBILITY.PRIVATE);
@@ -76,8 +78,11 @@ export default function SavedRoutesScreen() {
       case "private":
         list = list.filter((r) => !r.visibility || r.visibility === RIDE_VISIBILITY.PRIVATE);
         break;
+      case "public":
+        list = list.filter((r) => r.visibility === RIDE_VISIBILITY.PUBLIC);
+        break;
       case "shared":
-        list = list.filter((r) => r.visibility === RIDE_VISIBILITY.GROUP || r.visibility === RIDE_VISIBILITY.PUBLIC);
+        list = list.filter((r) => r.visibility === RIDE_VISIBILITY.GROUP);
         break;
       case "all":
       default:
@@ -108,6 +113,7 @@ export default function SavedRoutesScreen() {
         );
     }
   }, [routes, sortBy, filterBy]);
+  const canShare = capabilities?.canShareRoutes === true;
 
   function handleOpenRoute(routeId) {
     setPendingSavedRouteId(routeId);
@@ -116,6 +122,10 @@ export default function SavedRoutesScreen() {
 
   async function handleShareRoute() {
     if (!selectedRoute) return;
+    if (!canShare) {
+      Alert.alert("Not allowed", "Your account cannot share routes.");
+      return;
+    }
     
     console.log('[SHARE] selectedRoute:', selectedRoute);
     console.log('[SHARE] selectedRoute.id:', selectedRoute.id);
@@ -127,6 +137,7 @@ export default function SavedRoutesScreen() {
         routeId: selectedRoute.id,
         visibility: selectedVisibility,
         groupId: groupId,
+        capabilities,
       });
       
       Alert.alert("Success", "Route shared!");
@@ -143,6 +154,10 @@ export default function SavedRoutesScreen() {
   }
 
   function openShareModal(route) {
+    if (!canShare) {
+      Alert.alert("Not allowed", "Your account cannot share routes.");
+      return;
+    }
     setSelectedRoute(route);
     setSelectedVisibility(RIDE_VISIBILITY.PRIVATE);
     setSelectedGroupId(null);
@@ -274,17 +289,19 @@ export default function SavedRoutesScreen() {
             <Text style={styles.actionLabel}>View on Map</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => openShareModal(item)}
-          >
-            <MaterialCommunityIcons
-              name="share-variant"
-              size={18}
-              color={theme.colors.accentMid}
-            />
-            <Text style={styles.actionLabel}>Share</Text>
-          </TouchableOpacity>
+          {canShare && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => openShareModal(item)}
+            >
+              <MaterialCommunityIcons
+                name="share-variant"
+                size={18}
+                color={theme.colors.accentMid}
+              />
+              <Text style={styles.actionLabel}>Share</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -300,11 +317,14 @@ export default function SavedRoutesScreen() {
     );
   }
 
-  const emptyMessage = filterBy === "shared" 
-    ? "No shared routes"
-    : filterBy === "private"
-    ? "No private routes"
-    : "No saved routes yet";
+  const emptyMessage =
+    filterBy === "shared"
+      ? "No shared routes"
+      : filterBy === "public"
+      ? "No public routes"
+      : filterBy === "private"
+      ? "No private routes"
+      : "No saved routes yet";
 
   return (
     <CRScreen padded={false}>

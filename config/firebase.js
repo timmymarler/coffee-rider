@@ -3,8 +3,8 @@ import Constants from "expo-constants";
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
+import { getStorage } from "firebase/storage";
 
 // Pull firebase config from app.config.js → extra.firebase
 const { firebase } = Constants.expoConfig.extra;

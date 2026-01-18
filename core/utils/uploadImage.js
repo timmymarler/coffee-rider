@@ -1,5 +1,5 @@
-import { httpsCallable } from 'firebase/functions';
 import { auth, functions } from '@config/firebase';
+import { httpsCallable } from 'firebase/functions';
 
 export async function uploadImage({
   type,        // "place" | "profile"

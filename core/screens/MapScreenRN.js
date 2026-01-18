@@ -5,6 +5,7 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
@@ -340,6 +341,11 @@ async function fetchNearbyPois(latitude, longitude, radius, capabilities) {
 
 export default function MapScreenRN() {
   const mapRef = useRef();
+  const insets = useSafeAreaInsets();
+
+  const TAB_BAR_HEIGHT = 56; // matches FloatingTabBar height
+  const FLOATING_MARGIN = 1; // sit almost flush with the tab bar
+  const SAVE_BUTTON_GAP = 50; // vertical gap between save and navigate buttons
 
   const [crPlaces, setCrPlaces] = useState([]);
   const [googlePois, setGooglePois] = useState([]);
@@ -412,7 +418,7 @@ export default function MapScreenRN() {
   }, [activeRide, endRide, setActiveRide]);
   
   const canSaveRoute = 
-    capabilities.canSaveRoute &&
+    capabilities.canSaveRoutes &&
     routeMeta &&
     (routeDestination || waypoints.length > 0);
   const [lastEncodedPolyline, setLastEncodedPolyline] = useState(null);
@@ -443,6 +449,9 @@ export default function MapScreenRN() {
       },
     ];
   }, [waypoints, routeDestination]);
+
+  const navButtonBottom = insets.bottom + TAB_BAR_HEIGHT + FLOATING_MARGIN;
+  const saveButtonBottom = navButtonBottom + SAVE_BUTTON_GAP;
   const [pendingMapPoint, setPendingMapPoint] = useState(null);
   const [showAddPointMenu, setShowAddPointMenu] = useState(false);
   const [manualStartPoint, setManualStartPoint] = useState(null);
@@ -587,6 +596,10 @@ export default function MapScreenRN() {
   }, []);
   async function handleSaveRoute(routeName) {
     if (!routeCoords.length || !user) return;
+    if (!capabilities.canSaveRoutes) {
+      setPostbox({ type: "info", message: "Your account cannot save routes." });
+      return;
+    }
     if (!user) {
       setPostbox({
         type: "info",
@@ -603,6 +616,7 @@ export default function MapScreenRN() {
 
     await saveRoute({
       user,
+      capabilities,
       visibility: "private", // change later via UI
       name: routeName || undefined,
       routeId: isUpdating ? currentLoadedRouteId : undefined,
@@ -729,6 +743,7 @@ export default function MapScreenRN() {
 
     // Turning ON: recenter + zoom FIRST
     skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
+    skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
     await recenterOnUser({ zoom: FOLLOW_ZOOM });
 
     // Now enable follow mode
@@ -1929,9 +1944,9 @@ export default function MapScreenRN() {
         />
       )}
 
-      {hasRouteIntent && !followUser && !activeRide && (
+      {hasRouteIntent && !followUser && !activeRide && canSaveRoute && (
         <TouchableOpacity
-          style={styles.saveRouteButton}
+          style={[styles.saveRouteButton, { bottom: saveButtonBottom }]}
           onPress={() => setShowSaveRouteModal(true)}
         >
           <MaterialCommunityIcons
@@ -1945,7 +1960,7 @@ export default function MapScreenRN() {
 
       {hasRouteIntent && (
         <TouchableOpacity
-          style={styles.navigateButton}
+          style={[styles.navigateButton, { bottom: navButtonBottom }]}
           onPress={() => handleNavigate(null)}
         >
           <MaterialCommunityIcons
@@ -2316,7 +2331,6 @@ const styles = StyleSheet.create({
   navigateButton: {
     position: "absolute",
     right: 16,
-    bottom: 110, // above tab bar
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
@@ -2337,7 +2351,6 @@ const styles = StyleSheet.create({
   saveRouteButton: {
     position: "absolute",
     right: 16,
-    bottom: 160, // above tab bar
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
