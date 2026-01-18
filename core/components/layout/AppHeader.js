@@ -1,8 +1,10 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { usePathname, useRouter } from "expo-router";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useContext } from "react";
+import { AuthContext } from "@context/AuthContext";
 
 function getTitleFromPath(pathname) {
   if (pathname === "/map") return "Map";
@@ -17,8 +19,10 @@ export default function AppHeader() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const router = useRouter();
+  const { user, auth } = useContext(AuthContext);
 
   const title = getTitleFromPath(pathname);
+  const userAvatar = auth?.profile?.avatar;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -35,16 +39,42 @@ export default function AppHeader() {
         {title}
       </Text>
 
-      <TouchableOpacity
-        style={styles.help}
-        onPress={() => router.push("/help")}
-      >
-        <MaterialCommunityIcons
-          name="help-circle-outline"
-          size={22}
-          color={theme.colors.accentDark}
-        />
-      </TouchableOpacity>
+      <View style={styles.rightIcons}>
+        {user && (
+          <TouchableOpacity
+            style={[
+              styles.profileIcon,
+              {
+                backgroundColor: userAvatar ? "transparent" : theme.colors.accent,
+              },
+            ]}
+            onPress={() => router.push("/profile")}
+          >
+            {userAvatar ? (
+              <Image
+                source={{ uri: userAvatar }}
+                style={styles.avatarImage}
+              />
+            ) : (
+              <MaterialCommunityIcons
+                name="account"
+                size={20}
+                color={theme.colors.primaryDark}
+              />
+            )}
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={styles.help}
+          onPress={() => router.push("/help")}
+        >
+          <MaterialCommunityIcons
+            name="help-circle-outline"
+            size={22}
+            color={theme.colors.accentDark}
+          />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -81,5 +111,30 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 16,
     bottom: 10,
+  },
+
+  rightIcons: {
+    position: "absolute",
+    right: 16,
+    bottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  profileIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: theme.colors.accent,
+  },
+
+  avatarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
 });
