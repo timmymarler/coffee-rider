@@ -79,13 +79,12 @@ function FloatingTabBar({ state }) {
         const isFocused = state.index === index;
         const isDisabled = tab.disabled === true;
         const isProfileTab = tab.name === "profile";
-        const color = isDisabled
+        const baseColor = isDisabled
           ? theme.colors.primaryMid
           : isFocused
             ? activeColor
             : inactiveColor;
-
-        const outlineColor = isProfileTab && user ? theme.colors.accent : "transparent";
+        const color = isProfileTab && user ? theme.colors.accentDark : baseColor;
 
         return (
           <TouchableOpacity
@@ -109,8 +108,6 @@ function FloatingTabBar({ state }) {
                 borderRadius: 20,
                 alignItems: "center",
                 justifyContent: "center",
-                borderWidth: outlineColor === "transparent" ? 0 : 2,
-                borderColor: outlineColor,
               }}
             >
               <Ionicons
