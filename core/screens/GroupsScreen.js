@@ -5,7 +5,7 @@ import { CRLabel } from "@components-ui/CRLabel";
 import { AuthContext } from "@context/AuthContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useAllUserGroups, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
-import { acceptInvite, createGroup, declineInvite, revokeInvite, sendInvite } from "@core/groups/service";
+import { acceptInvite, createGroup, declineInvite, leaveGroup, removeGroupMember, revokeInvite, sendInvite } from "@core/groups/service";
 import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
 import useActiveRide from "@core/map/routes/useActiveRide";
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
@@ -31,6 +31,8 @@ export default function GroupsScreen() {
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [groupName, setGroupName] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [removingMemberId, setRemovingMemberId] = useState(null);
+  const [leavingGroup, setLeavingGroup] = useState(false);
   
   // Hooks
   const { invites, loading: invitesLoading, error: invitesError } = useInvitesEnriched(user?.uid, user?.email);
@@ -207,18 +209,104 @@ export default function GroupsScreen() {
                       No members yet.
                     </Text>
                   ) : (
-                    members.map((m) => (
-                      <View key={m.uid} style={styles.memberItem}>
-                        <View>
-                          <Text style={styles.memberName}>
-                            {m.displayName || m.email || m.uid}
-                          </Text>
-                          <Text style={styles.memberRole}>
-                            {m.role === "owner" ? "Owner" : "Member"}
-                          </Text>
-                        </View>
-                      </View>
-                    ))
+                    <>
+                      {members.map((m) => {
+                        const isCurrentUser = m.uid === user?.uid;
+                        const isOwner = m.role === "owner";
+                        const canRemove = !isCurrentUser && !isOwner; // Can remove non-owner members
+                        
+                        return (
+                          <View key={m.uid} style={styles.memberItem}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.memberName}>
+                                {m.displayName || m.email || m.uid}
+                                {isCurrentUser ? " (you)" : ""}
+                              </Text>
+                              <Text style={styles.memberRole}>
+                                {isOwner ? "Owner" : "Member"}
+                              </Text>
+                            </View>
+                            {canRemove && (
+                              <TouchableOpacity
+                                style={{ marginLeft: theme.spacing.md }}
+                                onPress={() => {
+                                  Alert.alert(
+                                    "Remove Member?",
+                                    `Remove ${m.displayName || m.email || m.uid} from the group?`,
+                                    [
+                                      { text: "Cancel", style: "cancel" },
+                                      {
+                                        text: "Remove",
+                                        style: "destructive",
+                                        onPress: async () => {
+                                          setRemovingMemberId(m.uid);
+                                          try {
+                                            await removeGroupMember({
+                                              groupId: selectedGroupId,
+                                              memberId: m.uid,
+                                              userId: user?.uid,
+                                              capabilities,
+                                            });
+                                            Alert.alert("Removed", "Member has been removed from the group.");
+                                          } catch (err) {
+                                            Alert.alert("Unable to remove", err?.message || "Unexpected error");
+                                          } finally {
+                                            setRemovingMemberId(null);
+                                          }
+                                        },
+                                      },
+                                    ]
+                                  );
+                                }}
+                                disabled={removingMemberId === m.uid}
+                              >
+                                <Text style={{ color: theme.colors.danger, fontSize: 12, fontWeight: "500" }}>
+                                  {removingMemberId === m.uid ? "…" : "Remove"}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        );
+                      })}
+                      {/* Leave Group button - only for non-owners */}
+                      {!members.find(m => m.uid === user?.uid)?.role === "owner" && (
+                        <CRButton
+                          title={leavingGroup ? "Leaving…" : "Leave Group"}
+                          variant="danger"
+                          loading={leavingGroup}
+                          onPress={() => {
+                            Alert.alert(
+                              "Leave Group?",
+                              "You will no longer have access to this group and its shared routes.",
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                  text: "Leave",
+                                  style: "destructive",
+                                  onPress: async () => {
+                                    setLeavingGroup(true);
+                                    try {
+                                      await leaveGroup({
+                                        groupId: selectedGroupId,
+                                        userId: user?.uid,
+                                      });
+                                      setSelectedGroupId(null);
+                                      Alert.alert("Left", "You have left the group.");
+                                    } catch (err) {
+                                      Alert.alert("Unable to leave", err?.message || "Unexpected error");
+                                    } finally {
+                                      setLeavingGroup(false);
+                                    }
+                                  },
+                                },
+                              ]
+                            );
+                          }}
+                          disabled={leavingGroup}
+                          style={{ marginTop: theme.spacing.md }}
+                        />
+                      )}
+                    </>
                   )}
                 </CRCard>
               </View>

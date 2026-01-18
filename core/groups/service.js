@@ -1,6 +1,7 @@
 import {
     addDoc,
     collection,
+    deleteDoc,
     doc,
     getDoc,
     serverTimestamp,
@@ -166,4 +167,55 @@ export async function revokeInvite({ inviteId, capabilities }) {
     status: GROUP_INVITE_STATUS.REVOKED,
     revokedAt: serverTimestamp(),
   });
+}
+
+/**
+ * Leave a group - removes the current user from the group members
+ */
+export async function leaveGroup({ groupId, userId }) {
+  if (!groupId) throw new Error("groupId is required");
+  if (!userId) throw new Error("userId is required");
+
+  // Check if user is the owner - owners cannot leave (must delete or transfer ownership)
+  const memberRef = doc(db, GROUPS_COLLECTION, groupId, GROUP_MEMBERS_SUBCOLLECTION, userId);
+  const memberSnap = await getDoc(memberRef);
+  
+  if (!memberSnap.exists()) {
+    throw new Error("User is not a member of this group");
+  }
+
+  const memberData = memberSnap.data();
+  if (memberData.role === GROUP_MEMBER_ROLE.OWNER) {
+    throw new Error("Group owners cannot leave. Delete the group or transfer ownership first.");
+  }
+
+  // Remove user from members
+  await deleteDoc(memberRef);
+}
+
+/**
+ * Remove a member from a group - owner only
+ */
+export async function removeGroupMember({ groupId, memberId, userId, capabilities }) {
+  assertGroupsAccess(capabilities);
+  if (!groupId) throw new Error("groupId is required");
+  if (!memberId) throw new Error("memberId is required");
+  if (!userId) throw new Error("userId is required");
+
+  // Verify requester is the group owner
+  const groupRef = doc(db, GROUPS_COLLECTION, groupId);
+  const groupSnap = await getDoc(groupRef);
+  if (!groupSnap.exists()) throw new Error("Group not found");
+  if (groupSnap.data().ownerId !== userId) {
+    throw new Error("Only the group owner can remove members");
+  }
+
+  // Prevent removing the owner
+  if (memberId === groupSnap.data().ownerId) {
+    throw new Error("Cannot remove the group owner");
+  }
+
+  // Remove member
+  const memberRef = doc(db, GROUPS_COLLECTION, groupId, GROUP_MEMBERS_SUBCOLLECTION, memberId);
+  await deleteDoc(memberRef);
 }
