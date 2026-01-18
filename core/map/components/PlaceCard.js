@@ -701,8 +701,11 @@ export default function PlaceCard({
       await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") return;
 
+    const mediaTypeImages = ImagePicker.MediaType?.Images || ImagePicker.MediaTypeOptions.Images;
+    const mediaTypes = ImagePicker.MediaType ? [mediaTypeImages] : mediaTypeImages;
+
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes,
       allowsEditing: true,     // 🔥 enable crop UI
       quality: 0.8,
       base64: true,
@@ -715,7 +718,6 @@ export default function PlaceCard({
     if (!asset?.base64) return;
 
     const { url } = await uploadImage({
-      user,
       type: "place",
       placeId: safePlace.id,
       imageBase64: asset.base64,

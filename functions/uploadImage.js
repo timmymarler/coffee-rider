@@ -5,22 +5,43 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-export const uploadImage = functions.https.onCall(async (data, context) => {
-  // httpsCallable automatically populates context.auth with the current user
-  if (!context.auth) {
+export const uploadImage = functions.https.onCall(async (request, context) => {
+  console.log('[uploadImage] Function called');
+  
+  // Extract the actual data - onCall wraps it
+  const data = request.data || request;
+  const { type, placeId, imageBase64, idToken } = data;
+  
+  let uid = null;
+  let tokenSource = null;
+
+  // First try context.auth (from Authorization header)
+  if (context.auth?.uid) {
+    uid = context.auth.uid;
+    tokenSource = 'context.auth';
+    console.log('[uploadImage] Got uid from context.auth:', uid);
+  }
+  // Fallback: try to verify the idToken from payload
+  else if (idToken) {
+    console.log('[uploadImage] No context.auth, attempting to verify payload idToken');
+    try {
+      const decoded = await admin.auth().verifyIdToken(idToken);
+      uid = decoded.uid;
+      tokenSource = 'payload.idToken';
+      console.log('[uploadImage] Successfully verified token from payload, uid:', uid);
+    } catch (err) {
+      console.error('[uploadImage] Failed to verify provided idToken:', err.message);
+      throw new functions.https.HttpsError('unauthenticated', `Token verification failed: ${err.message}`);
+    }
+  }
+
+  // Final check
+  if (!uid) {
+    console.error('[uploadImage] No uid found in either context.auth or data.idToken');
     throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated');
   }
 
-  const uid = context.auth.uid;
-  const { type, imageBase64, placeId } = data;
-
-  // Log input for debugging
-  console.log('[uploadImage] Called with:', {
-    uid,
-    type,
-    imageBase64Length: imageBase64?.length || 0,
-    placeId,
-  });
+  console.log('[uploadImage] Authentication successful, uid:', uid, 'source:', tokenSource);
 
   // Validate inputs
   if (!type) {
@@ -40,6 +61,7 @@ export const uploadImage = functions.https.onCall(async (data, context) => {
       : `placePhotos/${placeId}/${Date.now()}.jpg`;
 
     const bucket = admin.storage().bucket();
+    console.log('[uploadImage] Using bucket:', bucket.name);
     const file = bucket.file(path);
 
     // Upload the image
@@ -49,19 +71,31 @@ export const uploadImage = functions.https.onCall(async (data, context) => {
 
     console.log('[uploadImage] Uploaded file to:', path);
 
-    // Get a signed URL that doesn't expire for 99 years (effectively permanent)
-    const [url] = await file.getSignedUrl({
-      version: 'v4',
-      action: 'read',
-      expires: Date.now() + 99 * 365 * 24 * 60 * 60 * 1000, // 99 years
-    });
+    // Check if file exists
+    const [exists] = await file.exists();
+    console.log('[uploadImage] File exists after upload:', exists);
 
-    console.log('[uploadImage] Generated signed URL:', url);
+    if (!exists) {
+      throw new Error('File was not created successfully');
+    }
 
-    return { ok: true, path, url };
+    // Make file public so we can get a simple public URL
+    console.log('[uploadImage] Making file public...');
+    await file.makePublic();
+    console.log('[uploadImage] File made public successfully');
+    
+    // Use the bucket name from the actual bucket object
+    const actualBucketName = bucket.name;
+    console.log('[uploadImage] Actual bucket name:', actualBucketName);
+    
+    // Construct the public URL with the correct bucket
+    const publicUrl = `https://storage.googleapis.com/${actualBucketName}/${path}`;
+    
+    console.log('[uploadImage] Generated public URL:', publicUrl);
+
+    return { ok: true, path, url: publicUrl };
   } catch (error) {
     console.error('[uploadImage] Error:', error);
     throw new functions.https.HttpsError('internal', `Upload failed: ${error.message}`);
   }
-});
 });

@@ -11,14 +11,20 @@
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "firebase-admin": "^13.6.0",
-    "firebase-functions": "^7.0.0"
+    "firebase-functions": "^7.0.0",
+    "expo": "~54.0.31",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
   },
   "devDependencies": {
     "firebase-functions-test": "^3.4.1"
   },
-  "private": true
+  "private": true,
+  "version": "1.0.0"
 }

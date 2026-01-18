@@ -1,1 +1,1 @@
-export { uploadImage } from "./uploadImage.js";
+export { uploadImage } from './uploadImage.js';

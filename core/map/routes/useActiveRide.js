@@ -21,15 +21,11 @@ export default function useActiveRide(user) {
   const locationSubscriptionRef = useRef(null);
   const lastUpdateRef = useRef(0);
 
-  // Normalize Storage URLs that might come back with the .firebasestorage.app host
+  // Normalize Storage URLs - just pass through now that function returns correct bucket
   const normalizeAvatarUrl = useCallback((url) => {
     if (!url) return null;
-    // Fix bucket host typo in older stored URLs
-    let normalized = url.replace('firebasestorage.app', 'appspot.com');
-
-    // Ensure cache-busting preserves existing query params (alt=media&token=...)
-    // If the URL already has a cache buster appended as ?v=..., leave as is; we only normalize host
-    return normalized;
+    // No normalization needed - the uploadImage function now returns correct bucket name
+    return url;
   }, []);
 
   // Listen to user's own active ride document
@@ -124,7 +120,12 @@ export default function useActiveRide(user) {
               };
 
               if (userName) payload.userName = userName;
-              if (userAvatar) payload.userAvatar = userAvatar;
+              if (userAvatar) {
+                payload.userAvatar = userAvatar;
+                console.log('[useActiveRide] Sending avatar:', userAvatar);
+              } else {
+                console.log('[useActiveRide] No avatar to send');
+              }
 
               await setDoc(activeRideRef, payload, { merge: true });
               

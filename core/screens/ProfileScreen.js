@@ -31,6 +31,10 @@ export default function ProfileScreen() {
     user?.photoURL ||
     "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
 
+  console.log('[ProfileScreen] Render - profile.photoURL:', profile?.photoURL);
+  console.log('[ProfileScreen] Render - user.photoURL:', user?.photoURL);
+  console.log('[ProfileScreen] Render - avatarUri:', avatarUri);
+
   const [displayName, setDisplayName] = useState(profile?.displayName || user?.displayName || "");
   const [bio, setBio] = useState(profile?.bio || "");
   const [bike, setBike] = useState(profile?.bike || "");
@@ -49,6 +53,12 @@ export default function ProfileScreen() {
     setHomeLocation(profile?.homeLocation || "");
     setHomeAddress(profile?.homeAddress || "");
   }, [profile]);
+
+  // Log avatarUri changes
+  useEffect(() => {
+    console.log('[ProfileScreen] avatarUri changed:', avatarUri);
+    console.log('[ProfileScreen] imageRefreshKey:', imageRefreshKey);
+  }, [avatarUri, imageRefreshKey]);
 
   const email = user?.email || "";
   const role = profile?.role || "user";
@@ -241,6 +251,8 @@ export default function ProfileScreen() {
               borderRadius: 48,
               marginRight: theme.spacing.lg,
             }}
+            onLoad={() => console.log('[ProfileScreen] Image loaded successfully:', avatarUri)}
+            onError={(error) => console.error('[ProfileScreen] Image failed to load:', error.nativeEvent, 'URI:', avatarUri)}
           />
 
           {uploading && (
