@@ -167,23 +167,17 @@ export default function AuthProvider({ children }) {
   // ----------------------------------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('[AuthContext] onAuthStateChanged fired. firebaseUser:', firebaseUser ? firebaseUser.email : null);
       try {
         if (!firebaseUser) {
-          // No Firebase user, but check for stored session
-          const session = await loadSession();
-          if (session) {
-            // Session still valid, stay logged in
-            // Firebase will re-auth if the session token is still good
-            setLoading(false);
-            return;
-          }
-
+          console.log('[AuthContext] No firebaseUser. Setting user to null.');
           setUser(null);
           setProfile(null);
           setLoading(false);
           return;
         }
 
+        console.log('[AuthContext] firebaseUser detected:', firebaseUser.email);
         setUser(firebaseUser);
         await saveSession(firebaseUser);
 

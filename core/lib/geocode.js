@@ -39,7 +39,7 @@ export async function getPlaceLabel(lat, lng) {
       }
     }
 
-    // 2) If no POI name found, fall back to Geocoding (town / locality)
+    // 2) If no POI name found, fall back to Geocoding (road name/number, then town/locality)
     if (!label) {
       const geoUrl =
         `https://maps.googleapis.com/maps/api/geocode/json` +
@@ -55,13 +55,27 @@ export async function getPlaceLabel(lat, lng) {
         const getComp = (type) =>
           comps.find((c) => c.types.includes(type))?.long_name || null;
 
+        // Prefer road name/number if available
+        const road = getComp("route");
         const town =
           getComp("locality") ||
           getComp("postal_town") ||
           getComp("administrative_area_level_2") ||
           null;
+        const houseNumber = getComp("street_number");
 
-        label = town;
+        // Only use house number if no road name is present
+        if (road && town) {
+          label = `${road}, near ${town}`;
+        } else if (road) {
+          label = road;
+        } else if (houseNumber && town) {
+          label = `${houseNumber}, near ${town}`;
+        } else if (houseNumber) {
+          label = houseNumber;
+        } else {
+          label = town;
+        }
       }
     }
 

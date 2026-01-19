@@ -5,18 +5,19 @@ import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import AuthLayout from "./AuthLayout";
+import { resetPassword } from "./resetPassword";
 export default function LoginScreen() {
   const router = useRouter();
   const { colors, spacing } = theme;
@@ -24,6 +25,26 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  async function handleResetPassword() {
+    if (!email) {
+      Alert.alert("Missing email", "Please enter your email address above first.");
+      return;
+    }
+    try {
+      await resetPassword(email);
+      Alert.alert(
+        "Password reset sent",
+        `A password reset email has been sent to ${email.trim()}. Please check your inbox.`,
+      );
+    } catch (err) {
+      console.error("Reset password error:", err);
+      Alert.alert(
+        "Reset failed",
+        err.message || "Could not send reset email. Please try again."
+      );
+    }
+  }
 
   async function handleLogin() {
     if (!email || !password) {
@@ -87,9 +108,10 @@ export default function LoginScreen() {
           />
         </View>
 
+
         <View>{/* Submit */}</View>
         <TouchableOpacity
-          style={[
+          style={[ 
             styles.button,
             submitting && { opacity: 0.7 },
           ]}
@@ -101,6 +123,13 @@ export default function LoginScreen() {
           ) : (
             <Text style={styles.buttonText}>Log in</Text>
           )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={handleResetPassword}
+          style={{ marginTop: spacing.sm, alignItems: "center" }}
+        >
+          <Text style={[styles.linkText, { color: colors.accent }]}>Reset Password</Text>
         </TouchableOpacity>
 
         <View>{/* Register link */}</View>

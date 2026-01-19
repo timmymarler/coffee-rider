@@ -40,7 +40,7 @@ import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 
 const RECENTER_ZOOM = 12;
-const FOLLOW_ZOOM = 17; // closer, more “navigation” feel
+const FOLLOW_ZOOM = 18; // slightly less close, more “navigation” feel
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 /* ------------------------------------------------------------------ */
@@ -426,6 +426,7 @@ export default function MapScreenRN() {
 
   const skipNextFollowTickRef = useRef(false);
   const skipNextRegionChangeRef = useRef(false);
+  const skipRegionChangeUntilRef = useRef(0);
   const isAnimatingRef = useRef(false); // Track if we're doing a programmatic animation
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
@@ -782,13 +783,17 @@ export default function MapScreenRN() {
     );
     // Reset flag after animation completes
     setTimeout(() => { isAnimatingRef.current = false; }, 500);
+    // Debounce region change disables for 2 seconds after recenter
+    skipRegionChangeUntilRef.current = Date.now() + 2000;
   }
 
   function handleRecentre() {
     // Explicitly disable Follow Me when user taps the red recenter button
     setFollowUser(false);
     clearFollowMeInactivityTimeout();
-    recenterOnUser({ zoom: RECENTER_ZOOM });
+    // Always reset to normal zoom and no tilt
+    skipNextRegionChangeRef.current = true;
+    recenterOnUser({ zoom: RECENTER_ZOOM, pitch: 0 });
   }
 
   function clearFollowMeInactivityTimeout() {
@@ -812,17 +817,22 @@ export default function MapScreenRN() {
   /* FOLLOW MODE                                                  */
   /* ------------------------------------------------------------ */
   async function toggleFollowMe() {
-    // Turning OFF: clear inactivity timeout
+    // Turning OFF: clear inactivity timeout and revert camera
     if (followUser) {
       setFollowUser(false);
       clearFollowMeInactivityTimeout();
+      // Revert to normal zoom and no tilt
+      skipNextRegionChangeRef.current = true;
+      skipRegionChangeUntilRef.current = Date.now() + 2000;
+      await recenterOnUser({ zoom: RECENTER_ZOOM, pitch: 0 });
       return;
     }
 
-    // Turning ON: recenter + zoom FIRST
+    // Turning ON: recenter + zoom + tilt FIRST
     skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
     skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
-    await recenterOnUser({ zoom: FOLLOW_ZOOM });
+    skipRegionChangeUntilRef.current = Date.now() + 2000;
+    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 45 });
 
     // Now enable follow mode and start 15-minute inactivity timer
     setFollowUser(true);
@@ -905,12 +915,10 @@ export default function MapScreenRN() {
     // This keeps Follow Me on as long as the user is moving
     resetFollowMeInactivityTimeout();
 
-    // Use heading when in navigation mode
-    const recenterOptions = shouldRotateMap 
-      ? { heading: smoothedHeading, pitch: 45 }
-      : { pitch: 0 };
-    
-    recenterOnUser(recenterOptions); // center with optional heading + tilt
+    // Only update camera in navigation mode (Follow Me)
+    if (shouldRotateMap) {
+      recenterOnUser({ heading: smoothedHeading, pitch: 45, zoom: FOLLOW_ZOOM });
+    }
   }, [userLocation, followUser, shouldRotateMap, smoothedHeading]);
 
   // Compute distance to next junction (current step end). Advance step when close.
@@ -1008,7 +1016,13 @@ export default function MapScreenRN() {
 
   const handleRegionChangeComplete = async (region) => {
     setMapRegion(region);
-    
+
+    // Debounce disables for 2s after programmatic camera moves
+    if (skipRegionChangeUntilRef.current && Date.now() < skipRegionChangeUntilRef.current) {
+      // Ignore region changes during debounce window
+      return;
+    }
+
     // Disable Follow Me only on user pan, not on programmatic animations
     // isAnimatingRef detects our own recenterOnUser() calls
     // skipNextRegionChangeRef catches route-to-home and toggle-on animations
