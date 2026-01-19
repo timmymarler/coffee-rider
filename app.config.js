@@ -1,8 +1,18 @@
 
 import "dotenv/config";
+import { Platform } from 'react-native';
 
+const googleMapsApiKey =
+  Platform.OS === 'ios'
+    ? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS
+    : process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID;
 
+const googlePlacesApiKey =
+  Platform.OS === 'ios'
+    ? process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS
+    : process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID;
 
+// Use these variables wherever you need the keys
 // Read the app variant from ENV or default to rider
 const APP_NAME = process.env.APP_NAME || "rider";
 
@@ -61,8 +71,8 @@ export default {
         projectId: "93932a29-f9a5-4f08-8b1d-6c9030e8bc59"
       },
 
-      googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
-      googlePlacesApiKey: process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY,
+      googleMapsApiKey: googleMapsApiKey,
+      googlePlacesApiKey: googlePlacesApiKey,
 
       firebase: {
         apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
