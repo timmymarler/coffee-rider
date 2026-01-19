@@ -243,7 +243,7 @@ function FloatingTabBar({ state }) {
 function LayoutContent() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [versionModalDismissed, setVersionModalDismissed] = useState(false);
-  const { versionStatus } = useContext(AuthContext);
+  const { user, loading, versionStatus } = useContext(AuthContext);
 
   // Show version modal when status changes and update is available
   useEffect(() => {
@@ -266,6 +266,20 @@ function LayoutContent() {
 
   const currentVersion = Constants.expoConfig?.version || "1.0.0";
 
+  if (loading) {
+    // Optionally, show a loading spinner here
+    return null;
+  }
+
+  if (!user) {
+    // Not authenticated: show login/register screen
+    // You may want to use a dedicated AuthStack or just the login/register screen directly
+    // Here, we assume you have core/auth/login.js as your login screen
+    const LoginScreen = require("@core/auth/login").default;
+    return <LoginScreen />;
+  }
+
+  // Authenticated: show main app
   return (
     <>
       <Tabs
