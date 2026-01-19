@@ -1,4 +1,7 @@
+
 import "dotenv/config";
+
+
 
 // Read the app variant from ENV or default to rider
 const APP_NAME = process.env.APP_NAME || "rider";
@@ -72,7 +75,8 @@ export default {
     },
 
     ios: {
-      bundleIdentifier: IOS_BUNDLE[APP_NAME]
+      bundleIdentifier: IOS_BUNDLE[APP_NAME],
+      googleServicesFile: "./GoogleService-Info.plist"
     },
 
     android: {
