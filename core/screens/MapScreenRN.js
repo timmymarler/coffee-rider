@@ -10,8 +10,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
 
-import * as Location from "expo-location";
 import * as KeepAwake from "expo-keep-awake";
+import * as Location from "expo-location";
 import { classifyPoi } from "../map/classify/classifyPois";
 import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
@@ -23,6 +23,7 @@ import { saveRoute } from "@/core/map/routes/saveRoute";
 import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
+import useNavigationCamera from "@core/map/hooks/useNavigationCamera";
 import useActiveRide from "@core/map/routes/useActiveRide";
 import useActiveRideLocations from "@core/map/routes/useActiveRideLocations";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
@@ -69,6 +70,19 @@ const AMENITY_ICON_MAP = {
   outdoor_seating: "table-picnic",
   parking: "parking",
 };
+
+  // Maneuver → icon + label map (simplified)
+  const MANEUVER_ICON_MAP = {
+    TURN_LEFT: { icon: "turn-left", label: "Turn left" },
+    TURN_RIGHT: { icon: "turn-right", label: "Turn right" },
+    TURN_SLIGHT_LEFT: { icon: "turn-left", label: "Slight left" },
+    TURN_SLIGHT_RIGHT: { icon: "turn-right", label: "Slight right" },
+    STRAIGHT: { icon: "arrow-up-bold", label: "Continue straight" },
+    ROUNDABOUT_ENTER: { icon: "roundabout-left", label: "Enter roundabout" },
+    ROUNDABOUT_EXIT: { icon: "roundabout-right", label: "Exit roundabout" },
+    MERGE_LEFT: { icon: "arrow-left-bottom", label: "Merge left" },
+    MERGE_RIGHT: { icon: "arrow-right-bottom", label: "Merge right" },
+  };
 
 /* Rider focussed for now - add theme specific later */
 const FILTER_SUITABILITIES = RIDER_SUITABILITY;
@@ -149,6 +163,29 @@ function dedupeByProximity(crPlaces, googlePlaces) {
   return googlePlaces.filter((g) => {
     return !crPlaces.some((c) => distanceMeters(c, g) < CR_RADIUS_METERS);
   });
+}
+
+// Format distance in Miles and Yards (no feet)
+function formatDistanceImperial(meters) {
+  if (meters == null) return "";
+  const miles = meters / 1609.344;
+  if (miles >= 0.1) {
+    const digits = miles >= 10 ? 0 : 1;
+    return `${miles.toFixed(digits)} mi`;
+  }
+  const yards = meters * 1.09361;
+  return `${Math.round(yards)} yd`;
+}
+
+// Approximate distance between two lat/lng points in meters
+function distanceBetweenMeters(a, b) {
+  if (!a || !b) return null;
+  const dx = (a.latitude - b.latitude) * 111320;
+  const dy =
+    (a.longitude - b.longitude) *
+    (40075000 * Math.cos((a.latitude * Math.PI) / 180)) /
+    360;
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 function getIconForCategory(category) {
@@ -407,11 +444,21 @@ export default function MapScreenRN() {
   const routeRequestId = useRef(0);
   const [routeVersion, setRouteVersion] = useState(0);
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
+  const [routeSteps, setRouteSteps] = useState([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
   const routeFittedRef = useRef(false);
   
   // Active ride & location sharing
   const { activeRide, endRide } = useActiveRide(user);
   const { riderLocations } = useActiveRideLocations(activeRide, user?.uid);
+  
+  // Navigation camera for heading-up mode
+  const { isNavigationMode, shouldRotateMap, smoothedHeading } = useNavigationCamera({
+    isFollowMeEnabled: followUser,
+    activeRide,
+    userLocation,
+  });
   
   // Sync activeRide to TabBarContext so floating tab bar can access it
   useEffect(() => {
@@ -518,6 +565,8 @@ export default function MapScreenRN() {
         distanceMeters: result.distanceMeters ?? result.distance,
         durationSeconds: result.durationSeconds ?? result.duration,
       });
+        setRouteSteps(result.steps ?? []);
+        setCurrentStepIndex(0);
 
       console.log("[REFRESH] Route refreshed from current location");
     } catch (error) {
@@ -715,7 +764,7 @@ export default function MapScreenRN() {
     }
   }
 
-  async function recenterOnUser({ zoom = null } = {}) {
+  async function recenterOnUser({ zoom = null, heading = null, pitch = null } = {}) {
     if (!mapRef.current) return;
 
     const coords = await ensureUserLocation();
@@ -726,11 +775,13 @@ export default function MapScreenRN() {
       {
         center: { latitude: coords.latitude, longitude: coords.longitude },
         ...(zoom !== null ? { zoom } : {}),
+        ...(heading !== null ? { heading } : {}),
+        ...(pitch !== null ? { pitch } : {}),
       },
       { duration: 350 }
     );
     // Reset flag after animation completes
-    setTimeout(() => { isAnimatingRef.current = false; }, 400);
+    setTimeout(() => { isAnimatingRef.current = false; }, 500);
   }
 
   function handleRecentre() {
@@ -854,8 +905,30 @@ export default function MapScreenRN() {
     // This keeps Follow Me on as long as the user is moving
     resetFollowMeInactivityTimeout();
 
-    recenterOnUser(); // center only
-  }, [userLocation, followUser]);
+    // Use heading when in navigation mode
+    const recenterOptions = shouldRotateMap 
+      ? { heading: smoothedHeading, pitch: 45 }
+      : { pitch: 0 };
+    
+    recenterOnUser(recenterOptions); // center with optional heading + tilt
+  }, [userLocation, followUser, shouldRotateMap, smoothedHeading]);
+
+  // Compute distance to next junction (current step end). Advance step when close.
+  useEffect(() => {
+    if (!isNavigationMode) return;
+    if (!userLocation) return;
+    if (!routeSteps || routeSteps.length === 0) return;
+    const idx = Math.min(currentStepIndex, routeSteps.length - 1);
+    const step = routeSteps[idx];
+    if (!step?.end?.latitude || !step?.end?.longitude) return;
+
+    const d = distanceBetweenMeters(userLocation, step.end);
+    setNextJunctionDistance(d);
+    // Advance to next step when within ~30m of end
+    if (d !== null && d < 30 && idx < routeSteps.length - 1) {
+      setCurrentStepIndex(idx + 1);
+    }
+  }, [userLocation, isNavigationMode, routeSteps, currentStepIndex]);
 
   // Keep screen awake during Follow Me or active ride
   useEffect(() => {
@@ -1383,6 +1456,8 @@ export default function MapScreenRN() {
       distanceMeters: result.distanceMeters ?? result.distance,
       durationSeconds: result.durationSeconds ?? result.duration,
     });
+    setRouteSteps(result.steps ?? []);
+    setCurrentStepIndex(0);
 
     // Only auto-fit if not already fitted AND not in Follow Me mode
     if (!routeFittedRef.current && !followUser) {
@@ -1649,7 +1724,8 @@ export default function MapScreenRN() {
           ref={mapRef}
           key={mapKey}
           style={StyleSheet.absoluteFill}
-          showsUserLocation
+          showsUserLocation={!isNavigationMode}
+          pitchEnabled
           showsMyLocationButton={false}
           onRegionChangeComplete={handleRegionChangeComplete}
           onPress={() => {
@@ -1661,9 +1737,6 @@ export default function MapScreenRN() {
               setSelectedPlaceId(null);
               clearTempIfSafe();
             }
-          }}
-          onPanDrag={() => {
-            if (followUser) setFollowUser(false);
           }}
           onLongPress={async (e) => {
             if (!capabilities.canCreateRoutes) return;
@@ -1709,6 +1782,27 @@ export default function MapScreenRN() {
             attemptRouteFit();
           }}
         >
+          {/* Navigation arrow marker - shown during Follow Me or active ride */}
+          {isNavigationMode && userLocation && (
+            <Marker
+              coordinate={{
+                latitude: userLocation.latitude,
+                longitude: userLocation.longitude,
+              }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              flat={true}
+              rotation={smoothedHeading || 0}
+              zIndex={1000}
+            >
+              <View style={styles.navigationArrow}>
+                <MaterialCommunityIcons
+                  name="navigation"
+                  size={32}
+                  color="#2196F3"
+                />
+              </View>
+            </Marker>
+          )}
 
           {crMarkers.map(renderMarker)}
           {searchMarkers.map(renderMarker)}
@@ -1981,6 +2075,31 @@ export default function MapScreenRN() {
           <Text style={styles.noticeText}>{searchNotice.message}</Text>
         </View>
       )}
+
+      {/* Junction panel (top-left) during navigation - helmet visible */}
+      {isNavigationMode && routeSteps && routeSteps.length > 0 && (
+        (() => {
+          const step = routeSteps[Math.min(currentStepIndex, routeSteps.length - 1)];
+          const m = step?.maneuver || "STRAIGHT";
+          const meta = MANEUVER_ICON_MAP[m] || MANEUVER_ICON_MAP.STRAIGHT;
+          const dist = nextJunctionDistance;
+          const distText = dist != null ? formatDistanceImperial(dist) : "";
+          return (
+            <View style={styles.junctionPanel}>
+              {/* Large direction icon */}
+              <MaterialCommunityIcons name={meta.icon} size={64} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
+              
+              {/* Distance and label section */}
+              <View style={styles.junctionContent}>
+                {distText ? (
+                  <Text style={styles.junctionDistance}>{distText}</Text>
+                ) : null}
+                <Text style={styles.junctionLabel}>{meta.label}</Text>
+              </View>
+            </View>
+          );
+        })()
+      )}
       {postbox && (
         <View style={styles.postbox}>
           <Text style={styles.postboxTitle}>{postbox.title}</Text>
@@ -2227,6 +2346,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  navigationArrow: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#2196F3",
+  },
+
   recenterButton: {
     position: "absolute",
     right: 16,
@@ -2273,6 +2403,50 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.secondaryMid, // dark green
     zIndex: 9999,
     elevation: 6,
+  },
+
+  junctionPanel: {
+    position: "absolute",
+    top: 20,
+    left: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: "#2196F3",
+    borderWidth: 3,
+    borderColor: "rgba(245, 245, 240, 0.95)",
+    zIndex: 2000,
+    elevation: 8,
+    gap: 16,
+  },
+  junctionIcon: {
+    marginRight: 4,
+  },
+  junctionContent: {
+    justifyContent: "center",
+  },
+  junctionDistance: {
+    fontSize: 48,
+    fontWeight: "700",
+    color: "rgba(245, 245, 240, 0.95)",
+    lineHeight: 56,
+  },
+  junctionLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "rgba(245, 245, 240, 0.95)",
+    marginTop: 4,
+  },
+  junctionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fbbf24",
+  },
+  junctionText: {
+    fontSize: 12,
+    color: "#e5e7eb",
   },
 
   postboxTitle: {

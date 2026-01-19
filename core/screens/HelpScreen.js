@@ -5,8 +5,8 @@ import { Dimensions, Linking, Pressable, ScrollView, StyleSheet, Text, View } fr
 import { AuthContext } from "@context/AuthContext";
 import { getCapabilities } from "@core/roles/capabilities";
 import theme from "@themes";
-import SvgPin from "../map/components/SvgPin";
 import { useLocalSearchParams } from "expo-router";
+import SvgPin from "../map/components/SvgPin";
 
 
 const { width: screenWidth } = Dimensions.get("window");

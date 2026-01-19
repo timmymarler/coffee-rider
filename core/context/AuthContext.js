@@ -1,6 +1,7 @@
 // core/context/AuthContext.js
 
 import { auth, db } from "@config/firebase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     createUserWithEmailAndPassword,
     onAuthStateChanged,
@@ -10,7 +11,6 @@ import {
 } from "firebase/auth";
 import { deleteDoc, doc } from "firebase/firestore";
 import { createContext, useEffect, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState } from "react-native";
 
 import { getCapabilities } from "@core/roles/capabilities";

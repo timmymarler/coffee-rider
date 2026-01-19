@@ -3,10 +3,12 @@
 import AuthProvider, { AuthContext } from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import AppHeader from "@core/components/layout/AppHeader";
+import SplashScreen from "@core/components/ui/SplashScreen";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
 import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
 import { getAndResetSummary } from "@core/utils/devMetrics";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import theme from "@themes";
 import Constants from "expo-constants";
 import { Tabs, usePathname, useRouter } from "expo-router";
@@ -291,6 +293,36 @@ function LayoutContent() {
 }
 
 export default function Layout() {
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashChecked, setSplashChecked] = useState(false);
+
+  // Check if splash has been shown for this version
+  useEffect(() => {
+    const checkSplashStatus = async () => {
+      try {
+        const currentVersion = Constants.expoConfig?.version || "1.0.0";
+        const lastSplashVersion = await AsyncStorage.getItem("@lastSplashVersion");
+        // Show splash if:
+        // 1. First time launch (no version stored)
+        // 2. Version has changed (major update)
+        if (!lastSplashVersion || lastSplashVersion !== currentVersion) {
+          setShowSplash(true);
+          // Mark this version as shown
+          await AsyncStorage.setItem("@lastSplashVersion", currentVersion);
+        } else {
+          setShowSplash(false);
+        }
+        setSplashChecked(true);
+      } catch (error) {
+        console.error("Error checking splash status:", error);
+        setShowSplash(false);
+        setSplashChecked(true);
+      }
+    };
+
+    checkSplashStatus();
+  }, []);
+
   // Log metrics summary when app goes to background or on unmount
   useEffect(() => {
     return () => {
@@ -298,6 +330,20 @@ export default function Layout() {
       getAndResetSummary();
     };
   }, []);
+
+  const handleSplashComplete = () => {
+    setShowSplash(false);
+  };
+
+  // Don't render anything until we've checked splash status
+  if (!splashChecked) {
+    return null;
+  }
+
+  // Show splash screen if needed
+  if (showSplash) {
+    return <SplashScreen onComplete={handleSplashComplete} />;
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

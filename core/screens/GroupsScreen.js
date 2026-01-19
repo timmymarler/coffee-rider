@@ -9,11 +9,11 @@ import { acceptInvite, createGroup, declineInvite, leaveGroup, removeGroupMember
 import useActiveRide from "@core/map/routes/useActiveRide";
 import { useGroupSharedRoutes, useMembersActiveRides } from "@core/map/routes/useSharedRides";
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 
