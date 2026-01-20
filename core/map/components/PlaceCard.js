@@ -9,6 +9,7 @@ import { incMetric } from "@core/utils/devMetrics";
 import { uploadImage } from "@core/utils/uploadImage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
+import Constants from 'expo-constants';
 import * as ImagePicker from "expo-image-picker";
 import {
   addDoc,
@@ -47,7 +48,7 @@ import { RIDER_CATEGORIES } from "../../config/categories/rider";
 const PLACE_CATEGORIES = RIDER_CATEGORIES;
 const screenWidth = Dimensions.get("window").width;
 const MAX_USER_PHOTOS_PER_PLACE = 2;
-const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
+const GOOGLE_KEY = Constants.expoConfig?.extra?.googlePlacesApiKey;
 
 /* ------------------------------------------------------------------ */
 /* CONSTANTS                                                          */

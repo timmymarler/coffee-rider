@@ -6,28 +6,14 @@ import { getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
 import { getStorage } from "firebase/storage";
-import { Platform } from 'react-native';
 
-// Use these variables wherever you need the keys
-// Pull firebase config from app.config.js → extra.firebase
-const { firebase } = Constants.expoConfig.extra;
+// Pull firebase config and API keys from app.config.js → extra
+const { firebase, googleMapsApiKey, googlePlacesApiKey } = Constants.expoConfig.extra;
 
 const firebaseConfig = {
-  apiKey:
-    Platform.OS === 'ios'
-      ? process.env.EXPO_PUBLIC_FIREBASE_API_KEY_IOS
-      : process.env.EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID,
-
-  googleMapsApiKey:
-    Platform.OS === 'ios'
-      ? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS
-      : process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID,
-
-  googlePlacesApiKey:
-    Platform.OS === 'ios'
-      ? process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS
-      : process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID,
-
+  apiKey: firebase.apiKey,
+  googleMapsApiKey,
+  googlePlacesApiKey,
   authDomain: firebase.authDomain,
   projectId: firebase.projectId,
   storageBucket: firebase.storageBucket,

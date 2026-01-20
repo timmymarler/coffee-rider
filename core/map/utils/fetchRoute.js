@@ -1,6 +1,8 @@
+import Constants from 'expo-constants';
+
 export async function fetchRoute({ origin, destination, waypoints = [] }) {
   try {
-    const key = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+    const key = Constants.expoConfig?.extra?.googleMapsApiKey;
 
     const intermediates =
       Array.isArray(waypoints) && waypoints.length > 0

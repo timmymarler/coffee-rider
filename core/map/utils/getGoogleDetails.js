@@ -1,4 +1,5 @@
-const KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
+import Constants from 'expo-constants';
+const KEY = Constants.expoConfig?.extra?.googlePlacesApiKey;
 
 export async function getGoogleDetails({ placeId, name, latitude, longitude }) {
   try {

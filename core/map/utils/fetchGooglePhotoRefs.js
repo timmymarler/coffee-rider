@@ -1,4 +1,5 @@
-const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
+import Constants from 'expo-constants';
+const GOOGLE_KEY = Constants.expoConfig?.extra?.googlePlacesApiKey;
 
 export async function fetchGooglePhotoRefs(placeId, limit = 1) {
   try {

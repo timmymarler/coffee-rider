@@ -1,16 +1,14 @@
 
 import "dotenv/config";
-import { Platform } from 'react-native';
 
-const googleMapsApiKey =
-  Platform.OS === 'ios'
-    ? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS
-    : process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID;
+const isIOS = process.env.EAS_BUILD_PLATFORM === 'ios';
+const googleMapsApiKey = isIOS
+  ? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS
+  : process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID;
 
-const googlePlacesApiKey =
-  Platform.OS === 'ios'
-    ? process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS
-    : process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID;
+const googlePlacesApiKey = isIOS
+  ? process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS
+  : process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID;
 
 // Use these variables wherever you need the keys
 // Read the app variant from ENV or default to rider
@@ -75,7 +73,9 @@ export default {
       googlePlacesApiKey: googlePlacesApiKey,
 
       firebase: {
-        apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+        apiKey: isIOS
+          ? process.env.EXPO_PUBLIC_FIREBASE_API_KEY_IOS
+          : process.env.EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID,
         authDomain: "coffee-rider-bea88.firebaseapp.com",
         projectId: "coffee-rider-bea88",
         storageBucket: "coffee-rider-bea88.appspot.com",
@@ -100,7 +100,9 @@ export default {
 
       config: {
         googleMaps: {
-          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyAFq43xqsPhcr_s1tuS1e7TTmme0t2SVGw"
+          apiKey: isIOS
+            ? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS
+            : process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID
         }
       },
       adaptiveIcon: {
