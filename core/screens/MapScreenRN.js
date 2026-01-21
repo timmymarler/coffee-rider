@@ -1768,8 +1768,6 @@ export default function MapScreenRN() {
             let label = null;
 
             if (nearbyCrPlace) {
-          }
-          {...(Platform.OS === "ios" ? { minZoomLevel: 1, maxZoomLevel: 18 } : {})}
               label = nearbyCrPlace.title || nearbyCrPlace.name;
             } else {
               try {
