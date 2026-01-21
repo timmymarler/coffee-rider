@@ -10,7 +10,7 @@ import useWaypoints from "./useWaypoints";
 // It receives `waypoints` as a prop (which may include destination).
 // It may still call useWaypoints() ONLY for mutations during transition.
 
-export default function WaypointsList({ waypoints, onClearAll }) {
+export default function WaypointsList({ waypoints, onClearAll, routeOrigin, routedTotalMeters }) {
   // ⚠️ DO NOT destructure `waypoints` from context here
   const [collapsed, setCollapsed] = useState(true);
   const reorderableWaypoints = waypoints.filter(wp => !wp.isTerminal);
@@ -19,6 +19,17 @@ export default function WaypointsList({ waypoints, onClearAll }) {
     removeWaypoint,
     reorderWaypoints, // ✅ MUST be destructured
   } = useWaypoints();
+
+  function formatDistanceImperial(meters) {
+    if (meters == null) return "";
+    const miles = meters / 1609.344;
+    if (miles >= 0.1) {
+      const digits = miles >= 10 ? 0 : 1;
+      return `${miles.toFixed(digits)} mi`;
+    }
+    const yards = meters * 1.09361;
+    return `${Math.round(yards)} yd`;
+  }
 
   if (!waypoints?.length) return null;
 
@@ -53,20 +64,14 @@ export default function WaypointsList({ waypoints, onClearAll }) {
           }}
           renderItem={({ item, drag, isActive, getIndex }) => {
             const index = getIndex();
-
             return (
               <View
-                style={[
-                  styles.row,
-                  isActive && { opacity: 0.7 },
-                ]}
+                style={[styles.row, isActive && { opacity: 0.7 }]}
               >
                 <Text style={styles.index}>{index + 1}</Text>
-
                 <Text style={styles.label} numberOfLines={1}>
                   {item.title || "Dropped pin"}
                 </Text>
-
                 {/* Remove button */}
                 <TouchableOpacity
                   onPress={() => removeWaypoint(index)}
@@ -75,7 +80,6 @@ export default function WaypointsList({ waypoints, onClearAll }) {
                 >
                   <Text style={styles.remove}>✕</Text>
                 </TouchableOpacity>
-
                 {/* Drag handle */}
                 <TouchableOpacity
                   onLongPress={drag}
@@ -93,15 +97,20 @@ export default function WaypointsList({ waypoints, onClearAll }) {
           }}
         />
       )}
-      {destination && (
+      {/* Show only routed total at the destination row if present */}
+      {destination && routeOrigin && (
         <View style={[styles.row, styles.destinationRow]}>
           <Text style={styles.index}>{reorderableWaypoints.length + 1}</Text>
           <Text style={styles.label} numberOfLines={1}>
             {destination.title}
           </Text>
+          {typeof routedTotalMeters === 'number' && routedTotalMeters > 0 && (
+            <Text style={styles.distance}>
+              {`${formatDistanceImperial(routedTotalMeters)} routed`}
+            </Text>
+          )}
         </View>
       )}
-
     </View>
   );
 }
@@ -162,5 +171,12 @@ const styles = StyleSheet.create({
     color: theme.colors.danger,
     fontSize: 20,
     fontWeight: "600",
+  },
+  distance: {
+    color: theme.colors.accentMid,
+    fontSize: 12,
+    marginLeft: 8,
+    minWidth: 48,
+    textAlign: "right",
   },
 });

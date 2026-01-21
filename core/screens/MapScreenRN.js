@@ -757,12 +757,24 @@ export default function MapScreenRN() {
     if (userLocation) return userLocation;
 
     try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          "Location Required",
+          "Location permission is required to use this feature. Please enable it in your device settings."
+        );
+        return null;
+      }
       const current = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
       setUserLocation(current.coords);
       return current.coords;
     } catch (e) {
+      Alert.alert(
+        "Location Error",
+        "Unable to determine your current location. Please check your settings."
+      );
       return null;
     }
   }
@@ -1454,9 +1466,14 @@ export default function MapScreenRN() {
       })),
     });
 
-    if (result?.distance) {
-      setRouteDistanceMeters(result.distance);
-    }
+      // Always set routed total distance (meters) for use in WaypointsList
+      if (typeof result?.distanceMeters === 'number' && result.distanceMeters > 0) {
+        setRouteDistanceMeters(result.distanceMeters);
+      } else if (typeof result?.distance === 'number' && result.distance > 0) {
+        setRouteDistanceMeters(result.distance);
+      } else {
+        setRouteDistanceMeters(null);
+      }
 
     if (!result?.polyline) return;
     if (requestId !== routeRequestId.current) return;
@@ -1537,6 +1554,7 @@ export default function MapScreenRN() {
       });
     }
 
+
     if (route.routePolyline) {
       const decoded = decode(route.routePolyline).map(([lat, lng]) => ({
         latitude: lat,
@@ -1545,6 +1563,15 @@ export default function MapScreenRN() {
 
       setRouteCoords(decoded);
       setLastEncodedPolyline(route.routePolyline);
+
+      // Set routed total distance from saved route (if present)
+      if (typeof route.distanceMeters === 'number' && route.distanceMeters > 0) {
+        setRouteDistanceMeters(route.distanceMeters);
+      } else if (typeof route.distance === 'number' && route.distance > 0) {
+        setRouteDistanceMeters(route.distance);
+      } else {
+        setRouteDistanceMeters(null);
+      }
 
       // 🔑 use the pending-fit system you already built
       pendingFitRef.current = decoded;
@@ -1847,7 +1874,7 @@ export default function MapScreenRN() {
               zIndex={950}
             >
               <SvgPin
-                icon={isHomeDestination ? "home" : "flag"}
+                icon={isHomeDestination ? "home" : "flag-checkered"}
                 fill={theme.colors.primary}
                 circle={theme.colors.accentMid}
                 stroke={theme.colors.danger}
@@ -2127,6 +2154,15 @@ export default function MapScreenRN() {
         <WaypointsList
           waypoints={displayWaypoints}
           onClearAll={clearNavigationIntent}
+          routeOrigin={manualStartPoint || userLocation}
+          // Always pass routedTotalMeters from state, fallback to routeMeta if needed
+          routedTotalMeters={
+            typeof routeDistanceMeters === 'number' && routeDistanceMeters > 0
+              ? routeDistanceMeters
+              : (typeof routeMeta?.distanceMeters === 'number' && routeMeta.distanceMeters > 0
+                  ? routeMeta.distanceMeters
+                  : undefined)
+          }
         />
       )}
 
