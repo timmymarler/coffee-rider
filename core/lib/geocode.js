@@ -2,7 +2,8 @@
 // Helper to turn lat/lng into a nice place label.
 // Tries a nearby Place (POI/business) first, then falls back to town/locality.
 
-const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+import Constants from "expo-constants";
+const GOOGLE_KEY = Constants.expoConfig.extra.googleMapsApiKey;
 
 const GEO_CACHE = {};
 

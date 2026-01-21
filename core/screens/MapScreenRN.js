@@ -1,4 +1,5 @@
 import { db } from "@config/firebase";
+import Constants from "expo-constants";
 import { TabBarContext } from "@context/TabBarContext";
 import { incMetric } from "@core/utils/devMetrics";
 import { collection, onSnapshot } from "firebase/firestore";
@@ -38,9 +39,10 @@ import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
+import { Platform } from "react-native";
 
 const RECENTER_ZOOM = 12;
-const FOLLOW_ZOOM = 18; // slightly less close, more “navigation” feel
+const FOLLOW_ZOOM = Platform.OS === "ios" ? 21 : 18; // iOS zooms closer
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 /* ------------------------------------------------------------------ */
@@ -1141,9 +1143,9 @@ export default function MapScreenRN() {
       return [];
     }
 
-    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
+    const apiKey = Constants.expoConfig?.extra?.googlePlacesApiKey;
     if (!apiKey) {
-      console.log("[GOOGLE] Missing API key");
+      console.log("[GOOGLE] Missing googlePlacesApiKey in Constants.expoConfig.extra");
       return [];
     }
     const fieldMask = [
@@ -1766,6 +1768,8 @@ export default function MapScreenRN() {
             let label = null;
 
             if (nearbyCrPlace) {
+          }
+          {...(Platform.OS === "ios" ? { minZoomLevel: 1, maxZoomLevel: 18 } : {})}
               label = nearbyCrPlace.title || nearbyCrPlace.name;
             } else {
               try {
@@ -1796,7 +1800,7 @@ export default function MapScreenRN() {
             attemptRouteFit();
           }}
         >
-          {/* Navigation arrow marker - shown during Follow Me or active ride */}
+          {/* Navigation arrow marker - show if Follow Me or active ride is enabled */}
           {isNavigationMode && userLocation && (
             <Marker
               coordinate={{
@@ -2091,7 +2095,7 @@ export default function MapScreenRN() {
       )}
 
       {/* Junction panel (top-left) during navigation - helmet visible */}
-      {isNavigationMode && routeSteps && routeSteps.length > 0 && (
+      {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
         (() => {
           const step = routeSteps[Math.min(currentStepIndex, routeSteps.length - 1)];
           const m = step?.maneuver || "STRAIGHT";
