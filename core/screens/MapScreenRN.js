@@ -24,7 +24,6 @@ import { saveRoute } from "@/core/map/routes/saveRoute";
 import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
-import useNavigationCamera from "@core/map/hooks/useNavigationCamera";
 import useActiveRide from "@core/map/routes/useActiveRide";
 import useActiveRideLocations from "@core/map/routes/useActiveRideLocations";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
@@ -452,101 +451,59 @@ export default function MapScreenRN() {
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
   const routeFittedRef = useRef(false);
   
-
-  // --- SMOOTHED USER LOCATION (for marker smoothing) ---
-  const [smoothedUserLocation, setSmoothedUserLocation] = useState(null);
-  const [smoothedPrevLocation, setSmoothedPrevLocation] = useState(null);
-  const [smoothedHeading, setSmoothedHeading] = useState(0);
-  const SMOOTHING_ALPHA = 0.25; // 0.0 = no smoothing, 1.0 = instant jump
-
-  // Calculate heading (bearing) between two lat/lng points
-  function calculateHeading(from, to) {
-    if (!from || !to) return 0;
-    const toRad = (deg) => (deg * Math.PI) / 180;
-    const toDeg = (rad) => (rad * 180) / Math.PI;
-    const dLon = toRad(to.longitude - from.longitude);
-    const lat1 = toRad(from.latitude);
-    const lat2 = toRad(to.latitude);
-    const y = Math.sin(dLon) * Math.cos(lat2);
-    const x = Math.cos(lat1) * Math.sin(lat2) -
-              Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-    let brng = Math.atan2(y, x);
-    brng = toDeg(brng);
-    return (brng + 360) % 360;
-  }
-
   // Active ride & location sharing
   const { activeRide, endRide } = useActiveRide(user);
   const { riderLocations } = useActiveRideLocations(activeRide, user?.uid);
   
-  // Navigation camera for heading-up mode
-  const { isNavigationMode, shouldRotateMap, smoothedHeading } = useNavigationCamera({
-    isFollowMeEnabled: followUser,
-    activeRide,
-    userLocation,
+  // Navigation mode is active when Follow Me is enabled OR user is on an active ride
+  const isNavigationMode = followUser || !!activeRide;
+  
+  // Sync activeRide to TabBarContext so floating tab bar can access it
   useEffect(() => {
-    let subscription;
+    console.log('[MapScreenRN] activeRide changed:', activeRide?.rideId || 'null');
+    setActiveRide(activeRide);
+    activeRideRef.current = activeRide;
+    endRideRef.current = endRide;
+  }, [activeRide, endRide, setActiveRide]);
+  
+  const canSaveRoute = 
+    capabilities.canSaveRoutes &&
+    routeMeta &&
+    (routeDestination || waypoints.length > 0);
+  const [lastEncodedPolyline, setLastEncodedPolyline] = useState(null);
 
-    (async () => {
-      console.log("[MAP] Requesting location permissions...");
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {/* Lines 998-1000 omitted */}
+  const [showSaveRouteModal, setShowSaveRouteModal] = useState(false);
+  const [saveRouteName, setSaveRouteName] = useState("");
+  const [currentLoadedRouteId, setCurrentLoadedRouteId] = useState(null);
 
-      console.log("[MAP] Getting current position...");
-      // 1️⃣ IMMEDIATE location (fixes first tap issue)
-      const current = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+  const {
+    pendingSavedRouteId,
+    setPendingSavedRouteId,
+    enableFollowMeAfterLoad,
+    setEnableFollowMeAfterLoad,
+  } = useContext(WaypointsContext);
+  const mapReadyRef = useRef(false);
+  const pendingFitRef = useRef(null);
+  const activeRideOnFocusRef = useRef(null); // Track active ride state when screen is focused
+  const activeRideRef = useRef(null);
+  const endRideRef = useRef(null);
+  
+  const displayWaypoints = useMemo(() => {
+    if (!routeDestination) return waypoints;
+    return [
+      ...waypoints,
+      {
+        ...routeDestination,
+        isTerminal: true,
+      },
+    ];
+  }, [waypoints, routeDestination]);
 
-      console.log("[MAP] Location set:", current.coords);
-      setUserLocation(current.coords);
-      setSmoothedUserLocation(current.coords); // Initialize smoothed location
-      setSmoothedPrevLocation(current.coords);
-
-      // 2️⃣ CONTINUOUS updates (Follow Me)
-      subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.Balanced,
-          timeInterval: 1000,
-          distanceInterval: 5,
-        },
-        (location) => {
-          setUserLocation(location.coords);
-          setSmoothedUserLocation((prev) => {
-            if (!prev) return location.coords;
-            const next = {
-              latitude: prev.latitude + SMOOTHING_ALPHA * (location.coords.latitude - prev.latitude),
-              longitude: prev.longitude + SMOOTHING_ALPHA * (location.coords.longitude - prev.longitude),
-              altitude: location.coords.altitude,
-              accuracy: location.coords.accuracy,
-              heading: location.coords.heading,
-              speed: location.coords.speed,
-            };
-            setSmoothedPrevLocation(prev);
-            return next;
-          });
-        }
-      );
-    })();
-
-    return () => {
-      console.log("[MAP] Cleaning up location subscription");
-      subscription?.remove();
-      clearFollowMeInactivityTimeout(); // Clean up inactivity timeout on unmount
-    };
-  }, []);
-
-  // Update smoothed heading based on smoothed location movement
-  useEffect(() => {
-    if (!smoothedUserLocation || !smoothedPrevLocation) return;
-    // Only update heading if movement is significant (avoid noise)
-    const dLat = smoothedUserLocation.latitude - smoothedPrevLocation.latitude;
-    const dLng = smoothedUserLocation.longitude - smoothedPrevLocation.longitude;
-    const dist = Math.sqrt(dLat * dLat + dLng * dLng) * 111000; // meters
-    if (dist > 0.5) { // Only update if moved >0.5m
-      setSmoothedHeading(calculateHeading(smoothedPrevLocation, smoothedUserLocation));
-    }
-  }, [smoothedUserLocation, smoothedPrevLocation]);
+  const navButtonBottom = insets.bottom + TAB_BAR_HEIGHT + FLOATING_MARGIN;
+  const saveButtonBottom = navButtonBottom + SAVE_BUTTON_GAP;
+  const [pendingMapPoint, setPendingMapPoint] = useState(null);
+  const [showAddPointMenu, setShowAddPointMenu] = useState(false);
+  const [manualStartPoint, setManualStartPoint] = useState(null);
   const [showRefreshRouteMenu, setShowRefreshRouteMenu] = useState(false);
   const hasRouteIntent = routeDestination || waypoints.length > 0;
 
@@ -968,10 +925,10 @@ export default function MapScreenRN() {
     resetFollowMeInactivityTimeout();
 
     // Only update camera in navigation mode (Follow Me)
-    if (shouldRotateMap) {
-      recenterOnUser({ heading: smoothedHeading, pitch: 45, zoom: FOLLOW_ZOOM });
+    if (isNavigationMode && userLocation.heading !== undefined && userLocation.heading !== -1 && userLocation.speed > 0.5) {
+      recenterOnUser({ heading: userLocation.heading, pitch: 45, zoom: FOLLOW_ZOOM });
     }
-  }, [userLocation, followUser, shouldRotateMap, smoothedHeading]);
+  }, [userLocation, followUser, isNavigationMode]);
 
   // Compute distance to next junction (current step end). Advance step when close.
   useEffect(() => {
@@ -1048,55 +1005,40 @@ export default function MapScreenRN() {
           timeInterval: 1000,
           distanceInterval: 5,
         },
-        useEffect(() => {
-          let subscription;
+        (location) => {
+          setUserLocation(location.coords);
+        }
+      );
+    })();
 
-          (async () => {
-            console.log("[MAP] Requesting location permissions...");
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== "granted") {/* Lines 993-995 omitted */}
+    return () => {
+      console.log("[MAP] Cleaning up location subscription");
+      subscription?.remove();
+      clearFollowMeInactivityTimeout(); // Clean up inactivity timeout on unmount
+    };
+  }, []);
 
-            console.log("[MAP] Getting current position...");
-            // 1️⃣ IMMEDIATE location (fixes first tap issue)
-            const current = await Location.getCurrentPositionAsync({
-              accuracy: Location.Accuracy.Balanced,
-            });
 
-            console.log("[MAP] Location set:", current.coords);
-            setUserLocation(current.coords);
-            setSmoothedUserLocation(current.coords); // Initialize smoothed location
+  /* ------------------------------------------------------------ */
+  /* FETCH GOOGLE POIS ON REGION CHANGE                            */
+  /* ------------------------------------------------------------ */
 
-            // 2️⃣ CONTINUOUS updates (Follow Me)
-            subscription = await Location.watchPositionAsync(
-              {
-                accuracy: Location.Accuracy.Balanced,
-                timeInterval: 1000,
-                distanceInterval: 5,
-              },
-              (location) => {
-                setUserLocation(location.coords);
-                setSmoothedUserLocation((prev) => {
-                  if (!prev) return location.coords;
-                  // Exponential moving average for lat/lng
-                  return {
-                    latitude: prev.latitude + SMOOTHING_ALPHA * (location.coords.latitude - prev.latitude),
-                    longitude: prev.longitude + SMOOTHING_ALPHA * (location.coords.longitude - prev.longitude),
-                    altitude: location.coords.altitude,
-                    accuracy: location.coords.accuracy,
-                    heading: location.coords.heading,
-                    speed: location.coords.speed,
-                  };
-                });
-              }
-            );
-          })();
+  const handleRegionChangeComplete = async (region) => {
+    setMapRegion(region);
 
-          return () => {
-            console.log("[MAP] Cleaning up location subscription");
-            subscription?.remove();
-            clearFollowMeInactivityTimeout(); // Clean up inactivity timeout on unmount
-          };
-        }, []);
+    // Debounce disables for 2s after programmatic camera moves
+    if (skipRegionChangeUntilRef.current && Date.now() < skipRegionChangeUntilRef.current) {
+      // Ignore region changes during debounce window
+      return;
+    }
+
+    // Disable Follow Me only on user pan, not on programmatic animations
+    // isAnimatingRef detects our own recenterOnUser() calls
+    // skipNextRegionChangeRef catches route-to-home and toggle-on animations
+    if (followUser && !isAnimatingRef.current && !skipNextRegionChangeRef.current) {
+      console.log('[MAP] User manually panned - disabling Follow Me');
+      lastUserPanTimeRef.current = Date.now();
+      setFollowUser(false);
       clearFollowMeInactivityTimeout();
     }
     skipNextRegionChangeRef.current = false;
@@ -1879,15 +1821,15 @@ export default function MapScreenRN() {
           }}
         >
           {/* Navigation arrow marker - show if Follow Me or active ride is enabled */}
-          {isNavigationMode && smoothedUserLocation && (
+          {isNavigationMode && userLocation && (
             <Marker
               coordinate={{
-                latitude: smoothedUserLocation.latitude,
-                longitude: smoothedUserLocation.longitude,
+                latitude: userLocation.latitude,
+                longitude: userLocation.longitude,
               }}
               anchor={{ x: 0.5, y: 0.5 }}
               flat={true}
-              rotation={smoothedHeading || 0}
+              rotation={userLocation.heading || 0}
               zIndex={1000}
             >
               <View style={styles.navigationArrow}>
