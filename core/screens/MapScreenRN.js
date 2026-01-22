@@ -1712,7 +1712,7 @@ export default function MapScreenRN() {
   };
 
   const currentZoom = mapRegion ? calculateZoomLevel(mapRegion.latitudeDelta) : 0;
-  const showPlaceNames = currentZoom >= 16; // Show names when zoomed in to zoom level 16+
+  const showPlaceNames = currentZoom >= 14; // Show names when zoomed in to zoom level 14+
 
   /* ------------------------------------------------------------ */
   /* RENDER                                                       */
