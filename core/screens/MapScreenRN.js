@@ -40,8 +40,8 @@ import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 
-const RECENTER_ZOOM = 12;
-const FOLLOW_ZOOM = Platform.OS === "ios" ? 21 : 18; // iOS zooms closer
+const RECENTER_ZOOM = 2.5;
+const FOLLOW_ZOOM = Platform.OS === "ios" ? 9 : 10; // Follow Me zoom level
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 /* ------------------------------------------------------------------ */
@@ -786,15 +786,28 @@ export default function MapScreenRN() {
     if (!coords) return;
 
     isAnimatingRef.current = true;
-    mapRef.current.animateCamera(
-      {
-        center: { latitude: coords.latitude, longitude: coords.longitude },
-        ...(zoom !== null ? { zoom } : {}),
-        ...(heading !== null ? { heading } : {}),
-        ...(pitch !== null ? { pitch } : {}),
-      },
-      { duration: 350 }
-    );
+    
+    // Build camera config with platform-specific zoom handling
+    let cameraConfig = {
+      center: { latitude: coords.latitude, longitude: coords.longitude },
+      ...(heading !== null ? { heading } : {}),
+      ...(pitch !== null ? { pitch } : {}),
+    };
+    
+    // iOS uses altitude (in meters), Android uses zoom level
+    if (zoom !== null) {
+      if (Platform.OS === "ios") {
+        // Convert zoom level to altitude for iOS
+        // Lower altitude = closer/more zoomed in
+        // zoom 28 ≈ ~100m altitude, zoom 12 ≈ ~5000m altitude
+        cameraConfig.altitude = Math.pow(2, 13 - zoom) * 10;
+      } else {
+        cameraConfig.zoom = zoom;
+      }
+    }
+    
+    mapRef.current.animateCamera(cameraConfig, { duration: 350 });
+    
     // Reset flag after animation completes
     setTimeout(() => { isAnimatingRef.current = false; }, 500);
     // Debounce region change disables for 2 seconds after recenter
@@ -930,7 +943,7 @@ export default function MapScreenRN() {
     resetFollowMeInactivityTimeout();
 
     // Only update camera in navigation mode (Follow Me)
-    if (isNavigationMode && userLocation.heading !== undefined && userLocation.heading !== -1 && userLocation.speed > 0.5) {
+    if (isNavigationMode && userLocation.heading !== undefined && userLocation.heading !== -1) {
       recenterOnUser({ heading: userLocation.heading, pitch: 45, zoom: FOLLOW_ZOOM });
     }
   }, [userLocation, followUser, isNavigationMode]);
@@ -1804,6 +1817,8 @@ export default function MapScreenRN() {
           showsUserLocation={!isNavigationMode}
           pitchEnabled
           showsMyLocationButton={false}
+          minZoomLevel={Platform.OS === "ios" ? 1 : 0}
+          maxZoomLevel={Platform.OS === "ios" ? 28 : 18}
           onRegionChangeComplete={handleRegionChangeComplete}
           onPress={() => {
             if (showFilters) {
