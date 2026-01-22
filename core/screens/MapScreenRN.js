@@ -40,8 +40,8 @@ import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 
-const RECENTER_ZOOM = 2.5;
-const FOLLOW_ZOOM = Platform.OS === "ios" ? 9 : 10; // Follow Me zoom level
+const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
+const FOLLOW_ZOOM = Platform.OS === "ios" ? 9 : 18; // Android: 18, iOS: 9
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 /* ------------------------------------------------------------------ */
