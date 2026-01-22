@@ -1701,6 +1701,19 @@ export default function MapScreenRN() {
     return categoryColorMap[category] || categoryColorMap.unknown;
   }
 
+  // Calculate zoom level from latitudeDelta
+  const calculateZoomLevel = (latitudeDelta) => {
+    // Approximation: zoom = log2(360 / latitudeDelta)
+    // At zoom 20: latitudeDelta ≈ 0.00014
+    // At zoom 15: latitudeDelta ≈ 0.0044
+    // At zoom 14: latitudeDelta ≈ 0.0087
+    // At zoom 13: latitudeDelta ≈ 0.0175
+    return Math.round(Math.log(360 / latitudeDelta) / Math.LN2);
+  };
+
+  const currentZoom = mapRegion ? calculateZoomLevel(mapRegion.latitudeDelta) : 0;
+  const showPlaceNames = currentZoom >= 16; // Show names when zoomed in to zoom level 16+
+
   /* ------------------------------------------------------------ */
   /* RENDER                                                       */
   /* ------------------------------------------------------------ */
@@ -1789,7 +1802,33 @@ export default function MapScreenRN() {
         anchor={{ x: 0.5, y: 1 }}
         zIndex={zIndex}
       >
-        <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
+        <View style={{ alignItems: "center" }}>
+          <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
+          {showPlaceNames && (
+            <View
+              style={{
+                backgroundColor: "rgba(0, 0, 0, 0.7)",
+                paddingHorizontal: 6,
+                paddingVertical: 3,
+                borderRadius: 4,
+                marginTop: 4,
+                maxWidth: 120,
+              }}
+            >
+              <Text
+                style={{
+                  color: "#fff",
+                  fontSize: 11,
+                  fontWeight: "500",
+                  textAlign: "center",
+                }}
+                numberOfLines={2}
+              >
+                {poi.title || poi.name || "Unnamed"}
+              </Text>
+            </View>
+          )}
+        </View>
       </Marker>
     );
   };
