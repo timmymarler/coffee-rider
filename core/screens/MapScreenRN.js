@@ -1,7 +1,7 @@
 import { db } from "@config/firebase";
-import Constants from "expo-constants";
 import { TabBarContext } from "@context/TabBarContext";
 import { incMetric } from "@core/utils/devMetrics";
+import Constants from "expo-constants";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -34,11 +34,11 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
 import { doc, getDoc } from "firebase/firestore";
+import { Platform } from "react-native";
 import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
-import { Platform } from "react-native";
 
 const RECENTER_ZOOM = 12;
 const FOLLOW_ZOOM = Platform.OS === "ios" ? 21 : 18; // iOS zooms closer
@@ -62,14 +62,19 @@ const CATEGORY_ICON_MAP = {
   scenic: "forest",
   bikes: "motorbike",
   scooters: "moped",
+  camping: "tent",
+  accommodation: "bed-outline",
   unknown: "map-marker",
 };
 
 
 const AMENITY_ICON_MAP = {
-  toilets: "toilet",
-  outdoor_seating: "table-picnic",
   parking: "parking",
+  outdoor_seating: "table-picnic",
+  toilets: "toilet",
+  disabled_access: "wheelchair-accessibility",
+  pet_friendly: "dog-side",
+  ev_charger: "ev-plug-ccs2",
 };
 
   // Maneuver → icon + label map (simplified)
@@ -1099,6 +1104,9 @@ export default function MapScreenRN() {
       photos: [],                // no CR photos yet
       amenities: [],
 
+      // Category from search result
+      category: googlePlace.category,
+
       // 🔑 The critical join key
       googlePlaceId: googlePlace.id,
 
@@ -1676,6 +1684,23 @@ export default function MapScreenRN() {
     }) || null;
   }
 
+  // Category → outline color map for markers
+  function getCategoryStrokeColor(category) {
+    const categoryColorMap = {
+      cafe: "#8B4513",           // brown
+      restaurant: "#D4641D",     // orange-brown
+      pub: "#8B0000",            // dark red
+      bikes: "#DC143C",          // crimson
+      fuel: "#006994",           // petrol blue
+      parking: "#556B2F",        // dark olive
+      scenic: "#228B22",         // forest green
+      camping: "#228B22",        // forest green
+      accommodation: "#663399",  // purple
+      unknown: "#696969",        // dim gray
+    };
+    return categoryColorMap[category] || categoryColorMap.unknown;
+  }
+
   /* ------------------------------------------------------------ */
   /* RENDER                                                       */
   /* ------------------------------------------------------------ */
@@ -1691,11 +1716,25 @@ export default function MapScreenRN() {
     const isSearchHitGoogle = activeQuery && !isCr && matchesQuery(poi, activeQuery);
 
     let markerMode = "default";
-    if (isDestination) markerMode = "destination";
-    else if (isSearchHitCR) markerMode = "searchCR";
-    else if (isSearchHitGoogle) markerMode = "searchGoogle";
-    else if (isCr) markerMode = "cr";
-    else if (isTemp) markerMode = "temp";
+    let zIndex = 1;
+    if (isDestination) {
+      markerMode = "destination";
+      zIndex = 1000;
+    } else if (isSearchHitCR) {
+      markerMode = "searchCR";
+      zIndex = 800; // Higher than searchGoogle
+    } else if (isSearchHitGoogle) {
+      markerMode = "searchGoogle";
+      zIndex = 700; // Lower than searchCR (partial matches)
+    } else if (isCr) {
+      markerMode = "cr";
+      zIndex = 500;
+    } else if (isTemp) {
+      markerMode = "temp";
+      zIndex = 600;
+    }
+
+    const categoryStroke = getCategoryStrokeColor(category);
 
     const markerStyles = {
       destination: {
@@ -1704,14 +1743,14 @@ export default function MapScreenRN() {
         stroke: theme.colors.danger,
       },
       searchCR: {
-        fill: theme.colors.accent,
-        circle: theme.colors.accentLight,
-        stroke: theme.colors.primaryLight,
+        fill: "#FFD700",         // bright gold for current places in search
+        circle: "#FFA500",
+        stroke: categoryStroke,  // category-specific outline
       },
       searchGoogle: {
-        fill: theme.colors.primaryMid,
-        circle: theme.colors.accentLight,
-        stroke: theme.colors.primaryDark,
+        fill: "#FFEAA7",         // lighter gold for search results
+        circle: "#FFB84D",
+        stroke: categoryStroke,  // category-specific outline
       },
       cr: {
         fill: theme.colors.accentMid,
@@ -1748,7 +1787,7 @@ export default function MapScreenRN() {
           setSelectedPlaceId(poi.id);
         }}
         anchor={{ x: 0.5, y: 1 }}
-        zIndex={isDestination ? 1000 : 1}
+        zIndex={zIndex}
       >
         <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
       </Marker>

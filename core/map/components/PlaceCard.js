@@ -65,18 +65,16 @@ const defaultSuitability = {
 
 const defaultAmenities = {
   parking: false,
-  motorcycleParking: false,
-  evCharger: false,
-  toilets: false,
-  petFriendly: false,
-  disabledAccess: false,
   outdoorSeating: false,
+  toilets: false,
+  disabledAccess: false,
+  petFriendly: false,
+  evCharger: false,
 };
 
 // UI key → Firestore key
 const AMENITY_KEY_MAP = {
   parking: "parking",
-  motorcycleParking: "motorcycle_parking",
   evCharger: "ev_charger",
   toilets: "toilets",
   petFriendly: "pet_friendly",
@@ -203,7 +201,13 @@ export default function PlaceCard({
   const [ratingInput, setRatingInput] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [localPlace, setLocalPlace] = useState(place);
-  const [category, setCategory] = useState("cafe");
+  // Set initial category: use place.category if present (from search result), else default to 'cafe'
+  const [category, setCategory] = useState(() => {
+    if (place?.category && typeof place.category === 'string') {
+      return place.category;
+    }
+    return "cafe";
+  });
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [addError, setAddError] = useState(null);
 
@@ -667,6 +671,11 @@ export default function PlaceCard({
       };
 
       if (googlePlaceId) {
+        // Extra guard: ensure createdBy is never null
+        if (!uid) {
+          setAddError("User ID missing. Please sign in again and try adding the place.");
+          return;
+        }
         // Google places: always CREATE (idempotent)
         await setDoc(
           placeRef,
@@ -1276,8 +1285,6 @@ export default function PlaceCard({
                       amenitiesState[key],
                       key === "parking"
                         ? "parking"
-                        : key === "motorcycleParking"
-                        ? "motorbike"
                         : key === "evCharger"
                         ? "ev-plug-ccs2"
                         : key === "toilets"
