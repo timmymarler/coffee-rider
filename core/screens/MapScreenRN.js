@@ -614,6 +614,8 @@ export default function MapScreenRN() {
   const saveButtonBottom = navButtonBottom + SAVE_BUTTON_GAP;
   const [pendingMapPoint, setPendingMapPoint] = useState(null);
   const [showAddPointMenu, setShowAddPointMenu] = useState(false);
+  const [showMarkerMenu, setShowMarkerMenu] = useState(false);
+  const [pendingMarker, setPendingMarker] = useState(null);
   const [manualStartPoint, setManualStartPoint] = useState(null);
   const [showRefreshRouteMenu, setShowRefreshRouteMenu] = useState(false);
   const hasRouteIntent = routeDestination || waypoints.length > 0;
@@ -621,6 +623,11 @@ export default function MapScreenRN() {
   const closeAddPointMenu = () => {
     setShowAddPointMenu(false);
     setPendingMapPoint(null);
+  };
+
+  const closeMarkerMenu = () => {
+    setShowMarkerMenu(false);
+    setPendingMarker(null);
   };
 
   const closeRefreshRouteMenu = () => {
@@ -1980,6 +1987,7 @@ export default function MapScreenRN() {
 
     const handleMarkerPress = (e) => {
       e.stopPropagation?.();
+      console.log("[MARKER] Press on:", poi.title || poi.name);
       if (poi.source === "google") {
         if (!capabilities.canSearchGoogle) return;
         const temp = promoteGoogleToTempCr(poi);
@@ -1994,14 +2002,8 @@ export default function MapScreenRN() {
       console.log("[MARKER] Long press on:", poi.title || poi.name);
       if (!capabilities.canCreateRoutes) return;
       
-      const payload = {
-        latitude: poi.latitude,
-        longitude: poi.longitude,
-        geocodeResult: poi.title || poi.name,
-      };
-
-      setPendingMapPoint(payload);
-      setShowAddPointMenu(true);
+      setPendingMarker(poi);
+      setShowMarkerMenu(true);
     };
 
     return (
@@ -2500,6 +2502,87 @@ export default function MapScreenRN() {
         />
       )}
 
+      {/* Marker long press menu - just routing options, no "Add new place" */}
+      <Modal visible={showMarkerMenu} transparent animationType="fade">
+        <View style={styles.pointMenuOverlay}>
+          <View style={styles.pointMenu}>
+            <Pressable
+              onPress={() => {
+                closeMarkerMenu();
+                if (pendingMarker) addFromPlace(pendingMarker);
+              }}
+              style={({ pressed }) => [
+                styles.pointMenuItem,
+                pressed && { backgroundColor: theme.colors.primaryDark },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="map-marker-plus"
+                size={26}
+                color={theme.colors.accent}
+                style={{ marginRight: 12 }}
+              />
+              <Text style={styles.pointMenuText}>Add waypoint</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                closeMarkerMenu();
+                if (pendingMarker) {
+                  setManualStartPoint({
+                    latitude: pendingMarker.latitude,
+                    longitude: pendingMarker.longitude,
+                  });
+                }
+              }}
+              style={({ pressed }) => [
+                styles.pointMenuItem,
+                pressed && { backgroundColor: theme.colors.primaryDark },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="flag-triangle"
+                size={26}
+                color={theme.colors.accent}
+                style={{ marginRight: 12 }}
+              />
+              <Text style={styles.pointMenuText}>Add as start point</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                closeMarkerMenu();
+                if (pendingMarker) {
+                  handleRoute(pendingMarker);
+                }
+              }}
+              style={({ pressed }) => [
+                styles.pointMenuItem,
+                pressed && { backgroundColor: theme.colors.primaryDark },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="flag-checkered"
+                size={26}
+                color={theme.colors.accent}
+                style={{ marginRight: 12 }}
+              />
+              <Text style={styles.pointMenuText}>Add as destination</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={closeMarkerMenu}
+              style={({ pressed }) => [
+                styles.pointMenuItem,
+                pressed && { backgroundColor: theme.colors.primaryDark },
+              ]}
+            >
+              <Text style={styles.pointMenuCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showAddPointMenu} transparent animationType="fade">
         <View style={styles.pointMenuOverlay}>
           <View style={styles.pointMenu}>
@@ -2515,7 +2598,7 @@ export default function MapScreenRN() {
                     latitude: pendingMapPoint?.latitude,
                     longitude: pendingMapPoint?.longitude,
                     title: pendingMapPoint?.geocodeResult || "New Place",
-                    isNew: true,
+                    _temp: true,
                     source: "cr",
                   };
                   setTempCrPlace(newPlace);
