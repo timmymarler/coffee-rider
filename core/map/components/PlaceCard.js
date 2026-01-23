@@ -647,6 +647,16 @@ export default function PlaceCard({
         return;
       }
 
+      if (!name || name.trim().length === 0) {
+        setAddError("Please enter a place name.");
+        return;
+      }
+
+      if (!category) {
+        setAddError("Please select a category.");
+        return;
+      }
+
       const docId = googlePlaceId || safePlace.id;
       const placeRef = doc(db, "places", docId);
 
@@ -1048,7 +1058,7 @@ export default function PlaceCard({
         <View style={styles.info}>
           {canAddPlace ? (
             <TextInput
-              style={[styles.title, styles.text]}
+              style={[styles.title, styles.text, { color: theme.colors.primaryLight }]}
               value={manualName}
               onChangeText={setManualName}
               placeholder="Place name"
@@ -1298,7 +1308,7 @@ export default function PlaceCard({
           
           {addError && (
             <View style={styles.savedHint}>
-              <Text style={{ color: theme.colors.accentMid }}>
+              <Text style={{ color: theme.colors.danger }}>
                 {addError}
               </Text>
             </View>

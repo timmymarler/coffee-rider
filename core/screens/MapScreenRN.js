@@ -2024,7 +2024,13 @@ export default function MapScreenRN() {
         anchor={{ x: 0.5, y: 1 }}
         zIndex={zIndex}
       >
-        <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
+        <Pressable
+          delayLongPress={500}
+          onLongPress={handleMarkerLongPress}
+          onPress={() => {}} // Consume the press to avoid double-triggering
+        >
+          <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
+        </Pressable>
       </Marker>
     );
   };
