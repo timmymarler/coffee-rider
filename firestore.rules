@@ -49,10 +49,15 @@ service cloud.firestore {
     match /places/{placeId} {
       allow read: if true;
       allow create: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
-      // Allow update if user is authenticated and is the creator or admin, but do not require createdBy to match for update
+      // Allow update if user is authenticated and is the creator or admin
+      // Pro users can update amenities, suitability, and ratings on any place
+      // Only admin and creators can update other fields
       allow update: if isAuthed() && (
         hasRole('admin') ||
-        (resource.data.createdBy == request.auth.uid)
+        (resource.data.createdBy == request.auth.uid) ||
+        (isProOrAdmin() && 
+         // Pro can update amenities, suitability, and ratings only (plus updatedAt)
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['amenities', 'suitability', 'crRatings', 'updatedAt']))
       );
       allow delete: if false;
     }
