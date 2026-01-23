@@ -722,6 +722,34 @@ export default function PlaceCard({
 
       console.log("[SAVE] Success! onPlaceCreated with docId=", docId);
       setAddSuccess(true);
+      
+      // Fetch the newly saved place from Firestore to refresh the card
+      try {
+        const docSnapshot = await new Promise((resolve) => {
+          const unsubscribe = onSnapshot(
+            doc(db, "places", docId),
+            (snap) => {
+              unsubscribe();
+              resolve(snap);
+            },
+            (err) => {
+              console.error("[SAVE] Error fetching new place:", err);
+              resolve(null);
+            }
+          );
+        });
+        
+        if (docSnapshot?.exists()) {
+          console.log("[SAVE] Refreshing card with newly saved place");
+          setCurrentPlace({
+            ...docSnapshot.data(),
+            id: docId,
+          });
+        }
+      } catch (refreshErr) {
+        console.error("[SAVE] Failed to refresh card:", refreshErr);
+      }
+      
       setTimeout(() => setAddSuccess(false), 2000);
       onPlaceCreated?.(name, docId);
       
