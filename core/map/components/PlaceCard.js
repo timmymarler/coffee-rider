@@ -731,10 +731,18 @@ export default function PlaceCard({
         
         if (docSnapshot.exists()) {
           console.log("[SAVE] Refreshing card with newly saved place data");
-          setCurrentPlace({
+          const newPlaceData = {
             ...docSnapshot.data(),
             id: docId,
-          });
+          };
+          console.log("[SAVE] New place data:", newPlaceData);
+          setCurrentPlace(newPlaceData);
+          
+          // Reset form fields since it's no longer editable
+          setManualName("");
+          setManualCategory(null);
+          setAddError(null);
+          console.log("[SAVE] Reset form fields and cleared errors");
         } else {
           console.warn("[SAVE] Document not found after save");
         }
