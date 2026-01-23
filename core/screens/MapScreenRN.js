@@ -1994,7 +1994,11 @@ export default function MapScreenRN() {
           setSelectedPlaceId(poi.id);
         }}
         onLongPress={() => {
-          if (!capabilities.canCreateRoutes) return;
+          console.log("[MARKER] Long press detected on:", poi.title || poi.name, "canCreateRoutes:", capabilities.canCreateRoutes);
+          if (!capabilities.canCreateRoutes) {
+            console.warn("[MARKER] User cannot create routes, ignoring long press");
+            return;
+          }
           
           const payload = {
             latitude: poi.latitude,
@@ -2002,6 +2006,7 @@ export default function MapScreenRN() {
             geocodeResult: poi.title || poi.name,
           };
 
+          console.log("[MARKER] Setting pending map point and showing menu");
           setPendingMapPoint(payload);
           setShowAddPointMenu(true);
         }}
@@ -2494,6 +2499,7 @@ export default function MapScreenRN() {
       <Modal visible={showAddPointMenu} transparent animationType="fade">
         <View style={styles.pointMenuOverlay}>
           <View style={styles.pointMenu}>
+            {console.log("[MENU] Menu visible. routeCoords.length:", routeCoords.length, "canCreateCrPlaces:", capabilities.canCreateCrPlaces)}
             {/* Show "Add new place here" if no route and user can create places */}
             {!routeCoords.length && capabilities.canCreateCrPlaces && (
               <Pressable
