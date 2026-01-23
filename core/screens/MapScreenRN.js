@@ -516,6 +516,9 @@ export default function MapScreenRN() {
   const router = useRouter();
   const [routeCoords, setRouteCoords] = useState([]);
 
+  // Newly created place (shown until it's fetched into crPlaces)
+  const [newlyCreatedPlace, setNewlyCreatedPlace] = useState(null);
+
   const hasRoute = routeCoords.length > 0;
   const [routeMeta, setRouteMeta] = useState(null);
   const [followUser, setFollowUser] = useState(false);
@@ -1554,12 +1557,17 @@ export default function MapScreenRN() {
 
     if (!selectedPlaceId) return null;
 
-    // 1️⃣ Temp Google-promoted place
+    // 1️⃣ Newly created place
+    if (newlyCreatedPlace && newlyCreatedPlace.id === selectedPlaceId) {
+      return newlyCreatedPlace;
+    }
+
+    // 2️⃣ Temp Google-promoted place
     if (tempCrPlace && tempCrPlace.id === selectedPlaceId) {
       return tempCrPlace;
     }
 
-    // 2️⃣ CR place
+    // 3️⃣ CR place
     const crPlace = crMarkers.find(p => p.id === selectedPlaceId);
     if (crPlace) {
       const googleMatch = crPlace.googlePlaceId
@@ -1581,9 +1589,9 @@ export default function MapScreenRN() {
       };
     }
 
-    // 3️⃣ Google-only place
+    // 4️⃣ Google-only place
     return searchMarkers.find(p => p.id === selectedPlaceId) || null;
-  }, [selectedPlaceId, crMarkers, searchMarkers, tempCrPlace]);
+  }, [selectedPlaceId, crMarkers, searchMarkers, tempCrPlace, newlyCreatedPlace]);
 
 
   /* ------------------------------------------------------------ */
@@ -2503,15 +2511,19 @@ export default function MapScreenRN() {
             clearTempIfSafe();
           }}
           onNavigate={handleNavigate}
-          onPlaceCreated={(name, newCrId) => {
+          onPlaceCreated={(newPlace) => {
             // Show feedback
+            const placeName = newPlace.title || newPlace.name || "Place";
             setPostbox({
               title: "Place added",
-              message: `${name} has been added to Coffee Rider`,
+              message: `${placeName} has been added to Coffee Rider`,
             });
 
-            // Switch selection to the real CR place
-            setSelectedPlaceId(newCrId);
+            // Store the newly created place temporarily
+            setNewlyCreatedPlace(newPlace);
+            
+            // Switch selection to the newly created place
+            setSelectedPlaceId(newPlace.id);
           }}
           onAddWaypoint={(placeArg) => {
             addFromPlace(placeArg);

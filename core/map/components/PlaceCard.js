@@ -724,8 +724,26 @@ export default function PlaceCard({
       console.log("[SAVE] Success! onPlaceCreated with docId=", docId);
       setAddSuccess(true);
       
-      // Call the parent callback with the new place details
-      onPlaceCreated?.(name, docId);
+      // Fetch the newly saved place so we can pass it to the parent
+      try {
+        console.log("[SAVE] Fetching newly saved place from Firestore");
+        const docSnapshot = await getDoc(doc(db, "places", docId));
+        
+        if (docSnapshot.exists()) {
+          const newPlaceData = {
+            ...docSnapshot.data(),
+            id: docId,
+          };
+          console.log("[SAVE] Passing newly saved place to parent:", name, docId);
+          onPlaceCreated?.(newPlaceData);
+        } else {
+          console.warn("[SAVE] Document not found after save, passing just ID");
+          onPlaceCreated?.({ title: name, id: docId });
+        }
+      } catch (err) {
+        console.error("[SAVE] Failed to fetch new place for callback:", err);
+        onPlaceCreated?.({ title: name, id: docId });
+      }
       
       // Close the card after a brief delay to show success message
       setTimeout(() => {
