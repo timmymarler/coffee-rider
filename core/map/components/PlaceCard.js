@@ -616,6 +616,7 @@ export default function PlaceCard({
 
     try {
       setAddError(null);
+      console.log("[SAVE] Starting save with manualName=", manualName, "category=", category);
       const isNewPlace = place.source === "google" || place._temp === true;
 
       const resolvedAddress =
@@ -642,6 +643,8 @@ export default function PlaceCard({
       const latitude = safePlace.latitude;
       const longitude = safePlace.longitude;
 
+      console.log("[SAVE] Validation: name=", name, "lat=", latitude, "lng=", longitude, "category=", category);
+
       if (typeof latitude !== "number" || typeof longitude !== "number") {
         setAddError("Location data missing for this place.");
         return;
@@ -658,6 +661,7 @@ export default function PlaceCard({
       }
 
       const docId = googlePlaceId || safePlace.id;
+      console.log("[SAVE] docId=", docId, "googlePlaceId=", googlePlaceId, "safePlace.id=", safePlace.id);
       const placeRef = doc(db, "places", docId);
 
       const payload = {
@@ -687,6 +691,7 @@ export default function PlaceCard({
           return;
         }
         // Google places: always CREATE (idempotent)
+        console.log("[SAVE] Creating new place with setDoc");
         await setDoc(
           placeRef,
           {
@@ -698,13 +703,15 @@ export default function PlaceCard({
         );
       } else {
         // Existing CR places
+        console.log("[SAVE] Updating existing place with updateDoc");
         await updateDoc(placeRef, payload);
       }
 
+      console.log("[SAVE] Success! onPlaceCreated with docId=", docId);
       onPlaceCreated?.(docId);
       
     } catch (err) {
-      console.error("[SAVE PLACE] failed", err);
+      console.error("[SAVE PLACE] failed:", err.message, err);
       setAddError("Failed to save place. Please try again.");
     }
   };
@@ -1058,11 +1065,11 @@ export default function PlaceCard({
         <View style={styles.info}>
           {canAddPlace ? (
             <TextInput
-              style={[styles.title, styles.text, { color: theme.colors.primaryLight }]}
+              style={[styles.title, styles.text, { color: theme.colors.text }]}
               value={manualName}
               onChangeText={setManualName}
               placeholder="Place name"
-              placeholderTextColor={theme.colors.primaryLight}
+              placeholderTextColor={theme.colors.textMuted}
             />
           ) : (
             <Text style={styles.title}>
