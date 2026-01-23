@@ -81,13 +81,15 @@
     /* ----------------------------- PRODUCTION -------------------------- */
 
     "production": {
-      "env": { "APP_NAME": "rider" }
-          "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS": "AIzaSyCBYfySFi7323moEn_SdW4V9JvI-rn48uo",
-          "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID": "AIzaSyCBYfySFi7323moEn_SdW4V9JvI-rn48uo",
-          "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS": "AIzaSyCBYfySFi7323moEn_SdW4V9JvI-rn48uo",
-          "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID": "AIzaSyCBYfySFi7323moEn_SdW4V9JvI-rn48uo",
-          "EXPO_PUBLIC_FIREBASE_API_KEY_IOS": "AIzaSyCreZstfHnXYWJx5QfaZdcWvoxNCMyLDHg",
-          "EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID": "AIzaSyCreZstfHnXYWJx5QfaZdcWvoxNCMyLDHg"
+      "env": {
+        "APP_NAME": "rider",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS": "AIzaSyCBYfySFi7323moEn_SdW4V9JvI-rn48uo",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID": "AIzaSyCBYfySFi7323moEn_SdW4V9JvI-rn48uo",
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS": "AIzaSyCBYfySFi7323moEn_SdW4V9JvI-rn48uo",
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID": "AIzaSyCBYfySFi7323moEn_SdW4V9JvI-rn48uo",
+        "EXPO_PUBLIC_FIREBASE_API_KEY_IOS": "AIzaSyCreZstfHnXYWJx5QfaZdcWvoxNCMyLDHg",
+        "EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID": "AIzaSyCreZstfHnXYWJx5QfaZdcWvoxNCMyLDHg"
+      }
     }
   },
 
