@@ -347,7 +347,7 @@ export default function ProfileScreen() {
       <CRCard>
         <View style={styles.actionRow}>
           <CRButton
-            title={saving ? "Saving…" : "Save Changes"}
+            title={saving ? "Saving…" : "Save"}
             loading={saving}
             onPress={handleSaveProfile}
             style={[styles.actionButtonGrow, { marginRight: theme.spacing.sm }]}

@@ -997,22 +997,7 @@ export default function PlaceCard({
             </TouchableOpacity>
           )}
 
-          {canNavigate && (
-            <TouchableOpacity
-              /* Navigate */
-              style={[styles.photoActionButton, styles.primaryAction]}
-              onPress={() => {
-                onNavigate(place);
-                onClose(); // or setSelectedPlace(null)
-              }}            
-            >
-              <MaterialCommunityIcons
-                name="navigation-variant"
-                size={18}
-                color="#fff"
-              />
-            </TouchableOpacity>
-          )}
+
           {canPreviewSingleRoute && (
             <TouchableOpacity
               /* Route / Clear Route */

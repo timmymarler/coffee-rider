@@ -254,6 +254,50 @@ function distanceBetweenMeters(a, b) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+// Ramer-Douglas-Peucker polyline simplification algorithm
+// Reduces points while maintaining visual accuracy
+function simplifyPolyline(points, tolerance = 0.00005) {
+  if (points.length <= 2) return points;
+
+  // Find the point with the maximum distance from the line segment
+  let maxDistance = 0;
+  let maxIndex = 0;
+
+  const start = points[0];
+  const end = points[points.length - 1];
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const p = points[i];
+    
+    // Distance from point to line segment
+    const num = Math.abs(
+      (end.longitude - start.longitude) * (start.latitude - p.latitude) -
+      (start.longitude - p.longitude) * (end.latitude - start.latitude)
+    );
+    
+    const den = Math.sqrt(
+      Math.pow(end.longitude - start.longitude, 2) +
+      Math.pow(end.latitude - start.latitude, 2)
+    );
+    
+    const distance = num / den;
+
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      maxIndex = i;
+    }
+  }
+
+  // Recursively simplify
+  if (maxDistance > tolerance) {
+    const recursive1 = simplifyPolyline(points.slice(0, maxIndex + 1), tolerance);
+    const recursive2 = simplifyPolyline(points.slice(maxIndex), tolerance);
+    return recursive1.slice(0, -1).concat(recursive2);
+  } else {
+    return [start, end];
+  }
+}
+
 function getIconForCategory(category) {
   if (CATEGORY_ICON_MAP[category]) return CATEGORY_ICON_MAP[category];
 
@@ -594,11 +638,15 @@ export default function MapScreenRN() {
       // If we have a current polyline, find the closest point on it to snap back to
       let snapPoint = null;
       if (routeCoords && routeCoords.length >= 2) {
-        // Find closest point on current polyline
+        // Find closest point on current polyline - OPTIMIZED with sampling
         let minDistance = Infinity;
         let closestIdx = 0;
         
-        for (let i = 0; i < routeCoords.length; i++) {
+        // Sample every Nth point instead of checking all points for performance
+        // For a 1000-point route, this checks ~50 points instead of 1000
+        const sampleInterval = Math.max(1, Math.floor(routeCoords.length / 50));
+        
+        for (let i = 0; i < routeCoords.length; i += sampleInterval) {
           const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
           if (dist < minDistance) {
             minDistance = dist;
@@ -610,7 +658,7 @@ export default function MapScreenRN() {
         // to ensure we're snapping to a point ahead, not behind
         if (minDistance < 500 && closestIdx < routeCoords.length - 1) {
           snapPoint = routeCoords[closestIdx];
-          console.log(`[REFRESH] Snapping back to polyline at index ${closestIdx}, distance: ${minDistance.toFixed(0)}m`);
+          console.log(`[REFRESH] Snapping back to polyline at index ${closestIdx} (sampled from ${routeCoords.length}), distance: ${minDistance.toFixed(0)}m`);
         }
       }
 
@@ -1564,15 +1612,25 @@ export default function MapScreenRN() {
   }
 
   async function buildRoute({ destinationOverride = null, requestId } = {}) {
-    if (!routeDestination && waypoints.length === 0) return;
-    if (!userLocation) return;
+    console.log("[buildRoute] Starting - destination:", routeDestination, "waypoints:", waypoints.length);
+    if (!routeDestination && waypoints.length === 0) {
+      console.log("[buildRoute] No destination or waypoints, returning");
+      return;
+    }
+    if (!userLocation) {
+      console.log("[buildRoute] No user location, returning");
+      return;
+    }
 
     const destination =
       destinationOverride ||
       routeDestination ||
       null;
 
-    if (!destination && waypoints.length === 0) return;
+    if (!destination && waypoints.length === 0) {
+      console.log("[buildRoute] No destination and no waypoints, returning");
+      return;
+    }
 
     // ─────────────────────────────
     // Determine final destination
@@ -1603,6 +1661,8 @@ export default function MapScreenRN() {
       })),
     });
 
+    console.log("[buildRoute] fetchRoute returned:", result);
+
       // Always set routed total distance (meters) for use in WaypointsList
       if (typeof result?.distanceMeters === 'number' && result.distanceMeters > 0) {
         setRouteDistanceMeters(result.distanceMeters);
@@ -1612,15 +1672,26 @@ export default function MapScreenRN() {
         setRouteDistanceMeters(null);
       }
 
-    if (!result?.polyline) return;
-    if (requestId !== routeRequestId.current) return;
+    if (!result?.polyline) {
+      console.log("[buildRoute] No polyline in result, returning");
+      return;
+    }
+    if (requestId !== routeRequestId.current) {
+      console.log("[buildRoute] Request ID mismatch, returning");
+      return;
+    }
 
     const decoded = decode(result.polyline).map(([lat, lng]) => ({
       latitude: lat,
       longitude: lng,
     }));
 
-    setRouteCoords(decoded);
+    // Simplify polyline to reduce rendering lag - removes ~70% of points
+    // while maintaining visual accuracy
+    const simplified = simplifyPolyline(decoded, 0.00005); // ~5m tolerance
+    console.log("[buildRoute] Decoded", decoded.length, "points, simplified to", simplified.length, "points");
+    
+    setRouteCoords(simplified);
     // 🔑 ADD THIS
     setRouteMeta({
       distanceMeters: result.distanceMeters ?? result.distance,
@@ -1633,7 +1704,7 @@ export default function MapScreenRN() {
     if (!routeFittedRef.current && !followUser) {
       routeFittedRef.current = true;
 
-      mapRef.current?.fitToCoordinates(decoded, {
+      mapRef.current?.fitToCoordinates(simplified, {
         edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
         animated: true,
       });
@@ -1919,6 +1990,15 @@ export default function MapScreenRN() {
           }
 
           setSelectedPlaceId(poi.id);
+        }}
+        onLongPress={() => {
+          if (!capabilities.canCreateRoutes) return;
+          addWaypoint({
+            lat: poi.latitude,
+            lng: poi.longitude,
+            title: poi.title || poi.name,
+            category: poi.category,
+          });
         }}
         anchor={{ x: 0.5, y: 1 }}
         zIndex={zIndex}
@@ -2350,19 +2430,7 @@ export default function MapScreenRN() {
         </TouchableOpacity>
       )}
 
-      {hasRouteIntent && (
-        <TouchableOpacity
-          style={[styles.navigateButton, { bottom: navButtonBottom }]}
-          onPress={() => handleNavigate(null)}
-        >
-          <MaterialCommunityIcons
-            name="navigation"
-            size={22}
-            color={theme.colors.text}
-          />
-          <Text style={styles.navigateButtonText}>Navigate</Text>
-        </TouchableOpacity>
-      )}
+
 
       {!followUser && !activeRide && (
         <SearchBar
