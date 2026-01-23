@@ -210,6 +210,7 @@ export default function PlaceCard({
   });
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [addError, setAddError] = useState(null);
+  const [addSuccess, setAddSuccess] = useState(false);
 
   const [comments, setComments] = useState([]);
   const [loadingComments, setLoadingComments] = useState(false);
@@ -701,14 +702,28 @@ export default function PlaceCard({
           },
           { merge: false } // important
         );
+      } else if (isNewPlace) {
+        // New temp place: CREATE with setDoc
+        console.log("[SAVE] Creating new temp place with setDoc, isNewPlace=", isNewPlace);
+        await setDoc(
+          placeRef,
+          {
+            ...payload,
+            createdAt: serverTimestamp(),
+            createdBy: uid,
+          },
+          { merge: false }
+        );
       } else {
-        // Existing CR places
+        // Existing CR places: UPDATE
         console.log("[SAVE] Updating existing place with updateDoc");
         await updateDoc(placeRef, payload);
       }
 
       console.log("[SAVE] Success! onPlaceCreated with docId=", docId);
-      onPlaceCreated?.(docId);
+      setAddSuccess(true);
+      setTimeout(() => setAddSuccess(false), 2000);
+      onPlaceCreated?.(name, docId);
       
     } catch (err) {
       console.error("[SAVE PLACE] failed:", err.message, err);
@@ -1317,6 +1332,14 @@ export default function PlaceCard({
             <View style={styles.savedHint}>
               <Text style={{ color: theme.colors.danger }}>
                 {addError}
+              </Text>
+            </View>
+          )}
+
+          {addSuccess && (
+            <View style={styles.savedHint}>
+              <Text style={{ color: theme.colors.accentMid }}>
+                Place saved successfully!
               </Text>
             </View>
           )}
