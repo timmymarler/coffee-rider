@@ -1,17 +1,15 @@
-import { Video } from 'expo-av';
 import { useEffect, useRef } from 'react';
 import { Animated, Image, StyleSheet, View } from 'react-native';
 
-const SplashScreen = ({ onComplete, duration = 6000 }) => {
+const SplashScreen = ({ onComplete, duration = 2000 }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const videoRef = useRef(null);
 
   useEffect(() => {
-    // Fade in logo after 1 second
+    // Fade in logo immediately
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 800,
-      delay: 1000,
+      duration: 600,
+      delay: 200,
       useNativeDriver: true,
     }).start();
 
@@ -23,28 +21,9 @@ const SplashScreen = ({ onComplete, duration = 6000 }) => {
     return () => clearTimeout(timer);
   }, [duration, onComplete, fadeAnim]);
 
-  const handleVideoEnd = () => {
-    onComplete?.();
-  };
-
   return (
     <View style={styles.container}>
-      {/* Video Background */}
-      <Video
-        ref={videoRef}
-        source={require('../../../assets/Coffee-Rider-Splash.mov')}
-        style={styles.video}
-        resizeMode="cover"
-        shouldPlay
-        isLooping={false}
-        onPlaybackStatusUpdate={(status) => {
-          if (status.didJustFinish) {
-            handleVideoEnd();
-          }
-        }}
-      />
-
-      {/* Logo Overlay - Bottom Third */}
+      {/* Logo - simplified splash without video */}
       <Animated.View style={[styles.logoContainer, { opacity: fadeAnim }]}>
         <Image
           source={require('../../../assets/rider/icon.png')}
@@ -63,14 +42,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  video: {
-    ...StyleSheet.absoluteFillObject,
-  },
   logoContainer: {
-    position: 'absolute',
-    bottom: '10%',
-    left: 0,
-    right: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },
