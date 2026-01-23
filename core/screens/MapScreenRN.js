@@ -44,6 +44,66 @@ const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
 const FOLLOW_ZOOM = Platform.OS === "ios" ? 9 : 18; // Android: 18, iOS: 9
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
+// Follow Me smoothing constants
+const MAX_LOCATION_ACCURACY = 25; // Meters - ignore readings worse than this
+const MIN_LOCATION_MOVE_DISTANCE = 3; // Meters - ignore updates < 3m away
+
+/* ------------------------------------------------------------------ */
+/* UTILITY FUNCTIONS                                                  */
+/* ------------------------------------------------------------------ */
+
+// Project a point onto a line segment (polyline snapping)
+function projectPointToPolyline(point, polylineCoords) {
+  if (!polylineCoords || polylineCoords.length < 2) return null;
+  
+  let closestPoint = null;
+  let minDistance = Infinity;
+  
+  for (let i = 0; i < polylineCoords.length - 1; i++) {
+    const p1 = polylineCoords[i];
+    const p2 = polylineCoords[i + 1];
+    
+    // Vector from p1 to p2
+    const dx = p2.longitude - p1.longitude;
+    const dy = p2.latitude - p1.latitude;
+    
+    // Vector from p1 to point
+    const px = point.longitude - p1.longitude;
+    const py = point.latitude - p1.latitude;
+    
+    // Project point onto segment
+    const t = Math.max(0, Math.min(1, (px * dx + py * dy) / (dx * dx + dy * dy)));
+    
+    const projectedLat = p1.latitude + t * dy;
+    const projectedLng = p1.longitude + t * dx;
+    
+    // Distance from point to projection
+    const dist = Math.sqrt((point.latitude - projectedLat) ** 2 + (point.longitude - projectedLng) ** 2) * 111000; // Approx meters
+    
+    if (dist < minDistance) {
+      minDistance = dist;
+      closestPoint = { latitude: projectedLat, longitude: projectedLng };
+    }
+  }
+  
+  // Only snap if within reasonable distance (50m)
+  return minDistance < 50 ? closestPoint : null;
+}
+
+// Calculate distance between two points in meters
+function distanceBetween(p1, p2) {
+  const lat1 = p1.latitude, lon1 = p1.longitude;
+  const lat2 = p2.latitude, lon2 = p2.longitude;
+  const R = 6371000; // Earth's radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 /* ------------------------------------------------------------------ */
 /* CATEGORY → ICON MAP                                                */
 /* ------------------------------------------------------------------ */
@@ -1024,7 +1084,30 @@ export default function MapScreenRN() {
           distanceInterval: 5,
         },
         (location) => {
-          setUserLocation(location.coords);
+          // Filter out inaccurate readings
+          if (location.coords.accuracy && location.coords.accuracy > MAX_LOCATION_ACCURACY) {
+            console.log(`[MAP] Ignoring inaccurate location (${location.coords.accuracy.toFixed(1)}m accuracy)`);
+            return;
+          }
+          
+          // Filter out movements < 3m (reduces jitter)
+          if (userLocation) {
+            const dist = distanceBetween(userLocation, location.coords);
+            if (dist < MIN_LOCATION_MOVE_DISTANCE) {
+              return;
+            }
+          }
+          
+          // Snap to polyline if on active route
+          let coords = location.coords;
+          if (isNavigationMode && routeCoords && routeCoords.length > 0) {
+            const snappedPoint = projectPointToPolyline(coords, routeCoords);
+            if (snappedPoint) {
+              coords = { ...coords, ...snappedPoint };
+            }
+          }
+          
+          setUserLocation(coords);
         }
       );
     })();
