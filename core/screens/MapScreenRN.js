@@ -1183,30 +1183,41 @@ export default function MapScreenRN() {
           distanceInterval: 5,
         },
         (location) => {
-          // Filter out inaccurate readings
-          if (location.coords.accuracy && location.coords.accuracy > MAX_LOCATION_ACCURACY) {
-            console.log(`[MAP] Ignoring inaccurate location (${location.coords.accuracy.toFixed(1)}m accuracy)`);
-            return;
-          }
-          
-          // Filter out movements < 3m (reduces jitter)
-          if (userLocation) {
-            const dist = distanceBetween(userLocation, location.coords);
-            if (dist < MIN_LOCATION_MOVE_DISTANCE) {
+          try {
+            console.log("[MAP] Location update:", location.coords.latitude.toFixed(4), location.coords.longitude.toFixed(4), "accuracy:", location.coords.accuracy?.toFixed(1));
+            
+            // Filter out inaccurate readings
+            if (location.coords.accuracy && location.coords.accuracy > MAX_LOCATION_ACCURACY) {
+              console.log(`[MAP] Ignoring inaccurate location (${location.coords.accuracy.toFixed(1)}m accuracy)`);
               return;
             }
-          }
-          
-          // Snap to polyline if on active route
-          let coords = location.coords;
-          if (isNavigationMode && routeCoords && routeCoords.length > 0) {
-            const snappedPoint = projectPointToPolyline(coords, routeCoords);
-            if (snappedPoint) {
-              coords = { ...coords, ...snappedPoint };
+            
+            // Filter out movements < 3m (reduces jitter)
+            if (userLocation) {
+              const dist = distanceBetween(userLocation, location.coords);
+              if (dist < MIN_LOCATION_MOVE_DISTANCE) {
+                console.log(`[MAP] Movement too small (${dist.toFixed(1)}m), ignoring`);
+                return;
+              }
             }
+            
+            // Snap to polyline if on active route
+            let coords = location.coords;
+            if (isNavigationMode && routeCoords && routeCoords.length > 0) {
+              const snappedPoint = projectPointToPolyline(coords, routeCoords);
+              if (snappedPoint) {
+                coords = { ...coords, ...snappedPoint };
+              }
+            }
+            
+            console.log("[MAP] Updating userLocation");
+            setUserLocation(coords);
+          } catch (err) {
+            console.error("[MAP] Error in location callback:", err);
           }
-          
-          setUserLocation(coords);
+        },
+        (error) => {
+          console.error("[MAP] Location watch error:", error);
         }
       );
     })();
