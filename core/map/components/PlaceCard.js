@@ -724,7 +724,7 @@ export default function PlaceCard({
       console.log("[SAVE] Success! onPlaceCreated with docId=", docId);
       setAddSuccess(true);
       
-      // Fetch the newly saved place so we can pass it to the parent
+      // Fetch the newly saved place so we can display it in full mode
       try {
         console.log("[SAVE] Fetching newly saved place from Firestore");
         const docSnapshot = await getDoc(doc(db, "places", docId));
@@ -734,22 +734,23 @@ export default function PlaceCard({
             ...docSnapshot.data(),
             id: docId,
           };
-          console.log("[SAVE] Passing newly saved place to parent:", name, docId);
-          onPlaceCreated?.(newPlaceData);
+          console.log("[SAVE] Got newly saved place, updating currentPlace");
+          setCurrentPlace(newPlaceData);
+          // Reset form fields since it's now a real CR place
+          setManualName("");
+          setManualCategory(null);
         } else {
-          console.warn("[SAVE] Document not found after save, passing just ID");
-          onPlaceCreated?.({ title: name, id: docId });
+          console.warn("[SAVE] Document not found after save");
         }
       } catch (err) {
-        console.error("[SAVE] Failed to fetch new place for callback:", err);
-        onPlaceCreated?.({ title: name, id: docId });
+        console.error("[SAVE] Failed to fetch new place for refresh:", err);
       }
       
-      // Close the card after a brief delay to show success message
+      // Notify parent after we've refreshed
       setTimeout(() => {
-        console.log("[SAVE] Closing card after successful save");
-        onClose?.();
-      }, 1500);
+        console.log("[SAVE] Calling onPlaceCreated callback");
+        onPlaceCreated?.({ title: name, id: docId });
+      }, 500);
       
     } catch (err) {
       console.error("[SAVE PLACE] failed:", err.message, err);
