@@ -2495,7 +2495,7 @@ export default function MapScreenRN() {
         <View style={styles.pointMenuOverlay}>
           <View style={styles.pointMenu}>
             {/* Show "Add new place here" if no route and user can create places */}
-            {!currentRoute && capabilities.canCreateCrPlaces && (
+            {!routeCoords.length && capabilities.canCreateCrPlaces && (
               <Pressable
                 onPress={() => {
                   closeAddPointMenu();
