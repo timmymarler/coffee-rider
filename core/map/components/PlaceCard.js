@@ -171,7 +171,7 @@ export default function PlaceCard({
   const [selectedRating, setSelectedRating] = useState(userCrRating);
 
   const canAddPlace =
-    (safePlace.source === "google" || safePlace.source === "cr" || safePlace._temp === true) &&
+    (safePlace.source === "google" || safePlace._temp === true) &&
     capabilities.canAddVenue === true &&
     !!currentUid;
   const isCrPlace = safePlace.source === "cr";  
