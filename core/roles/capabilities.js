@@ -29,6 +29,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canComment: true,
         canUploadPhotos: true,
         canUpdatePlaces: true,
+        canCreateCrPlaces: true,
 
         // Routes
         canSaveRoutes: true,
@@ -65,6 +66,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canComment: true,
         canUploadPhotos: true,
         canUpdatePlaces: true,
+        canCreateCrPlaces: true,
 
         canSaveRoutes: true,
         canShareRoutes: true,

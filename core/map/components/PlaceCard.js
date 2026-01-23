@@ -171,7 +171,7 @@ export default function PlaceCard({
   const [selectedRating, setSelectedRating] = useState(userCrRating);
 
   const canAddPlace =
-    (safePlace.source === "google" || safePlace._temp === true) &&
+    (safePlace.source === "google" || safePlace.source === "cr" || safePlace._temp === true) &&
     capabilities.canAddVenue === true &&
     !!currentUid;
   const isCrPlace = safePlace.source === "cr";  
@@ -186,11 +186,11 @@ export default function PlaceCard({
   /* ------------------------------------------------------------------ */
 
   const [manualName, setManualName] = useState(
-    isGoogleNew ? safePlace.title ?? "" : ""
+    (isGoogleNew || safePlace._temp) ? safePlace.title ?? "" : ""
   );
 
   const [manualCategory, setManualCategory] = useState(
-    isGoogleNew ? safePlace.category ?? null : null
+    (isGoogleNew || safePlace._temp) ? safePlace.category ?? null : null
   );
   const formattedAddress = useMemo(
     () => formatAddress(place.address),
@@ -1046,9 +1046,19 @@ export default function PlaceCard({
         showsVerticalScrollIndicator={false}
       >      
         <View style={styles.info}>
-          <Text style={styles.title}>
-            {isManualOnly ? "Save this place" : safePlace.title}
-          </Text>
+          {canAddPlace ? (
+            <TextInput
+              style={[styles.title, styles.text]}
+              value={manualName}
+              onChangeText={setManualName}
+              placeholder="Place name"
+              placeholderTextColor={theme.colors.primaryLight}
+            />
+          ) : (
+            <Text style={styles.title}>
+              {isManualOnly ? "Save this place" : safePlace.title}
+            </Text>
+          )}
 
           {/* Category */}
           <View style={styles.categoryRow}>

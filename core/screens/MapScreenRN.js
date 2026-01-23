@@ -598,6 +598,7 @@ export default function MapScreenRN() {
   const activeRideOnFocusRef = useRef(null); // Track active ride state when screen is focused
   const activeRideRef = useRef(null);
   const endRideRef = useRef(null);
+  const markerPressedRef = useRef(false); // Track if a marker was just pressed
   
   const displayWaypoints = useMemo(() => {
     if (!routeDestination) return waypoints;
@@ -1986,15 +1987,24 @@ export default function MapScreenRN() {
     const { fill, circle, stroke } = markerStyles[markerMode];
 
     const handleMarkerPress = (e) => {
-      e.stopPropagation?.();
-      console.log("[MARKER] Press on:", poi.title || poi.name);
+      console.log("[MARKER] Marker.onPress on:", poi.title || poi.name, "selectedPlaceId will be:", poi.id);
+      markerPressedRef.current = true;
+      // Reset the flag after a short delay so MapView.onPress can check it
+      setTimeout(() => {
+        markerPressedRef.current = false;
+      }, 100);
+      
       if (poi.source === "google") {
         if (!capabilities.canSearchGoogle) return;
         const temp = promoteGoogleToTempCr(poi);
-        if (temp) setSelectedPlaceId(temp.id);
+        if (temp) {
+          console.log("[MARKER] Google place, promoting to temp:", temp.id);
+          setSelectedPlaceId(temp.id);
+        }
         return;
       }
 
+      console.log("[MARKER] Setting selectedPlaceId to:", poi.id);
       setSelectedPlaceId(poi.id);
     };
 
@@ -2010,16 +2020,11 @@ export default function MapScreenRN() {
       <Marker
         key={`${poi.source}-${poi.id}`}
         coordinate={{ latitude: poi.latitude, longitude: poi.longitude }}
+        onPress={handleMarkerPress}
         anchor={{ x: 0.5, y: 1 }}
         zIndex={zIndex}
       >
-        <Pressable
-          onPress={handleMarkerPress}
-          onLongPress={handleMarkerLongPress}
-          delayLongPress={500}
-        >
-          <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
-        </Pressable>
+        <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
       </Marker>
     );
   };
@@ -2038,6 +2043,12 @@ export default function MapScreenRN() {
           maxZoomLevel={Platform.OS === "ios" ? 28 : 18}
           onRegionChangeComplete={handleRegionChangeComplete}
           onPress={() => {
+            // Don't clear selectedPlace if a marker was just pressed
+            if (markerPressedRef.current) {
+              console.log("[MAP] Marker press detected, not clearing selectedPlaceId");
+              return;
+            }
+            
             if (showFilters) {
               setShowFilters(false);
               return;
