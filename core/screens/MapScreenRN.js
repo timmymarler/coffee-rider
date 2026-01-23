@@ -2516,7 +2516,9 @@ export default function MapScreenRN() {
                     longitude: pendingMapPoint?.longitude,
                     title: pendingMapPoint?.geocodeResult || "New Place",
                     isNew: true,
+                    source: "cr",
                   };
+                  setTempCrPlace(newPlace);
                   setSelectedPlaceId(newPlace.id);
                 }}
                 style={({ pressed }) => [
