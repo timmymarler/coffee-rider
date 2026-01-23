@@ -724,34 +724,14 @@ export default function PlaceCard({
       console.log("[SAVE] Success! onPlaceCreated with docId=", docId);
       setAddSuccess(true);
       
-      // Fetch the newly saved place from Firestore to refresh the card
-      try {
-        console.log("[SAVE] Fetching newly saved place from Firestore");
-        const docSnapshot = await getDoc(doc(db, "places", docId));
-        
-        if (docSnapshot.exists()) {
-          console.log("[SAVE] Refreshing card with newly saved place data");
-          const newPlaceData = {
-            ...docSnapshot.data(),
-            id: docId,
-          };
-          console.log("[SAVE] New place data:", newPlaceData);
-          setCurrentPlace(newPlaceData);
-          
-          // Reset form fields since it's no longer editable
-          setManualName("");
-          setManualCategory(null);
-          setAddError(null);
-          console.log("[SAVE] Reset form fields and cleared errors");
-        } else {
-          console.warn("[SAVE] Document not found after save");
-        }
-      } catch (refreshErr) {
-        console.error("[SAVE] Failed to refresh card:", refreshErr);
-      }
-      
-      setTimeout(() => setAddSuccess(false), 2000);
+      // Call the parent callback with the new place details
       onPlaceCreated?.(name, docId);
+      
+      // Close the card after a brief delay to show success message
+      setTimeout(() => {
+        console.log("[SAVE] Closing card after successful save");
+        onClose?.();
+      }, 1500);
       
     } catch (err) {
       console.error("[SAVE PLACE] failed:", err.message, err);
