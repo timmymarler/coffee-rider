@@ -32,6 +32,7 @@ import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 import theme from "@themes";
 import { doc, getDoc } from "firebase/firestore";
 import { Platform } from "react-native";
@@ -512,6 +513,7 @@ export default function MapScreenRN() {
   const [tempCrPlace, setTempCrPlace] = useState(null);
 
   // Routing
+  const router = useRouter();
   const [routeCoords, setRouteCoords] = useState([]);
 
   const hasRoute = routeCoords.length > 0;
@@ -1993,12 +1995,15 @@ export default function MapScreenRN() {
         }}
         onLongPress={() => {
           if (!capabilities.canCreateRoutes) return;
-          addWaypoint({
-            lat: poi.latitude,
-            lng: poi.longitude,
-            title: poi.title || poi.name,
-            category: poi.category,
-          });
+          
+          const payload = {
+            latitude: poi.latitude,
+            longitude: poi.longitude,
+            geocodeResult: poi.title || poi.name,
+          };
+
+          setPendingMapPoint(payload);
+          setShowAddPointMenu(true);
         }}
         anchor={{ x: 0.5, y: 1 }}
         zIndex={zIndex}
@@ -2489,6 +2494,36 @@ export default function MapScreenRN() {
       <Modal visible={showAddPointMenu} transparent animationType="fade">
         <View style={styles.pointMenuOverlay}>
           <View style={styles.pointMenu}>
+            {/* Show "Add new place here" if no route and user can create places */}
+            {!currentRoute && capabilities.canCreateCrPlaces && (
+              <Pressable
+                onPress={() => {
+                  closeAddPointMenu();
+                  // Navigate to PlaceCard for creating new place at pending location
+                  router.push({
+                    pathname: '/map/place-details',
+                    params: {
+                      lat: pendingMapPoint?.latitude,
+                      lng: pendingMapPoint?.longitude,
+                      createNew: true,
+                    },
+                  });
+                }}
+                style={({ pressed }) => [
+                  styles.pointMenuItem,
+                  pressed && { backgroundColor: theme.colors.primaryDark },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="plus-circle"
+                  size={26}
+                  color={theme.colors.accent}
+                  style={{ marginRight: 12 }}
+                />
+                <Text style={styles.pointMenuText}>Add new place here</Text>
+              </Pressable>
+            )}
+
             <Pressable
               onPress={handleAddWaypoint}
               style={({ pressed }) => [
