@@ -168,9 +168,9 @@ function FloatingTabBar({ state }) {
           <LongPressGestureHandler
             onActivated={() => {
               if (mapActions?.isFollowing?.()) {
-                // When following: refresh route if possible
+                // When following: reroute from current location if there's an active route
                 if (mapActions?.canRefreshRoute?.()) {
-                  mapActions?.showRefreshMenu?.();
+                  mapActions?.refreshRoute?.();
                 }
               } else {
                 // When NOT following: route to home

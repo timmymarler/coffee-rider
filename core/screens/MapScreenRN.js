@@ -591,6 +591,29 @@ export default function MapScreenRN() {
     }
 
     try {
+      // If we have a current polyline, find the closest point on it to snap back to
+      let snapPoint = null;
+      if (routeCoords && routeCoords.length >= 2) {
+        // Find closest point on current polyline
+        let minDistance = Infinity;
+        let closestIdx = 0;
+        
+        for (let i = 0; i < routeCoords.length; i++) {
+          const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestIdx = i;
+          }
+        }
+        
+        // Only snap if reasonably close (within 500m) and forward-looking
+        // to ensure we're snapping to a point ahead, not behind
+        if (minDistance < 500 && closestIdx < routeCoords.length - 1) {
+          snapPoint = routeCoords[closestIdx];
+          console.log(`[REFRESH] Snapping back to polyline at index ${closestIdx}, distance: ${minDistance.toFixed(0)}m`);
+        }
+      }
+
       // Determine final destination (same as buildRoute logic)
       const finalDestination = routeDestination
         ? {
@@ -602,14 +625,28 @@ export default function MapScreenRN() {
             longitude: waypoints[waypoints.length - 1].lng,
           };
 
-      // Route from current location through all waypoints to final destination
+      // If we have a snap point, route through it to maintain the path
+      let routeWaypoints = waypoints.map(wp => ({
+        latitude: wp.lat,
+        longitude: wp.lng,
+      }));
+
+      if (snapPoint) {
+        // Insert snap point as first waypoint to guide back to route
+        routeWaypoints = [
+          {
+            latitude: snapPoint.latitude,
+            longitude: snapPoint.longitude,
+          },
+          ...routeWaypoints,
+        ];
+      }
+
+      // Route from current location through waypoints (including snap point if exists) to final destination
       const result = await fetchRoute({
         origin: userLocation,
         destination: finalDestination,
-        waypoints: waypoints.map(wp => ({
-          latitude: wp.lat,
-          longitude: wp.lng,
-        })),
+        waypoints: routeWaypoints,
       });
 
       if (!result?.polyline) {
@@ -628,10 +665,10 @@ export default function MapScreenRN() {
         distanceMeters: result.distanceMeters ?? result.distance,
         durationSeconds: result.durationSeconds ?? result.duration,
       });
-        setRouteSteps(result.steps ?? []);
-        setCurrentStepIndex(0);
+      setRouteSteps(result.steps ?? []);
+      setCurrentStepIndex(0);
 
-      console.log("[REFRESH] Route refreshed from current location");
+      console.log("[REFRESH] Route refreshed from current location back to polyline");
     } catch (error) {
       console.error("[REFRESH] Error refreshing route:", error);
     }
@@ -1047,6 +1084,7 @@ export default function MapScreenRN() {
       isFollowing: () => followUser,
       showRefreshMenu: () => setShowRefreshRouteMenu(true),
       canRefreshRoute: () => userLocation && (waypoints.length > 0 || routeDestination),
+      refreshRoute: handleRefreshRouteToNextWaypoint,
       routeToHome: routeToHome,
       endRide: endRide,
     });
