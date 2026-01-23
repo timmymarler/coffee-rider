@@ -17,6 +17,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   limit as fbLimit,
   onSnapshot,
   orderBy,
@@ -725,26 +726,17 @@ export default function PlaceCard({
       
       // Fetch the newly saved place from Firestore to refresh the card
       try {
-        const docSnapshot = await new Promise((resolve) => {
-          const unsubscribe = onSnapshot(
-            doc(db, "places", docId),
-            (snap) => {
-              unsubscribe();
-              resolve(snap);
-            },
-            (err) => {
-              console.error("[SAVE] Error fetching new place:", err);
-              resolve(null);
-            }
-          );
-        });
+        console.log("[SAVE] Fetching newly saved place from Firestore");
+        const docSnapshot = await getDoc(doc(db, "places", docId));
         
-        if (docSnapshot?.exists()) {
-          console.log("[SAVE] Refreshing card with newly saved place");
+        if (docSnapshot.exists()) {
+          console.log("[SAVE] Refreshing card with newly saved place data");
           setCurrentPlace({
             ...docSnapshot.data(),
             id: docId,
           });
+        } else {
+          console.warn("[SAVE] Document not found after save");
         }
       } catch (refreshErr) {
         console.error("[SAVE] Failed to refresh card:", refreshErr);
