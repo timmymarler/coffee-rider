@@ -1978,42 +1978,46 @@ export default function MapScreenRN() {
 
     const { fill, circle, stroke } = markerStyles[markerMode];
 
+    const handleMarkerPress = (e) => {
+      e.stopPropagation?.();
+      if (poi.source === "google") {
+        if (!capabilities.canSearchGoogle) return;
+        const temp = promoteGoogleToTempCr(poi);
+        if (temp) setSelectedPlaceId(temp.id);
+        return;
+      }
+
+      setSelectedPlaceId(poi.id);
+    };
+
+    const handleMarkerLongPress = () => {
+      console.log("[MARKER] Long press on:", poi.title || poi.name);
+      if (!capabilities.canCreateRoutes) return;
+      
+      const payload = {
+        latitude: poi.latitude,
+        longitude: poi.longitude,
+        geocodeResult: poi.title || poi.name,
+      };
+
+      setPendingMapPoint(payload);
+      setShowAddPointMenu(true);
+    };
+
     return (
       <Marker
         key={`${poi.source}-${poi.id}`}
         coordinate={{ latitude: poi.latitude, longitude: poi.longitude }}
-        onPress={(e) => {
-          e.stopPropagation?.();
-          if (poi.source === "google") {
-            if (!capabilities.canSearchGoogle) return;
-            const temp = promoteGoogleToTempCr(poi);
-            if (temp) setSelectedPlaceId(temp.id);
-            return;
-          }
-
-          setSelectedPlaceId(poi.id);
-        }}
-        onLongPress={() => {
-          console.log("[MARKER] Long press detected on:", poi.title || poi.name, "canCreateRoutes:", capabilities.canCreateRoutes);
-          if (!capabilities.canCreateRoutes) {
-            console.warn("[MARKER] User cannot create routes, ignoring long press");
-            return;
-          }
-          
-          const payload = {
-            latitude: poi.latitude,
-            longitude: poi.longitude,
-            geocodeResult: poi.title || poi.name,
-          };
-
-          console.log("[MARKER] Setting pending map point and showing menu");
-          setPendingMapPoint(payload);
-          setShowAddPointMenu(true);
-        }}
         anchor={{ x: 0.5, y: 1 }}
         zIndex={zIndex}
       >
-        <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
+        <Pressable
+          onPress={handleMarkerPress}
+          onLongPress={handleMarkerLongPress}
+          delayLongPress={500}
+        >
+          <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
+        </Pressable>
       </Marker>
     );
   };
@@ -2505,15 +2509,15 @@ export default function MapScreenRN() {
               <Pressable
                 onPress={() => {
                   closeAddPointMenu();
-                  // Navigate to PlaceCard for creating new place at pending location
-                  router.push({
-                    pathname: '/map/place-details',
-                    params: {
-                      lat: pendingMapPoint?.latitude,
-                      lng: pendingMapPoint?.longitude,
-                      createNew: true,
-                    },
-                  });
+                  // Create a new place object with pending location
+                  const newPlace = {
+                    id: `new-${Date.now()}`,
+                    latitude: pendingMapPoint?.latitude,
+                    longitude: pendingMapPoint?.longitude,
+                    title: pendingMapPoint?.geocodeResult || "New Place",
+                    isNew: true,
+                  };
+                  setSelectedPlaceId(newPlace.id);
                 }}
                 style={({ pressed }) => [
                   styles.pointMenuItem,
