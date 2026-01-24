@@ -8,13 +8,14 @@ import { CRInput } from "@components-ui/CRInput";
 import { CRLabel } from "@components-ui/CRLabel";
 import { CRScreen } from "@components-ui/CRScreen";
 import { AuthContext } from "@context/AuthContext";
+import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
 import { uploadImage } from "@core/utils/uploadImage";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { addDoc, collection, doc, getDoc, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Clipboard, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LoginScreen from "../auth/login";
 
@@ -38,6 +39,8 @@ export default function ProfileScreen() {
   const [bike, setBike] = useState(profile?.bike || "");
   const [homeLocation, setHomeLocation] = useState(profile?.homeLocation || "");
   const [homeAddress, setHomeAddress] = useState(profile?.homeAddress || "");
+  const [debugLogs, setDebugLogs] = useState([]);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
@@ -51,6 +54,15 @@ export default function ProfileScreen() {
     setHomeLocation(profile?.homeLocation || "");
     setHomeAddress(profile?.homeAddress || "");
   }, [profile]);
+
+  // Load debug logs on mount
+  useEffect(() => {
+    const loadLogs = async () => {
+      const logs = await getDebugLogs();
+      setDebugLogs(logs);
+    };
+    loadLogs();
+  }, [showDebugPanel]);
 
   const email = user?.email || "";
   const role = profile?.role || "user";
@@ -360,6 +372,78 @@ export default function ProfileScreen() {
           />
         </View>
       </CRCard>
+      </View>
+
+      {/* Debug Logs Section */}
+      <View style={styles.cardWrap}>
+        <CRCard>
+          <TouchableOpacity onPress={() => setShowDebugPanel(!showDebugPanel)} style={{ paddingVertical: 8 }}>
+            <Text style={{ color: theme.colors.primary, fontSize: 14, fontWeight: '600' }}>
+              Debug Logs ({debugLogs.length})
+            </Text>
+          </TouchableOpacity>
+          
+          {showDebugPanel && (
+            <View style={{ marginTop: 12 }}>
+              {debugLogs.length === 0 ? (
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>No debug logs yet</Text>
+              ) : (
+                <>
+                  <ScrollView 
+                    nestedScrollEnabled
+                    style={{ 
+                      maxHeight: 300, 
+                      backgroundColor: theme.colors.primaryDark,
+                      borderRadius: 6,
+                      paddingHorizontal: 8,
+                      paddingVertical: 6,
+                      marginBottom: 12,
+                    }}
+                  >
+                    {debugLogs.slice(-50).map((log, idx) => (
+                      <Text 
+                        key={idx} 
+                        style={{ 
+                          color: theme.colors.textMuted, 
+                          fontSize: 10,
+                          fontFamily: 'monospace',
+                          marginBottom: 4,
+                          lineHeight: 14,
+                        }}
+                      >
+                        {new Date(log.timestamp).toLocaleTimeString()} [{log.tag}] {log.message}
+                      </Text>
+                    ))}
+                  </ScrollView>
+
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                    <TouchableOpacity 
+                      style={{ flex: 1, paddingVertical: 8, backgroundColor: theme.colors.primary, borderRadius: 4, alignItems: 'center' }}
+                      onPress={async () => {
+                        const text = await exportDebugLogsAsText();
+                        Clipboard.setString(text);
+                        Alert.alert('Copied', 'Logs copied to clipboard');
+                      }}
+                    >
+                      <Text style={{ color: theme.colors.bg, fontSize: 12, fontWeight: '600' }}>Copy Logs</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
+                      style={{ flex: 1, paddingVertical: 8, backgroundColor: theme.colors.danger, borderRadius: 4, alignItems: 'center' }}
+                      onPress={async () => {
+                        await clearDebugLogs();
+                        setDebugLogs([]);
+                        Alert.alert('Cleared', 'Debug logs cleared');
+                      }}
+                    >
+                      <Text style={{ color: 'white', fontSize: 12, fontWeight: '600' }}>Clear Logs</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          )}
+        </CRCard>
       </View>
     </CRScreen>
   );

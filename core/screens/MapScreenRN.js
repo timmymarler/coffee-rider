@@ -1,5 +1,6 @@
 import { db } from "@config/firebase";
 import { TabBarContext } from "@context/TabBarContext";
+import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
 import { collection, onSnapshot } from "firebase/firestore";
@@ -32,8 +33,8 @@ import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "expo-router";
 import theme from "@themes";
+import { useRouter } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import { Platform } from "react-native";
 import { RIDER_AMENITIES } from "../config/amenities/rider";
@@ -42,7 +43,7 @@ import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
-const FOLLOW_ZOOM = Platform.OS === "ios" ? 9 : 18; // Android: 18, iOS: 9
+const FOLLOW_ZOOM = Platform.OS === "ios" ? 6 : 15; // Android: 15, iOS: 6 - More zoomed out for route visibility
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 // Follow Me smoothing constants
@@ -140,13 +141,13 @@ const AMENITY_ICON_MAP = {
 
   // Maneuver → icon + label map (simplified)
   const MANEUVER_ICON_MAP = {
-    TURN_LEFT: { icon: "turn-left", label: "Turn left" },
-    TURN_RIGHT: { icon: "turn-right", label: "Turn right" },
-    TURN_SLIGHT_LEFT: { icon: "turn-left", label: "Slight left" },
-    TURN_SLIGHT_RIGHT: { icon: "turn-right", label: "Slight right" },
+    TURN_LEFT: { icon: "arrow-left-bold", label: "Turn left" },
+    TURN_RIGHT: { icon: "arrow-right-bold", label: "Turn right" },
+    TURN_SLIGHT_LEFT: { icon: "arrow-left-top-bold", label: "Slight left" },
+    TURN_SLIGHT_RIGHT: { icon: "arrow-right-top-bold", label: "Slight right" },
     STRAIGHT: { icon: "arrow-up-bold", label: "Continue straight" },
-    ROUNDABOUT_ENTER: { icon: "roundabout-left", label: "Enter roundabout" },
-    ROUNDABOUT_EXIT: { icon: "roundabout-right", label: "Exit roundabout" },
+    ROUNDABOUT_ENTER: { icon: "rotate-clockwise", label: "Enter roundabout" },
+    ROUNDABOUT_EXIT: { icon: "rotate-clockwise", label: "Exit roundabout" },
     MERGE_LEFT: { icon: "arrow-left-bottom", label: "Merge left" },
     MERGE_RIGHT: { icon: "arrow-right-bottom", label: "Merge right" },
   };
@@ -648,10 +649,10 @@ export default function MapScreenRN() {
     }
 
     try {
-      // If we have a current polyline, find the closest point on it to snap back to
+      // If we have a current polyline, find the NEXT waypoint ahead to snap to
       let snapPoint = null;
       if (routeCoords && routeCoords.length >= 2) {
-        // Find closest point on current polyline - OPTIMIZED with sampling
+        // Find the closest point on current polyline
         let minDistance = Infinity;
         let closestIdx = 0;
         
@@ -667,11 +668,22 @@ export default function MapScreenRN() {
           }
         }
         
-        // Only snap if reasonably close (within 500m) and forward-looking
-        // to ensure we're snapping to a point ahead, not behind
-        if (minDistance < 500 && closestIdx < routeCoords.length - 1) {
+        // Find the NEXT waypoint ahead of current position
+        // Look ahead by ~20% of remaining route to find next waypoint
+        let nextWaypointIdx = closestIdx;
+        const lookAheadDistance = Math.floor(routeCoords.length * 0.2); // 20% ahead
+        const searchEndIdx = Math.min(closestIdx + lookAheadDistance, routeCoords.length - 1);
+        
+        // Find furthest waypoint within look-ahead range (going forward on route)
+        if (searchEndIdx > closestIdx) {
+          nextWaypointIdx = searchEndIdx;
+          snapPoint = routeCoords[nextWaypointIdx];
+          const snapDistance = distanceBetweenMeters(userLocation, snapPoint);
+          console.log(`[REFRESH] Snapping to next waypoint ahead at index ${nextWaypointIdx} (${searchEndIdx}/${routeCoords.length}), distance: ${snapDistance.toFixed(0)}m`);
+        } else if (minDistance < 500) {
+          // Fallback: if very close to current route, snap to closest point
           snapPoint = routeCoords[closestIdx];
-          console.log(`[REFRESH] Snapping back to polyline at index ${closestIdx} (sampled from ${routeCoords.length}), distance: ${minDistance.toFixed(0)}m`);
+          console.log(`[REFRESH] Close to route, snapping to closest point at index ${closestIdx}, distance: ${minDistance.toFixed(0)}m`);
         }
       }
 
@@ -693,7 +705,7 @@ export default function MapScreenRN() {
       }));
 
       if (snapPoint) {
-        // Insert snap point as first waypoint to guide back to route
+        // Insert snap point as first waypoint to guide forward on route
         routeWaypoints = [
           {
             latitude: snapPoint.latitude,
@@ -729,7 +741,7 @@ export default function MapScreenRN() {
       setRouteSteps(result.steps ?? []);
       setCurrentStepIndex(0);
 
-      console.log("[REFRESH] Route refreshed from current location back to polyline");
+      console.log("[REFRESH] Route refreshed - routing forward to next waypoint");
     } catch (error) {
       console.error("[REFRESH] Error refreshing route:", error);
     }
@@ -1017,7 +1029,7 @@ export default function MapScreenRN() {
     skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
     skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
     skipRegionChangeUntilRef.current = Date.now() + 2000;
-    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 45 });
+    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 25 });
 
     // Now enable follow mode and start 15-minute inactivity timer
     setFollowUser(true);
@@ -1033,6 +1045,8 @@ export default function MapScreenRN() {
     console.log("[ROUTE_TO_HOME] homeAddress:", homeAddress);
     
     if (!homeAddress || !homeAddress.trim()) {
+      console.log("[ROUTE_TO_HOME] No home address set");
+      await debugLog("ROUTE_TO_HOME", "No home address set");
       Alert.alert(
         "No Home Address",
         "Please add your home address in the Profile screen to use this feature."
@@ -1041,17 +1055,23 @@ export default function MapScreenRN() {
     }
 
     if (!userLocation) {
+      console.log("[ROUTE_TO_HOME] No user location");
+      await debugLog("ROUTE_TO_HOME", "No user location available");
       Alert.alert("No Location", "Unable to determine your current location.");
       return;
     }
 
     try {
       console.log("[ROUTE_TO_HOME] Geocoding address...");
+      await debugLog("ROUTE_TO_HOME", "Geocoding address: " + homeAddress);
+      
       // Geocode the home address
       const homeCoords = await geocodeAddress(homeAddress);
       console.log("[ROUTE_TO_HOME] Geocoded coords:", homeCoords);
       
       if (!homeCoords) {
+        console.log("[ROUTE_TO_HOME] Geocoding failed");
+        await debugLog("ROUTE_TO_HOME", "Geocoding failed for address", { address: homeAddress });
         Alert.alert(
           "Invalid Address",
           "Unable to find your home address. Please check it in your Profile settings."
@@ -1067,6 +1087,9 @@ export default function MapScreenRN() {
       setRouteClearedByUser(false); // Ensure route building is not blocked
 
       // Set home as destination - this will trigger buildRoute via useEffect
+      console.log("[ROUTE_TO_HOME] Setting route destination to home:", homeCoords);
+      await debugLog("ROUTE_TO_HOME", "Route to home initiated", { lat: homeCoords.lat, lng: homeCoords.lng });
+      
       setRouteDestination({
         latitude: homeCoords.lat,
         longitude: homeCoords.lng,
@@ -1075,14 +1098,17 @@ export default function MapScreenRN() {
       setIsHomeDestination(true);
       
       // Enable Follow Me mode to guide to home
+      console.log("[ROUTE_TO_HOME] Enabling Follow Me...");
       skipNextFollowTickRef.current = true;
       skipNextRegionChangeRef.current = true;
       await recenterOnUser({ zoom: FOLLOW_ZOOM });
       setFollowUser(true);
       
       console.log("[ROUTE_TO_HOME] Destination set and Follow Me enabled");
+      await debugLog("ROUTE_TO_HOME", "Follow Me enabled - tracking route home");
     } catch (error) {
       console.error("Error routing to home:", error);
+      await debugLog("ROUTE_TO_HOME", "Error: " + error.message, { error });
       Alert.alert("Error", "Failed to create route to home.");
     }
   }
@@ -1102,7 +1128,7 @@ export default function MapScreenRN() {
 
     // Only update camera in navigation mode (Follow Me)
     if (isNavigationMode && userLocation.heading !== undefined && userLocation.heading !== -1) {
-      recenterOnUser({ heading: userLocation.heading, pitch: 45, zoom: FOLLOW_ZOOM });
+      recenterOnUser({ heading: userLocation.heading, pitch: 25, zoom: FOLLOW_ZOOM });
     }
   }, [userLocation, followUser, isNavigationMode]);
 
@@ -1189,6 +1215,7 @@ export default function MapScreenRN() {
             // Filter out inaccurate readings
             if (location.coords.accuracy && location.coords.accuracy > MAX_LOCATION_ACCURACY) {
               console.log(`[MAP] Ignoring inaccurate location (${location.coords.accuracy.toFixed(1)}m accuracy)`);
+              debugLog("LOCATION_FILTERED", `Poor GPS accuracy: ${location.coords.accuracy.toFixed(0)}m (threshold: ${MAX_LOCATION_ACCURACY}m)`, { accuracy: location.coords.accuracy });
               return;
             }
             
@@ -1197,6 +1224,7 @@ export default function MapScreenRN() {
               const dist = distanceBetween(userLocation, location.coords);
               if (dist < MIN_LOCATION_MOVE_DISTANCE) {
                 console.log(`[MAP] Movement too small (${dist.toFixed(1)}m), ignoring`);
+                debugLog("LOCATION_FILTERED", `Movement too small: ${dist.toFixed(1)}m (threshold: ${MIN_LOCATION_MOVE_DISTANCE}m)`, { distance: dist });
                 return;
               }
             }
@@ -1210,10 +1238,13 @@ export default function MapScreenRN() {
               }
             }
             
-            console.log("[MAP] Updating userLocation");
+            console.log("[MAP] Updating userLocation - setting state");
+            debugLog("GPS_UPDATE", `Position: ${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)} (accuracy: ${location.coords.accuracy?.toFixed(0)}m)`, { lat: location.coords.latitude, lng: location.coords.longitude, accuracy: location.coords.accuracy });
             setUserLocation(coords);
+            console.log("[MAP] setUserLocation call complete");
           } catch (err) {
             console.error("[MAP] Error in location callback:", err);
+            debugLog("GPS_ERROR", "Location callback error: " + err.message, { error: err.message });
           }
         },
         (error) => {
@@ -1527,6 +1558,15 @@ export default function MapScreenRN() {
     buildRoute({ requestId });
   }, [routeDestination, waypoints, routeClearedByUser, userLocation]);
 
+  // Log routeCoords changes for debugging polyline visibility
+  useEffect(() => {
+    if (routeCoords && routeCoords.length > 0) {
+      console.log("[POLYLINE] routeCoords updated with", routeCoords.length, "coordinates");
+    } else {
+      console.log("[POLYLINE] routeCoords cleared");
+    }
+  }, [routeCoords]);
+
 
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
@@ -1720,7 +1760,10 @@ export default function MapScreenRN() {
     const simplified = simplifyPolyline(decoded, 0.00005); // ~5m tolerance
     console.log("[buildRoute] Decoded", decoded.length, "points, simplified to", simplified.length, "points");
     
+    console.log("[buildRoute] Setting route coords with", simplified.length, "points");
+    await debugLog("ROUTE_BUILT", `Route built: ${simplified.length} points, ${(result.distanceMeters / 1000).toFixed(1)}km`, { points: simplified.length, distanceKm: (result.distanceMeters / 1000).toFixed(1) });
     setRouteCoords(simplified);
+    console.log("[buildRoute] setRouteCoords call complete");
     // 🔑 ADD THIS
     setRouteMeta({
       distanceMeters: result.distanceMeters ?? result.distance,
@@ -2424,7 +2467,9 @@ export default function MapScreenRN() {
       {/* Junction panel (top-left) during navigation - helmet visible */}
       {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
         (() => {
-          const step = routeSteps[Math.min(currentStepIndex, routeSteps.length - 1)];
+          // Show the NEXT step's maneuver (what's coming), not the current step
+          const nextStepIndex = Math.min(currentStepIndex + 1, routeSteps.length - 1);
+          const step = routeSteps[nextStepIndex];
           const m = step?.maneuver || "STRAIGHT";
           const meta = MANEUVER_ICON_MAP[m] || MANEUVER_ICON_MAP.STRAIGHT;
           const dist = nextJunctionDistance;

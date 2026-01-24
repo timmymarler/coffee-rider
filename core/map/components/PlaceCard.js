@@ -12,36 +12,36 @@ import theme from "@themes";
 import Constants from 'expo-constants';
 import * as ImagePicker from "expo-image-picker";
 import {
-  addDoc,
-  arrayUnion,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  limit as fbLimit,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  Timestamp,
-  updateDoc,
+    addDoc,
+    arrayUnion,
+    collection,
+    deleteDoc,
+    doc,
+    limit as fbLimit,
+    getDoc,
+    onSnapshot,
+    orderBy,
+    query,
+    serverTimestamp,
+    setDoc,
+    Timestamp,
+    updateDoc,
 } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
-  Dimensions,
-  FlatList,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { RIDER_CATEGORIES } from "../../config/categories/rider";
 
