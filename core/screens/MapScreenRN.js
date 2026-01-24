@@ -43,7 +43,7 @@ import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
-const FOLLOW_ZOOM = Platform.OS === "ios" ? 6 : 15; // Android: 15, iOS: 6 - More zoomed out for route visibility
+const FOLLOW_ZOOM = Platform.OS === "ios" ? 6 : 16; // Android: 16, iOS: 6 - More zoomed out for route visibility
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 // Follow Me smoothing constants
@@ -603,6 +603,12 @@ export default function MapScreenRN() {
   const activeRideRef = useRef(null);
   const endRideRef = useRef(null);
   const markerPressedRef = useRef(false); // Track if a marker was just pressed
+  
+  // Dead reckoning: estimate position based on heading when GPS is poor
+  const lastGoodGPSRef = useRef(null); // Last accurate GPS reading
+  const lastGPSTimeRef = useRef(null); // Time of last GPS update
+  const estimatedSpeedRef = useRef(0); // Estimated speed in m/s (from recent updates)
+  const positionSmoothingRef = useRef(null); // Smoothed position for Kalman-like filtering
   
   const displayWaypoints = useMemo(() => {
     if (!routeDestination) return waypoints;
@@ -1212,25 +1218,58 @@ export default function MapScreenRN() {
           try {
             console.log("[MAP] Location update:", location.coords.latitude.toFixed(4), location.coords.longitude.toFixed(4), "accuracy:", location.coords.accuracy?.toFixed(1));
             
+            const now = Date.now();
+            let coordsToUse = location.coords;
+            
             // Filter out inaccurate readings
             if (location.coords.accuracy && location.coords.accuracy > MAX_LOCATION_ACCURACY) {
               console.log(`[MAP] Ignoring inaccurate location (${location.coords.accuracy.toFixed(1)}m accuracy)`);
               debugLog("LOCATION_FILTERED", `Poor GPS accuracy: ${location.coords.accuracy.toFixed(0)}m (threshold: ${MAX_LOCATION_ACCURACY}m)`, { accuracy: location.coords.accuracy });
-              return;
+              
+              // Dead reckoning: estimate position using heading when GPS is poor
+              if (lastGoodGPSRef.current && lastGPSTimeRef.current && location.coords.heading !== undefined && location.coords.heading !== -1) {
+                const timeDiffSec = (now - lastGPSTimeRef.current) / 1000;
+                const estimatedDistance = estimatedSpeedRef.current * timeDiffSec; // meters
+                
+                if (estimatedDistance > 0 && estimatedDistance < 200) { // Max 200m extrapolation
+                  const heading = location.coords.heading * (Math.PI / 180); // Convert to radians
+                  const lat = lastGoodGPSRef.current.latitude + (estimatedDistance / 111111) * Math.cos(heading);
+                  const lng = lastGoodGPSRef.current.longitude + (estimatedDistance / 111111 / Math.cos(lastGoodGPSRef.current.latitude * Math.PI / 180)) * Math.sin(heading);
+                  
+                  coordsToUse = { ...lastGoodGPSRef.current, latitude: lat, longitude: lng };
+                  console.log("[MAP] Using dead reckoning estimate based on heading");
+                  debugLog("DEAD_RECKONING", `Estimated position using heading (${estimatedDistance.toFixed(0)}m ahead)`, { estimatedDistance });
+                }
+              }
+              
+              if (coordsToUse === location.coords) return; // No valid estimate, skip update
             }
             
             // Filter out movements < 3m (reduces jitter)
             if (userLocation) {
-              const dist = distanceBetween(userLocation, location.coords);
+              const dist = distanceBetween(userLocation, coordsToUse);
               if (dist < MIN_LOCATION_MOVE_DISTANCE) {
                 console.log(`[MAP] Movement too small (${dist.toFixed(1)}m), ignoring`);
                 debugLog("LOCATION_FILTERED", `Movement too small: ${dist.toFixed(1)}m (threshold: ${MIN_LOCATION_MOVE_DISTANCE}m)`, { distance: dist });
                 return;
               }
+              
+              // Update estimated speed (moving average)
+              const timeDiffSec = (now - (lastGPSTimeRef.current || now)) / 1000;
+              if (timeDiffSec > 0) {
+                const speed = dist / timeDiffSec;
+                estimatedSpeedRef.current = estimatedSpeedRef.current * 0.7 + speed * 0.3; // Exponential moving average
+              }
+            }
+            
+            // Track good GPS readings for dead reckoning
+            if (location.coords.accuracy && location.coords.accuracy <= MAX_LOCATION_ACCURACY) {
+              lastGoodGPSRef.current = location.coords;
+              lastGPSTimeRef.current = now;
             }
             
             // Snap to polyline if on active route
-            let coords = location.coords;
+            let coords = coordsToUse;
             if (isNavigationMode && routeCoords && routeCoords.length > 0) {
               const snappedPoint = projectPointToPolyline(coords, routeCoords);
               if (snappedPoint) {
