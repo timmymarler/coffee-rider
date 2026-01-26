@@ -135,14 +135,15 @@ export default function RegisterScreen({ onBack }) {
       title="Create account"
       subtitle="Join Coffee Rider"
     >
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 180 }}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 220 : 100}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }}
+          keyboardShouldPersistTaps="handled"
         >
           {/* Display Name */}
           <View style={styles.field}>
@@ -307,8 +308,8 @@ export default function RegisterScreen({ onBack }) {
               Continue as Guest
             </Text>
           </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </AuthLayout>
   );
 }
