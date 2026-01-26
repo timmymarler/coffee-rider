@@ -60,7 +60,7 @@ export default function LoginScreen() {
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
       setSubmitting(false);
-      router.replace("/(tabs)/map");
+      router.replace("map");
     } catch (err) {
       console.error("Login error:", err);
       setSubmitting(false);
