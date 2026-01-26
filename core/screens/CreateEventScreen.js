@@ -20,6 +20,7 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    TimePickerAndroid,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -182,26 +183,38 @@ export default function CreateEventScreen() {
   };
 
   const handleDatePicker = async (field) => {
-    if (Platform.OS === "android" && DatePickerAndroid) {
+    if (Platform.OS === "android") {
       const currentDate = field === "Start Date" ? formData.startDateTime : formData.endDateTime;
       try {
+        // Step 1: Pick the date
         const { action, year, month, day } = await DatePickerAndroid.open({
           date: currentDate,
           mode: "calendar",
         });
+        
         if (action === DatePickerAndroid.dateSetAction) {
-          const newDate = new Date(year, month, day);
-          if (field === "Start Date") {
-            updateForm("startDateTime", newDate);
-          } else {
-            updateForm("endDateTime", newDate);
+          // Step 2: Pick the time
+          const { action: timeAction, hour, minute } = await TimePickerAndroid.open({
+            hour: currentDate.getHours(),
+            minute: currentDate.getMinutes(),
+            is24Hour: true,
+          });
+          
+          if (timeAction === TimePickerAndroid.timeSetAction) {
+            // Combine date and time
+            const newDateTime = new Date(year, month, day, hour, minute);
+            if (field === "Start Date") {
+              updateForm("startDateTime", newDateTime);
+            } else {
+              updateForm("endDateTime", newDateTime);
+            }
           }
         }
       } catch ({ code, message }) {
-        console.warn("Error picking date:", message);
+        console.warn("Error picking date/time:", message);
       }
     } else {
-      // For iOS and fallback, show a modal with the date picker
+      // For iOS, show a modal with the date/time picker
       setDatePickerMode(field === "Start Date" ? "startDateTime" : "endDateTime");
       setShowDatePicker(true);
     }
