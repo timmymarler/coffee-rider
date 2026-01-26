@@ -46,18 +46,9 @@ export default function LoginScreen() {
         err.message || "Could not send reset email. Please try again."
       );
     }
-  async function handleGuestMode() {
-    try {
-      await enterGuestMode();
-      router.replace("/map");
-    } catch (err) {
-      console.error("Guest mode error:", err);
-      Alert.alert(
-        "Error",
-        "Could not enter guest mode. Please try again."
-      );
-    }
   }
+
+  async function handleLogin() {
     if (!email || !password) {
       Alert.alert("Missing details", "Please enter your email and password.");
       return;
@@ -133,6 +124,7 @@ export default function LoginScreen() {
         </View>
 
 
+        <View>{/* Submit */}</View>
         <TouchableOpacity
           style={[ 
             styles.button,
@@ -155,15 +147,16 @@ export default function LoginScreen() {
           <Text style={[styles.linkText, { color: colors.accent }]}>Reset Password</Text>
         </TouchableOpacity>
 
+        <View>{/* Register link */}</View>
         <TouchableOpacity
-          onPress={() => router.push("register")}
+          onPress={() => router.push("/auth/register")}
           style={{ marginTop: spacing.md, alignItems: "center" }}
         >
           <Text style={styles.linkText}>
             Don’t have an account? Register
           </Text>
         </TouchableOpacity>
-
+        <View>{/* Continue as Guest */}</View>
         <TouchableOpacity
           onPress={handleGuestMode}
           style={{ marginTop: spacing.lg, alignItems: "center" }}
@@ -171,10 +164,9 @@ export default function LoginScreen() {
           <Text style={[styles.linkText, { color: colors.textMuted }]}>
             Continue as Guest
           </Text>
-        </TouchableOpacity>
-      </AuthLayout>
-    </ScrollView>
-  </KeyboardAvoidingView>
+        </TouchableOpacity>    </AuthLayout>
+  </ScrollView>
+</KeyboardAvoidingView>
   );
 }
 
