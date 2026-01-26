@@ -149,7 +149,7 @@ export default function LoginScreen() {
 
         <View>{/* Register link */}</View>
         <TouchableOpacity
-          onPress={() => router.push("/auth/register")}
+          onPress={() => router.push("register")}
           style={{ marginTop: spacing.md, alignItems: "center" }}
         >
           <Text style={styles.linkText}>

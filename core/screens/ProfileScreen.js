@@ -143,14 +143,14 @@ export default function ProfileScreen() {
               
               <TouchableOpacity
                 style={styles.loginButton}
-                onPress={() => router.push("/auth/login")}
+                onPress={() => router.replace("/(auth)/login")}
               >
                 <Text style={styles.loginButtonText}>Log In</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.registerButton]}
-                onPress={() => router.push("/auth/register")}
+                onPress={() => router.replace("/(auth)/register")}
               >
                 <Text style={[styles.registerButtonText]}>Create Account</Text>
               </TouchableOpacity>
