@@ -1,21 +1,20 @@
 // core/screens/CalendarScreen.js
 import { AuthContext } from "@context/AuthContext";
 import { useEvents } from "@core/hooks/useEvents";
-import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
 import { useRouter } from "expo-router";
 import { useCallback, useContext, useMemo, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Modal,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
-    Alert,
-    Pressable
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -877,15 +876,18 @@ const styles = StyleSheet.create({
   },
   eventCard: {
     flexDirection: "row",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 10,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    backgroundColor: theme.colors.primaryDark,
+    borderRadius: theme.radius.md,
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.accentMid,
-    backgroundColor: theme.colors.background,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
   eventTime: {
     marginRight: 12,
