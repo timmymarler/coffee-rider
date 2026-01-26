@@ -18,6 +18,7 @@ import {
     View,
 } from "react-native";
 import AuthLayout from "./AuthLayout";
+import RegisterScreen from "./register";
 import { resetPassword } from "./resetPassword";
 export default function LoginScreen() {
   const router = useRouter();
@@ -27,6 +28,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
 
   async function handleResetPassword() {
     if (!email) {
@@ -58,7 +60,7 @@ export default function LoginScreen() {
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
       setSubmitting(false);
-      router.replace("/map");
+      router.replace("/(tabs)/map");
     } catch (err) {
       console.error("Login error:", err);
       setSubmitting(false);
@@ -72,7 +74,7 @@ export default function LoginScreen() {
   async function handleGuestMode() {
     try {
       await enterGuestMode();
-      router.replace("/map");
+      router.replace("/(tabs)/map");
     } catch (err) {
       console.error("Guest mode error:", err);
       Alert.alert(
@@ -80,6 +82,10 @@ export default function LoginScreen() {
         "Could not enter guest mode. Please try again."
       );
     }
+  }
+
+  if (showRegister) {
+    return <RegisterScreen onBack={() => setShowRegister(false)} />;
   }
 
   return (
@@ -144,7 +150,7 @@ export default function LoginScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity
-        onPress={() => router.push("register")}
+        onPress={() => setShowRegister(true)}
         style={{ marginTop: spacing.md, alignItems: "center" }}
       >
         <Text style={styles.linkText}>

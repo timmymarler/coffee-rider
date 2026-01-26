@@ -165,7 +165,7 @@ export default function ProfileScreen() {
                 style={{ marginTop: theme.spacing.lg }}
                 onPress={() => {
                   exitGuestMode();
-                  router.replace("/map");
+                  // App will automatically show login screen when guest mode exits
                 }}
               >
                 <Text style={[styles.subText, { color: theme.colors.accent }]}>
