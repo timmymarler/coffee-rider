@@ -49,10 +49,11 @@ export default function ProfileScreen() {
   const [imageRefreshKey, setImageRefreshKey] = useState(0);  // Force image reload
   const [sponsorshipStatus, setSponsorshipStatus] = useState(null);
   const [renewingSponsorship, setRenewingSponsorship] = useState(false);
-  const [placeName, setPlaceName] = useState(profile?.place?.name || "");
-  const [placeCategory, setPlaceCategory] = useState(profile?.place?.category || "cafe");
-  const [placeAddress, setPlaceAddress] = useState(profile?.place?.address || "");
-  const [placeAmenities, setPlaceAmenities] = useState(profile?.place?.amenities || "");
+  const [placeId, setPlaceId] = useState(profile?.linkedPlaceId || "");
+  const [placeName, setPlaceName] = useState("");
+  const [placeCategory, setPlaceCategory] = useState("cafe");
+  const [placeAddress, setPlaceAddress] = useState("");
+  const [placeAmenities, setPlaceAmenities] = useState("");
   
   // Update when profile changes
   useEffect(() => {
@@ -60,10 +61,7 @@ export default function ProfileScreen() {
     
     // Load different fields based on role
     if (profile?.role === "place-owner") {
-      setPlaceName(profile?.place?.name || "");
-      setPlaceCategory(profile?.place?.category || "cafe");
-      setPlaceAddress(profile?.place?.address || "");
-      setPlaceAmenities(profile?.place?.amenities || "");
+      setPlaceId(profile?.linkedPlaceId || "");
     } else {
       setBio(profile?.bio || "");
       setBike(profile?.bike || "");
@@ -71,6 +69,28 @@ export default function ProfileScreen() {
       setHomeAddress(profile?.homeAddress || "");
     }
   }, [profile]);
+
+  // Load place data from places collection for place owners
+  useEffect(() => {
+    const loadPlaceData = async () => {
+      if (role === "place-owner" && profile?.linkedPlaceId) {
+        try {
+          const placeRef = doc(db, "places", profile.linkedPlaceId);
+          const placeSnap = await getDoc(placeRef);
+          if (placeSnap.exists()) {
+            const data = placeSnap.data();
+            setPlaceName(data.name || "");
+            setPlaceCategory(data.category || "cafe");
+            setPlaceAddress(data.address || "");
+            setPlaceAmenities(data.amenities || "");
+          }
+        } catch (error) {
+          console.error("Error loading place data:", error);
+        }
+      }
+    };
+    loadPlaceData();
+  }, [profile?.linkedPlaceId, role]);
 
   // Load debug logs on mount
   useEffect(() => {
@@ -218,14 +238,18 @@ export default function ProfileScreen() {
       };
 
       // Save different fields based on role
-      if (role === "place-owner") {
-        updateData.place = {
+      if (role === "place-owner" && placeId) {
+        // Update place document in places collection
+        const placeRef = doc(db, "places", placeId);
+        await updateDoc(placeRef, {
           name: placeName.trim(),
           category: placeCategory,
           address: placeAddress.trim(),
           amenities: placeAmenities.trim(),
-        };
-      } else {
+          updatedAt: Date.now(),
+        });
+      } else if (role !== "place-owner") {
+        // Update rider profile fields
         updateData.bio = bio.trim();
         updateData.bike = bike.trim();
         updateData.homeLocation = homeLocation.trim();

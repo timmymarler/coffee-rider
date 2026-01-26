@@ -17,7 +17,7 @@ import {
 
 import { auth, db } from "@config/firebase";
 import theme from "@themes";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import AuthLayout from "./AuthLayout";
 
 const ROLES = [
@@ -74,12 +74,25 @@ export default function RegisterScreen() {
         createdAt: serverTimestamp(),
       };
 
-      // Add place info if place-owner
+      // Create place document if place-owner
       if (selectedRole === "place-owner") {
-        userData.place = {
+        // Create place document in places collection
+        const placeRef = await addDoc(collection(db, "places"), {
           name: placeName.trim(),
           category: placeCategory,
-        };
+          createdBy: user.uid,
+          createdAt: serverTimestamp(),
+          location: {
+            latitude: 0,
+            longitude: 0, // Default location, user can update from profile
+          },
+          // Initialize empty suitability and amenities
+          suitability: {},
+          amenities: {},
+        });
+
+        // Store reference to place in user document
+        userData.linkedPlaceId = placeRef.id;
       }
 
       await setDoc(doc(db, "users", user.uid), userData);
