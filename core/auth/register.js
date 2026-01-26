@@ -100,7 +100,12 @@ export default function RegisterScreen({ onBack }) {
       await setDoc(doc(db, "users", user.uid), userData);
       
       setSubmitting(false);
-      router.replace("/profile");
+      Alert.alert(
+        "Verification email sent",
+        "Please check your email to verify your account before logging in."
+      );
+      // Return to login after showing alert
+      setTimeout(() => onBack?.() || router.push("login"), 2000);
     } catch (err) {
       console.error("Register error:", err);
       setSubmitting(false);
@@ -132,9 +137,11 @@ export default function RegisterScreen({ onBack }) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }}
+        keyboardShouldPersistTaps="handled"
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 120 : 0}
         >
           {/* Display Name */}
           <View style={styles.field}>
@@ -344,7 +351,7 @@ const styles = StyleSheet.create({
   roleLabel: {
     fontSize: 15,
     fontWeight: "600",
-    color: theme.colors.text,
+    color: theme.colors.primaryMid,
   },
   roleLabelActive: {
     color: theme.colors.accentMid,
