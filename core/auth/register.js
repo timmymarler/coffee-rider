@@ -24,8 +24,8 @@ import { RIDER_CATEGORIES } from "@core/config/categories/rider";
 
 const ROLES = [
   { id: "rider", label: "Rider", description: "Find coffee stops" },
-  { id: "place-owner", label: "Place Owner", description: "Manage your café" },
   { id: "pro", label: "Pro", description: "Rider + full features" },
+  { id: "place-owner", label: "Place Owner", description: "Manage your café" },
 ];
 
 export default function RegisterScreen({ onBack }) {
@@ -137,12 +137,12 @@ export default function RegisterScreen({ onBack }) {
     >
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 100 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 180 }}
         keyboardShouldPersistTaps="handled"
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 160 : 50}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 220 : 100}
         >
           {/* Display Name */}
           <View style={styles.field}>
