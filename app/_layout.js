@@ -32,10 +32,11 @@ function FloatingTabBar({ state }) {
   console.log('[FloatingTabBar] activeRide from context:', activeRide?.rideId || 'null');
 
   // Determine which tabs are accessible based on capabilities
+  const { emailVerified } = useContext(AuthContext) || {};
   const canAccessMap = capabilities?.canAccessMap === true;
   const canAccessSavedRoutes = capabilities?.canAccessSavedRoutes === true;
   const canAccessGroups = capabilities?.canAccessGroups === true;
-  const canAccessCalendar = capabilities?.canAccessCalendar === true;
+  const canAccessCalendar = capabilities?.canAccessCalendar === true && emailVerified;
   const canAccessProfile = capabilities?.canAccessProfile === true;
 
   const isMapScreen =

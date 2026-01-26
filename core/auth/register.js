@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 12,
     fontWeight: "500",
-    color: theme.colors.text,
+    color: theme.colors.primaryMid,
   },
   categoryTextActive: {
     color: theme.colors.accentMid,

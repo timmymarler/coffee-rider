@@ -31,6 +31,7 @@ export default function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null); // Firestore profile doc (role, etc.)
   const [isGuest, setIsGuest] = useState(false); // Guest mode flag
   const [loading, setLoading] = useState(true);
+  const [emailVerified, setEmailVerified] = useState(false); // Email verification status
   const [versionStatus, setVersionStatus] = useState({
     status: "current",
     hasUpdate: false,
@@ -186,12 +187,15 @@ export default function AuthProvider({ children }) {
           console.log('[AuthContext] No firebaseUser. Setting user to null.');
           setUser(null);
           setProfile(null);
+          setEmailVerified(false);
           setLoading(false);
           return;
         }
 
         console.log('[AuthContext] firebaseUser detected:', firebaseUser.email);
+        console.log('[AuthContext] emailVerified:', firebaseUser.emailVerified);
         setUser(firebaseUser);
+        setEmailVerified(firebaseUser.emailVerified);
         await saveSession(firebaseUser);
 
         await ensureUserDocument(firebaseUser.uid, firebaseUser);
@@ -263,6 +267,7 @@ export default function AuthProvider({ children }) {
     role,
     capabilities,
     isGuest,
+    emailVerified,
     loading,
     versionStatus,
     login,
