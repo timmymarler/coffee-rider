@@ -52,6 +52,7 @@ function FloatingTabBar({ state }) {
     { name: "map", icon: "map" },
     { name: "saved-routes", icon: "git-branch" },
     { name: "groups", icon: "people", disabled: !canAccessGroups },
+    { name: "calendar", icon: "calendar" },
     { name: "profile", icon: "person" },
   ];
 
