@@ -113,10 +113,17 @@ export default function RegisterScreen({ onBack }) {
       setSubmitting(false);
       Alert.alert(
         "Verification email sent",
-        "Please check your email to verify your account before logging in."
+        "Please check your email to verify your account before logging in.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Close register modal and return to login
+              onBack?.();
+            }
+          }
+        ]
       );
-      // Return to login after showing alert
-      setTimeout(() => onBack?.() || router.push("login"), 2000);
     } catch (err) {
       console.error("Register error:", err);
       setSubmitting(false);
