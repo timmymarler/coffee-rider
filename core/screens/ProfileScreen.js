@@ -8,7 +8,9 @@ import { CRInput } from "@components-ui/CRInput";
 import { CRLabel } from "@components-ui/CRLabel";
 import { CRScreen } from "@components-ui/CRScreen";
 import { AuthContext } from "@context/AuthContext";
+import { useSponsorship } from "@core/hooks/useSponsorship";
 import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
+import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
@@ -45,6 +47,8 @@ export default function ProfileScreen() {
   const [uploading, setUploading] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
   const [imageRefreshKey, setImageRefreshKey] = useState(0);  // Force image reload
+  const [sponsorshipStatus, setSponsorshipStatus] = useState(null);
+  const [renewingSponsorship, setRenewingSponsorship] = useState(false);
   
   // Update when profile changes
   useEffect(() => {
@@ -63,6 +67,24 @@ export default function ProfileScreen() {
     };
     loadLogs();
   }, [showDebugPanel]);
+
+  // Load sponsorship status for place owners
+  useEffect(() => {
+    const loadSponsorshipStatus = async () => {
+      if (role === "place-owner" && profile?.linkedPlaceId) {
+        try {
+          const placeRef = doc(db, "places", profile.linkedPlaceId);
+          const placeSnap = await getDoc(placeRef);
+          if (placeSnap.exists() && placeSnap.data().sponsorship) {
+            setSponsorshipStatus(placeSnap.data().sponsorship);
+          }
+        } catch (error) {
+          console.error("Error loading sponsorship:", error);
+        }
+      }
+    };
+    loadSponsorshipStatus();
+  }, [profile, role]);
 
   const email = user?.email || "";
   const role = profile?.role || "user";
@@ -225,6 +247,39 @@ export default function ProfileScreen() {
     }
   }
 
+  async function handleRenewSponsorship() {
+    if (!profile?.linkedPlaceId) {
+      Alert.alert("Error", "No place linked to this account");
+      return;
+    }
+
+    setRenewingSponsorship(true);
+    
+    try {
+      // For now, simulate a 30-day renewal
+      // In production, this would trigger a payment flow
+      const result = await renewSponsorship(profile.linkedPlaceId, 30, {
+        transactionId: `renewal-${Date.now()}`,
+      });
+
+      if (result.success) {
+        Alert.alert("Success", result.message);
+        // Reload sponsorship status
+        const placeRef = doc(db, "places", profile.linkedPlaceId);
+        const placeSnap = await getDoc(placeRef);
+        if (placeSnap.exists()) {
+          setSponsorshipStatus(placeSnap.data().sponsorship);
+        }
+      } else {
+        Alert.alert("Error", result.message || "Failed to renew sponsorship");
+      }
+    } catch (error) {
+      console.error("Renewal error:", error);
+      Alert.alert("Error", "Failed to renew sponsorship");
+    } finally {
+      setRenewingSponsorship(false);
+    }
+  }
 
   // -----------------------------------
   // MAIN PROFILE LAYOUT
@@ -355,6 +410,52 @@ export default function ProfileScreen() {
         </View>
       </CRCard>
       </View>
+
+      {/* Sponsorship Section for Place Owners */}
+      {role === "place-owner" && (
+        <View style={styles.cardWrap}>
+          <CRCard>
+            <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '600', marginBottom: theme.spacing.md }}>
+              Sponsorship Status
+            </Text>
+            
+            {sponsorshipStatus?.isActive ? (
+              <>
+                <Text style={{ color: theme.colors.success || theme.colors.primary, fontSize: 14, fontWeight: '500', marginBottom: 4 }}>
+                  ✓ Active
+                </Text>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginBottom: theme.spacing.md }}>
+                  Valid until {sponsorshipStatus.validTo ? new Date(sponsorshipStatus.validTo).toLocaleDateString() : 'N/A'}
+                </Text>
+                <CRButton
+                  title={renewingSponsorship ? "Renewing…" : "Renew Sponsorship"}
+                  variant="primary"
+                  onPress={handleRenewSponsorship}
+                  loading={renewingSponsorship}
+                  disabled={renewingSponsorship}
+                />
+              </>
+            ) : (
+              <>
+                <Text style={{ color: theme.colors.danger || theme.colors.accentDark, fontSize: 14, fontWeight: '500', marginBottom: 8 }}>
+                  No active sponsorship
+                </Text>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginBottom: theme.spacing.md }}>
+                  Upgrade your place to increase visibility and access premium features.
+                </Text>
+                <CRButton
+                  title="Upgrade Now"
+                  variant="primary"
+                  onPress={handleRenewSponsorship}
+                  loading={renewingSponsorship}
+                  disabled={renewingSponsorship}
+                />
+              </>
+            )}
+          </CRCard>
+        </View>
+      )}
+
       <View style={styles.cardWrap}>
       <CRCard>
         <View style={styles.actionRow}>
