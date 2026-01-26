@@ -3,7 +3,7 @@ import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { useEventForm } from "@core/hooks/useEventForm";
 import theme from "@themes";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import {
@@ -27,7 +27,11 @@ export default function CreateEventScreen() {
   const router = useRouter();
   const { user, profile } = useContext(AuthContext);
   const { colors, spacing } = theme;
-  const { formData, updateForm, submitForm, submitting, error } = useEventForm();
+  const { selectedDate } = useLocalSearchParams();
+  
+  // Parse selectedDate if provided
+  const initialDate = selectedDate ? new Date(selectedDate) : null;
+  const { formData, updateForm, submitForm, submitting, error } = useEventForm(initialDate);
 
   const [userPlaces, setUserPlaces] = useState([]);
   const [loadingPlaces, setLoadingPlaces] = useState(false);

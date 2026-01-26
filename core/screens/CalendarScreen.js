@@ -474,7 +474,10 @@ export default function CalendarScreen() {
         {profile?.role === "place-owner" || profile?.role === "pro" ? (
           <TouchableOpacity
             style={styles.createEventButton}
-            onPress={() => router.push("/create-event")}
+            onPress={() => router.push({
+              pathname: "/create-event",
+              params: { selectedDate: selectedDate.toISOString() }
+            })}
           >
             <Text style={styles.createEventButtonText}>+ Create Event</Text>
           </TouchableOpacity>

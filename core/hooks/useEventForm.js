@@ -2,15 +2,28 @@
 import { useState } from "react";
 import { useEvents } from "./useEvents";
 
-export function useEventForm() {
+export function useEventForm(initialDate = null) {
   const { createEvent } = useEvents();
+  
+  // Initialize with passed date or current date/time
+  const getInitialDateTime = () => {
+    if (initialDate && initialDate instanceof Date) {
+      return initialDate;
+    }
+    return new Date();
+  };
+  
+  const startDate = getInitialDateTime();
+  const endDate = new Date(startDate);
+  endDate.setHours(endDate.getHours() + 1); // Default 1 hour duration
+  
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     placeId: "",
     placeName: "",
-    startDateTime: new Date(),
-    endDateTime: new Date(),
+    startDateTime: startDate,
+    endDateTime: endDate,
     maxAttendees: null,
     suitability: [], // [Bikes, Scooters, Cars]
     region: "",
