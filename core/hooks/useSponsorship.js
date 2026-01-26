@@ -4,7 +4,7 @@ import { checkSponsorship, renewSponsorship } from "@core/utils/sponsorshipUtils
 import { useContext, useState } from "react";
 
 export function useSponsorship() {
-  const { profile } = useContext(AuthContext);
+  const { user, profile } = useContext(AuthContext);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [sponsorshipStatus, setSponsorshipStatus] = useState(null);
@@ -16,8 +16,8 @@ export function useSponsorship() {
    * @param {object} transactionDetails - Payment details { transactionId, amount, etc }
    */
   const handlePaymentSuccess = async (durationDays, transactionDetails) => {
-    if (!profile?.place?.linkedPlaceId) {
-      setError("No linked place found");
+    if (!user?.uid) {
+      setError("User not authenticated");
       return { success: false };
     }
 
@@ -25,7 +25,7 @@ export function useSponsorship() {
     setError(null);
 
     const result = await renewSponsorship(
-      profile.place.linkedPlaceId,
+      user.uid,
       durationDays,
       transactionDetails
     );
@@ -48,15 +48,15 @@ export function useSponsorship() {
    * Check current sponsorship status
    */
   const checkStatus = async () => {
-    if (!profile?.place?.linkedPlaceId) {
-      setError("No linked place found");
+    if (!user?.uid) {
+      setError("User not authenticated");
       return null;
     }
 
     setLoading(true);
     setError(null);
 
-    const status = await checkSponsorship(profile.place.linkedPlaceId);
+    const status = await checkSponsorship(user.uid);
     setLoading(false);
 
     if (status.isActive !== undefined) {
