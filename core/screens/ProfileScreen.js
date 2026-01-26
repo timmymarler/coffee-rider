@@ -49,14 +49,27 @@ export default function ProfileScreen() {
   const [imageRefreshKey, setImageRefreshKey] = useState(0);  // Force image reload
   const [sponsorshipStatus, setSponsorshipStatus] = useState(null);
   const [renewingSponsorship, setRenewingSponsorship] = useState(false);
+  const [placeName, setPlaceName] = useState(profile?.place?.name || "");
+  const [placeCategory, setPlaceCategory] = useState(profile?.place?.category || "cafe");
+  const [placeAddress, setPlaceAddress] = useState(profile?.place?.address || "");
+  const [placeAmenities, setPlaceAmenities] = useState(profile?.place?.amenities || "");
   
   // Update when profile changes
   useEffect(() => {
     setDisplayName(profile?.displayName || user?.displayName || "");
-    setBio(profile?.bio || "");
-    setBike(profile?.bike || "");
-    setHomeLocation(profile?.homeLocation || "");
-    setHomeAddress(profile?.homeAddress || "");
+    
+    // Load different fields based on role
+    if (profile?.role === "place-owner") {
+      setPlaceName(profile?.place?.name || "");
+      setPlaceCategory(profile?.place?.category || "cafe");
+      setPlaceAddress(profile?.place?.address || "");
+      setPlaceAmenities(profile?.place?.amenities || "");
+    } else {
+      setBio(profile?.bio || "");
+      setBike(profile?.bike || "");
+      setHomeLocation(profile?.homeLocation || "");
+      setHomeAddress(profile?.homeAddress || "");
+    }
   }, [profile]);
 
   // Load debug logs on mount
@@ -68,15 +81,15 @@ export default function ProfileScreen() {
     loadLogs();
   }, [showDebugPanel]);
 
-  // Load sponsorship status for place owners
+  // Load sponsorship status for place owners from user document
   useEffect(() => {
     const loadSponsorshipStatus = async () => {
-      if (role === "place-owner" && profile?.linkedPlaceId) {
+      if (role === "place-owner" && user?.uid) {
         try {
-          const placeRef = doc(db, "places", profile.linkedPlaceId);
-          const placeSnap = await getDoc(placeRef);
-          if (placeSnap.exists() && placeSnap.data().sponsorship) {
-            setSponsorshipStatus(placeSnap.data().sponsorship);
+          const userRef = doc(db, "users", user.uid);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists() && userSnap.data().sponsorship) {
+            setSponsorshipStatus(userSnap.data().sponsorship);
           }
         } catch (error) {
           console.error("Error loading sponsorship:", error);
@@ -84,7 +97,7 @@ export default function ProfileScreen() {
       }
     };
     loadSponsorshipStatus();
-  }, [profile, role]);
+  }, [profile, role, user?.uid]);
 
   const email = user?.email || "";
   const role = profile?.role || "user";
@@ -198,15 +211,28 @@ export default function ProfileScreen() {
 
     try {
       const userRef = doc(db, "users", user.uid);
-
-      await updateDoc(userRef, {
+      
+      const updateData = {
         displayName: displayName.trim(),
-        bio: bio.trim(),
-        bike: bike.trim(),
-        homeLocation: homeLocation.trim(),
-        homeAddress: homeAddress.trim(),
         updatedAt: Date.now(),
-      });
+      };
+
+      // Save different fields based on role
+      if (role === "place-owner") {
+        updateData.place = {
+          name: placeName.trim(),
+          category: placeCategory,
+          address: placeAddress.trim(),
+          amenities: placeAmenities.trim(),
+        };
+      } else {
+        updateData.bio = bio.trim();
+        updateData.bike = bike.trim();
+        updateData.homeLocation = homeLocation.trim();
+        updateData.homeAddress = homeAddress.trim();
+      }
+
+      await updateDoc(userRef, updateData);
 
       await refreshProfile();
       setSaving(false);
@@ -248,8 +274,8 @@ export default function ProfileScreen() {
   }
 
   async function handleRenewSponsorship() {
-    if (!profile?.linkedPlaceId) {
-      Alert.alert("Error", "No place linked to this account");
+    if (!user?.uid) {
+      Alert.alert("Error", "User not authenticated");
       return;
     }
 
@@ -258,17 +284,17 @@ export default function ProfileScreen() {
     try {
       // For now, simulate a 30-day renewal
       // In production, this would trigger a payment flow
-      const result = await renewSponsorship(profile.linkedPlaceId, 30, {
+      const result = await renewSponsorship(user.uid, 30, {
         transactionId: `renewal-${Date.now()}`,
       });
 
       if (result.success) {
         Alert.alert("Success", result.message);
-        // Reload sponsorship status
-        const placeRef = doc(db, "places", profile.linkedPlaceId);
-        const placeSnap = await getDoc(placeRef);
-        if (placeSnap.exists()) {
-          setSponsorshipStatus(placeSnap.data().sponsorship);
+        // Reload sponsorship status from user document
+        const userRef = doc(db, "users", user.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          setSponsorshipStatus(userSnap.data().sponsorship);
         }
       } else {
         Alert.alert("Error", result.message || "Failed to renew sponsorship");
@@ -373,21 +399,50 @@ export default function ProfileScreen() {
         <CRLabel>Display Name</CRLabel>
         <CRInput value={displayName} onChangeText={setDisplayName} />
 
-        <CRLabel style={{ marginTop: theme.spacing.md }}>Bike</CRLabel>
-        <CRInput value={bike} onChangeText={setBike} />
+        {role === "place-owner" ? (
+          <>
+            {/* Place Owner Fields */}
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Place Name</CRLabel>
+            <CRInput value={placeName} onChangeText={setPlaceName} />
 
-        <CRLabel style={{ marginTop: theme.spacing.md }}>Home Area</CRLabel>
-        <CRInput value={homeLocation} onChangeText={setHomeLocation} />
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Category</CRLabel>
+            <CRInput value={placeCategory} onChangeText={setPlaceCategory} />
 
-        <CRLabel style={{ marginTop: theme.spacing.md }}>Home Address</CRLabel>
-        <CRInput 
-          value={homeAddress} 
-          onChangeText={setHomeAddress} 
-          placeholder="123 Main St, City, Postcode"
-        />
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Address</CRLabel>
+            <CRInput 
+              value={placeAddress} 
+              onChangeText={setPlaceAddress} 
+              placeholder="123 Main St, City, Postcode"
+            />
 
-        <CRLabel style={{ marginTop: theme.spacing.md }}>Rider Bio</CRLabel>
-        <CRInput value={bio} onChangeText={setBio} multiline />
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Amenities</CRLabel>
+            <CRInput 
+              value={placeAmenities} 
+              onChangeText={setPlaceAmenities} 
+              placeholder="WiFi, Seating, Parking"
+              multiline 
+            />
+          </>
+        ) : (
+          <>
+            {/* Rider Fields */}
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Bike</CRLabel>
+            <CRInput value={bike} onChangeText={setBike} />
+
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Home Area</CRLabel>
+            <CRInput value={homeLocation} onChangeText={setHomeLocation} />
+
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Home Address</CRLabel>
+            <CRInput 
+              value={homeAddress} 
+              onChangeText={setHomeAddress} 
+              placeholder="123 Main St, City, Postcode"
+            />
+
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Rider Bio</CRLabel>
+            <CRInput value={bio} onChangeText={setBio} multiline />
+          </>
+        )}
 
         <View
           style={{

@@ -3,43 +3,43 @@ import { db } from "@config/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 
 /**
- * Renew or extend a place's sponsorship
- * @param {string} placeId - The ID of the place
+ * Renew or extend a user's sponsorship
+ * @param {string} userId - The ID of the user (place owner)
  * @param {number} durationDays - Number of days to extend the sponsorship
  * @param {object} transactionDetails - Optional payment transaction details
  * @returns {object} - { success: boolean, validTo: timestamp, message: string }
  */
-export async function renewSponsorship(placeId, durationDays, transactionDetails = null) {
+export async function renewSponsorship(userId, durationDays, transactionDetails = null) {
   try {
-    if (!placeId || !durationDays || durationDays <= 0) {
+    if (!userId || !durationDays || durationDays <= 0) {
       return {
         success: false,
-        message: "Invalid place ID or duration",
+        message: "Invalid user ID or duration",
       };
     }
 
-    const placeRef = doc(db, "places", placeId);
-    const placeSnap = await getDoc(placeRef);
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
 
-    if (!placeSnap.exists()) {
+    if (!userSnap.exists()) {
       return {
         success: false,
-        message: "Place not found",
+        message: "User not found",
       };
     }
 
     // Calculate new validTo date
     const now = Date.now();
-    const currentValidTo = placeSnap.data()?.sponsorship?.validTo?.toMillis?.() || 
-                          placeSnap.data()?.sponsorship?.validTo || 
+    const currentValidTo = userSnap.data()?.sponsorship?.validTo?.toMillis?.() || 
+                          userSnap.data()?.sponsorship?.validTo || 
                           now;
     
     // If already expired, extend from today; otherwise extend from current expiry
     const baseDate = currentValidTo < now ? now : currentValidTo;
     const newValidTo = new Date(baseDate + durationDays * 24 * 60 * 60 * 1000);
 
-    // Update place sponsorship
-    await updateDoc(placeRef, {
+    // Update user sponsorship
+    await updateDoc(userRef, {
       sponsorship: {
         isActive: true,
         validTo: newValidTo,
@@ -63,23 +63,23 @@ export async function renewSponsorship(placeId, durationDays, transactionDetails
 }
 
 /**
- * Check if a place has active sponsorship
- * @param {string} placeId - The ID of the place
+ * Check if a user has active sponsorship
+ * @param {string} userId - The ID of the user
  * @returns {object} - { isActive: boolean, validTo: date, daysRemaining: number }
  */
-export async function checkSponsorship(placeId) {
+export async function checkSponsorship(userId) {
   try {
-    const placeRef = doc(db, "places", placeId);
-    const placeSnap = await getDoc(placeRef);
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
 
-    if (!placeSnap.exists()) {
+    if (!userSnap.exists()) {
       return {
         isActive: false,
-        message: "Place not found",
+        message: "User not found",
       };
     }
 
-    const sponsorshipData = placeSnap.data()?.sponsorship;
+    const sponsorshipData = userSnap.data()?.sponsorship;
     if (!sponsorshipData) {
       return {
         isActive: false,
