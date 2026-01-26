@@ -1,0 +1,632 @@
+// core/screens/CreateEventScreen.js
+import { db } from "@config/firebase";
+import { AuthContext } from "@context/AuthContext";
+import { useEventForm } from "@core/hooks/useEventForm";
+import theme from "@themes";
+import { useRouter } from "expo-router";
+import { doc, getDoc } from "firebase/firestore";
+import { useContext, useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    DatePickerAndroid,
+    DatePickerIOS,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
+
+export default function CreateEventScreen() {
+  const router = useRouter();
+  const { user, profile } = useContext(AuthContext);
+  const { colors, spacing } = theme;
+  const { formData, updateForm, submitForm, submitting, error } = useEventForm();
+
+  const [userPlaces, setUserPlaces] = useState([]);
+  const [loadingPlaces, setLoadingPlaces] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerMode, setDatePickerMode] = useState("startDateTime"); // "startDateTime" or "endDateTime"
+
+  // Load places for this place owner
+  useEffect(() => {
+    if (profile?.role === "place-owner" && profile?.linkedPlaceId) {
+      // For place owners, use their linked place from their profile
+      const userPlace = {
+        id: profile.linkedPlaceId,
+        name: profile.displayName || "My Place",
+      };
+      setUserPlaces([userPlace]);
+      // Auto-select their place
+      updateForm("placeId", userPlace.id);
+      updateForm("placeName", userPlace.name);
+    }
+  }, [profile, user]);
+
+  const handleSubmit = async () => {
+    // Check if place owner has active sponsorship
+    if (profile?.role === "place-owner") {
+      if (!profile?.linkedPlaceId) {
+        Alert.alert("No place linked", "Please link a place to your account first.");
+        return;
+      }
+
+      try {
+        // Fetch the place document to check sponsorship
+        const placeRef = doc(db, "places", profile.linkedPlaceId);
+        const placeSnap = await getDoc(placeRef);
+        const placeData = placeSnap.data();
+
+        if (!placeData?.sponsorship?.isActive) {
+          Alert.alert(
+            "Sponsorship expired",
+            "Your sponsorship has expired. Please renew it to create events."
+          );
+          return;
+        }
+
+        // Check if sponsorship is still valid (validTo is in the future)
+        const now = Date.now();
+        const validTo = placeData.sponsorship.validTo?.toMillis?.() || placeData.sponsorship.validTo;
+        if (validTo && validTo < now) {
+          Alert.alert(
+            "Sponsorship expired",
+            "Your sponsorship has expired. Please renew it to create events."
+          );
+          return;
+        }
+      } catch (err) {
+        console.error("Error checking sponsorship:", err);
+        Alert.alert("Error", "Could not verify sponsorship status.");
+        return;
+      }
+    }
+
+    const success = await submitForm();
+    if (success) {
+      Alert.alert("Success", "Event created successfully!");
+      router.back();
+    } else {
+      Alert.alert("Error", error || "Failed to create event");
+    }
+  };
+
+  const handleDatePicker = async (field) => {
+    if (Platform.OS === "android" && DatePickerAndroid) {
+      const currentDate = field === "Start Date" ? formData.startDateTime : formData.endDateTime;
+      try {
+        const { action, year, month, day } = await DatePickerAndroid.open({
+          date: currentDate,
+          mode: "calendar",
+        });
+        if (action === DatePickerAndroid.dateSetAction) {
+          const newDate = new Date(year, month, day);
+          if (field === "Start Date") {
+            updateForm("startDateTime", newDate);
+          } else {
+            updateForm("endDateTime", newDate);
+          }
+        }
+      } catch ({ code, message }) {
+        console.warn("Error picking date:", message);
+      }
+    } else {
+      // For iOS and fallback, show a modal with the date picker
+      setDatePickerMode(field === "Start Date" ? "startDateTime" : "endDateTime");
+      setShowDatePicker(true);
+    }
+  };
+
+  const handleDateConfirm = (date) => {
+    if (datePickerMode === "startDateTime") {
+      updateForm("startDateTime", date);
+    } else {
+      updateForm("endDateTime", date);
+    }
+    setShowDatePicker(false);
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.closeButton}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Create Event</Text>
+        <View style={{ width: 50 }} />
+      </View>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: spacing.xl * 4 }}
+        >
+          {/* Event Title */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Event Title *</Text>
+            <TextInput
+              value={formData.title}
+              onChangeText={(value) => updateForm("title", value)}
+              placeholder="Coffee & Cycling Meetup"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+            />
+          </View>
+
+          {/* Description */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Description</Text>
+            <TextInput
+              value={formData.description}
+              onChangeText={(value) => updateForm("description", value)}
+              placeholder="Tell people about your event..."
+              placeholderTextColor={colors.textMuted}
+              style={[styles.input, { height: 80 }]}
+              multiline
+            />
+          </View>
+
+          {/* Place Selection */}
+          {userPlaces.length > 0 && (
+            <View style={styles.field}>
+              <Text style={styles.label}>Place *</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginTop: 8 }}
+              >
+                {userPlaces.map((place) => (
+                  <TouchableOpacity
+                    key={place.id}
+                    style={[
+                      styles.placeButton,
+                      formData.placeId === place.id &&
+                        styles.placeButtonActive,
+                    ]}
+                    onPress={() => {
+                      updateForm("placeId", place.id);
+                      updateForm("placeName", place.name);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.placeButtonText,
+                        formData.placeId === place.id &&
+                          styles.placeButtonTextActive,
+                      ]}
+                    >
+                      {place.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* No Places Message */}
+          {userPlaces.length === 0 && profile?.role === "place-owner" && (
+            <View style={[styles.field, { backgroundColor: colors.inputBackground, padding: 12, borderRadius: 8 }]}>
+              <Text style={styles.label}>Place not linked</Text>
+              <Text style={[styles.placeButtonText, { marginTop: 8 }]}>
+                You haven't linked a place yet. Go to your Profile and link a place from the Maps screen to create events.
+              </Text>
+              <TouchableOpacity
+                style={[styles.button, { marginTop: 12 }]}
+                onPress={() => router.push("/profile")}
+              >
+                <Text style={styles.buttonText}>Go to Profile</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Start Date/Time */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Start Date & Time *</Text>
+            <TouchableOpacity
+              style={styles.dateButton}
+              onPress={() => handleDatePicker("Start Date")}
+            >
+              <Text style={styles.dateButtonText}>
+                {formData.startDateTime.toLocaleString()}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* End Date/Time */}
+          <View style={styles.field}>
+            <Text style={styles.label}>End Date & Time *</Text>
+            <TouchableOpacity
+              style={styles.dateButton}
+              onPress={() => handleDatePicker("End Date")}
+            >
+              <Text style={styles.dateButtonText}>
+                {formData.endDateTime.toLocaleString()}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Max Attendees */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Max Attendees (optional)</Text>
+            <TextInput
+              value={
+                formData.maxAttendees ? formData.maxAttendees.toString() : ""
+              }
+              onChangeText={(value) =>
+                updateForm("maxAttendees", value ? parseInt(value) : null)
+              }
+              placeholder="Leave blank for unlimited"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="number-pad"
+              style={styles.input}
+            />
+          </View>
+
+          {/* Region */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Region *</Text>
+            <View style={styles.regionContainer}>
+              {["Wales", "South East", "Midlands", "East of England", "North", "London"].map(
+                (region) => (
+                  <TouchableOpacity
+                    key={region}
+                    style={[
+                      styles.regionButton,
+                      formData.region === region &&
+                        styles.regionButtonActive,
+                    ]}
+                    onPress={() => updateForm("region", region)}
+                  >
+                    <Text
+                      style={[
+                        styles.regionButtonText,
+                        formData.region === region &&
+                          styles.regionButtonTextActive,
+                      ]}
+                    >
+                      {region}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              )}
+            </View>
+          </View>
+
+          {/* Suitability */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Suitable For *</Text>
+            <View style={styles.suitabilityContainer}>
+              {["Bikes", "Scooters", "Cars"].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.suitabilityButton,
+                    formData.suitability.includes(option) &&
+                      styles.suitabilityButtonActive,
+                  ]}
+                  onPress={() => {
+                    const updated = formData.suitability.includes(option)
+                      ? formData.suitability.filter((s) => s !== option)
+                      : [...formData.suitability, option];
+                    updateForm("suitability", updated);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.suitabilityButtonText,
+                      formData.suitability.includes(option) &&
+                        styles.suitabilityButtonTextActive,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Recurrence */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Recurrence</Text>
+            <View style={styles.recurrenceContainer}>
+              {["one-off", "weekly", "monthly"].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.recurrenceButton,
+                    formData.recurrence === option &&
+                      styles.recurrenceButtonActive,
+                  ]}
+                  onPress={() => updateForm("recurrence", option)}
+                >
+                  <Text
+                    style={[
+                      styles.recurrenceButtonText,
+                      formData.recurrence === option &&
+                        styles.recurrenceButtonTextActive,
+                    ]}
+                  >
+                    {option === "one-off"
+                      ? "One-Off"
+                      : option.charAt(0).toUpperCase() + option.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Error Message */}
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={[styles.submitButton, submitting && { opacity: 0.7 }]}
+            disabled={submitting}
+            onPress={handleSubmit}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color={colors.primaryDark} />
+            ) : (
+              <Text style={styles.submitButtonText}>Create Event</Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={{ height: spacing.lg }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* iOS Date Picker Modal */}
+      {Platform.OS === "ios" && (
+        <Modal
+          transparent
+          animationType="slide"
+          visible={showDatePicker}
+          onRequestClose={() => setShowDatePicker(false)}
+        >
+          <View style={styles.datePickerModalContainer}>
+            <View style={styles.datePickerContent}>
+              <View style={styles.datePickerHeader}>
+                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                  <Text style={styles.datePickerButtonText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <DatePickerIOS
+                date={datePickerMode === "startDateTime" ? formData.startDateTime : formData.endDateTime}
+                onDateChange={(date) => {
+                  if (datePickerMode === "startDateTime") {
+                    updateForm("startDateTime", date);
+                  } else {
+                    updateForm("endDateTime", date);
+                  }
+                }}
+                mode="datetime"
+                minimumDate={new Date()}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  closeButton: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.accentMid,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  field: {
+    marginBottom: theme.spacing.lg,
+  },
+  label: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: theme.colors.inputBackground,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: theme.colors.inputText,
+  },
+  dateButton: {
+    backgroundColor: theme.colors.inputBackground,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  dateButtonText: {
+    fontSize: 14,
+    color: theme.colors.inputText,
+  },
+  placeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+    borderRadius: 6,
+    marginRight: 8,
+    backgroundColor: theme.colors.inputBackground,
+  },
+  placeButtonActive: {
+    backgroundColor: theme.colors.accentMid,
+    borderColor: theme.colors.accentMid,
+  },
+  placeButtonText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: theme.colors.textMuted,
+  },
+  placeButtonTextActive: {
+    color: theme.colors.primaryDark,
+  },
+  regionContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  regionButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+    borderRadius: 6,
+    backgroundColor: theme.colors.inputBackground,
+  },
+  regionButtonActive: {
+    backgroundColor: theme.colors.accentMid,
+    borderColor: theme.colors.accentMid,
+  },
+  regionButtonText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: theme.colors.textMuted,
+  },
+  regionButtonTextActive: {
+    color: theme.colors.primaryDark,
+  },
+  suitabilityContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  suitabilityButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+    borderRadius: 6,
+    alignItems: "center",
+    backgroundColor: theme.colors.inputBackground,
+  },
+  suitabilityButtonActive: {
+    backgroundColor: theme.colors.accentMid,
+    borderColor: theme.colors.accentMid,
+  },
+  suitabilityButtonText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: theme.colors.textMuted,
+  },
+  suitabilityButtonTextActive: {
+    color: theme.colors.primaryDark,
+  },
+  recurrenceContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  recurrenceButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+    borderRadius: 6,
+    alignItems: "center",
+    backgroundColor: theme.colors.inputBackground,
+  },
+  recurrenceButtonActive: {
+    backgroundColor: theme.colors.accentMid,
+    borderColor: theme.colors.accentMid,
+  },
+  recurrenceButtonText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: theme.colors.textMuted,
+  },
+  recurrenceButtonTextActive: {
+    color: theme.colors.primaryDark,
+  },
+  errorContainer: {
+    backgroundColor: theme.colors.danger,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: theme.spacing.md,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "white",
+    fontWeight: "500",
+  },
+  submitButton: {
+    backgroundColor: theme.colors.accentMid,
+    paddingVertical: 12,
+    borderRadius: 999,
+    alignItems: "center",
+    marginBottom: theme.spacing.md,
+  },
+  submitButtonText: {
+    color: theme.colors.primaryDark,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  datePickerModalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  datePickerContent: {
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    maxHeight: "70%",
+  },
+  datePickerHeader: {
+    backgroundColor: theme.colors.primaryMid,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    alignItems: "flex-end",
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.inputBorder,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  datePickerButtonText: {
+    color: theme.colors.accentMid,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+});
