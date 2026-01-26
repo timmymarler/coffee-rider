@@ -3,7 +3,7 @@ import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { useEventForm } from "@core/hooks/useEventForm";
 import theme from "@themes";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import {
@@ -11,6 +11,7 @@ import {
     Alert,
     DatePickerAndroid,
     DatePickerIOS,
+    FlatList,
     KeyboardAvoidingView,
     Modal,
     Platform,
