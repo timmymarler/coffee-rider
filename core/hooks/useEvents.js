@@ -35,6 +35,9 @@ export function useEvents(filters = {}) {
         // Apply filters
         const constraints = [];
 
+        // Always filter by current user's events
+        constraints.push(where("userId", "==", user.uid));
+
         if (filters.placeId) {
           constraints.push(where("placeId", "==", filters.placeId));
         }

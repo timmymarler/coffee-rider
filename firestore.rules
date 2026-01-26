@@ -50,11 +50,16 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
       // Allow update if user is authenticated and is the creator or admin
+      // Linked users (place owners) can update amenities and suitability on their linked place
       // Pro users can update amenities, suitability, and ratings on any place
       // Only admin and creators can update other fields
       allow update: if isAuthed() && (
         hasRole('admin') ||
         (resource.data.createdBy == request.auth.uid) ||
+        // Linked user: check if this user has linkedPlaceId matching this place
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedPlaceId == placeId &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['amenities', 'suitability', 'updatedAt'])) ||
         (isProOrAdmin() && 
          // Pro can update amenities, suitability, and ratings only (plus updatedAt)
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['amenities', 'suitability', 'crRatings', 'updatedAt']))
@@ -203,6 +208,15 @@ service cloud.firestore {
       // The document only exists when someone is actively sharing, so this is safe
       // Location data itself is filtered client-side to same ride/group only
       allow get: if isAuthed();
+    }
+
+    /* EVENTS - USER CALENDAR EVENTS */
+    match /events/{eventId} {
+      allow create: if isAuthed() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAuthed() && resource.data.userId == request.auth.uid;
+      allow update: if isAuthed() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthed() && resource.data.userId == request.auth.uid;
+      allow list: if isAuthed();
     }
     
   }
