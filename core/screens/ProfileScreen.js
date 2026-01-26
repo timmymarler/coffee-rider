@@ -19,6 +19,7 @@ import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Clipboard, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LoginScreen from "../auth/login";
+import RegisterScreen from "../auth/register";
 
 
 export default function ProfileScreen() {
@@ -26,6 +27,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, profile, loading, logout, refreshProfile, isGuest, exitGuestMode } = useContext(AuthContext);
+  const [showRegisterScreen, setShowRegisterScreen] = useState(false);
 
   // -----------------------------------
   // Initial Values
@@ -131,6 +133,11 @@ export default function ProfileScreen() {
 
   // Handle guest mode: show login/register options
   if (isGuest && !user) {
+    // Show RegisterScreen directly if user clicked "Create Account"
+    if (showRegisterScreen) {
+      return <RegisterScreen onBack={() => setShowRegisterScreen(false)} />;
+    }
+
     return (
       <CRScreen>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
@@ -154,8 +161,8 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 style={[styles.registerButton]}
                 onPress={() => {
-                  exitGuestMode();
-                  // App will show LoginScreen with register modal option
+                  // Show RegisterScreen directly in guest mode
+                  setShowRegisterScreen(true);
                 }}
               >
                 <Text style={[styles.registerButtonText]}>Create Account</Text>

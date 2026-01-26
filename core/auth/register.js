@@ -136,12 +136,12 @@ export default function RegisterScreen({ onBack }) {
     >
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 100 }}
         keyboardShouldPersistTaps="handled"
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 120 : 0}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 160 : 50}
         >
           {/* Display Name */}
           <View style={styles.field}>
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   },
   roleDescription: {
     fontSize: 12,
-    color: theme.colors.textMuted,
+    color: theme.colors.primaryMid,
     marginTop: 2,
   },
   roleDescriptionActive: {
