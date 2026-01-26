@@ -85,6 +85,7 @@ export function useEvents(filters = {}) {
       const eventsRef = collection(db, "events");
       const docRef = await addDoc(eventsRef, {
         ...eventData,
+        userId: user.uid,
         createdBy: user.uid,
         createdAt: serverTimestamp(),
         attendees: [user.uid],
