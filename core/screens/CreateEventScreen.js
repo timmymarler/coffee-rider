@@ -58,12 +58,12 @@ export default function CreateEventScreen() {
       }
 
       try {
-        // Fetch the place document to check sponsorship
-        const placeRef = doc(db, "places", profile.linkedPlaceId);
-        const placeSnap = await getDoc(placeRef);
-        const placeData = placeSnap.data();
+        // Fetch the user document to check sponsorship
+        const userRef = doc(db, "users", user.uid);
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.data();
 
-        if (!placeData?.sponsorship?.isActive) {
+        if (!userData?.sponsorship?.isActive) {
           Alert.alert(
             "Sponsorship expired",
             "Your sponsorship has expired. Please renew it to create events."
@@ -73,7 +73,7 @@ export default function CreateEventScreen() {
 
         // Check if sponsorship is still valid (validTo is in the future)
         const now = Date.now();
-        const validTo = placeData.sponsorship.validTo?.toMillis?.() || placeData.sponsorship.validTo;
+        const validTo = userData.sponsorship.validTo?.toMillis?.() || userData.sponsorship.validTo;
         if (validTo && validTo < now) {
           Alert.alert(
             "Sponsorship expired",
