@@ -77,6 +77,8 @@ export default function RegisterScreen({ onBack }) {
         createdAt: serverTimestamp(),
       };
 
+      console.log("Creating user with role:", selectedRole, "Full userData:", userData);
+
       // Create place document if place-owner
       if (selectedRole === "place-owner") {
         // Create place document in places collection
@@ -99,6 +101,14 @@ export default function RegisterScreen({ onBack }) {
       }
 
       await setDoc(doc(db, "users", user.uid), userData);
+      
+      // Send verification email
+      try {
+        await user.sendEmailVerification();
+        console.log("Verification email sent to:", user.email);
+      } catch (emailErr) {
+        console.error("Failed to send verification email:", emailErr);
+      }
       
       setSubmitting(false);
       Alert.alert(
