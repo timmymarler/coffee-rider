@@ -74,7 +74,7 @@ export default function LoginScreen() {
   async function handleGuestMode() {
     try {
       await enterGuestMode();
-      router.replace("/(tabs)/map");
+      // App will automatically show main tabs when guest mode is active
     } catch (err) {
       console.error("Guest mode error:", err);
       Alert.alert(
