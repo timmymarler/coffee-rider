@@ -3,6 +3,7 @@
 export const CAPABILITY_LEVELS = {
   GUEST: "guest",
   USER: "user",
+  PLACE_OWNER: "place-owner",
   PRO: "pro",
   ADMIN: "admin",
 };
@@ -13,6 +14,13 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
       return {
         // Admin flag
         isAdmin: true,
+
+        // Tab access
+        canAccessMap: true,
+        canAccessSavedRoutes: true,
+        canAccessGroups: true,
+        canAccessCalendar: true,
+        canAccessProfile: true,
 
         // Core access
         canViewMap: true,
@@ -34,7 +42,6 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         // Routes
         canSaveRoutes: true,
         canShareRoutes: true,
-        canAccessGroups: true,
 
         // Search
         canSearchCR: true,
@@ -43,6 +50,10 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         // Google photos
         googlePhotoAccess: "full",
         canViewGooglePhotos: true,
+
+        // Calendar & Events
+        canCreateEvents: true,
+        canAccessSponsorship: true,
 
         // Admin
         canEditAnyVenue: true,
@@ -53,6 +64,13 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
     case CAPABILITY_LEVELS.PRO:
       return {
         isAdmin: false,
+
+        // Tab access
+        canAccessMap: true,
+        canAccessSavedRoutes: true,
+        canAccessGroups: true,
+        canAccessCalendar: true,
+        canAccessProfile: true,
 
         canViewMap: true,
         canViewPlacecard: true,
@@ -70,41 +88,98 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         canSaveRoutes: true,
         canShareRoutes: true,
-        canAccessGroups: true,
 
         canSearchCR: true,
         canSearchGoogle: true,
 
         googlePhotoAccess: "full",
         canViewGooglePhotos: true,
+
+        // Calendar & Events
+        canCreateEvents: true,
+        canAccessSponsorship: false,
+      };
+
+    case CAPABILITY_LEVELS.PLACE_OWNER:
+      return {
+        isAdmin: false,
+
+        // Tab access
+        canAccessMap: true,
+        canAccessSavedRoutes: false,
+        canAccessGroups: false,
+        canAccessCalendar: true,
+        canAccessProfile: true,
+
+        // Core access
+        canViewMap: true,
+        canViewPlacecard: true,
+
+        // Navigation & routing
+        canNavigate: false,
+        canPreviewSingleRoute: true,
+        canCreateRoutes: false,
+
+        // Places & content
+        canAddVenue: false,
+        canRate: true,
+        canComment: true,
+        canUploadPhotos: false,
+        canUpdatePlaces: true,         // own place only
+        canCreateCrPlaces: false,
+
+        // Routes
+        canSaveRoutes: true,
+        canShareRoutes: false,
+
+        // Search
+        canSearchCR: true,
+        canSearchGoogle: false,
+
+        googlePhotoAccess: "limited",
+        canViewGooglePhotos: true,
+
+        // Calendar & Events
+        canCreateEvents: true,
+        canAccessSponsorship: true,
       };
 
     case CAPABILITY_LEVELS.USER:
       return {
         isAdmin: false,
 
+        // Tab access
+        canAccessMap: true,
+        canAccessSavedRoutes: true,
+        canAccessGroups: false,
+        canAccessCalendar: false,
+        canAccessProfile: true,
+
         canViewMap: true,
         canViewPlacecard: true,
 
-        canNavigate: true,
+        canNavigate: false,
         canPreviewSingleRoute: true,   // ✅ this is the key upgrade
         canCreateRoutes: false,        // ❌ no waypoints
 
         canAddVenue: true,
         canRate: true,
         canComment: true,
-        canUploadPhotos: true,
+        canUploadPhotos: false,
         canUpdatePlaces: false,
 
         canSaveRoutes: true,           // auto-saved, hidden
         canShareRoutes: false,
-        canAccessGroups: false,
 
         canSearchCR: true,
         canSearchGoogle: false,
 
         googlePhotoAccess: "limited",  // 1–2 photos per place
         canViewGooglePhotos: true,
+
+        // Calendar & Events
+        canCreateEvents: false,
+        canAccessSponsorship: false,
       };
 
     case CAPABILITY_LEVELS.GUEST:
@@ -112,10 +187,17 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
       return {
         isAdmin: false,
 
+        // Tab access - Guest can see map and profile tabs only
+        canAccessMap: true,
+        canAccessSavedRoutes: false,
+        canAccessGroups: false,
+        canAccessCalendar: false,
+        canAccessProfile: true,         // shows login/register
+
         canViewMap: true,
         canViewPlacecard: true,
 
-        canNavigate: true,             // native maps only
+        canNavigate: false,             // native maps only
         canPreviewSingleRoute: false,
         canCreateRoutes: false,
 
@@ -127,13 +209,16 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         canSaveRoutes: false,
         canShareRoutes: false,
-        canAccessGroups: false,
 
         canSearchCR: true,
         canSearchGoogle: false,
 
         googlePhotoAccess: "none",
         canViewGooglePhotos: false,
+
+        // Calendar & Events
+        canCreateEvents: false,
+        canAccessSponsorship: false,
       };
   }
 }
