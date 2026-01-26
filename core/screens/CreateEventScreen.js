@@ -5,6 +5,7 @@ import { useEventForm } from "@core/hooks/useEventForm";
 import theme from "@themes";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { collection, doc, getDoc, getDocs } from "firebase/firestore";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useContext, useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -20,7 +21,6 @@ import {
     StyleSheet,
     Text,
     TextInput,
-    TimePickerAndroid,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -182,6 +182,9 @@ export default function CreateEventScreen() {
     }
   };
 
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [timePickerMode, setTimePickerMode] = useState("startDateTime");
+
   const handleDatePicker = async (field) => {
     if (Platform.OS === "android") {
       const currentDate = field === "Start Date" ? formData.startDateTime : formData.endDateTime;
@@ -193,25 +196,15 @@ export default function CreateEventScreen() {
         });
         
         if (action === DatePickerAndroid.dateSetAction) {
-          // Step 2: Pick the time
-          const { action: timeAction, hour, minute } = await TimePickerAndroid.open({
-            hour: currentDate.getHours(),
-            minute: currentDate.getMinutes(),
-            is24Hour: true,
-          });
-          
-          if (timeAction === TimePickerAndroid.timeSetAction) {
-            // Combine date and time
-            const newDateTime = new Date(year, month, day, hour, minute);
-            if (field === "Start Date") {
-              updateForm("startDateTime", newDateTime);
-            } else {
-              updateForm("endDateTime", newDateTime);
-            }
-          }
+          // Step 2: Show modal time picker for time selection
+          setTimePickerMode(field === "Start Date" ? "startDateTime" : "endDateTime");
+          setShowTimePicker(true);
+          // Store the picked date so we can combine it with time later
+          const pickedDate = new Date(year, month, day);
+          updateForm(field === "Start Date" ? "startDateTime" : "endDateTime", pickedDate);
         }
       } catch ({ code, message }) {
-        console.warn("Error picking date/time:", message);
+        console.warn("Error picking date:", message);
       }
     } else {
       // For iOS, show a modal with the date/time picker
@@ -569,31 +562,64 @@ export default function CreateEventScreen() {
         </View>
       </Modal>
 
-      {/* iOS Date Picker Modal */}
-      {Platform.OS === "ios" && (
+      {/* Date/Time Picker Modal (iOS and Android time picker) */}
+      {(showDatePicker || showTimePicker) && (
         <Modal
           transparent
           animationType="slide"
-          visible={showDatePicker}
-          onRequestClose={() => setShowDatePicker(false)}
+          visible={showDatePicker || showTimePicker}
+          onRequestClose={() => {
+            setShowDatePicker(false);
+            setShowTimePicker(false);
+          }}
         >
           <View style={styles.datePickerModalContainer}>
             <View style={styles.datePickerContent}>
               <View style={styles.datePickerHeader}>
-                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowDatePicker(false);
+                    setShowTimePicker(false);
+                  }}
+                >
                   <Text style={styles.datePickerButtonText}>Done</Text>
                 </TouchableOpacity>
               </View>
-              <DatePickerIOS
-                date={datePickerMode === "startDateTime" ? formData.startDateTime : formData.endDateTime}
-                onDateChange={(date) => {
-                  if (datePickerMode === "startDateTime") {
-                    updateForm("startDateTime", date);
-                  } else {
-                    updateForm("endDateTime", date);
+              <DateTimePicker
+                value={
+                  showDatePicker
+                    ? datePickerMode === "startDateTime"
+                      ? formData.startDateTime
+                      : formData.endDateTime
+                    : timePickerMode === "startDateTime"
+                    ? formData.startDateTime
+                    : formData.endDateTime
+                }
+                onChange={(event, selectedDate) => {
+                  if (selectedDate) {
+                    if (showDatePicker) {
+                      if (datePickerMode === "startDateTime") {
+                        updateForm("startDateTime", selectedDate);
+                      } else {
+                        updateForm("endDateTime", selectedDate);
+                      }
+                      // Auto-close on iOS
+                      if (Platform.OS === "ios") {
+                        setShowDatePicker(false);
+                      }
+                    } else if (showTimePicker) {
+                      if (timePickerMode === "startDateTime") {
+                        updateForm("startDateTime", selectedDate);
+                      } else {
+                        updateForm("endDateTime", selectedDate);
+                      }
+                      // Auto-close after time selection
+                      setShowTimePicker(false);
+                    }
                   }
                 }}
-                mode="datetime"
+                mode={showTimePicker ? "time" : "datetime"}
+                display={Platform.OS === "ios" ? "spinner" : "default"}
                 minimumDate={new Date()}
               />
             </View>
