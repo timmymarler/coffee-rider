@@ -2,7 +2,7 @@
 import { auth } from "@config/firebase";
 import theme from "@themes";
 import { useRouter } from "expo-router";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { useState, useContext } from "react";
 import { AuthContext } from "@/core/context/AuthContext";
 import {
@@ -23,7 +23,7 @@ import { resetPassword } from "./resetPassword";
 export default function LoginScreen() {
   const router = useRouter();
   const { colors, spacing } = theme;
-  const { enterGuestMode } = useContext(AuthContext);
+  const { enterGuestMode, user, emailVerified } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -82,6 +82,63 @@ export default function LoginScreen() {
         "Could not enter guest mode. Please try again."
       );
     }
+  }
+
+  async function handleLogout() {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error("Logout error:", err);
+      Alert.alert("Logout failed", "Please try again.");
+    }
+  }
+
+  // If user is logged in but email not verified, show verification prompt
+  if (user && !emailVerified) {
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <AuthLayout
+            title="Email Not Verified"
+            subtitle="Check your inbox for the verification link"
+          >
+            <View style={{ marginVertical: spacing.lg }}>
+              <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: spacing.md }}>
+                We sent a verification email to:
+              </Text>
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600", marginBottom: spacing.lg }}>
+                {user.email}
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: spacing.md }}>
+                Click the link in the email to verify your account. You won't be able to access the full app until your email is verified.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleLogout}
+              style={[styles.button, { backgroundColor: colors.accentMid }]}
+            >
+              <Text style={styles.buttonText}>Logout & Browse as Guest</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setEmail(user.email)}
+              style={{ marginTop: spacing.md, alignItems: "center" }}
+            >
+              <Text style={[styles.linkText, { color: colors.accent }]}>
+                Resend Verification Email
+              </Text>
+            </TouchableOpacity>
+          </AuthLayout>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
   }
 
   if (showRegister) {
