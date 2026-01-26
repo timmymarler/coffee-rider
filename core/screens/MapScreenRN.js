@@ -2220,6 +2220,7 @@ export default function MapScreenRN() {
               flat={true}
               rotation={userLocation.heading || 0}
               zIndex={1000}
+              tracksViewChanges={false}
             >
               <View style={styles.navigationArrow}>
                 <MaterialCommunityIcons
