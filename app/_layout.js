@@ -250,7 +250,7 @@ function FloatingTabBar({ state }) {
 function LayoutContent() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [versionModalDismissed, setVersionModalDismissed] = useState(false);
-  const { user, loading, versionStatus, isGuest } = useContext(AuthContext);
+  const { user, loading, versionStatus, isGuest, emailVerified } = useContext(AuthContext);
 
   // Show version modal when status changes and update is available
   useEffect(() => {
@@ -278,8 +278,8 @@ function LayoutContent() {
     return null;
   }
 
-  if (!user && !isGuest) {
-    // Not authenticated and not in guest mode: show login screen
+  // Not authenticated and not in guest mode, OR authenticated but not verified: show login screen
+  if ((!user && !isGuest) || (user && !emailVerified)) {
     // Import LoginScreen directly instead of using layout to avoid Expo Router conflicts
     const LoginScreen = require("@/core/auth/login").default;
     return <LoginScreen />;
