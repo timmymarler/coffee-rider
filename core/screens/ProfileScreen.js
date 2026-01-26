@@ -155,7 +155,7 @@ export default function ProfileScreen() {
                 style={[styles.registerButton]}
                 onPress={() => {
                   exitGuestMode();
-                  // App will show LoginScreen, user can navigate to Register from there
+                  // App will show LoginScreen with register modal option
                 }}
               >
                 <Text style={[styles.registerButtonText]}>Create Account</Text>
@@ -164,8 +164,8 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 style={{ marginTop: theme.spacing.lg }}
                 onPress={() => {
-                  exitGuestMode();
-                  // App will automatically show login screen when guest mode exits
+                  // Just close the profile view and return to browsing - don't exit guest mode
+                  router.back();
                 }}
               >
                 <Text style={[styles.subText, { color: theme.colors.accent }]}>
