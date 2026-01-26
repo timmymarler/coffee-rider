@@ -20,6 +20,7 @@ import theme from "@themes";
 import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import AuthLayout from "./AuthLayout";
 import { AuthContext } from "@/core/context/AuthContext";
+import { RIDER_CATEGORIES } from "@core/config/categories/rider";
 
 const ROLES = [
   { id: "rider", label: "Rider", description: "Find coffee stops" },
@@ -207,22 +208,22 @@ export default function RegisterScreen({ onBack }) {
               <View style={styles.field}>
                 <Text style={styles.label}>Category</Text>
                 <View style={styles.categoryContainer}>
-                  {["cafe", "roastery", "restaurant", "bar"].map((cat) => (
+                  {RIDER_CATEGORIES.map((cat) => (
                     <TouchableOpacity
-                      key={cat}
+                      key={cat.key}
                       style={[
                         styles.categoryButton,
-                        placeCategory === cat && styles.categoryButtonActive,
+                        placeCategory === cat.key && styles.categoryButtonActive,
                       ]}
-                      onPress={() => setPlaceCategory(cat)}
+                      onPress={() => setPlaceCategory(cat.key)}
                     >
                       <Text
                         style={[
                           styles.categoryText,
-                          placeCategory === cat && styles.categoryTextActive,
+                          placeCategory === cat.key && styles.categoryTextActive,
                         ]}
                       >
-                        {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                        {cat.label}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -371,11 +372,12 @@ const styles = StyleSheet.create({
   },
   categoryButton: {
     flex: 1,
-    minWidth: "45%",
+    minWidth: "30%",
     borderWidth: 1,
     borderColor: theme.colors.inputBorder,
-    borderRadius: 8,
-    paddingVertical: 10,
+    borderRadius: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     alignItems: "center",
     backgroundColor: theme.colors.inputBackground,
   },
@@ -384,7 +386,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.accentMid + "20",
   },
   categoryText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "500",
     color: theme.colors.text,
   },

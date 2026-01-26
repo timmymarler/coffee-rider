@@ -9,6 +9,7 @@ export default function AuthLayout({ title, subtitle, children }) {
         backgroundColor: theme.colors.background,
         justifyContent: "center",
         padding: theme.spacing.lg,
+        paddingTop: theme.spacing.xl * 2,
       }}
     >
       <View
