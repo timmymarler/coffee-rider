@@ -1,6 +1,6 @@
 // core/auth/register.js
 import { useRouter } from "expo-router";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { useState, useContext } from "react";
 import {
   ActivityIndicator,
@@ -104,7 +104,7 @@ export default function RegisterScreen({ onBack }) {
       
       // Send verification email
       try {
-        await user.sendEmailVerification();
+        await sendEmailVerification(user);
         console.log("Verification email sent to:", user.email);
       } catch (emailErr) {
         console.error("Failed to send verification email:", emailErr);
