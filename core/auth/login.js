@@ -96,75 +96,71 @@ export default function LoginScreen() {
       title="Welcome back"
       subtitle="Log in to Coffee Rider"
     >
-      <View>{/* Email */}</View>
-        <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder="you@example.com"
-            placeholderTextColor={colors.textMuted}
-            style={styles.input}
-          />
-        </View>
+      <View style={styles.field}>
+        <Text style={styles.label}>Email</Text>
+        <TextInput
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          placeholder="you@example.com"
+          placeholderTextColor={colors.textMuted}
+          style={styles.input}
+        />
+      </View>
 
-        <View>{/* Password */}</View>
-        <View style={styles.field}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholder="••••••••"
-            placeholderTextColor={colors.textMuted}
-            style={styles.input}
-          />
-        </View>
+      <View style={styles.field}>
+        <Text style={styles.label}>Password</Text>
+        <TextInput
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          placeholder="••••••••"
+          placeholderTextColor={colors.textMuted}
+          style={styles.input}
+        />
+      </View>
 
+      <TouchableOpacity
+        style={[ 
+          styles.button,
+          submitting && { opacity: 0.7 },
+        ]}
+        disabled={submitting}
+        onPress={handleLogin}
+      >
+        {submitting ? (
+          <ActivityIndicator size="small" color={colors.primaryDark} />
+        ) : (
+          <Text style={styles.buttonText}>Log in</Text>
+        )}
+      </TouchableOpacity>
 
-        <View>{/* Submit */}</View>
-        <TouchableOpacity
-          style={[ 
-            styles.button,
-            submitting && { opacity: 0.7 },
-          ]}
-          disabled={submitting}
-          onPress={handleLogin}
-        >
-          {submitting ? (
-            <ActivityIndicator size="small" color={colors.primaryDark} />
-          ) : (
-            <Text style={styles.buttonText}>Log in</Text>
-          )}
-        </TouchableOpacity>
+      <TouchableOpacity
+        onPress={handleResetPassword}
+        style={{ marginTop: spacing.sm, alignItems: "center" }}
+      >
+        <Text style={[styles.linkText, { color: colors.accent }]}>Reset Password</Text>
+      </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={handleResetPassword}
-          style={{ marginTop: spacing.sm, alignItems: "center" }}
-        >
-          <Text style={[styles.linkText, { color: colors.accent }]}>Reset Password</Text>
-        </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => router.push("register")}
+        style={{ marginTop: spacing.md, alignItems: "center" }}
+      >
+        <Text style={styles.linkText}>
+          Don't have an account? Register
+        </Text>
+      </TouchableOpacity>
 
-        <View>{/* Register link */}</View>
-        <TouchableOpacity
-          onPress={() => router.push("/auth/register")}
-          style={{ marginTop: spacing.md, alignItems: "center" }}
-        >
-          <Text style={styles.linkText}>
-            Don’t have an account? Register
-          </Text>
-        </TouchableOpacity>
-        <View>{/* Continue as Guest */}</View>
-        <TouchableOpacity
-          onPress={handleGuestMode}
-          style={{ marginTop: spacing.lg, alignItems: "center" }}
-        >
-          <Text style={[styles.linkText, { color: colors.textMuted }]}>
-            Continue as Guest
-          </Text>
-        </TouchableOpacity>    </AuthLayout>
+      <TouchableOpacity
+        onPress={handleGuestMode}
+        style={{ marginTop: spacing.lg, alignItems: "center" }}
+      >
+        <Text style={[styles.linkText, { color: colors.textMuted }]}>
+          Continue as Guest
+        </Text>
+      </TouchableOpacity>
+    </AuthLayout>
   </ScrollView>
 </KeyboardAvoidingView>
   );
