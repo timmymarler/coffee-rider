@@ -4,7 +4,7 @@ import { AuthContext } from "@context/AuthContext";
 import { useEventForm } from "@core/hooks/useEventForm";
 import theme from "@themes";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -37,8 +37,14 @@ export default function CreateEventScreen() {
   const [loadingPlaces, setLoadingPlaces] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState("startDateTime"); // "startDateTime" or "endDateTime"
+  
+  // Place search state for Pro users
+  const [placeName, setPlaceName] = useState("");
+  const [placeMatches, setPlaceMatches] = useState([]);
+  const [showPlaceSelectionModal, setShowPlaceSelectionModal] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // Load places for this place owner
+  // Load places for this place owner or show search for Pro users
   useEffect(() => {
     if (profile?.role === "place-owner" && profile?.linkedPlaceId) {
       // For place owners, use their linked place from their profile
@@ -53,7 +59,80 @@ export default function CreateEventScreen() {
     }
   }, [profile, user]);
 
+  // Search for places by name (for Pro users)
+  async function searchPlaces() {
+    if (!placeName.trim()) {
+      setPlaceMatches([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const searchTerm = placeName.trim().toLowerCase();
+      console.log("[CreateEvent] Searching for places with name containing:", searchTerm);
+      
+      // Get all places and filter client-side for case-insensitive substring match
+      const q = await getDocs(collection(db, "places"));
+      const matches = q.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        }))
+        .filter(place => 
+          place.name && place.name.toLowerCase().includes(searchTerm)
+        )
+        .sort((a, b) => {
+          // Sort by relevance - exact matches first, then starts with, then contains
+          const aName = a.name.toLowerCase();
+          const bName = b.name.toLowerCase();
+          
+          if (aName === searchTerm) return -1;
+          if (bName === searchTerm) return 1;
+          if (aName.startsWith(searchTerm)) return -1;
+          if (bName.startsWith(searchTerm)) return 1;
+          return 0;
+        });
+      
+      console.log("[CreateEvent] Found matches:", matches.length, matches);
+      setPlaceMatches(matches);
+
+      // Show selection modal if matches found
+      if (matches.length > 0) {
+        console.log("[CreateEvent] Found matches - showing modal");
+        setShowPlaceSelectionModal(true);
+      }
+    } catch (err) {
+      console.error("Error searching places:", err);
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
+  // Handle place selection from search results
+  function handleSelectPlace(place) {
+    updateForm("placeId", place.id);
+    updateForm("placeName", place.name);
+    setPlaceName(""); // Clear search
+    setPlaceMatches([]);
+    setShowPlaceSelectionModal(false);
+    console.log("[CreateEvent] Selected place:", place.name);
+  }
+
+  // Handle clearing place selection
+  function handleClearPlace() {
+    updateForm("placeId", null);
+    updateForm("placeName", "");
+    setPlaceName("");
+    setPlaceMatches([]);
+  }
+
   const handleSubmit = async () => {
+    // Validate place selection for all users
+    if (!formData.placeId || !formData.placeName) {
+      Alert.alert("Please select a place", "You must choose a place for your event.");
+      return;
+    }
+
     // Check if place owner has active sponsorship
     if (profile?.role === "place-owner") {
       if (!profile?.linkedPlaceId) {
@@ -180,8 +259,8 @@ export default function CreateEventScreen() {
             />
           </View>
 
-          {/* Place Selection */}
-          {userPlaces.length > 0 && (
+          {/* Place Selection - Place Owner */}
+          {profile?.role === "place-owner" && userPlaces.length > 0 && (
             <View style={styles.field}>
               <Text style={styles.label}>Place *</Text>
               <ScrollView
@@ -217,8 +296,47 @@ export default function CreateEventScreen() {
             </View>
           )}
 
-          {/* No Places Message */}
-          {userPlaces.length === 0 && profile?.role === "place-owner" && (
+          {/* Place Selection - Pro User */}
+          {profile?.role === "pro" && (
+            <View style={styles.field}>
+              <Text style={styles.label}>Place *</Text>
+              
+              {/* Selected Place Display */}
+              {formData.placeName && (
+                <View style={[styles.selectedPlaceContainer]}>
+                  <Text style={styles.selectedPlaceText}>{formData.placeName}</Text>
+                  <TouchableOpacity onPress={handleClearPlace}>
+                    <Text style={styles.changePlaceButton}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              
+              {/* Place Search Input */}
+              {!formData.placeName && (
+                <View style={styles.placeSearchContainer}>
+                  <TextInput
+                    value={placeName}
+                    onChangeText={setPlaceName}
+                    placeholder="Search for a place..."
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.placeSearchInput}
+                  />
+                  <TouchableOpacity
+                    style={styles.searchButton}
+                    onPress={searchPlaces}
+                    disabled={isSearching || !placeName.trim()}
+                  >
+                    <Text style={styles.searchButtonText}>
+                      {isSearching ? "Searching..." : "Search"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* No Places Message - Place Owner */}
+          {profile?.role === "place-owner" && userPlaces.length === 0 && (
             <View style={[styles.field, { backgroundColor: colors.inputBackground, padding: 12, borderRadius: 8 }]}>
               <Text style={styles.label}>Place not linked</Text>
               <Text style={[styles.placeButtonText, { marginTop: 8 }]}>
@@ -392,6 +510,50 @@ export default function CreateEventScreen() {
           <View style={{ height: spacing.lg }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Place Selection Modal */}
+      <Modal
+        transparent
+        animationType="slide"
+        visible={showPlaceSelectionModal}
+        onRequestClose={() => setShowPlaceSelectionModal(false)}
+      >
+        <View style={styles.placeModalContainer}>
+          <View style={styles.placeModalContent}>
+            <View style={styles.placeModalHeader}>
+              <TouchableOpacity onPress={() => setShowPlaceSelectionModal(false)}>
+                <Text style={styles.placeModalCloseButton}>✕</Text>
+              </TouchableOpacity>
+              <Text style={styles.placeModalTitle}>Select a Place</Text>
+              <View style={{ width: 30 }} />
+            </View>
+
+            <FlatList
+              data={placeMatches}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item: place }) => (
+                <TouchableOpacity
+                  style={styles.placeMatchItem}
+                  onPress={() => handleSelectPlace(place)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.placeMatchName}>{place.name}</Text>
+                    {place.category && (
+                      <Text style={styles.placeMatchCategory}>
+                        {place.category.charAt(0).toUpperCase() + place.category.slice(1)}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={styles.placeMatchArrow}>›</Text>
+                </TouchableOpacity>
+              )}
+              scrollEnabled={true}
+              style={{ maxHeight: "80%" }}
+              contentContainerStyle={{ paddingHorizontal: theme.spacing.md }}
+            />
+          </View>
+        </View>
+      </Modal>
 
       {/* iOS Date Picker Modal */}
       {Platform.OS === "ios" && (
@@ -632,5 +794,114 @@ const styles = StyleSheet.create({
     color: theme.colors.accentMid,
     fontSize: 16,
     fontWeight: "600",
+  },
+  placeSearchContainer: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  placeSearchInput: {
+    flex: 1,
+    backgroundColor: theme.colors.inputBackground,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: theme.colors.inputText,
+  },
+  searchButton: {
+    backgroundColor: theme.colors.accentMid,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  searchButtonText: {
+    color: theme.colors.primaryDark,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  selectedPlaceContainer: {
+    backgroundColor: theme.colors.inputBackground,
+    borderWidth: 1,
+    borderColor: theme.colors.accentMid,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  selectedPlaceText: {
+    fontSize: 14,
+    color: theme.colors.text,
+    fontWeight: "500",
+  },
+  changePlaceButton: {
+    color: theme.colors.accentMid,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  placeModalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  placeModalContent: {
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    maxHeight: "90%",
+  },
+  placeModalHeader: {
+    backgroundColor: theme.colors.primaryMid,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.inputBorder,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  placeModalTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  placeModalCloseButton: {
+    fontSize: 24,
+    color: theme.colors.text,
+    fontWeight: "400",
+    width: 30,
+    textAlign: "center",
+  },
+  placeMatchItem: {
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  placeMatchName: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: theme.colors.text,
+  },
+  placeMatchCategory: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginTop: 4,
+  },
+  placeMatchArrow: {
+    fontSize: 18,
+    color: theme.colors.accentMid,
+    marginLeft: 12,
   },
 });
