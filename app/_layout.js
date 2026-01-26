@@ -278,6 +278,9 @@ function LayoutContent() {
     return null;
   }
 
+  // Debug logging
+  console.log('[LayoutContent] user:', user ? user.email : null, 'isGuest:', isGuest, 'emailVerified:', emailVerified);
+
   // Not authenticated and not in guest mode, OR authenticated but not verified: show login screen
   if ((!user && !isGuest) || (user && !emailVerified)) {
     // Import LoginScreen directly instead of using layout to avoid Expo Router conflicts

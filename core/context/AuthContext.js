@@ -24,6 +24,7 @@ import Constants from "expo-constants";
 export const AuthContext = createContext(null);
 
 const SESSION_KEY = '@coffee_rider_session';
+const GUEST_MODE_KEY = '@coffee_rider_guest_mode';
 const SESSION_EXPIRY_DAYS = 14; // 14 days of inactivity before auto-logout
 
 export default function AuthProvider({ children }) {
@@ -90,6 +91,34 @@ export default function AuthProvider({ children }) {
     }
   }
 
+  async function saveGuestMode() {
+    try {
+      await AsyncStorage.setItem(GUEST_MODE_KEY, 'true');
+      console.log('[AuthContext] Guest mode saved');
+    } catch (err) {
+      console.error('[AuthContext] Error saving guest mode:', err);
+    }
+  }
+
+  async function loadGuestMode() {
+    try {
+      const saved = await AsyncStorage.getItem(GUEST_MODE_KEY);
+      return saved === 'true';
+    } catch (err) {
+      console.error('[AuthContext] Error loading guest mode:', err);
+      return false;
+    }
+  }
+
+  async function clearGuestMode() {
+    try {
+      await AsyncStorage.removeItem(GUEST_MODE_KEY);
+      console.log('[AuthContext] Guest mode cleared');
+    } catch (err) {
+      console.error('[AuthContext] Error clearing guest mode:', err);
+    }
+  }
+
   async function updateSessionLastUsed() {
     try {
       const stored = await AsyncStorage.getItem(SESSION_KEY);
@@ -139,11 +168,13 @@ export default function AuthProvider({ children }) {
     console.log('[AuthContext] Entering guest mode');
     setIsGuest(true);
     setLoading(false);
+    await saveGuestMode();
   }
 
   async function exitGuestMode() {
     console.log('[AuthContext] Exiting guest mode');
     setIsGuest(false);
+    await clearGuestMode();
   }
 
   async function register(email, password, displayName) {
@@ -177,6 +208,20 @@ export default function AuthProvider({ children }) {
   }
 
   // ----------------------------------------
+  // INITIALIZATION: Restore guest mode and session on app startup
+  // ----------------------------------------
+  useEffect(() => {
+    async function init() {
+      const wasInGuestMode = await loadGuestMode();
+      if (wasInGuestMode) {
+        console.log('[AuthContext] Restoring guest mode from storage');
+        setIsGuest(true);
+      }
+    }
+    init();
+  }, []);
+
+  // ----------------------------------------
   // AUTH STATE & SESSION RESTORE
   // ----------------------------------------
   useEffect(() => {
@@ -188,7 +233,10 @@ export default function AuthProvider({ children }) {
           setUser(null);
           setProfile(null);
           setEmailVerified(false);
-          setLoading(false);
+          // Don't change loading state if we're in guest mode - let the initialization effect handle it
+          if (!isGuest) {
+            setLoading(false);
+          }
           return;
         }
 
@@ -196,6 +244,8 @@ export default function AuthProvider({ children }) {
         console.log('[AuthContext] emailVerified:', firebaseUser.emailVerified);
         setUser(firebaseUser);
         setEmailVerified(firebaseUser.emailVerified);
+        setIsGuest(false); // Clear guest mode when user logs in
+        await clearGuestMode();
         await saveSession(firebaseUser);
 
         await ensureUserDocument(firebaseUser.uid, firebaseUser);
@@ -209,7 +259,7 @@ export default function AuthProvider({ children }) {
     });
 
     return () => unsub();
-  }, []);
+  }, [isGuest]);
 
   // Track app foreground/background to update session activity
   useEffect(() => {
