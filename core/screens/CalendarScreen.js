@@ -162,8 +162,8 @@ export default function CalendarScreen() {
               {i}
             </Text>
             {dayEvents.length > 0 && (
-              <View style={styles.eventDot}>
-                <Text style={styles.eventDotText}>{dayEvents.length}</Text>
+              <View style={[styles.eventDot, isSelected && styles.eventDotSelected]}>
+                <Text style={[styles.eventDotText, isSelected && styles.eventDotTextSelected]}>{dayEvents.length}</Text>
               </View>
             )}
           </View>
@@ -498,9 +498,14 @@ export default function CalendarScreen() {
                 <View style={styles.eventModalHeader}>
                   <Text style={styles.eventModalTitle}>{selectedEvent.title}</Text>
                   <TouchableOpacity onPress={() => setShowEventModal(false)}>
-                    <Ionicons name="close" size={28} color={colors.text} />
+                    <Ionicons name="close" size={28} color={theme.colors.accentMid} />
                   </TouchableOpacity>
                 </View>
+
+                {/* Subtitle with place name */}
+                <Text style={styles.eventModalSubtitle}>
+                  {selectedEvent.placeName || "No location"}
+                </Text>
 
                 {/* Event details */}
                 <View style={styles.eventModalSection}>
@@ -655,8 +660,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.primaryMid,
+    borderBottomWidth: 0,
   },
   title: {
     fontSize: 24,
@@ -667,28 +672,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingBottom: 14,
-    backgroundColor: "transparent",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.primaryMid,
   },
   filterButton: {
-    width: 52,
-    height: 52,
-    marginLeft: 8,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.colors.primaryDark,
-    shadowColor: theme.colors.accentMid,
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
+    backgroundColor: theme.colors.accentMid,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    elevation: 3,
   },
   filterButtonText: {
     fontSize: 13,
     fontWeight: "600",
-    color: theme.colors.accentMid,
+    color: theme.colors.primaryDark,
   },
   filtersPanel: {
     maxHeight: "70%",
@@ -738,7 +742,77 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.background,
+  },
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  calendarCell: {
+    width: "14.285714%",
+    aspectRatio: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 0.5,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  calendarCellSelected: {
+    backgroundColor: theme.colors.accentMid + "30",
+  },
+  calendarCellToday: {
+    backgroundColor: theme.colors.primaryLight,
+  },
+  dayHeader: {
+    backgroundColor: theme.colors.primaryMid,
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  dayHeaderText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.colors.accentMid,
+  },
+  calendarCellContent: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  calendarDay: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  calendarDaySelected: {
+    color: theme.colors.accentMid,
+    fontWeight: "700",
+  },
+  calendarDayToday: {
+    color: theme.colors.accentMid,
+    fontWeight: "700",
+  },
+  eventDot: {
+    marginTop: 2,
+    backgroundColor: theme.colors.accentMid,
+    borderRadius: 6,
+    minWidth: 16,
+    height: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  eventDotText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: theme.colors.primaryDark,
   },
   viewToggle: {
     flexDirection: "row",
@@ -790,9 +864,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     marginBottom: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: "hidden",
   },
   calendarCell: {
@@ -800,9 +875,9 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: theme.colors.border,
-    backgroundColor: "transparent",
+    backgroundColor: theme.colors.surface,
   },
   calendarCellContent: {
     flex: 1,
@@ -813,12 +888,12 @@ const styles = StyleSheet.create({
   },
   dayHeader: {
     backgroundColor: theme.colors.primaryMid,
-    borderColor: theme.colors.primaryMid,
+    borderColor: theme.colors.border,
   },
   dayHeaderText: {
     fontSize: 12,
-    fontWeight: "600",
-    color: "white",
+    fontWeight: "700",
+    color: theme.colors.accentMid,
   },
   calendarCellToday: {
     backgroundColor: theme.colors.accentDark,
@@ -851,7 +926,13 @@ const styles = StyleSheet.create({
   eventDotText: {
     fontSize: 8,
     fontWeight: "700",
-    color: "white",
+    color: theme.colors.primaryMid,
+  },
+  eventDotSelected: {
+    backgroundColor: theme.colors.primaryMid,
+  },
+  eventDotTextSelected: {
+    color: theme.colors.accentMid,
   },
   eventsSection: {
     marginBottom: theme.spacing.lg,
@@ -979,45 +1060,55 @@ const styles = StyleSheet.create({
   eventModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "flex-end",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.md,
   },
   eventModalContent: {
-    backgroundColor: theme.colors.background,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 20,
+    paddingTop: 24,
+    paddingBottom: 32,
     maxHeight: "85%",
+    width: "85%",
+    maxWidth: 400,
   },
   eventModalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: theme.spacing.lg,
-    paddingBottom: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: 20,
   },
   eventModalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
-    color: theme.colors.text,
+    color: theme.colors.accentMid,
     flex: 1,
+  },
+  eventModalSubtitle: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    paddingHorizontal: 20,
+    marginBottom: 16,
   },
   eventModalSection: {
     marginBottom: theme.spacing.lg,
+    paddingHorizontal: 20,
   },
   eventModalLabel: {
     fontSize: 12,
-    fontWeight: "600",
-    color: theme.colors.textMuted,
+    fontWeight: "700",
+    color: theme.colors.accentDark,
     marginBottom: 6,
     textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   eventModalValue: {
     fontSize: 16,
     color: theme.colors.text,
     fontWeight: "500",
+    lineHeight: 24,
   },
   deleteEventButton: {
     flexDirection: "row",
@@ -1025,15 +1116,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 14,
     paddingHorizontal: theme.spacing.md,
-    backgroundColor: theme.colors.inputBackground,
-    borderWidth: 1,
-    borderColor: theme.colors.danger,
+    backgroundColor: theme.colors.danger,
     borderRadius: 8,
     marginTop: theme.spacing.lg,
+    marginHorizontal: 20,
   },
   deleteEventButtonText: {
     fontSize: 15,
     fontWeight: "600",
-    color: theme.colors.danger,
+    color: "#ffffff",
     marginLeft: 8,
   },});
