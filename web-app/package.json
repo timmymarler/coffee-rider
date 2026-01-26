@@ -1,0 +1,32 @@
+{
+  "name": "coffee-rider-web",
+  "private": true,
+  "version": "2.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext js,jsx",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
+  },
+  "dependencies": {
+    "firebase": "^10.8.0",
+    "leaflet": "^1.9.4",
+    "mapbox-gl": "^3.4.0",
+    "polyline-encoded": "^0.0.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-leaflet": "^5.0.0",
+    "react-router-dom": "^6.21.2",
+    "expo": "~54.0.31",
+    "react-native": "0.81.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.56.0",
+    "eslint-plugin-react": "^7.33.2",
+    "vite": "^5.1.0"
+  }
+}

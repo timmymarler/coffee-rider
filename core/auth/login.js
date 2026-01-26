@@ -3,7 +3,8 @@ import { auth } from "@config/firebase";
 import theme from "@themes";
 import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { useState } from "react";
+import { useState, useContext } from "react";
+import { AuthContext } from "@/core/context/AuthContext";
 import {
     ActivityIndicator,
     Alert,
@@ -21,6 +22,7 @@ import { resetPassword } from "./resetPassword";
 export default function LoginScreen() {
   const router = useRouter();
   const { colors, spacing } = theme;
+  const { enterGuestMode } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -63,6 +65,19 @@ export default function LoginScreen() {
       Alert.alert(
         "Login failed",
         err.message || "Please check your details and try again."
+      );
+    }
+  }
+
+  async function handleGuestMode() {
+    try {
+      await enterGuestMode();
+      router.replace("/map");
+    } catch (err) {
+      console.error("Guest mode error:", err);
+      Alert.alert(
+        "Error",
+        "Could not enter guest mode. Please try again."
       );
     }
   }
@@ -141,7 +156,15 @@ export default function LoginScreen() {
             Don’t have an account? Register
           </Text>
         </TouchableOpacity>
-    </AuthLayout>
+        <View>{/* Continue as Guest */}</View>
+        <TouchableOpacity
+          onPress={handleGuestMode}
+          style={{ marginTop: spacing.lg, alignItems: "center" }}
+        >
+          <Text style={[styles.linkText, { color: colors.textMuted }]}>
+            Continue as Guest
+          </Text>
+        </TouchableOpacity>    </AuthLayout>
   </ScrollView>
 </KeyboardAvoidingView>
   );

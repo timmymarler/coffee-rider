@@ -11,7 +11,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import theme from "@themes";
 import Constants from "expo-constants";
-import { Tabs, Stack, usePathname, useRouter } from "expo-router";
+import { Tabs, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Alert, Animated, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
@@ -31,7 +31,12 @@ function FloatingTabBar({ state }) {
 
   console.log('[FloatingTabBar] activeRide from context:', activeRide?.rideId || 'null');
 
+  // Determine which tabs are accessible based on capabilities
+  const canAccessMap = capabilities?.canAccessMap === true;
+  const canAccessSavedRoutes = capabilities?.canAccessSavedRoutes === true;
   const canAccessGroups = capabilities?.canAccessGroups === true;
+  const canAccessCalendar = capabilities?.canAccessCalendar === true;
+  const canAccessProfile = capabilities?.canAccessProfile === true;
 
   const isMapScreen =
     pathname === "/map" ||
@@ -49,11 +54,11 @@ function FloatingTabBar({ state }) {
   const inactiveColor = theme.colors.primaryLight;
 
   const tabs = [
-    { name: "map", icon: "map" },
-    { name: "saved-routes", icon: "git-branch" },
+    { name: "map", icon: "map", disabled: !canAccessMap },
+    { name: "saved-routes", icon: "git-branch", disabled: !canAccessSavedRoutes },
     { name: "groups", icon: "people", disabled: !canAccessGroups },
-    { name: "calendar", icon: "calendar" },
-    { name: "profile", icon: "person" },
+    { name: "calendar", icon: "calendar", disabled: !canAccessCalendar },
+    { name: "profile", icon: "person", disabled: !canAccessProfile },
   ];
 
   return (
@@ -244,7 +249,7 @@ function FloatingTabBar({ state }) {
 function LayoutContent() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [versionModalDismissed, setVersionModalDismissed] = useState(false);
-  const { user, loading, versionStatus } = useContext(AuthContext);
+  const { user, loading, versionStatus, isGuest } = useContext(AuthContext);
 
   // Show version modal when status changes and update is available
   useEffect(() => {
@@ -272,16 +277,14 @@ function LayoutContent() {
     return null;
   }
 
-  if (!user) {
-    // Not authenticated: show auth stack (login/register)
-    return (
-      <Stack screenOptions={{ headerShown: false }} initialRouteName="auth">
-        <Stack.Screen name="auth" />
-      </Stack>
-    );
+  if (!user && !isGuest) {
+    // Not authenticated and not in guest mode: show auth screens (login/register)
+    // Import the auth layout with Stack navigator from app/auth
+    const AuthStackLayout = require("./auth/_layout").default;
+    return <AuthStackLayout />;
   }
 
-  // Authenticated: show main app
+  // Authenticated or guest mode: show main app with tabs
   return (
     <>
       <Tabs

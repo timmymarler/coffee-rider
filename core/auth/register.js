@@ -1,7 +1,7 @@
 // core/auth/register.js
 import { useRouter } from "expo-router";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { useState } from "react";
+import { useState, useContext } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import { auth, db } from "@config/firebase";
 import theme from "@themes";
 import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import AuthLayout from "./AuthLayout";
+import { AuthContext } from "@/core/context/AuthContext";
 
 const ROLES = [
   { id: "rider", label: "Rider", description: "Find coffee stops" },
@@ -29,6 +30,7 @@ const ROLES = [
 export default function RegisterScreen() {
   const router = useRouter();
   const { colors, spacing } = theme;
+  const { enterGuestMode } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -105,6 +107,19 @@ export default function RegisterScreen() {
       Alert.alert(
         "Registration failed",
         err.message || "Please try again."
+      );
+    }
+  }
+
+  async function handleGuestMode() {
+    try {
+      await enterGuestMode();
+      router.replace("/map");
+    } catch (err) {
+      console.error("Guest mode error:", err);
+      Alert.alert(
+        "Error",
+        "Could not enter guest mode. Please try again."
       );
     }
   }
@@ -269,6 +284,16 @@ export default function RegisterScreen() {
           >
             <Text style={styles.linkText}>
               Already have an account? Log in
+            </Text>
+          </TouchableOpacity>
+
+          {/* Continue as Guest */}
+          <TouchableOpacity
+            onPress={handleGuestMode}
+            style={{ marginTop: spacing.lg, alignItems: "center" }}
+          >
+            <Text style={[styles.linkText, { color: colors.textMuted }]}>
+              Continue as Guest
             </Text>
           </TouchableOpacity>
         </KeyboardAvoidingView>

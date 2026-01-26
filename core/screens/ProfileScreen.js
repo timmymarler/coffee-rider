@@ -8,7 +8,6 @@ import { CRInput } from "@components-ui/CRInput";
 import { CRLabel } from "@components-ui/CRLabel";
 import { CRScreen } from "@components-ui/CRScreen";
 import { AuthContext } from "@context/AuthContext";
-import { useSponsorship } from "@core/hooks/useSponsorship";
 import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";

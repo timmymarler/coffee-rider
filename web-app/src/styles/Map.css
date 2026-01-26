@@ -1,0 +1,108 @@
+.map-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  background: #fafaf9;
+}
+
+.map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: white;
+  border-bottom: 1px solid #eee;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  z-index: 100;
+  gap: 16px;
+}
+
+.map-header h1 {
+  margin: 0;
+  font-size: 24px;
+  color: #333;
+  font-weight: 600;
+  flex: 1;
+  text-align: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-btn {
+  padding: 8px 16px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.header-btn:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.filters-btn {
+  order: -1;
+}
+
+.logout-btn {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: white;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.logout-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.user-info {
+  color: #666;
+  font-size: 14px;
+}
+
+.map-container {
+  flex: 1;
+  position: relative;
+  width: 100%;
+}
+
+/* Mapbox GL CSS adjustments */
+.mapboxgl-ctrl-bottom-left,
+.mapboxgl-ctrl-bottom-right {
+  margin-bottom: 20px;
+}
+
+.map-info {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-size: 12px;
+  color: #666;
+  z-index: 10;
+  font-family: 'Monaco', 'Courier New', monospace;
+}
+
+.map-info p {
+  margin: 0;
+}

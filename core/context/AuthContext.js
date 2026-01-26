@@ -29,6 +29,7 @@ const SESSION_EXPIRY_DAYS = 14; // 14 days of inactivity before auto-logout
 export default function AuthProvider({ children }) {
   const [user, setUser] = useState(null);       // Firebase Auth user
   const [profile, setProfile] = useState(null); // Firestore profile doc (role, etc.)
+  const [isGuest, setIsGuest] = useState(false); // Guest mode flag
   const [loading, setLoading] = useState(true);
   const [versionStatus, setVersionStatus] = useState({
     status: "current",
@@ -129,7 +130,19 @@ export default function AuthProvider({ children }) {
 
   async function logout() {
     await clearSession();
+    setIsGuest(false);
     await signOut(auth);
+  }
+
+  async function enterGuestMode() {
+    console.log('[AuthContext] Entering guest mode');
+    setIsGuest(true);
+    setLoading(false);
+  }
+
+  async function exitGuestMode() {
+    console.log('[AuthContext] Exiting guest mode');
+    setIsGuest(false);
   }
 
   async function register(email, password, displayName) {
@@ -249,12 +262,15 @@ export default function AuthProvider({ children }) {
     profile,
     role,
     capabilities,
+    isGuest,
     loading,
     versionStatus,
     login,
     logout,
     register,
     refreshProfile,
+    enterGuestMode,
+    exitGuestMode,
   };
 
   return (

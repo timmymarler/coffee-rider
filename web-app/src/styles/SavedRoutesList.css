@@ -1,0 +1,152 @@
+.saved-routes-panel,
+.groups-panel {
+  position: fixed;
+  right: 0;
+  top: 60px;
+  width: 320px;
+  height: calc(100vh - 60px);
+  background: white;
+  border-left: 1px solid #eee;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  z-index: 500;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.saved-routes-panel.open,
+.groups-panel.open {
+  transform: translateX(0);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid #eee;
+  background: white;
+  position: sticky;
+  top: 0;
+  z-index: 501;
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.routes-list,
+.groups-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.empty-message {
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+  padding: 40px 20px;
+}
+
+.route-item,
+.group-item {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  margin-bottom: 12px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.route-item:hover,
+.group-item:hover {
+  border-color: #ddd;
+  background: #f9f9f9;
+}
+
+.route-info,
+.group-info {
+  margin-bottom: 12px;
+}
+
+.route-info h4,
+.group-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  color: #333;
+  font-weight: 600;
+}
+
+.route-stops,
+.group-members {
+  margin: 0;
+  font-size: 12px;
+  color: #999;
+}
+
+.route-distance {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.route-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-small {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-small.btn-primary {
+  background: #667eea;
+  color: white;
+}
+
+.btn-small.btn-primary:hover {
+  background: #5568d3;
+}
+
+.btn-small.btn-danger {
+  background: #fee;
+  color: #c33;
+  border: 1px solid #fdd;
+}
+
+.btn-small.btn-danger:hover {
+  background: #fdd;
+  border-color: #fcc;
+}
+
+.group-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.group-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
