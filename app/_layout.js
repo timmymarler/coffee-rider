@@ -278,10 +278,10 @@ function LayoutContent() {
   }
 
   if (!user && !isGuest) {
-    // Not authenticated and not in guest mode: show auth screens (login/register)
-    // Import the auth layout with Stack navigator from app/auth
-    const AuthStackLayout = require("./auth/_layout").default;
-    return <AuthStackLayout />;
+    // Not authenticated and not in guest mode: show login screen
+    // Import LoginScreen directly instead of using layout to avoid Expo Router conflicts
+    const LoginScreen = require("@/core/auth/login").default;
+    return <LoginScreen />;
   }
 
   // Authenticated or guest mode: show main app with tabs

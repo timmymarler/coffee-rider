@@ -27,7 +27,7 @@ const ROLES = [
   { id: "pro", label: "Pro", description: "Rider + full features" },
 ];
 
-export default function RegisterScreen() {
+export default function RegisterScreen({ onBack }) {
   const router = useRouter();
   const { colors, spacing } = theme;
   const { enterGuestMode } = useContext(AuthContext);
@@ -279,7 +279,7 @@ export default function RegisterScreen() {
 
           {/* Back to login */}
           <TouchableOpacity
-            onPress={() => router.push("login")}
+            onPress={onBack || (() => router.push("login"))}
             style={{ marginTop: spacing.md, alignItems: "center" }}
           >
             <Text style={styles.linkText}>

@@ -143,14 +143,20 @@ export default function ProfileScreen() {
               
               <TouchableOpacity
                 style={styles.loginButton}
-                onPress={() => router.replace("/(auth)/login")}
+                onPress={() => {
+                  exitGuestMode();
+                  // By exiting guest mode and having no user, the app will show LoginScreen
+                }}
               >
                 <Text style={styles.loginButtonText}>Log In</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.registerButton]}
-                onPress={() => router.replace("/(auth)/register")}
+                onPress={() => {
+                  exitGuestMode();
+                  // App will show LoginScreen, user can navigate to Register from there
+                }}
               >
                 <Text style={[styles.registerButtonText]}>Create Account</Text>
               </TouchableOpacity>

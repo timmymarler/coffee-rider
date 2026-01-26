@@ -23,6 +23,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const { colors, spacing } = theme;
   const { enterGuestMode } = useContext(AuthContext);
+  const [showRegister, setShowRegister] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -80,6 +81,11 @@ export default function LoginScreen() {
         "Could not enter guest mode. Please try again."
       );
     }
+  }
+
+  if (showRegister) {
+    const RegisterScreen = require("./register").default;
+    return <RegisterScreen onBack={() => setShowRegister(false)} />;
   }
 
   return (
@@ -149,7 +155,7 @@ export default function LoginScreen() {
 
         <View>{/* Register link */}</View>
         <TouchableOpacity
-          onPress={() => router.push("register")}
+          onPress={() => setShowRegister(true)}
           style={{ marginTop: spacing.md, alignItems: "center" }}
         >
           <Text style={styles.linkText}>
