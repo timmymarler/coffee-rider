@@ -7,17 +7,18 @@ export default function AuthLayout({ title, subtitle, children }) {
       style={{
         flex: 1,
         backgroundColor: theme.colors.background,
-        justifyContent: "center",
         padding: theme.spacing.lg,
         paddingTop: theme.spacing.xl * 2,
       }}
     >
       <View
         style={{
+          flex: 1,
           backgroundColor: theme.colors.primaryDark,
           borderRadius: theme.radius.lg,
           padding: theme.spacing.lg,
           elevation: 6,
+          overflow: "hidden",
         }}
       >
         <Text
