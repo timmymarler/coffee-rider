@@ -11,7 +11,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import theme from "@themes";
 import Constants from "expo-constants";
-import { Tabs, usePathname, useRouter } from "expo-router";
+import { Tabs, Stack, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Alert, Animated, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
@@ -273,11 +273,12 @@ function LayoutContent() {
   }
 
   if (!user) {
-    // Not authenticated: show login/register screen
-    // You may want to use a dedicated AuthStack or just the login/register screen directly
-    // Here, we assume you have core/auth/login.js as your login screen
-    const LoginScreen = require("@core/auth/login").default;
-    return <LoginScreen />;
+    // Not authenticated: show auth stack (login/register)
+    return (
+      <Stack screenOptions={{ headerShown: false }} initialRouteName="auth">
+        <Stack.Screen name="auth" />
+      </Stack>
+    );
   }
 
   // Authenticated: show main app
@@ -290,6 +291,7 @@ function LayoutContent() {
         <Tabs.Screen name="map" />
         <Tabs.Screen name="saved-routes" />
         <Tabs.Screen name="groups" />
+        <Tabs.Screen name="calendar" />
         <Tabs.Screen name="profile" />
       </Tabs>
 
