@@ -25,7 +25,7 @@ export default function ProfileScreen() {
 
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, profile, loading, logout, refreshProfile } = useContext(AuthContext);
+  const { user, profile, loading, logout, refreshProfile, isGuest, exitGuestMode } = useContext(AuthContext);
 
   // -----------------------------------
   // Initial Values
@@ -125,11 +125,54 @@ export default function ProfileScreen() {
     return null;
   }
 
-  if (!user) {
+  if (!user && !isGuest) {
     return <LoginScreen />;
   }
 
- 
+  // Handle guest mode: show login/register options
+  if (isGuest && !user) {
+    return (
+      <CRScreen>
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+          <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+              <Text style={styles.heading}>Welcome to Coffee Rider</Text>
+              <Text style={[styles.subText, { marginBottom: theme.spacing.lg }]}>
+                Sign in to save your favorite routes and manage your profile
+              </Text>
+              
+              <TouchableOpacity
+                style={styles.loginButton}
+                onPress={() => router.push("/auth/login")}
+              >
+                <Text style={styles.loginButtonText}>Log In</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.registerButton]}
+                onPress={() => router.push("/auth/register")}
+              >
+                <Text style={[styles.registerButtonText]}>Create Account</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{ marginTop: theme.spacing.lg }}
+                onPress={() => {
+                  exitGuestMode();
+                  router.replace("/map");
+                }}
+              >
+                <Text style={[styles.subText, { color: theme.colors.accent }]}>
+                  Continue Browsing
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </CRScreen>
+    );
+  }
+
   // -----------------------------------
   // Upload Avatar
   // -----------------------------------
@@ -629,6 +672,50 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  heading: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
+    textAlign: "center",
+  },
+  subText: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    textAlign: "center",
+  },
+  loginButton: {
+    backgroundColor: theme.colors.accentMid,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 999,
+    alignItems: "center",
+    width: "100%",
+    marginBottom: theme.spacing.md,
+  },
+  loginButtonText: {
+    color: theme.colors.primaryDark,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  registerButton: {
+    borderWidth: 2,
+    borderColor: theme.colors.accentMid,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 999,
+    alignItems: "center",
+    width: "100%",
+  },
+  registerButtonText: {
+    color: theme.colors.accentMid,
+    fontSize: 16,
+    fontWeight: "600",
+  },
   cardWrap: {
     marginHorizontal: 16,
     marginBottom: theme.spacing.sm, 
