@@ -221,8 +221,16 @@ service cloud.firestore {
         // Can read group events if member of the group
         (resource.data.visibility == 'group' && isGroupMember(resource.data.groupId))
       );
-      allow update: if isAuthed() && resource.data.userId == request.auth.uid;
-      allow delete: if isAuthed() && resource.data.userId == request.auth.uid;
+      allow update: if isAuthed() && (
+        // Can update own events (check both userId and createdBy for backwards compatibility)
+        resource.data.userId == request.auth.uid ||
+        resource.data.createdBy == request.auth.uid
+      );
+      allow delete: if isAuthed() && (
+        // Can delete own events (check both userId and createdBy for backwards compatibility)
+        resource.data.userId == request.auth.uid ||
+        resource.data.createdBy == request.auth.uid
+      );
       allow list: if isAuthed();
     }
     
