@@ -1,7 +1,7 @@
 import { AuthContext } from "@context/AuthContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useContext, useEffect, useState } from "react";
-import MapScreenRN from "../core/screens/MapScreenRN";
+import MapScreenRN from "../core/screens/MapScreenRN-TomTom";
 
 export default function Map() {
   const { user } = useContext(AuthContext);
