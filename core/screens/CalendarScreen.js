@@ -3,6 +3,7 @@ import { AuthContext } from "@context/AuthContext";
 import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY, shareEvent } from "@core/map/events/sharedEvents";
 import { getCapabilities } from "@core/roles/capabilities";
+import { useAllUserGroups } from "@core/groups/hooks";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
@@ -57,7 +58,6 @@ export default function CalendarScreen() {
   const [selectedVisibility, setSelectedVisibility] = useState(EVENT_VISIBILITY.PRIVATE);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [sharing, setSharing] = useState(false);
-  const [groups, setGroups] = useState([]);
 
   // Memoize the useEvents filter to avoid unnecessary refetches
   const useEventsFilter = useMemo(
@@ -67,6 +67,9 @@ export default function CalendarScreen() {
 
   // Only pass regions to useEvents - suitability will be filtered client-side
   const { events: allEvents, loading, deleteEvent, deleteEventSeries } = useEvents(useEventsFilter);
+
+  // Load user's groups for share modal
+  const { groups } = useAllUserGroups(user?.uid);
 
   // Filter events by suitability client-side
   const events = useMemo(() => {
@@ -84,12 +87,7 @@ export default function CalendarScreen() {
       // Refresh events when screen comes into focus
       // This ensures newly created events appear after navigating back from CreateEventScreen
       setRefreshTrigger(prev => prev + 1);
-      
-      // Load user's groups if they exist
-      if (user && profile?.groups) {
-        setGroups(profile.groups || []);
-      }
-    }, [user, profile])
+    }, [])
   );
 
   const getDaysInMonth = (date) => {
@@ -1355,7 +1353,7 @@ const styles = StyleSheet.create({
   shareEventButtonText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#ffffff",
+    color: theme.colors.primaryDark,
     marginLeft: 8,
   },
   deleteEventButton: {
