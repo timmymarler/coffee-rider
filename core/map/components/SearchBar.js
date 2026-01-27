@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import {
     ActivityIndicator,
@@ -16,6 +17,8 @@ export function SearchBar({
   onClear,
   onFilterPress,
   filtersActive = false,
+  onRouteTypePress,
+  routeTypeActive = false,
 }) {
   const styles = createStyles(theme);
 
@@ -87,6 +90,21 @@ export function SearchBar({
             color={filtersActive ? theme.colors.accentMid : theme.colors.primaryLight}
           />
         </TouchableOpacity>
+
+        {/* Route Type Button */}
+        {onRouteTypePress && (
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={onRouteTypePress}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="shuffle-variant"
+              size={28}
+              color={routeTypeActive ? theme.colors.accent : theme.colors.primaryLight}
+            />
+          </TouchableOpacity>
+        )}
 
       </View>
 

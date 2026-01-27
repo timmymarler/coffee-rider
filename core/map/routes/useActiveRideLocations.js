@@ -71,7 +71,10 @@ export default function useActiveRideLocations(myActiveRide, userId) {
         setLoading(false);
       },
       (err) => {
-        console.error('[useActiveRideLocations] Snapshot error:', err);
+        // Ignore permission errors when user is logging out
+        if (err.code !== 'permission-denied') {
+          console.error('[useActiveRideLocations] Snapshot error:', err);
+        }
         setRiderLocations([]);
         setLoading(false);
       }

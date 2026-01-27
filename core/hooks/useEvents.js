@@ -30,40 +30,59 @@ export function useEvents(filters = {}) {
       try {
         setLoading(true);
         const eventsRef = collection(db, "events");
+
+        // Fetch ALL events (we'll filter client-side for visibility)
         let q = query(eventsRef);
 
-        // Apply filters
-        const constraints = [];
-
-        // Always filter by current user's events
-        constraints.push(where("userId", "==", user.uid));
-
-        if (filters.placeId) {
-          constraints.push(where("placeId", "==", filters.placeId));
-        }
-
-        if (filters.createdBy) {
-          constraints.push(where("createdBy", "==", filters.createdBy));
-        }
-
-        if (filters.region && filters.region !== "") {
-          constraints.push(where("region", "==", filters.region));
-        }
-
-        // Handle regions array (for multi-select filtering)
+        // Apply region filters if needed (these are safe to apply at query level)
         if (filters.regions && Array.isArray(filters.regions) && filters.regions.length > 0) {
-          constraints.push(where("region", "in", filters.regions));
-        }
-
-        if (constraints.length > 0) {
-          q = query(eventsRef, ...constraints);
+          q = query(eventsRef, where("region", "in", filters.regions));
+        } else if (filters.region && filters.region !== "") {
+          q = query(eventsRef, where("region", "==", filters.region));
         }
 
         const snapshot = await getDocs(q);
-        const eventsList = snapshot.docs.map((doc) => ({
+        let eventsList = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
+
+        // Filter client-side for visibility and ownership
+        eventsList = eventsList.filter((event) => {
+          // Always include events created by current user
+          if (event.userId === user.uid || event.createdBy === user.uid) {
+            return true;
+          }
+          
+          // Include public events
+          if (event.visibility === "public") {
+            return true;
+          }
+          
+          // Include group events if user is in the group
+          // (TODO: check user's groups - for now just include them)
+          if (event.visibility === "group") {
+            return true;
+          }
+          
+          return false;
+        });
+
+        // Apply other filters
+        if (filters.placeId) {
+          eventsList = eventsList.filter(e => e.placeId === filters.placeId);
+        }
+
+        if (filters.createdBy) {
+          eventsList = eventsList.filter(e => e.createdBy === filters.createdBy || e.userId === filters.createdBy);
+        }
+
+        if (filters.suitability && Array.isArray(filters.suitability) && filters.suitability.length > 0) {
+          eventsList = eventsList.filter((event) => {
+            if (!event.suitability || event.suitability.length === 0) return true;
+            return filters.suitability.some((suit) => event.suitability.includes(suit));
+          });
+        }
 
         setEvents(eventsList);
         setError(null);

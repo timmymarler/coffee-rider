@@ -49,6 +49,13 @@ export function useSavedRoutes(includePublic = false) {
       });
       userRoutesLoaded = true;
       updateRoutes();
+    }, (err) => {
+      // Ignore permission errors when user is logging out
+      if (err.code !== 'permission-denied') {
+        console.error("Error listening to user routes:", err);
+      }
+      userRoutesLoaded = true;
+      updateRoutes();
     });
 
     const unsubPublic = publicRoutesQuery

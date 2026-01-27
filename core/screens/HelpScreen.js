@@ -81,6 +81,17 @@ export default function HelpScreen() {
         </View>
         <View style={styles.controlRow}>
           <MaterialCommunityIcons
+            name="crosshairs-gps"
+            size={22}
+            color={theme.colors.danger}
+            style={styles.controlIcon}
+          />
+          <Text style={styles.controlText}>
+            <Text style={styles.controlLabel}>Location Sharing</Text> — when you start a group ride, your live location is shared with other riders in real-time (every 10 seconds). You'll see their markers on the map too. Your location is ONLY shared when you explicitly start a ride and ONLY visible to riders on the same route in the same group. Ending your ride immediately stops all sharing.
+          </Text>
+        </View>
+        <View style={styles.controlRow}>
+          <MaterialCommunityIcons
             name="navigation"
             size={22}
             color={theme.colors.primary}
@@ -99,7 +110,7 @@ export default function HelpScreen() {
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
-            <Text style={styles.controlLabel}>Follow Me (Active)</Text> — when you enable Follow Me, the icon will turn red
+            <Text style={styles.controlLabel}>Follow Me (Active)</Text> — when you enable Follow Me, the icon will turn red and the map stays centered on your location. Your location is visible on the map in real-time.
           </Text>
         </View>
         <View style={styles.controlRow}>
@@ -176,6 +187,41 @@ export default function HelpScreen() {
             Destination — the place you are navigating to or routing towards.
           </Text>
         </View>
+      </View>
+
+      {/* -------------------------------------------------- */}
+      {/* ROUTE OPTIMIZATION                                 */}
+      {/* -------------------------------------------------- */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Route optimization</Text>
+
+        <Text style={styles.subText}>
+          Choose different route types to match your riding preferences. Tap the route button on the search bar to select your preferred optimization.
+        </Text>
+
+        <Text style={styles.bullet}>
+          <Text style={styles.controlLabel}>⚡ Fastest</Text> — Optimizes for travel time while keeping sensible routes. Uses all road types to get you there quickly.
+        </Text>
+
+        <Text style={styles.bullet}>
+          <Text style={styles.controlLabel}>🎢 Curvy</Text> — Thrilling routes with smooth curves and moderate windingness. Great for spiraling mountain passes and flowing A-roads.
+        </Text>
+
+        <Text style={styles.bullet}>
+          <Text style={styles.controlLabel}>🌀 Twisty</Text> — Maximum turns and curves on interesting roads. Perfect for riders seeking the most winding path.
+        </Text>
+
+        <Text style={styles.bullet}>
+          <Text style={styles.controlLabel}>🏔️ Adventure</Text> — Hilly mountain roads with elevation changes. Ideal for exploring scenic terrain and challenging climbs.
+        </Text>
+
+        <Text style={styles.bullet}>
+          <Text style={styles.controlLabel}>⚙️ Custom</Text> — Design your own route by choosing your preferred level of windingness (turns) and hilliness (elevation). Select from Low, Normal, or High for each parameter.
+        </Text>
+
+        <Text style={[styles.subText, { marginTop: 12 }]}>
+          <Text style={styles.controlLabel}>Waypoints:</Text> Long press on any location to add waypoints. Your route will recalculate to pass through all waypoints in order while maintaining your selected route optimization.
+        </Text>
       </View>
 
       {/* -------------------------------------------------- */}

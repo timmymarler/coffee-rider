@@ -181,6 +181,17 @@ export default function PlaceCard({
     setSelectedRating(userCrRating);
   }, [userCrRating, place?.id]);
 
+  // Log when place prop changes (to detect map updates)
+  useEffect(() => {
+    console.log("[PlaceCard] 📍 Place prop received/updated:", {
+      placeId: place?.id,
+      name: place?.title || place?.name,
+      category: place?.category,
+      amenities: place?.amenities,
+      suitability: place?.suitability,
+    });
+  }, [place?.id, place?.amenities, place?.suitability, place?.category]);
+
 
     /* ------------------------------------------------------------------ */
   /* LOCAL STATE                                                        */
@@ -319,10 +330,12 @@ export default function PlaceCard({
   useEffect(() => {
     if (!place?.id) return;
 
+    console.log("[PlaceCard] Setting up real-time listener for place:", place.id);
     const placeRef = doc(db, "places", place.id);
     const unsub = onSnapshot(placeRef, (snap) => {
       incMetric("PlaceCard:placeSnapshot");
       if (snap.exists()) {
+        console.log("[PlaceCard] 🔄 Real-time update received:", snap.data());
         // Merge listener data with original place to preserve all fields
         setCurrentPlace({
           ...place,
@@ -331,7 +344,10 @@ export default function PlaceCard({
       }
     });
 
-    return () => unsub();
+    return () => {
+      console.log("[PlaceCard] Unsubscribing from place listener");
+      unsub();
+    };
   }, [place?.id, place]);
 
   const buildBooleanMapPayload = (stateObj) => {

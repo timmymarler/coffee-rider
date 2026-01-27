@@ -1,5 +1,6 @@
 import { db } from "@config/firebase";
 import { TabBarContext } from "@context/TabBarContext";
+import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
@@ -19,6 +20,7 @@ import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
 import { decode } from "@mapbox/polyline";
 import { SearchBar } from "../map/components/SearchBar";
+import MapRouteTypeSelector from "@core/components/routing/MapRouteTypeSelector";
 import { fetchRoute } from "../map/utils/fetchRoute";
 import { fetchTomTomRoute } from "../map/utils/tomtomRouting";
 
@@ -487,6 +489,37 @@ async function fetchNearbyPois(latitude, longitude, radius, capabilities) {
 }
 
 /* ------------------------------------------------------------------ */
+/* UTILITY: Coordinate Normalization                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Normalize coordinate formats from different sources
+ * Handles: {lat, lng}, {latitude, longitude}, or direct values
+ * Returns null if coordinates are invalid
+ */
+function normalizeCoord(obj) {
+  if (!obj) return null;
+  
+  const lat = obj.latitude ?? obj.lat;
+  const lng = obj.longitude ?? obj.lng;
+  
+  // Validate coordinates are valid numbers
+  if (typeof lat !== 'number' || typeof lng !== 'number' || 
+      isNaN(lat) || isNaN(lng)) {
+    console.warn('[normalizeCoord] Invalid coordinates:', obj);
+    return null;
+  }
+  
+  // Validate coordinates are within valid ranges
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    console.warn('[normalizeCoord] Coordinates out of bounds:', { lat, lng });
+    return null;
+  }
+  
+  return { latitude: lat, longitude: lng };
+}
+
+/* ------------------------------------------------------------------ */
 /* MAIN SCREEN                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -534,6 +567,21 @@ export default function MapScreenRN() {
   const user = auth?.user || null;
   const role = auth?.profile?.role || "guest";
   const capabilities = getCapabilities(role);
+  
+  // Get user's routing preferences
+  const { 
+    routeType: userRouteType, 
+    travelMode: userTravelMode, 
+    routeTypeMap,
+    theme: currentTheme,
+    getDefaultsForBrand,
+    customHilliness,
+    customWindingness,
+  } = useContext(RoutingPreferencesContext);
+
+  // Determine if route type is non-default
+  const defaultRouteType = getDefaultsForBrand(currentTheme)?.routeType;
+  const isRouteTypeNonDefault = userRouteType !== defaultRouteType;
 
   const [searchNotice, setSearchNotice] = useState(null);
   const [postbox, setPostbox] = useState(null);
@@ -610,7 +658,10 @@ export default function MapScreenRN() {
   const lastGPSTimeRef = useRef(null); // Time of last GPS update
   const estimatedSpeedRef = useRef(0); // Estimated speed in m/s (from recent updates)
   const positionSmoothingRef = useRef(null); // Smoothed position for Kalman-like filtering
-  
+  const lastRouteBuildLocationRef = useRef(null); // Track location used for last route build to avoid excessive rebuilds
+  const lastRouteTypeRef = useRef(null); // Track the route type used for last route build to rebuild when it changes
+  const lastWaypoints = useRef([]); // Track waypoints from last route build to rebuild when they change
+  const MIN_ROUTE_REBUILD_DISTANCE_METERS = 10; // Only rebuild routes if user moves more than 10 meters
   const displayWaypoints = useMemo(() => {
     if (!routeDestination) return waypoints;
     return [
@@ -630,6 +681,7 @@ export default function MapScreenRN() {
   const [pendingMarker, setPendingMarker] = useState(null);
   const [manualStartPoint, setManualStartPoint] = useState(null);
   const [showRefreshRouteMenu, setShowRefreshRouteMenu] = useState(false);
+  const [showRouteTypeSelector, setShowRouteTypeSelector] = useState(false);
   const hasRouteIntent = routeDestination || waypoints.length > 0;
 
   const closeAddPointMenu = () => {
@@ -694,22 +746,32 @@ export default function MapScreenRN() {
         }
       }
 
-      // Determine final destination (same as buildRoute logic)
-      const finalDestination = routeDestination
-        ? {
-            latitude: routeDestination.latitude,
-            longitude: routeDestination.longitude,
-          }
-        : {
-            latitude: waypoints[waypoints.length - 1].lat,
-            longitude: waypoints[waypoints.length - 1].lng,
-          };
+      // Determine final destination (same as buildRoute logic) - normalize coordinates
+      let finalDestination = null;
+      if (routeDestination) {
+        finalDestination = normalizeCoord(routeDestination);
+        if (!finalDestination) {
+          console.error('[REFRESH] Failed to normalize route destination');
+          return;
+        }
+      } else if (waypoints.length > 0) {
+        finalDestination = normalizeCoord(waypoints[waypoints.length - 1]);
+        if (!finalDestination) {
+          console.error('[REFRESH] Failed to normalize last waypoint');
+          return;
+        }
+      }
+
+      if (!finalDestination) {
+        console.error('[REFRESH] No valid final destination');
+        return;
+      }
 
       // If we have a snap point, route through it to maintain the path
-      let routeWaypoints = waypoints.map(wp => ({
-        latitude: wp.lat,
-        longitude: wp.lng,
-      }));
+      let routeWaypoints = waypoints.map(wp => {
+        const normalized = normalizeCoord(wp);
+        return normalized || { latitude: wp.lat, longitude: wp.lng };
+      });
 
       if (snapPoint) {
         // Insert snap point as first waypoint to guide forward on route
@@ -727,7 +789,11 @@ export default function MapScreenRN() {
         userLocation,
         finalDestination,
         routeWaypoints,
-        'bike'  // Use bike routing for better cycling routes
+        userTravelMode,  // Use user's vehicle type
+        userRouteType,   // Use user's route type preference
+        routeTypeMap,    // Map of route type IDs to TomTom parameters
+        customHilliness, // Custom hilliness for custom routes
+        customWindingness // Custom windingness for custom routes
       );
 
       if (!result?.polyline) {
@@ -754,6 +820,7 @@ export default function MapScreenRN() {
   };
 
   const handleAddWaypoint = () => {
+    console.log("[MAP] Adding waypoint, current routeDestination:", routeDestination);
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
     addFromMapPress(pendingMapPoint);
@@ -1664,9 +1731,35 @@ export default function MapScreenRN() {
       return;
     }
 
+    // If route type changed, always rebuild (ignore distance threshold)
+    const routeTypeChanged = userRouteType !== lastRouteTypeRef.current;
+    
+    // If waypoints changed, always rebuild (ignore distance threshold)
+    const waypointsChanged = waypoints.length !== lastWaypoints.current.length ||
+      waypoints.some((wp, idx) => 
+        !lastWaypoints.current[idx] || 
+        wp.lat !== lastWaypoints.current[idx].lat || 
+        wp.lng !== lastWaypoints.current[idx].lng
+      );
+    
+    if (waypointsChanged) {
+      console.log("[MAP] Waypoints changed, rebuilding route. routeDestination:", routeDestination, "waypoints:", waypoints.length);
+    }
+    
+    // Check if user has moved far enough to warrant a route rebuild
+    // This prevents excessive API calls from GPS noise (small accuracy variations)
+    // But we skip this check if the route type or waypoints have changed
+    if (!routeTypeChanged && !waypointsChanged && lastRouteBuildLocationRef.current) {
+      const distanceMoved = distanceBetween(lastRouteBuildLocationRef.current, userLocation);
+      if (distanceMoved < MIN_ROUTE_REBUILD_DISTANCE_METERS) {
+        console.log(`[MAP] User moved only ${distanceMoved.toFixed(1)}m (min: ${MIN_ROUTE_REBUILD_DISTANCE_METERS}m), skipping route rebuild`);
+        return; // Skip rebuild if movement is less than threshold
+      }
+    }
+
     const requestId = ++routeRequestId.current;
     buildRoute({ requestId });
-  }, [routeDestination, waypoints, routeClearedByUser, userLocation]);
+  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType]);
 
   // Log routeCoords changes for debugging polyline visibility
   useEffect(() => {
@@ -1792,7 +1885,7 @@ export default function MapScreenRN() {
 
   async function buildRoute({ destinationOverride = null, requestId } = {}) {
     console.log("[buildRoute] Starting - destination:", routeDestination, "waypoints:", waypoints.length);
-    if (!routeDestination && waypoints.length === 0) {
+    if (!routeDestination && !destinationOverride && waypoints.length === 0) {
       console.log("[buildRoute] No destination or waypoints, returning");
       return;
     }
@@ -1814,34 +1907,73 @@ export default function MapScreenRN() {
     // ─────────────────────────────
     // Determine final destination
     // ─────────────────────────────
-    const finalDestination = destination
-      ? {
-          latitude: destination.latitude,
-          longitude: destination.longitude,
-        }
-      : {
-          latitude: waypoints[waypoints.length - 1].lat,
-          longitude: waypoints[waypoints.length - 1].lng,
-        };
+    let finalDestination = null;
+    
+    if (destination) {
+      finalDestination = normalizeCoord(destination);
+      if (!finalDestination) {
+        console.error('[buildRoute] Failed to normalize destination coordinates:', destination);
+        return;
+      }
+    } else if (waypoints.length > 0) {
+      finalDestination = normalizeCoord(waypoints[waypoints.length - 1]);
+      if (!finalDestination) {
+        console.error('[buildRoute] Failed to normalize last waypoint coordinates');
+        return;
+      }
+    }
+
+    if (!finalDestination) {
+      console.error('[buildRoute] No valid final destination');
+      return;
+    }
 
     // ─────────────────────────────
     // Intermediates
     // ─────────────────────────────
-    const intermediates = destination
-      ? waypoints
-      : waypoints.slice(0, -1);
+    // When routing to a destination, user-added waypoints come BEFORE the destination
+    // so they must be intermediates, with the destination as the final point
+    let intermediates = [];
+    if (destination) {
+      // Only user-added waypoints go in intermediates; destination will be final
+      intermediates = waypoints;
+    } else if (waypoints.length > 0) {
+      // No explicit destination, so all but the last waypoint are intermediates
+      intermediates = waypoints.slice(0, -1);
+    }
+
+    // Normalize intermediates
+    const normalizedIntermediates = intermediates
+      .map(wp => normalizeCoord(wp))
+      .filter(wp => wp !== null);
+    
+    // Validate user location
+    const startCoord = normalizeCoord(manualStartPoint || userLocation);
+    if (!startCoord) {
+      console.error('[buildRoute] Failed to normalize start location:', manualStartPoint || userLocation);
+      return;
+    }
 
     const result = await fetchTomTomRoute(
-      manualStartPoint || userLocation,
+      startCoord,
       finalDestination,
-      intermediates.map(wp => ({
-        latitude: wp.lat,
-        longitude: wp.lng,
-      })),
-      'bike'  // Use bike routing for better cycling routes
+      normalizedIntermediates,
+      userTravelMode,  // Use user's vehicle type
+      userRouteType,   // Use user's route type preference
+      routeTypeMap,    // Map of route type IDs to TomTom parameters
+      customHilliness, // Custom hilliness for custom routes
+      customWindingness // Custom windingness for custom routes
     );
 
     console.log("[buildRoute] fetchTomTomRoute returned:", result);
+
+    // Track the location used for this successful route build
+    // This prevents redundant rebuilds when user moves < MIN_ROUTE_REBUILD_DISTANCE_METERS
+    if (startCoord) {
+      lastRouteBuildLocationRef.current = startCoord;
+      lastRouteTypeRef.current = userRouteType; // Also track the route type used
+      lastWaypoints.current = waypoints; // Track waypoints used
+    }
 
       // Always set routed total distance (meters) for use in WaypointsList
       if (typeof result?.distanceMeters === 'number' && result.distanceMeters > 0) {
@@ -2213,7 +2345,7 @@ export default function MapScreenRN() {
           ref={mapRef}
           key={mapKey}
           style={StyleSheet.absoluteFill}
-          showsUserLocation={!isNavigationMode}
+          showsUserLocation={true}
           pitchEnabled
           showsMyLocationButton={false}
           minZoomLevel={Platform.OS === "ios" ? 1 : 0}
@@ -2279,29 +2411,6 @@ export default function MapScreenRN() {
             attemptRouteFit();
           }}
         >
-          {/* Navigation arrow marker - show if Follow Me or active ride is enabled */}
-          {isNavigationMode && userLocation && (
-            <Marker
-              coordinate={{
-                latitude: userLocation.latitude,
-                longitude: userLocation.longitude,
-              }}
-              anchor={{ x: 0.5, y: 0.5 }}
-              flat={true}
-              rotation={userLocation.heading || 0}
-              zIndex={1000}
-              tracksViewChanges={false}
-            >
-              <View style={styles.navigationArrow}>
-                <MaterialCommunityIcons
-                  name="navigation"
-                  size={32}
-                  color="#2196F3"
-                />
-              </View>
-            </Marker>
-          )}
-
           {crMarkers.map(renderMarker)}
           {searchMarkers.map(renderMarker)}
           {manualStartPoint && (
@@ -2637,8 +2746,6 @@ export default function MapScreenRN() {
         </TouchableOpacity>
       )}
 
-
-
       {!followUser && !activeRide && (
         <SearchBar
           value={searchInput}
@@ -2650,6 +2757,8 @@ export default function MapScreenRN() {
           onClear={clearSearch}
           onFilterPress={() => setShowFilters(prev => !prev)}
           filtersActive={filtersActive}
+          onRouteTypePress={() => setShowRouteTypeSelector(true)}
+          routeTypeActive={isRouteTypeNonDefault}
         />
       )}
 
@@ -2953,6 +3062,12 @@ export default function MapScreenRN() {
         </View>
       </Modal>
 
+      {/* Route Type Selector Modal */}
+      <MapRouteTypeSelector
+        visible={showRouteTypeSelector}
+        onClose={() => setShowRouteTypeSelector(false)}
+      />
+
     </View>
   );
 }
@@ -3207,7 +3322,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: theme.colors.primaryDark,
   },
-
 
   waypointPin: {
     width: 18,

@@ -83,12 +83,22 @@ export default function useActiveRide(user) {
         }
       },
       (err) => {
-        console.error('[useActiveRide] Snapshot error:', err);
-        setError(err.message);
+        // Ignore permission errors when user is logging out
+        if (err.code === 'permission-denied') {
+          console.log('[useActiveRide] Permission denied - user likely logging out');
+          setActiveRide(null);
+          setError(null);
+        } else {
+          console.error('[useActiveRide] Snapshot error:', err);
+          setError(err.message);
+        }
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      console.log('[useActiveRide] Cleaning up listener');
+      unsubscribe();
+    };
   }, [user?.uid]);
 
   // Update location periodically when ride is active

@@ -42,6 +42,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         // Routes
         canSaveRoutes: true,
         canShareRoutes: true,
+        canShareEvents: true,
 
         // Search
         canSearchCR: true,

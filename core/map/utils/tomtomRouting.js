@@ -6,10 +6,65 @@ import { decode } from "@mapbox/polyline";
  * @param {Object} origin - {latitude, longitude}
  * @param {Object} destination - {latitude, longitude}
  * @param {Array} waypoints - [{latitude, longitude}, ...] (optional)
- * @param {string} vehicleType - 'car', 'pedestrian', 'bike', 'truck', 'taxi', 'bus', 'motorcycle' (optional, default 'car')
+ * @param {string} vehicleType - 'car', 'pedestrian', 'bike', 'motorcycle' (optional, default 'car')
+ * @param {string} routeTypeId - Route type ID like 'scenic', 'adventure', 'fastest' (optional)
+ * @param {Object} routeTypeMap - Map of route type IDs to {tomtomRouteType, hilliness, windingness} (optional)
+ * @param {string} customHilliness - Override hilliness for custom routes (optional, 'low', 'normal', 'high')
+ * @param {string} customWindingness - Override windingness for custom routes (optional, 'low', 'normal', 'high')
  * @returns {Promise<Object>} Route data with polyline, distance, duration
  */
-export async function fetchTomTomRoute(origin, destination, waypoints = [], vehicleType = "car") {
+export async function fetchTomTomRoute(origin, destination, waypoints = [], vehicleType = "car", routeTypeId = null, routeTypeMap = null, customHilliness = null, customWindingness = null) {
+  // Map vehicle types to appropriate TomTom travelMode and avoid preferences
+  // Note: avoid parameter accepts single values only. Valid values:
+  // tollRoads, motorways, ferries, unpavedRoads, carpools, alreadyUsedRoads, borderCrossings, tunnels, carTrains, lowEmissionZones
+  const vehicleConfigMap = {
+    car: {
+      travelMode: "car",
+      defaultRouteType: "fastest",
+      defaultAvoid: "ferries",
+    },
+    motorcycle: {
+      travelMode: "motorcycle",
+      defaultRouteType: "thrilling",
+      defaultAvoid: "motorways",
+    },
+    bike: {
+      travelMode: "bike",
+      defaultRouteType: "thrilling",
+      defaultAvoid: "motorways",
+    },
+    pedestrian: {
+      travelMode: "pedestrian",
+      defaultRouteType: "shortest",
+      defaultAvoid: "",
+    },
+    default: {
+      travelMode: "car",
+      defaultRouteType: "fastest",
+      defaultAvoid: "",
+    }
+  };
+  
+  const vehicleConfig = vehicleConfigMap[vehicleType] || vehicleConfigMap.default;
+  
+  // Determine final route type, hilliness, and windingness parameters
+  let tomtomRouteType = vehicleConfig.defaultRouteType;
+  let hilliness = null;
+  let windingness = null;
+  
+  if (routeTypeId && routeTypeMap && routeTypeMap[routeTypeId]) {
+    const routeConfig = routeTypeMap[routeTypeId];
+    tomtomRouteType = routeConfig.tomtomRouteType || tomtomRouteType;
+    hilliness = routeConfig.hilliness || null;
+    windingness = routeConfig.windingness || null;
+  }
+  
+  // Override with custom values if this is a custom route type
+  if (routeTypeId === "custom") {
+    hilliness = customHilliness || hilliness;
+    windingness = customWindingness || windingness;
+  }
+  
   const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
 
   if (!tomtomApiKey) {
@@ -20,8 +75,35 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
     throw new Error("Origin and destination are required");
   }
 
+  // Validate coordinates
+  if (typeof origin.latitude !== 'number' || typeof origin.longitude !== 'number' ||
+      typeof destination.latitude !== 'number' || typeof destination.longitude !== 'number') {
+    console.error('[tomtomRouting] Invalid coordinate types:', {
+      origin: { type: typeof origin.latitude, lat: origin.latitude, lng: origin.longitude },
+      destination: { type: typeof destination.latitude, lat: destination.latitude, lng: destination.longitude }
+    });
+    throw new Error(`Invalid coordinates: origin or destination has non-numeric values`);
+  }
+
+  // Validate coordinate ranges
+  const validateCoord = (name, coord) => {
+    if (Math.abs(coord.latitude) > 90 || Math.abs(coord.longitude) > 180) {
+      throw new Error(`${name} coordinates out of bounds: lat=${coord.latitude}, lng=${coord.longitude}`);
+    }
+  };
+  
+  validateCoord('Origin', origin);
+  validateCoord('Destination', destination);
+  waypoints?.forEach((wp, i) => {
+    if (wp.latitude !== undefined && wp.longitude !== undefined) {
+      validateCoord(`Waypoint ${i}`, wp);
+    }
+  });
+
   try {
     // Build waypoints string (TomTom format: lat,lng:lat,lng)
+    // Note: In TomTom routing, waypoints must come BEFORE destination
+    // Format: origin:waypoint1:waypoint2:...:destination
     let waypointsStr = "";
     if (waypoints && waypoints.length > 0) {
       waypointsStr = waypoints
@@ -33,22 +115,60 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
     const originStr = `${origin.latitude},${origin.longitude}`;
     const destStr = `${destination.latitude},${destination.longitude}`;
 
-    // TomTom Routing API endpoint
-    const url = `https://api.tomtom.com/routing/1/calculateRoute/${originStr}:${destStr}${waypointsStr}/json`;
+    // TomTom Routing API endpoint - waypoints go BETWEEN origin and destination
+    const url = `https://api.tomtom.com/routing/1/calculateRoute/${originStr}${waypointsStr}:${destStr}/json`;
+
+    console.log('[tomtomRouting] Request URL:', url);
+    console.log('[tomtomRouting] Vehicle config:', {
+      vehicleType: vehicleType,
+      routeTypeId: routeTypeId,
+      travelMode: vehicleConfig.travelMode,
+      routeType: tomtomRouteType,
+      hilliness: hilliness || 'none',
+      windingness: windingness || 'none',
+      coordinates: {
+        origin: { latitude: origin.latitude, longitude: origin.longitude },
+        destination: { latitude: destination.latitude, longitude: destination.longitude },
+        waypointsCount: waypoints?.length || 0
+      }
+    });
 
     const params = new URLSearchParams({
       key: tomtomApiKey,
-      vehicleType: vehicleType,
+      // Travel mode and route optimization based on vehicle type and route preference
+      travelMode: vehicleConfig.travelMode,
+      routeType: tomtomRouteType,
       computeTravelTimeFor: "all",
       traffic: "true",
       instructionsType: "text",
       language: "en-GB",
     });
+    
+    // Add hilliness and windingness parameters for thrilling routes
+    if (hilliness && tomtomRouteType === "thrilling") {
+      params.append("hilliness", hilliness);
+    }
+    if (windingness && tomtomRouteType === "thrilling") {
+      params.append("windingness", windingness);
+    }
+    
+    // Note: TomTom's /calculateRoute/ endpoint includes:
+    // - travelMode: car, motorcycle, bike, pedestrian
+    // - routeType: fastest, shortest, short, eco, thrilling
+    // - hilliness: low, normal, high (for routeType=thrilling)
+    // - windingness: low, normal, high (for routeType=thrilling, level of turns)
 
     const response = await fetch(`${url}?${params}`);
 
     if (!response.ok) {
-      throw new Error(`TomTom API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error('[tomtomRouting] API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+        url: url
+      });
+      throw new Error(`TomTom API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
@@ -59,6 +179,43 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
 
     const route = data.routes[0];
     const legs = route.legs || [];
+    
+    // TomTom returns guidance in route.guidance.instructions array
+    let instructions = [];
+    if (route.guidance && route.guidance.instructions && Array.isArray(route.guidance.instructions)) {
+      instructions = route.guidance.instructions;
+    }
+
+    console.log('[tomtomRouting] Route response structure:', {
+      hasGuidance: !!route.guidance,
+      guidanceType: typeof route.guidance,
+      instructionsLength: instructions.length,
+      legsLength: legs.length,
+      legKeys: legs[0] ? Object.keys(legs[0]) : [],
+      guidanceKeys: route.guidance ? Object.keys(route.guidance) : [],
+    });
+
+    // Convert TomTom instructions into steps format for navigation
+    // Each instruction contains maneuver type, text description, and distance
+    const steps = instructions.length > 0 ? instructions.map((instr, idx) => {
+      // The end point is the location of the next instruction (or current if last)
+      const endPoint = idx < instructions.length - 1 ? instructions[idx + 1].point : instr.point;
+      
+      return {
+        maneuver: instr.maneuver || "STRAIGHT",
+        instruction: instr.text || "Continue",
+        distance: instr.distance || (idx < instructions.length - 1 ? 100 : 0),
+        position: instr.point, // Where this instruction starts
+        end: endPoint, // Where this instruction ends (at next maneuver point)
+      };
+    }) : [];
+
+    console.log('[tomtomRouting] Converted instructions to steps:', {
+      instructionsCount: instructions.length,
+      stepsCount: steps.length,
+      firstInstruction: instructions[0] || 'no instructions',
+      firstStep: steps[0] || 'no steps',
+    });
 
     // Extract polyline points from legs
     let allPoints = [];
@@ -84,7 +241,8 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
       duration: route.summary?.travelTimeInSeconds || 0,
       durationInTraffic: route.summary?.travelTimeInSecondsTraffic || route.summary?.travelTimeInSeconds || 0,
       legs: legs,
-      guidance: route.guidance || [],
+      guidance: instructions, // Array of TomTom instruction objects
+      steps: steps, // Converted instructions into steps format for navigation
       rawRoute: route, // Store raw data for reference
     };
   } catch (error) {

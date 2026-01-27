@@ -2,6 +2,7 @@
 
 import AuthProvider, { AuthContext } from "@context/AuthContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
+import { RoutingPreferencesProvider } from "@context/RoutingPreferencesContext";
 import AppHeader from "@core/components/layout/AppHeader";
 import SplashScreen from "@core/components/ui/SplashScreen";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
@@ -372,12 +373,14 @@ export default function Layout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <TabBarProvider>
-          <WaypointsProvider>
-            <AppHeader />
-            <LayoutContent />
-          </WaypointsProvider>
-        </TabBarProvider>
+        <RoutingPreferencesProvider brand="rider">
+          <TabBarProvider>
+            <WaypointsProvider>
+              <AppHeader />
+              <LayoutContent />
+            </WaypointsProvider>
+          </TabBarProvider>
+        </RoutingPreferencesProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

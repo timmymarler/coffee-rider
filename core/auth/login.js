@@ -1,10 +1,10 @@
 // core/auth/login.js
+import { AuthContext } from "@/core/context/AuthContext";
 import { auth } from "@config/firebase";
 import theme from "@themes";
 import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { useState, useContext } from "react";
-import { AuthContext } from "@/core/context/AuthContext";
+import { useContext, useState } from "react";
 import {
     ActivityIndicator,
     Alert,

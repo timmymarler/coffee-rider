@@ -36,12 +36,12 @@ export function CRButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={theme.colors.primaryDark} />
+        <ActivityIndicator color={variant === "danger" ? "#ffffff" : theme.colors.primaryDark} />
       ) : (
         <Text
           style={[
             {
-              color: theme.colors.primaryDark,
+              color: variant === "danger" ? "#ffffff" : theme.colors.primaryDark,
               fontSize: theme.typography.md,
               fontWeight: "600",
             },

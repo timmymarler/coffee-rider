@@ -8,13 +8,18 @@ import { CRInput } from "@components-ui/CRInput";
 import { CRLabel } from "@components-ui/CRLabel";
 import { CRScreen } from "@components-ui/CRScreen";
 import { AuthContext } from "@context/AuthContext";
+import { RIDER_AMENITIES } from "@core/config/amenities/rider";
+import { RIDER_CATEGORIES } from "@core/config/categories/rider";
+import { RIDER_SUITABILITY } from "@core/config/suitability/rider";
+import RouteThemeSelector from "@core/components/routing/RouteThemeSelector";
 import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { addDoc, collection, doc, getDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Clipboard, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -54,7 +59,11 @@ export default function ProfileScreen() {
   const [placeName, setPlaceName] = useState("");
   const [placeCategory, setPlaceCategory] = useState("cafe");
   const [placeAddress, setPlaceAddress] = useState("");
-  const [placeAmenities, setPlaceAmenities] = useState("");
+  const [placeAmenities, setPlaceAmenities] = useState([]);
+  const [placeSuitability, setPlaceSuitability] = useState([]);
+
+  // Track changes for Save button
+  const [initialValues, setInitialValues] = useState({});
   
   // Update when profile changes
   useEffect(() => {
@@ -73,24 +82,58 @@ export default function ProfileScreen() {
 
   // Load place data from places collection for place owners
   useEffect(() => {
-    const loadPlaceData = async () => {
-      if (role === "place-owner" && profile?.linkedPlaceId) {
-        try {
-          const placeRef = doc(db, "places", profile.linkedPlaceId);
-          const placeSnap = await getDoc(placeRef);
-          if (placeSnap.exists()) {
-            const data = placeSnap.data();
-            setPlaceName(data.name || "");
-            setPlaceCategory(data.category || "cafe");
-            setPlaceAddress(data.address || "");
-            setPlaceAmenities(data.amenities || "");
-          }
-        } catch (error) {
-          console.error("Error loading place data:", error);
-        }
+    if (role !== "place-owner" || !profile?.linkedPlaceId) {
+      // For riders, set initial values
+      setInitialValues({
+        displayName: displayName,
+        bio: bio,
+        bike: bike,
+        homeLocation: homeLocation,
+        homeAddress: homeAddress,
+      });
+      return;
+    }
+
+    // Real-time listener for place data updates
+    const placeRef = doc(db, "places", profile.linkedPlaceId);
+    const unsubscribe = onSnapshot(placeRef, (placeSnap) => {
+      if (placeSnap.exists()) {
+        const data = placeSnap.data();
+        console.log("[ProfileScreen] 📍 Place updated:", {
+          placeId: profile.linkedPlaceId,
+          name: data.name,
+          category: data.category,
+          amenities: data.amenities,
+          suitability: data.suitability,
+        });
+        setPlaceName(data.name || "");
+        setPlaceCategory(data.category || "cafe");
+        setPlaceAddress(data.address || "");
+        // Handle amenities - can be array or empty
+        setPlaceAmenities(Array.isArray(data.amenities) ? data.amenities : []);
+        // Handle suitability - can be array or empty
+        setPlaceSuitability(Array.isArray(data.suitability) ? data.suitability : []);
+
+        // Set initial values for change tracking
+        setInitialValues({
+          displayName: displayName,
+          placeName: data.name || "",
+          placeCategory: data.category || "cafe",
+          placeAddress: data.address || "",
+          placeAmenities: Array.isArray(data.amenities) ? data.amenities : [],
+          placeSuitability: Array.isArray(data.suitability) ? data.suitability : [],
+        });
       }
-    };
-    loadPlaceData();
+    }, (error) => {
+      // Ignore permission errors when user is logging out
+      if (error.code === 'permission-denied') {
+        console.log("[ProfileScreen] Permission denied on place listener - user likely logging out");
+      } else {
+        console.error("[ProfileScreen] Error listening to place data:", error);
+      }
+    });
+
+    return () => unsubscribe();
   }, [profile?.linkedPlaceId, role]);
 
   // Load debug logs on mount
@@ -105,7 +148,7 @@ export default function ProfileScreen() {
   // Load sponsorship status for place owners from user document
   useEffect(() => {
     const loadSponsorshipStatus = async () => {
-      if (role === "place-owner" && user?.uid) {
+      if (role === "place-owner" && user?.uid && !isGuest) {
         try {
           const userRef = doc(db, "users", user.uid);
           const userSnap = await getDoc(userRef);
@@ -118,7 +161,7 @@ export default function ProfileScreen() {
       }
     };
     loadSponsorshipStatus();
-  }, [profile, role, user?.uid]);
+  }, [profile, role, user?.uid, isGuest]);
 
   const email = user?.email || "";
   const role = profile?.role || "user";
@@ -276,6 +319,30 @@ export default function ProfileScreen() {
   };
 
   // -----------------------------------
+  // Check if there are unsaved changes
+  // -----------------------------------
+  const hasChanges = () => {
+    if (role === "place-owner") {
+      return (
+        displayName !== initialValues.displayName ||
+        placeName !== initialValues.placeName ||
+        placeCategory !== initialValues.placeCategory ||
+        placeAddress !== initialValues.placeAddress ||
+        JSON.stringify(placeAmenities) !== JSON.stringify(initialValues.placeAmenities) ||
+        JSON.stringify(placeSuitability) !== JSON.stringify(initialValues.placeSuitability)
+      );
+    } else {
+      return (
+        displayName !== initialValues.displayName ||
+        bio !== initialValues.bio ||
+        bike !== initialValues.bike ||
+        homeLocation !== initialValues.homeLocation ||
+        homeAddress !== initialValues.homeAddress
+      );
+    }
+  };
+
+  // -----------------------------------
   // Save Profile Fields
   // -----------------------------------
   async function handleSaveProfile() {
@@ -285,6 +352,8 @@ export default function ProfileScreen() {
     setSavedTick(false);
 
     try {
+      const email = user?.email || "";
+      const role = profile?.role || "user";
       const userRef = doc(db, "users", user.uid);
       
       const updateData = {
@@ -292,34 +361,71 @@ export default function ProfileScreen() {
         updatedAt: Date.now(),
       };
 
+      console.log("[ProfileScreen] Starting save - User:", user.uid, "Role:", role, "PlaceId:", placeId);
+
       // Save different fields based on role
       if (role === "place-owner" && placeId) {
         // Update place document in places collection
         const placeRef = doc(db, "places", placeId);
-        await updateDoc(placeRef, {
+        const placeUpdateData = {
           name: placeName.trim(),
           category: placeCategory,
           address: placeAddress.trim(),
-          amenities: placeAmenities.trim(),
+          amenities: placeAmenities, // Now stored as array
+          suitability: placeSuitability, // Now stored as array
           updatedAt: Date.now(),
-        });
+        };
+        console.log("[ProfileScreen] Updating place document:", placeId);
+        console.log("[ProfileScreen] Place data:", placeUpdateData);
+        await updateDoc(placeRef, placeUpdateData);
+        console.log("[ProfileScreen] ✓ Place document updated successfully");
       } else if (role !== "place-owner") {
         // Update rider profile fields
         updateData.bio = bio.trim();
         updateData.bike = bike.trim();
         updateData.homeLocation = homeLocation.trim();
         updateData.homeAddress = homeAddress.trim();
+        console.log("[ProfileScreen] Updating as rider");
+      } else {
+        console.warn("[ProfileScreen] ⚠️  Place owner but no placeId:", { role, placeId });
       }
 
-      await updateDoc(userRef, updateData);
+      // Only save displayName for place owners (rest goes to place doc)
+      if (role !== "place-owner" || displayName !== initialValues.displayName) {
+        console.log("[ProfileScreen] Updating user document");
+        console.log("[ProfileScreen] User data:", updateData);
+        await updateDoc(userRef, updateData);
+        console.log("[ProfileScreen] ✓ User document updated successfully");
+      } else {
+        console.log("[ProfileScreen] Skipping user update (place owner, no name change)");
+      }
+
+      // Update initial values to match current state
+      setInitialValues({
+        displayName: displayName,
+        ...(role === "place-owner" ? {
+          placeName: placeName,
+          placeCategory: placeCategory,
+          placeAddress: placeAddress,
+          placeAmenities: placeAmenities,
+          placeSuitability: placeSuitability,
+        } : {
+          bio: bio,
+          bike: bike,
+          homeLocation: homeLocation,
+          homeAddress: homeAddress,
+        }),
+      });
 
       await refreshProfile();
       setSaving(false);
 
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 2000);
+      console.log("[ProfileScreen] ✓ Save complete");
     } catch (err) {
-      console.error("Profile save error:", err);
+      console.error("[ProfileScreen] ✗ Save error:", err);
+      Alert.alert("Save Error", err.message || "Failed to save profile");
       setSaving(false);
     }
   }
@@ -485,7 +591,46 @@ export default function ProfileScreen() {
             <CRInput value={placeName} onChangeText={setPlaceName} />
 
             <CRLabel style={{ marginTop: theme.spacing.md }}>Category</CRLabel>
-            <CRInput value={placeCategory} onChangeText={setPlaceCategory} />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginVertical: theme.spacing.sm }}
+            >
+              <View style={{ flexDirection: "row", gap: theme.spacing.sm, paddingRight: theme.spacing.lg }}>
+                {RIDER_CATEGORIES.map((cat) => (
+                  <TouchableOpacity
+                    key={cat.key}
+                    onPress={() => setPlaceCategory(cat.key)}
+                    style={{
+                      paddingHorizontal: theme.spacing.md,
+                      paddingVertical: theme.spacing.sm,
+                      borderRadius: theme.radius.md,
+                      backgroundColor:
+                        placeCategory === cat.key
+                          ? theme.colors.accent
+                          : theme.colors.inputBg,
+                      borderWidth: placeCategory === cat.key ? 2 : 1,
+                      borderColor:
+                        placeCategory === cat.key
+                          ? theme.colors.accent
+                          : theme.colors.inputBorder,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color:
+                          placeCategory === cat.key
+                            ? theme.colors.primaryDark
+                            : theme.colors.text,
+                        fontWeight: placeCategory === cat.key ? "600" : "500",
+                      }}
+                    >
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
 
             <CRLabel style={{ marginTop: theme.spacing.md }}>Address</CRLabel>
             <CRInput 
@@ -494,13 +639,120 @@ export default function ProfileScreen() {
               placeholder="123 Main St, City, Postcode"
             />
 
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Suitability</CRLabel>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.sm, marginVertical: theme.spacing.sm }}>
+              {RIDER_SUITABILITY.map((suit) => {
+                const isSelected = placeSuitability.includes(suit.key);
+                const iconMap = {
+                  bikers: "motorbike",
+                  scooters: "moped",
+                  cyclists: "bicycle",
+                };
+                return (
+                  <TouchableOpacity
+                    key={suit.key}
+                    onPress={() => {
+                      setPlaceSuitability((prev) =>
+                        isSelected
+                          ? prev.filter((s) => s !== suit.key)
+                          : [...prev, suit.key]
+                      );
+                    }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingHorizontal: theme.spacing.md,
+                      paddingVertical: theme.spacing.sm,
+                      borderRadius: theme.radius.md,
+                      backgroundColor: isSelected
+                        ? theme.colors.accent
+                        : theme.colors.inputBg,
+                      borderWidth: 1,
+                      borderColor: isSelected
+                        ? theme.colors.accent
+                        : theme.colors.inputBorder,
+                      gap: theme.spacing.xs,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={iconMap[suit.key] || "check"}
+                      size={18}
+                      color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                    />
+                    <Text
+                      style={{
+                        color: isSelected
+                          ? theme.colors.primaryDark
+                          : theme.colors.text,
+                        fontWeight: isSelected ? "600" : "500",
+                        fontSize: 13,
+                      }}
+                    >
+                      {suit.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
             <CRLabel style={{ marginTop: theme.spacing.md }}>Amenities</CRLabel>
-            <CRInput 
-              value={placeAmenities} 
-              onChangeText={setPlaceAmenities} 
-              placeholder="WiFi, Seating, Parking"
-              multiline 
-            />
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.sm, marginVertical: theme.spacing.sm }}>
+              {RIDER_AMENITIES.map((amenity) => {
+                const isSelected = placeAmenities.includes(amenity.key);
+                const iconMap = {
+                  parking: "parking",
+                  outdoor_seating: "table-picnic",
+                  toilets: "toilet",
+                  disabled_access: "wheelchair-accessibility",
+                  pet_friendly: "dog-side",
+                  ev_charger: "ev-plug-ccs2",
+                };
+                return (
+                  <TouchableOpacity
+                    key={amenity.key}
+                    onPress={() => {
+                      setPlaceAmenities((prev) =>
+                        isSelected
+                          ? prev.filter((a) => a !== amenity.key)
+                          : [...prev, amenity.key]
+                      );
+                    }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingHorizontal: theme.spacing.md,
+                      paddingVertical: theme.spacing.sm,
+                      borderRadius: theme.radius.md,
+                      backgroundColor: isSelected
+                        ? theme.colors.accent
+                        : theme.colors.inputBg,
+                      borderWidth: 1,
+                      borderColor: isSelected
+                        ? theme.colors.accent
+                        : theme.colors.inputBorder,
+                      gap: theme.spacing.xs,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={iconMap[amenity.key] || "check"}
+                      size={18}
+                      color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                    />
+                    <Text
+                      style={{
+                        color: isSelected
+                          ? theme.colors.primaryDark
+                          : theme.colors.text,
+                        fontWeight: isSelected ? "600" : "500",
+                        fontSize: 13,
+                      }}
+                    >
+                      {amenity.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </>
         ) : (
           <>
@@ -520,6 +772,11 @@ export default function ProfileScreen() {
 
             <CRLabel style={{ marginTop: theme.spacing.md }}>Rider Bio</CRLabel>
             <CRInput value={bio} onChangeText={setBio} multiline />
+
+            {/* Route Theme Selector - Hidden for now */}
+            {/* <View style={{ marginTop: theme.spacing.lg }}>
+              <RouteThemeSelector />
+            </View> */}
           </>
         )}
 
@@ -559,15 +816,34 @@ export default function ProfileScreen() {
                   ✓ Active
                 </Text>
                 <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginBottom: theme.spacing.md }}>
-                  Valid until {sponsorshipStatus.validTo ? new Date(sponsorshipStatus.validTo).toLocaleDateString() : 'N/A'}
+                  Valid until {
+                    sponsorshipStatus.validTo 
+                      ? new Date(
+                          typeof sponsorshipStatus.validTo === 'object' && sponsorshipStatus.validTo.toMillis
+                            ? sponsorshipStatus.validTo.toMillis()
+                            : sponsorshipStatus.validTo
+                        ).toLocaleDateString()
+                      : 'N/A'
+                  }
                 </Text>
-                <CRButton
-                  title={renewingSponsorship ? "Renewing…" : "Renew Sponsorship"}
-                  variant="primary"
-                  onPress={handleRenewSponsorship}
-                  loading={renewingSponsorship}
-                  disabled={renewingSponsorship}
-                />
+                {/* Show button with disabled state based on days remaining */}
+                {sponsorshipStatus.validTo && (() => {
+                  const validToMs = typeof sponsorshipStatus.validTo === 'object' && sponsorshipStatus.validTo.toMillis
+                    ? sponsorshipStatus.validTo.toMillis()
+                    : sponsorshipStatus.validTo;
+                  const daysRemaining = (validToMs - Date.now()) / (24 * 60 * 60 * 1000);
+                  const isExpiringSoon = daysRemaining < 30;
+                  
+                  return (
+                    <CRButton
+                      title={renewingSponsorship ? "Renewing…" : "Renew Sponsorship"}
+                      variant="primary"
+                      onPress={handleRenewSponsorship}
+                      loading={renewingSponsorship}
+                      disabled={renewingSponsorship || !isExpiringSoon}
+                    />
+                  );
+                })()}
               </>
             ) : (
               <>
@@ -597,6 +873,7 @@ export default function ProfileScreen() {
             title={saving ? "Saving…" : "Save"}
             loading={saving}
             onPress={handleSaveProfile}
+            disabled={saving || !hasChanges()}
             style={[styles.actionButtonGrow, { marginRight: theme.spacing.sm }]}
           />
           <CRButton
