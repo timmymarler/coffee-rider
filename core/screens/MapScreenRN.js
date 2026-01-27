@@ -3,7 +3,7 @@ import { TabBarContext } from "@context/TabBarContext";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, getDocs, onSnapshot } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
@@ -920,11 +920,82 @@ export default function MapScreenRN() {
         };
       });
 
+      // 🔄 Log place updates for debugging
+      console.log("[MapScreenRN] 📍 Places listener updated, total places:", places.length);
+      if (newlyCreatedPlace) {
+        const isNewPlaceInList = places.find(p => p.id === newlyCreatedPlace.id);
+        console.log("[MapScreenRN] Newly created place in listener?", isNewPlaceInList ? "✓ YES" : "✗ NO", "Place ID:", newlyCreatedPlace.id);
+      }
+      
+      if (selectedPlaceId) {
+        const updatedPlace = places.find(p => p.id === selectedPlaceId);
+        if (updatedPlace) {
+          console.log("[MapScreenRN] 🔄 Updated selected place from listener:", {
+            placeId: updatedPlace.id,
+            name: updatedPlace.title,
+            category: updatedPlace.category,
+            amenities: updatedPlace.amenities,
+            suitability: updatedPlace.suitability,
+          });
+        }
+      }
+
       setCrPlaces(places);
+    }, (err) => {
+      // Ignore permission errors when user is logging out
+      if (err.code !== 'permission-denied') {
+        console.error("[MapScreenRN] Error listening to places:", err);
+      }
     });
 
     return unsub;
-  }, []);
+  }, [selectedPlaceId]);
+
+  // Monitor newly created places and ensure they're in crPlaces
+  useEffect(() => {
+    if (!newlyCreatedPlace) return;
+
+    const checkNewPlace = async () => {
+      try {
+        // Small delay to allow Firestore to settle
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const newPlaceInList = crPlaces.find(p => p.id === newlyCreatedPlace.id);
+        if (!newPlaceInList) {
+          console.log("[MapScreenRN] 🔄 Newly created place not yet in crPlaces, triggering refresh...");
+          // Force refresh by querying places directly
+          const placesSnapshot = await getDocs(collection(db, "places"));
+          const refreshedPlaces = placesSnapshot.docs.map((doc) => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              source: "cr",
+              title: data.name,
+              latitude: data.location?.latitude,
+              longitude: data.location?.longitude,
+              category: data.category || "unknown",
+              rating: data.rating,
+              ...data,
+              suitability: Array.isArray(data.suitability)
+                ? data.suitability
+                : Object.keys(data.suitability || {}),
+              amenities: Array.isArray(data.amenities)
+                ? data.amenities
+                : Object.keys(data.amenities || {}),
+            };
+          });
+          setCrPlaces(refreshedPlaces);
+          console.log("[MapScreenRN] ✓ Refreshed crPlaces, total:", refreshedPlaces.length);
+        } else {
+          console.log("[MapScreenRN] ✓ Newly created place found in crPlaces");
+        }
+      } catch (err) {
+        console.error("[MapScreenRN] Error checking new place:", err);
+      }
+    };
+
+    checkNewPlace();
+  }, [newlyCreatedPlace]);
 
   /* ------------------------------------------------------------ */
   /* USER LOCATION                                                */
@@ -2896,10 +2967,7 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: "#2196F3",
+    backgroundColor: "transparent",
   },
 
   recenterButton: {
