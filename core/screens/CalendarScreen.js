@@ -47,6 +47,7 @@ export default function CalendarScreen() {
   const [filters, setFilters] = useState({
     regions: [],
     suitability: [], // Bikes, Scooters, Cars
+    sharing: [], // Private, Group, Public
   });
   const [showFilters, setShowFilters] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -71,14 +72,30 @@ export default function CalendarScreen() {
   // Load user's groups for share modal
   const { groups } = useAllUserGroups(user?.uid);
 
-  // Filter events by suitability client-side
+  // Filter events by suitability and sharing client-side
   const events = useMemo(() => {
     return allEvents.filter((event) => {
-      if (filters.suitability.length === 0) return true;
-      if (!event.suitability || event.suitability.length === 0) return true;
-      return filters.suitability.some((suit) => event.suitability.includes(suit));
+      // Filter by suitability
+      if (filters.suitability.length > 0) {
+        if (!event.suitability || event.suitability.length === 0) {
+          return false;
+        }
+        if (!filters.suitability.some((suit) => event.suitability.includes(suit))) {
+          return false;
+        }
+      }
+
+      // Filter by sharing/visibility
+      if (filters.sharing.length > 0) {
+        const eventVisibility = event.visibility || "private";
+        if (!filters.sharing.includes(eventVisibility)) {
+          return false;
+        }
+      }
+
+      return true;
     });
-  }, [allEvents, filters.suitability]);
+  }, [allEvents, filters.suitability, filters.sharing]);
 
   const filtersActive = filters.regions.length > 0 || filters.suitability.length > 0;
 
@@ -373,6 +390,15 @@ export default function CalendarScreen() {
     }));
   };
 
+  const handleSharingToggle = (sharing) => {
+    setFilters((prev) => ({
+      ...prev,
+      sharing: prev.sharing.includes(sharing)
+        ? prev.sharing.filter((s) => s !== sharing)
+        : [...prev.sharing, sharing],
+    }));
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.headerControls, { paddingTop: 12, paddingRight: insets.top + 12 }]}>
@@ -404,7 +430,7 @@ export default function CalendarScreen() {
           >
             <Ionicons
               name="options"
-              size={24}
+              size={28}
               color={filtersActive ? colors.accentMid : colors.primaryLight}
             />
           </TouchableOpacity>
@@ -462,6 +488,33 @@ export default function CalendarScreen() {
                     ]}
                   >
                     {suitability}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.filterTitle, { marginTop: spacing.md }]}>Sharing</Text>
+          <View style={styles.iconGrid}>
+            {["private", "group", "public"].map((sharingType) => {
+              const active = filters.sharing.includes(sharingType);
+              const displayName = sharingType.charAt(0).toUpperCase() + sharingType.slice(1);
+              return (
+                <TouchableOpacity
+                  key={sharingType}
+                  style={[
+                    styles.iconButton,
+                    active && styles.iconButtonActive,
+                  ]}
+                  onPress={() => handleSharingToggle(sharingType)}
+                >
+                  <Text
+                    style={[
+                      styles.iconLabel,
+                      active && styles.iconLabelActive,
+                    ]}
+                  >
+                    {displayName}
                   </Text>
                 </TouchableOpacity>
               );
@@ -914,17 +967,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primaryMid,
   },
   filterButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: 52,
+    height: 52,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.colors.accentMid,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    backgroundColor: theme.colors.primaryDark,
+    shadowColor: theme.colors.accentMid,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    elevation: 4,
   },
   filterButtonText: {
     fontSize: 13,
