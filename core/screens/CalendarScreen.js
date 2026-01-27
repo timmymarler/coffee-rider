@@ -97,7 +97,7 @@ export default function CalendarScreen() {
     });
   }, [allEvents, filters.suitability, filters.sharing]);
 
-  const filtersActive = filters.regions.length > 0 || filters.suitability.length > 0;
+  const filtersActive = filters.regions.length > 0 || filters.suitability.length > 0 || filters.sharing.length > 0;
 
   useFocusEffect(
     useCallback(() => {
@@ -442,7 +442,34 @@ export default function CalendarScreen() {
           contentContainerStyle={styles.filtersPanelContent}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.filterTitle}>Regions</Text>
+          <Text style={styles.filterTitle}>Sharing</Text>
+          <View style={styles.iconGrid}>
+            {["private", "group", "public"].map((sharingType) => {
+              const active = filters.sharing.includes(sharingType);
+              const displayName = sharingType.charAt(0).toUpperCase() + sharingType.slice(1);
+              return (
+                <TouchableOpacity
+                  key={sharingType}
+                  style={[
+                    styles.iconButton,
+                    active && styles.iconButtonActive,
+                  ]}
+                  onPress={() => handleSharingToggle(sharingType)}
+                >
+                  <Text
+                    style={[
+                      styles.iconLabel,
+                      active && styles.iconLabelActive,
+                    ]}
+                  >
+                    {displayName}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.filterTitle, { marginTop: spacing.md }]}>Regions</Text>
           <View style={styles.iconGrid}>
             {REGIONS.map((region) => {
               const active = filters.regions.includes(region);
@@ -488,33 +515,6 @@ export default function CalendarScreen() {
                     ]}
                   >
                     {suitability}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <Text style={[styles.filterTitle, { marginTop: spacing.md }]}>Sharing</Text>
-          <View style={styles.iconGrid}>
-            {["private", "group", "public"].map((sharingType) => {
-              const active = filters.sharing.includes(sharingType);
-              const displayName = sharingType.charAt(0).toUpperCase() + sharingType.slice(1);
-              return (
-                <TouchableOpacity
-                  key={sharingType}
-                  style={[
-                    styles.iconButton,
-                    active && styles.iconButtonActive,
-                  ]}
-                  onPress={() => handleSharingToggle(sharingType)}
-                >
-                  <Text
-                    style={[
-                      styles.iconLabel,
-                      active && styles.iconLabelActive,
-                    ]}
-                  >
-                    {displayName}
                   </Text>
                 </TouchableOpacity>
               );
