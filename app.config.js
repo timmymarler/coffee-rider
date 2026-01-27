@@ -10,6 +10,8 @@ const googlePlacesApiKey = isIOS
   ? process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS
   : process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID;
 
+const tomtomApiKey = process.env.EXPO_PUBLIC_TOMTOM_API_KEY;
+
 // Use these variables wherever you need the keys
 // Read the app variant from ENV or default to rider
 const APP_NAME = process.env.APP_NAME || "rider";
@@ -71,6 +73,7 @@ export default {
 
       googleMapsApiKey: googleMapsApiKey,
       googlePlacesApiKey: googlePlacesApiKey,
+      tomtomApiKey: tomtomApiKey,
 
       firebase: {
         apiKey: isIOS
