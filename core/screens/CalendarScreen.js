@@ -119,7 +119,14 @@ export default function CalendarScreen() {
       setSelectedGroupId(null);
     } catch (err) {
       console.error("Error sharing event:", err);
-      Alert.alert("Error", err.message || "Failed to share event");
+      // User-friendly error messages
+      let errorMessage = "Failed to share event. Please try again.";
+      if (err.message?.includes("own events")) {
+        errorMessage = "You can only share events you created.";
+      } else if (err.message?.includes("canShareEvents")) {
+        errorMessage = "You don't have permission to share events.";
+      }
+      Alert.alert("Error", errorMessage);
     } finally {
       setSharing(false);
     }
@@ -620,8 +627,8 @@ export default function CalendarScreen() {
                   </View>
                 )}
 
-                {/* Share button for event owners */}
-                {(profile?.role === "place-owner" || profile?.role === "pro" || selectedEvent.createdBy === user?.uid) && (
+                {/* Share button - only for event creator */}
+                {selectedEvent.createdBy === user?.uid && (
                   <TouchableOpacity
                     style={styles.shareEventButton}
                     onPress={openShareModal}
@@ -631,8 +638,8 @@ export default function CalendarScreen() {
                   </TouchableOpacity>
                 )}
 
-                {/* Delete button for event owners */}
-                {(profile?.role === "place-owner" || profile?.role === "pro" || selectedEvent.createdBy === user?.uid) && (
+                {/* Delete button - only for event creator */}
+                {selectedEvent.createdBy === user?.uid && (
                   <TouchableOpacity
                     style={styles.deleteEventButton}
                     onPress={() => {
