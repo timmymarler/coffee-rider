@@ -44,6 +44,8 @@ import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
+import { cacheRoute, getCachedRoute, getCachedRoutes, clearRouteCache } from "@core/utils/routeCache";
+import { useNetworkStatus, checkNetworkStatus, getLastKnownNetworkStatus } from "@core/hooks/useNetworkStatus";
 
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
 const FOLLOW_ZOOM = Platform.OS === "ios" ? 6 : 16; // Android: 16, iOS: 6 - More zoomed out for route visibility
@@ -672,6 +674,18 @@ export default function MapScreenRN() {
       },
     ];
   }, [waypoints, routeDestination]);
+
+  // Network status monitoring
+  const networkStatus = useNetworkStatus();
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+
+  useEffect(() => {
+    // Update offline mode based on network status
+    setIsOfflineMode(!networkStatus.isOnline);
+    if (!networkStatus.isOnline) {
+      console.log('[MAP] Device is offline');
+    }
+  }, [networkStatus.isOnline]);
 
   const navButtonBottom = insets.bottom + TAB_BAR_HEIGHT + FLOATING_MARGIN;
   const saveButtonBottom = navButtonBottom + SAVE_BUTTON_GAP;
@@ -1954,16 +1968,62 @@ export default function MapScreenRN() {
       return;
     }
 
-    const result = await fetchTomTomRoute(
-      startCoord,
-      finalDestination,
-      normalizedIntermediates,
-      userTravelMode,  // Use user's vehicle type
-      userRouteType,   // Use user's route type preference
-      routeTypeMap,    // Map of route type IDs to TomTom parameters
-      customHilliness, // Custom hilliness for custom routes
-      customWindingness // Custom windingness for custom routes
-    );
+    // 🔄 TRY CACHE FIRST if offline or as optimization
+    let result = null;
+    
+    try {
+      const cachedResult = await getCachedRoute(
+        startCoord,
+        finalDestination,
+        normalizedIntermediates,
+        userRouteType
+      );
+
+      if (cachedResult) {
+        console.log('[buildRoute] Using cached route');
+        result = cachedResult;
+      } else if (!networkStatus.isOnline) {
+        // Offline and no cache available
+        console.warn('[buildRoute] Offline and no cached route available');
+        setPostbox({
+          title: 'Offline',
+          message: 'Route not in cache. Unable to fetch new route without internet.',
+        });
+        return;
+      }
+    } catch (error) {
+      console.warn('[buildRoute] Error checking cache:', error);
+      // Continue to fetch fresh route if cache check fails
+    }
+
+    // Fetch fresh route if not cached and online
+    if (!result) {
+      result = await fetchTomTomRoute(
+        startCoord,
+        finalDestination,
+        normalizedIntermediates,
+        userTravelMode,  // Use user's vehicle type
+        userRouteType,   // Use user's route type preference
+        routeTypeMap,    // Map of route type IDs to TomTom parameters
+        customHilliness, // Custom hilliness for custom routes
+        customWindingness // Custom windingness for custom routes
+      );
+
+      // Cache the fresh result
+      if (result?.polyline) {
+        try {
+          await cacheRoute(
+            startCoord,
+            finalDestination,
+            normalizedIntermediates,
+            userRouteType,
+            result
+          );
+        } catch (error) {
+          console.warn('[buildRoute] Error caching route:', error);
+        }
+      }
+    }
 
     console.log("[buildRoute] fetchTomTomRoute returned:", result);
 
@@ -2097,10 +2157,12 @@ export default function MapScreenRN() {
       // 🔑 use the pending-fit system you already built
       pendingFitRef.current = decoded;
       attemptRouteFit();
+    } else {
+      // No saved polyline - allow rebuild to fetch from API
+      isLoadingSavedRouteRef.current = false;
     }
 
     setRoutingActive(true);
-    isLoadingSavedRouteRef.current = true;
   }
 
   function handleNavigate(placeOverride = null) {
@@ -2716,6 +2778,18 @@ export default function MapScreenRN() {
         </View>
       )}
 
+      {isOfflineMode && (
+        <View style={styles.offlineBanner}>
+          <MaterialCommunityIcons
+            name="wifi-off"
+            size={20}
+            color={theme.colors.accent}
+            style={{ marginRight: 8 }}
+          />
+          <Text style={styles.offlineBannerText}>Offline Mode - Using cached routes</Text>
+        </View>
+      )}
+
       {!followUser && !activeRide && (
         <WaypointsList
           waypoints={displayWaypoints}
@@ -3189,6 +3263,30 @@ const styles = StyleSheet.create({
   postboxText: {
     fontSize: 13,
     color: "#ecfdf5",
+  },
+
+  offlineBanner: {
+    position: "absolute",
+    bottom: 70,
+    left: 16,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: theme.colors.primaryMid || "#1a2332",
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.danger || "#ef4444",
+    zIndex: 1500,
+    elevation: 4,
+  },
+
+  offlineBannerText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: theme.colors.textMuted || "#e5e7eb",
+    flex: 1,
   },
   
   filterPanel: {
