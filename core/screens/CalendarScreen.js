@@ -1,6 +1,8 @@
 // core/screens/CalendarScreen.js
 import { AuthContext } from "@context/AuthContext";
 import { useEvents } from "@core/hooks/useEvents";
+import { EVENT_VISIBILITY, shareEvent } from "@core/map/events/sharedEvents";
+import { getCapabilities } from "@core/roles/capabilities";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
@@ -49,6 +51,13 @@ export default function CalendarScreen() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  // Share event modal state
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [selectedVisibility, setSelectedVisibility] = useState(EVENT_VISIBILITY.PRIVATE);
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [sharing, setSharing] = useState(false);
+  const [groups, setGroups] = useState([]);
 
   // Memoize the useEvents filter to avoid unnecessary refetches
   const useEventsFilter = useMemo(
@@ -75,7 +84,12 @@ export default function CalendarScreen() {
       // Refresh events when screen comes into focus
       // This ensures newly created events appear after navigating back from CreateEventScreen
       setRefreshTrigger(prev => prev + 1);
-    }, [])
+      
+      // Load user's groups if they exist
+      if (user && profile?.groups) {
+        setGroups(profile.groups || []);
+      }
+    }, [user, profile])
   );
 
   const getDaysInMonth = (date) => {
@@ -84,6 +98,46 @@ export default function CalendarScreen() {
 
   const getFirstDayOfMonth = (date) => {
     return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  };
+
+  const handleShareEvent = async () => {
+    if (!selectedEvent) return;
+
+    try {
+      setSharing(true);
+      const capabilities = await getCapabilities(user, profile);
+      
+      await shareEvent({
+        eventId: selectedEvent.id,
+        visibility: selectedVisibility,
+        groupId: selectedVisibility === EVENT_VISIBILITY.GROUP ? selectedGroupId : null,
+        capabilities,
+      });
+
+      Alert.alert("Success", "Event shared successfully!");
+      setShareModalVisible(false);
+      setSelectedVisibility(EVENT_VISIBILITY.PRIVATE);
+      setSelectedGroupId(null);
+    } catch (err) {
+      console.error("Error sharing event:", err);
+      Alert.alert("Error", err.message || "Failed to share event");
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const openShareModal = () => {
+    if (!selectedEvent) return;
+    
+    // Pre-populate visibility if the event already has one
+    if (selectedEvent.visibility) {
+      setSelectedVisibility(selectedEvent.visibility);
+      if (selectedEvent.visibility === EVENT_VISIBILITY.GROUP && selectedEvent.groupId) {
+        setSelectedGroupId(selectedEvent.groupId);
+      }
+    }
+    
+    setShareModalVisible(true);
   };
 
   const getEventsForDate = (date) => {
@@ -567,6 +621,17 @@ export default function CalendarScreen() {
                   </View>
                 )}
 
+                {/* Share button for event owners */}
+                {(profile?.role === "place-owner" || profile?.role === "pro" || selectedEvent.createdBy === user?.uid) && (
+                  <TouchableOpacity
+                    style={styles.shareEventButton}
+                    onPress={openShareModal}
+                  >
+                    <Ionicons name="share-social" size={20} color={theme.colors.accentMid} />
+                    <Text style={styles.shareEventButtonText}>Share Event</Text>
+                  </TouchableOpacity>
+                )}
+
                 {/* Delete button for event owners */}
                 {(profile?.role === "place-owner" || profile?.role === "pro" || selectedEvent.createdBy === user?.uid) && (
                   <TouchableOpacity
@@ -643,6 +708,172 @@ export default function CalendarScreen() {
                 <View style={{ height: 20 }} />
               </ScrollView>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Share Event Modal */}
+      <Modal
+        visible={shareModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShareModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Share Event</Text>
+            <Text style={styles.modalSubtitle}>
+              {selectedEvent?.title || "Untitled event"}
+            </Text>
+
+            <ScrollView style={styles.optionsContainer}>
+              {/* Private Option */}
+              <TouchableOpacity
+                style={[
+                  styles.visibilityOption,
+                  selectedVisibility === EVENT_VISIBILITY.PRIVATE &&
+                    styles.visibilityOptionSelected,
+                ]}
+                onPress={() => setSelectedVisibility(EVENT_VISIBILITY.PRIVATE)}
+              >
+                <Ionicons
+                  name="lock-closed"
+                  size={20}
+                  color={
+                    selectedVisibility === EVENT_VISIBILITY.PRIVATE
+                      ? theme.colors.accentMid
+                      : theme.colors.text
+                  }
+                />
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Private</Text>
+                  <Text style={styles.optionDesc}>Only you can see this</Text>
+                </View>
+                <Ionicons
+                  name={
+                    selectedVisibility === EVENT_VISIBILITY.PRIVATE
+                      ? "radio-button-on"
+                      : "radio-button-off"
+                  }
+                  size={20}
+                  color={theme.colors.accentMid}
+                />
+              </TouchableOpacity>
+
+              {/* Group Option */}
+              <TouchableOpacity
+                style={[
+                  styles.visibilityOption,
+                  selectedVisibility === EVENT_VISIBILITY.GROUP &&
+                    styles.visibilityOptionSelected,
+                ]}
+                onPress={() => setSelectedVisibility(EVENT_VISIBILITY.GROUP)}
+              >
+                <MaterialCommunityIcons
+                  name="account-multiple"
+                  size={20}
+                  color={
+                    selectedVisibility === EVENT_VISIBILITY.GROUP
+                      ? theme.colors.accentMid
+                      : theme.colors.text
+                  }
+                />
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Group</Text>
+                  <Text style={styles.optionDesc}>Share with a group</Text>
+                </View>
+                <Ionicons
+                  name={
+                    selectedVisibility === EVENT_VISIBILITY.GROUP
+                      ? "radio-button-on"
+                      : "radio-button-off"
+                  }
+                  size={20}
+                  color={theme.colors.accentMid}
+                />
+              </TouchableOpacity>
+
+              {selectedVisibility === EVENT_VISIBILITY.GROUP && groups?.length > 0 && (
+                <View style={styles.groupSelector}>
+                  {groups.map((group) => (
+                    <TouchableOpacity
+                      key={group.id}
+                      style={[
+                        styles.groupOption,
+                        selectedGroupId === group.id &&
+                          styles.groupOptionSelected,
+                      ]}
+                      onPress={() => setSelectedGroupId(group.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.groupOptionText,
+                          selectedGroupId === group.id &&
+                            styles.groupOptionTextSelected,
+                        ]}
+                      >
+                        {group.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {selectedVisibility === EVENT_VISIBILITY.GROUP && (!groups || groups.length === 0) && (
+                <Text style={styles.noGroupsText}>
+                  No groups available. Create a group first.
+                </Text>
+              )}
+
+              {/* Public Option */}
+              <TouchableOpacity
+                style={[
+                  styles.visibilityOption,
+                  selectedVisibility === EVENT_VISIBILITY.PUBLIC &&
+                    styles.visibilityOptionSelected,
+                ]}
+                onPress={() => setSelectedVisibility(EVENT_VISIBILITY.PUBLIC)}
+              >
+                <Ionicons
+                  name="globe"
+                  size={20}
+                  color={
+                    selectedVisibility === EVENT_VISIBILITY.PUBLIC
+                      ? theme.colors.accentMid
+                      : theme.colors.text
+                  }
+                />
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Public</Text>
+                  <Text style={styles.optionDesc}>Anyone can see this</Text>
+                </View>
+                <Ionicons
+                  name={
+                    selectedVisibility === EVENT_VISIBILITY.PUBLIC
+                      ? "radio-button-on"
+                      : "radio-button-off"
+                  }
+                  size={20}
+                  color={theme.colors.accentMid}
+                />
+              </TouchableOpacity>
+            </ScrollView>
+
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.colors.accentMid }]}
+                onPress={handleShareEvent}
+                disabled={sharing}
+              >
+                <Text style={styles.modalButtonText}>Share</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShareModalVisible(false)}
+              >
+                <Text style={[styles.modalButtonText, styles.cancelButtonText]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1110,6 +1341,23 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     lineHeight: 24,
   },
+  shareEventButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.accentMid,
+    borderRadius: 8,
+    marginTop: theme.spacing.lg,
+    marginHorizontal: 20,
+  },
+  shareEventButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#ffffff",
+    marginLeft: 8,
+  },
   deleteEventButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1126,4 +1374,127 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#ffffff",
     marginLeft: 8,
-  },});
+  },
+  
+  // Share modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: 20,
+    paddingTop: 24,
+    paddingBottom: 32,
+    maxHeight: "75%",
+    width: "85%",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.text,
+    paddingHorizontal: 20,
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  optionsContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    maxHeight: 400,
+  },
+  visibilityOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  visibilityOptionSelected: {
+    backgroundColor: "rgba(255, 216, 92, 0.1)",
+    borderColor: theme.colors.accentMid,
+  },
+  optionTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  optionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  optionDesc: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginTop: 2,
+  },
+  groupSelector: {
+    marginLeft: 32,
+    marginTop: 8,
+    marginBottom: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: theme.colors.accentMid,
+    paddingLeft: 12,
+  },
+  groupOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+    borderRadius: 8,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  groupOptionSelected: {
+    backgroundColor: "rgba(255, 216, 92, 0.15)",
+    borderColor: theme.colors.accentMid,
+  },
+  groupOptionText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: theme.colors.text,
+  },
+  groupOptionTextSelected: {
+    color: theme.colors.accentMid,
+    fontWeight: "600",
+  },
+  noGroupsText: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+    fontStyle: "italic",
+    marginTop: 8,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 20,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  cancelButton: {
+    backgroundColor: theme.colors.border,
+  },
+  cancelButtonText: {
+    color: theme.colors.text,
+  },
+});

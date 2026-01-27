@@ -5,13 +5,11 @@ import { useEventForm } from "@core/hooks/useEventForm";
 import theme from "@themes";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { collection, doc, getDoc, getDocs } from "firebase/firestore";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useContext, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
     DatePickerAndroid,
-    DatePickerIOS,
     FlatList,
     KeyboardAvoidingView,
     Modal,
@@ -22,7 +20,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
 
 export default function CreateEventScreen() {
@@ -33,7 +31,7 @@ export default function CreateEventScreen() {
   
   // Parse selectedDate if provided
   const initialDate = selectedDate ? new Date(selectedDate) : null;
-  const { formData, updateForm, submitForm, submitting, error } = useEventForm(initialDate);
+  const { formData, updateForm, submitForm, submitting, error } = useEventForm(initialDate, profile?.role);
 
   const [userPlaces, setUserPlaces] = useState([]);
   const [loadingPlaces, setLoadingPlaces] = useState(false);
@@ -75,18 +73,36 @@ export default function CreateEventScreen() {
       
       // Get all places and filter client-side for case-insensitive substring match
       const q = await getDocs(collection(db, "places"));
+      console.log("[CreateEvent] Total places in collection:", q.docs.length);
+      
+      if (q.docs.length > 0) {
+        console.log("[CreateEvent] Sample places:", q.docs.slice(0, 3).map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            name: data.name || data.title,
+          };
+        }));
+      }
+      
       const matches = q.docs
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        }))
-        .filter(place => 
-          place.name && place.name.toLowerCase().includes(searchTerm)
-        )
+        .map(doc => {
+          const data = doc.data();
+          // Normalize place data - use name if available, fall back to title
+          return {
+            id: doc.id,
+            ...data,
+            name: data.name || data.title || "Unnamed Place",
+          };
+        })
+        .filter(place => {
+          const placeName = (place.name || place.title || "").toLowerCase();
+          return placeName && placeName.includes(searchTerm);
+        })
         .sort((a, b) => {
           // Sort by relevance - exact matches first, then starts with, then contains
-          const aName = a.name.toLowerCase();
-          const bName = b.name.toLowerCase();
+          const aName = (a.name || a.title || "").toLowerCase();
+          const bName = (b.name || b.title || "").toLowerCase();
           
           if (aName === searchTerm) return -1;
           if (bName === searchTerm) return 1;
@@ -98,11 +114,9 @@ export default function CreateEventScreen() {
       console.log("[CreateEvent] Found matches:", matches.length, matches);
       setPlaceMatches(matches);
 
-      // Show selection modal if matches found
-      if (matches.length > 0) {
-        console.log("[CreateEvent] Found matches - showing modal");
-        setShowPlaceSelectionModal(true);
-      }
+      // Always show selection modal (even if no matches found)
+      console.log("[CreateEvent] Showing place selection modal");
+      setShowPlaceSelectionModal(true);
     } catch (err) {
       console.error("Error searching places:", err);
     } finally {
@@ -182,44 +196,55 @@ export default function CreateEventScreen() {
     }
   };
 
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [timePickerMode, setTimePickerMode] = useState("startDateTime");
+  const [editingTimeField, setEditingTimeField] = useState(null);
+  const [tempHour, setTempHour] = useState("00");
+  const [tempMinute, setTempMinute] = useState("00");
 
   const handleDatePicker = async (field) => {
-    if (Platform.OS === "android") {
-      const currentDate = field === "Start Date" ? formData.startDateTime : formData.endDateTime;
-      try {
-        // Step 1: Pick the date
-        const { action, year, month, day } = await DatePickerAndroid.open({
-          date: currentDate,
-          mode: "calendar",
-        });
-        
-        if (action === DatePickerAndroid.dateSetAction) {
-          // Step 2: Show modal time picker for time selection
-          setTimePickerMode(field === "Start Date" ? "startDateTime" : "endDateTime");
-          setShowTimePicker(true);
-          // Store the picked date so we can combine it with time later
-          const pickedDate = new Date(year, month, day);
-          updateForm(field === "Start Date" ? "startDateTime" : "endDateTime", pickedDate);
+    const currentDate = field === "Start Date" ? formData.startDateTime : formData.endDateTime;
+    try {
+      const { action, year, month, day } = await DatePickerAndroid.open({
+        date: currentDate,
+        mode: "calendar",
+      });
+      
+      if (action === DatePickerAndroid.dateSetAction) {
+        const newDate = new Date(year, month, day, currentDate.getHours(), currentDate.getMinutes());
+        if (field === "Start Date") {
+          updateForm("startDateTime", newDate);
+        } else {
+          updateForm("endDateTime", newDate);
         }
-      } catch ({ code, message }) {
-        console.warn("Error picking date:", message);
       }
-    } else {
-      // For iOS, show a modal with the date/time picker
-      setDatePickerMode(field === "Start Date" ? "startDateTime" : "endDateTime");
-      setShowDatePicker(true);
+    } catch ({ code, message }) {
+      console.warn("Error picking date:", message);
     }
   };
 
-  const handleDateConfirm = (date) => {
-    if (datePickerMode === "startDateTime") {
-      updateForm("startDateTime", date);
+  const openTimeEditor = (field) => {
+    const currentDate = field === "Start Date" ? formData.startDateTime : formData.endDateTime;
+    setTempHour(String(currentDate.getHours()).padStart(2, "0"));
+    setTempMinute(String(currentDate.getMinutes()).padStart(2, "0"));
+    setEditingTimeField(field);
+  };
+
+  const saveTime = () => {
+    const hour = parseInt(tempHour);
+    const minute = parseInt(tempMinute);
+    
+    const finalHour = isNaN(hour) ? 0 : Math.max(0, Math.min(23, hour));
+    const finalMinute = isNaN(minute) ? 0 : Math.max(0, Math.min(59, minute));
+    
+    if (editingTimeField === "Start Date") {
+      const newDate = new Date(formData.startDateTime);
+      newDate.setHours(finalHour, finalMinute);
+      updateForm("startDateTime", newDate);
     } else {
-      updateForm("endDateTime", date);
+      const newDate = new Date(formData.endDateTime);
+      newDate.setHours(finalHour, finalMinute);
+      updateForm("endDateTime", newDate);
     }
-    setShowDatePicker(false);
+    setEditingTimeField(null);
   };
 
   return (
@@ -361,27 +386,49 @@ export default function CreateEventScreen() {
           {/* Start Date/Time */}
           <View style={styles.field}>
             <Text style={styles.label}>Start Date & Time *</Text>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => handleDatePicker("Start Date")}
-            >
-              <Text style={styles.dateButtonText}>
-                {formData.startDateTime.toLocaleString()}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.dateTimeRow}>
+              <TouchableOpacity
+                style={[styles.dateButton, { flex: 1, marginRight: 8 }]}
+                onPress={() => handleDatePicker("Start Date")}
+              >
+                <Text style={styles.dateButtonText}>
+                  {formData.startDateTime.toLocaleDateString()}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.timeButton, { flex: 1 }]}
+                onPress={() => openTimeEditor("Start Date")}
+              >
+                <Text style={styles.timeButtonText}>
+                  {String(formData.startDateTime.getHours()).padStart(2, "0")}:
+                  {String(formData.startDateTime.getMinutes()).padStart(2, "0")}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* End Date/Time */}
           <View style={styles.field}>
             <Text style={styles.label}>End Date & Time *</Text>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => handleDatePicker("End Date")}
-            >
-              <Text style={styles.dateButtonText}>
-                {formData.endDateTime.toLocaleString()}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.dateTimeRow}>
+              <TouchableOpacity
+                style={[styles.dateButton, { flex: 1, marginRight: 8 }]}
+                onPress={() => handleDatePicker("End Date")}
+              >
+                <Text style={styles.dateButtonText}>
+                  {formData.endDateTime.toLocaleDateString()}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.timeButton, { flex: 1 }]}
+                onPress={() => openTimeEditor("End Date")}
+              >
+                <Text style={styles.timeButtonText}>
+                  {String(formData.endDateTime.getHours()).padStart(2, "0")}:
+                  {String(formData.endDateTime.getMinutes()).padStart(2, "0")}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Max Attendees */}
@@ -528,104 +575,134 @@ export default function CreateEventScreen() {
         <View style={styles.placeModalContainer}>
           <View style={styles.placeModalContent}>
             <View style={styles.placeModalHeader}>
+              <Text style={styles.placeModalTitle}>Select a Place</Text>
               <TouchableOpacity onPress={() => setShowPlaceSelectionModal(false)}>
                 <Text style={styles.placeModalCloseButton}>✕</Text>
               </TouchableOpacity>
-              <Text style={styles.placeModalTitle}>Select a Place</Text>
-              <View style={{ width: 30 }} />
             </View>
 
-            <FlatList
-              data={placeMatches}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item: place }) => (
-                <TouchableOpacity
-                  style={styles.placeMatchItem}
-                  onPress={() => handleSelectPlace(place)}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.placeMatchName}>{place.name}</Text>
-                    {place.category && (
-                      <Text style={styles.placeMatchCategory}>
-                        {place.category.charAt(0).toUpperCase() + place.category.slice(1)}
-                      </Text>
-                    )}
-                  </View>
-                  <Text style={styles.placeMatchArrow}>›</Text>
-                </TouchableOpacity>
-              )}
-              scrollEnabled={true}
-              style={{ maxHeight: "80%" }}
-              contentContainerStyle={{ paddingHorizontal: theme.spacing.md }}
-            />
+            <Text style={{ fontSize: 13, color: colors.textMuted, marginBottom: 16 }}>
+              {placeMatches.length === 0
+                ? `No places found matching "${placeName}"`
+                : placeMatches.length === 1
+                ? "Found an existing place. Would you like to select it?"
+                : `Found ${placeMatches.length} matching places:`}
+            </Text>
+
+            {placeMatches.length > 0 && (
+              <FlatList
+                data={placeMatches}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item: place }) => (
+                  <TouchableOpacity
+                    style={styles.placeMatchItem}
+                    onPress={() => handleSelectPlace(place)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.placeMatchName}>{place.name}</Text>
+                      {place.category && (
+                        <Text style={styles.placeMatchCategory}>
+                          {place.category.charAt(0).toUpperCase() + place.category.slice(1)}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.placeMatchArrow}>›</Text>
+                  </TouchableOpacity>
+                )}
+                scrollEnabled={true}
+                nestedScrollEnabled={true}
+                style={{ maxHeight: 300 }}
+              />
+            )}
           </View>
         </View>
       </Modal>
 
-      {/* Date/Time Picker Modal (iOS and Android time picker) */}
-      {(showDatePicker || showTimePicker) && (
-        <Modal
-          transparent
-          animationType="slide"
-          visible={showDatePicker || showTimePicker}
-          onRequestClose={() => {
-            setShowDatePicker(false);
-            setShowTimePicker(false);
-          }}
-        >
-          <View style={styles.datePickerModalContainer}>
-            <View style={styles.datePickerContent}>
-              <View style={styles.datePickerHeader}>
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowDatePicker(false);
-                    setShowTimePicker(false);
-                  }}
-                >
-                  <Text style={styles.datePickerButtonText}>Done</Text>
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={
-                  showDatePicker
-                    ? datePickerMode === "startDateTime"
-                      ? formData.startDateTime
-                      : formData.endDateTime
-                    : timePickerMode === "startDateTime"
-                    ? formData.startDateTime
-                    : formData.endDateTime
-                }
-                onChange={(event, selectedDate) => {
-                  if (selectedDate) {
-                    if (showDatePicker) {
-                      if (datePickerMode === "startDateTime") {
-                        updateForm("startDateTime", selectedDate);
-                      } else {
-                        updateForm("endDateTime", selectedDate);
+      {/* Date/Time Picker Modal - Time Editor */}
+      <Modal
+        transparent
+        animationType="slide"
+        visible={editingTimeField !== null}
+        onRequestClose={() => setEditingTimeField(null)}
+      >
+        <View style={styles.timePickerModalContainer}>
+          <View style={styles.timePickerContent}>
+            <View style={styles.timePickerHeader}>
+              <TouchableOpacity onPress={() => setEditingTimeField(null)}>
+                <Text style={styles.timePickerCloseButton}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.timePickerTitle}>
+                Set {editingTimeField === "Start Date" ? "Start" : "End"} Time
+              </Text>
+              <TouchableOpacity onPress={saveTime}>
+                <Text style={styles.timePickerSaveButton}>Save</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.timeInputContainer}>
+              <View style={styles.timeInputGroup}>
+                <Text style={styles.timeLabel}>Hour</Text>
+                <TextInput
+                  value={tempHour}
+                  onChangeText={(val) => {
+                    if (val === "") {
+                      setTempHour("");
+                    } else {
+                      const num = parseInt(val);
+                      if (!isNaN(num) && num >= 0 && num <= 23) {
+                        setTempHour(String(num));
                       }
-                      // Auto-close on iOS
-                      if (Platform.OS === "ios") {
-                        setShowDatePicker(false);
-                      }
-                    } else if (showTimePicker) {
-                      if (timePickerMode === "startDateTime") {
-                        updateForm("startDateTime", selectedDate);
-                      } else {
-                        updateForm("endDateTime", selectedDate);
-                      }
-                      // Auto-close after time selection
-                      setShowTimePicker(false);
                     }
-                  }
-                }}
-                mode={showTimePicker ? "time" : "datetime"}
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                minimumDate={new Date()}
-              />
+                  }}
+                  onBlur={() => {
+                    if (tempHour === "" || isNaN(parseInt(tempHour))) {
+                      setTempHour("00");
+                    } else {
+                      setTempHour(String(parseInt(tempHour)).padStart(2, "0"));
+                    }
+                  }}
+                  placeholder="00"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  style={styles.timeInput}
+                />
+              </View>
+
+              <Text style={styles.timeSeparator}>:</Text>
+
+              <View style={styles.timeInputGroup}>
+                <Text style={styles.timeLabel}>Minute</Text>
+                <TextInput
+                  value={tempMinute}
+                  onChangeText={(val) => {
+                    if (val === "") {
+                      setTempMinute("");
+                    } else {
+                      const num = parseInt(val);
+                      if (!isNaN(num) && num >= 0 && num <= 59) {
+                        setTempMinute(String(num));
+                      }
+                    }
+                  }}
+                  onBlur={() => {
+                    if (tempMinute === "" || isNaN(parseInt(tempMinute))) {
+                      setTempMinute("00");
+                    } else {
+                      setTempMinute(String(parseInt(tempMinute)).padStart(2, "0"));
+                    }
+                  }}
+                  placeholder="00"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  style={styles.timeInput}
+                />
+              </View>
             </View>
           </View>
-        </Modal>
-      )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -888,60 +965,150 @@ const styles = StyleSheet.create({
   },
   placeModalContainer: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     justifyContent: "flex-end",
   },
   placeModalContent: {
-    backgroundColor: theme.colors.background,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    maxHeight: "90%",
+    backgroundColor: theme.colors.primaryMid,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+    paddingBottom: 60,
+    maxHeight: "80%",
   },
   placeModalHeader: {
-    backgroundColor: theme.colors.primaryMid,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.inputBorder,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    marginBottom: 16,
   },
   placeModalTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.accentDark,
   },
   placeModalCloseButton: {
     fontSize: 24,
-    color: theme.colors.text,
+    color: theme.colors.accentMid,
     fontWeight: "400",
     width: 30,
     textAlign: "center",
   },
   placeMatchItem: {
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
     flexDirection: "row",
-    justifyContent: "space-between",
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
     alignItems: "center",
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.accentMid,
   },
   placeMatchName: {
     fontSize: 14,
-    fontWeight: "500",
-    color: theme.colors.text,
+    fontWeight: "600",
+    color: theme.colors.accentMid,
+    flex: 1,
   },
   placeMatchCategory: {
     fontSize: 12,
     color: theme.colors.textMuted,
-    marginTop: 4,
+    marginTop: 2,
   },
   placeMatchArrow: {
     fontSize: 18,
     color: theme.colors.accentMid,
-    marginLeft: 12,
+    marginLeft: 8,
+  },
+  dateTimeRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  timeButton: {
+    backgroundColor: theme.colors.inputBackground,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  timeButtonText: {
+    fontSize: 14,
+    color: theme.colors.inputText,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  timePickerModalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.md,
+  },
+  timePickerContent: {
+    backgroundColor: theme.colors.background,
+    borderRadius: 12,
+    paddingVertical: theme.spacing.lg,
+    maxWidth: "85%",
+  },
+  timePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  timePickerTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  timePickerCloseButton: {
+    color: theme.colors.textMuted,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  timePickerSaveButton: {
+    color: theme.colors.accentMid,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  timeInputContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "flex-end",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.lg,
+    gap: 8,
+  },
+  timeInputGroup: {
+    alignItems: "center",
+  },
+  timeLabel: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginBottom: 8,
+    fontWeight: "500",
+  },
+  timeInput: {
+    backgroundColor: theme.colors.inputBackground,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 24,
+    fontWeight: "600",
+    color: theme.colors.inputText,
+    textAlign: "center",
+    width: 80,
+  },
+  timeSeparator: {
+    fontSize: 28,
+    color: theme.colors.text,
+    fontWeight: "600",
+    marginBottom: 4,
   },
 });

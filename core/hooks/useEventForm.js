@@ -1,8 +1,9 @@
 // core/hooks/useEventForm.js
 import { useState } from "react";
+import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
 import { useEvents } from "./useEvents";
 
-export function useEventForm(initialDate = null) {
+export function useEventForm(initialDate = null, userRole = null) {
   const { createEvent } = useEvents();
   
   // Initialize with passed date or current date/time
@@ -11,6 +12,11 @@ export function useEventForm(initialDate = null) {
       return initialDate;
     }
     return new Date();
+  };
+  
+  // Place owners have public events by default, others are private
+  const getDefaultVisibility = () => {
+    return userRole === "place-owner" ? EVENT_VISIBILITY.PUBLIC : EVENT_VISIBILITY.PRIVATE;
   };
   
   const startDate = getInitialDateTime();
@@ -34,6 +40,7 @@ export function useEventForm(initialDate = null) {
     recurrenceDateOfMonth: 1,
     recurrenceDayOfMonth: 1, // "1st", "2nd", "3rd", "4th", "last"
     recurrenceDayOfWeekMonthly: 3, // 0-6 (Mon-Sun)
+    visibility: getDefaultVisibility(),
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -208,6 +215,7 @@ export function useEventForm(initialDate = null) {
         recurrenceDateOfMonth: 1,
         recurrenceDayOfMonth: 1,
         recurrenceDayOfWeekMonthly: 3,
+        visibility: getDefaultVisibility(),
       });
 
       setSubmitting(false);
