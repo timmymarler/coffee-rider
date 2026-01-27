@@ -103,13 +103,14 @@ export default function CalendarScreen() {
 
     try {
       setSharing(true);
-      const capabilities = await getCapabilities(user, profile);
+      const capabilities = getCapabilities(profile?.role || "guest");
       
       await shareEvent({
         eventId: selectedEvent.id,
         visibility: selectedVisibility,
         groupId: selectedVisibility === EVENT_VISIBILITY.GROUP ? selectedGroupId : null,
         capabilities,
+        userId: user?.uid,
       });
 
       Alert.alert("Success", "Event shared successfully!");
