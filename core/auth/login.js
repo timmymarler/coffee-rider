@@ -3,7 +3,7 @@ import { AuthContext } from "@/core/context/AuthContext";
 import { auth } from "@config/firebase";
 import theme from "@themes";
 import { useRouter } from "expo-router";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut, sendEmailVerification } from "firebase/auth";
 import { useContext, useState } from "react";
 import {
     ActivityIndicator,
@@ -93,6 +93,30 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleResendVerificationEmail() {
+    if (!user) {
+      Alert.alert("Error", "User not found. Please log in again.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await sendEmailVerification(user);
+      Alert.alert(
+        "Email sent",
+        `A verification email has been sent to ${user.email}. Please check your inbox and spam folder.`
+      );
+    } catch (err) {
+      console.error("Resend verification error:", err);
+      Alert.alert(
+        "Failed to send",
+        err.message || "Could not send verification email. Please try again."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   // If user is logged in but email not verified, show verification prompt
   if (user && !emailVerified) {
     return (
@@ -128,11 +152,12 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => setEmail(user.email)}
+              onPress={handleResendVerificationEmail}
+              disabled={submitting}
               style={{ marginTop: spacing.md, alignItems: "center" }}
             >
               <Text style={[styles.linkText, { color: colors.accent }]}>
-                Resend Verification Email
+                {submitting ? "Sending..." : "Resend Verification Email"}
               </Text>
             </TouchableOpacity>
           </AuthLayout>
