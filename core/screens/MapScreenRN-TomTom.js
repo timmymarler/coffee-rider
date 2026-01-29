@@ -47,7 +47,7 @@ import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
-const FOLLOW_ZOOM = Platform.OS === "ios" ? 6 : 16; // Android: 16, iOS: 6 - More zoomed out for route visibility
+const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17; // Android: 17, iOS: 7 - More zoomed in for better detail
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 // Follow Me smoothing constants
@@ -1335,7 +1335,7 @@ export default function MapScreenRN() {
     skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
     skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
     skipRegionChangeUntilRef.current = Date.now() + 2000;
-    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 25 });
+    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
 
     // Now enable follow mode and start 15-minute inactivity timer
     setFollowUser(true);
@@ -1445,7 +1445,7 @@ export default function MapScreenRN() {
 
     // Only update camera in navigation mode (Follow Me)
     if (isNavigationMode && userLocation.heading !== undefined && userLocation.heading !== -1) {
-      recenterOnUser({ heading: userLocation.heading, pitch: 25, zoom: FOLLOW_ZOOM });
+      recenterOnUser({ heading: userLocation.heading, pitch: 35, zoom: FOLLOW_ZOOM });
     }
   }, [userLocation, followUser, isNavigationMode]);
 
