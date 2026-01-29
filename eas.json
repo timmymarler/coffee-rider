@@ -36,6 +36,10 @@
     },
 
     "rider-preview": {
+      "ios": {
+        "provisioning_profile": "managed",
+        "distribution_certificate": "managed"
+      },
       "android": { "buildType": "apk" },
       "env": { 
           "APP_NAME": "rider",
