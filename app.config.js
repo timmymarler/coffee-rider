@@ -95,7 +95,8 @@ export default {
         NSLocationAlwaysAndWhenInUseUsageDescription: "Coffee Rider needs your location for group rides and navigation, including background location tracking.",
         NSLocationAlwaysUsageDescription: "Coffee Rider needs your location for group rides and navigation, including background location tracking.",
         NSMotionUsageDescription: "Coffee Rider uses motion data to improve location accuracy.",
-        UIBackgroundModes: ["location", "fetch"]
+        UIBackgroundModes: ["location", "fetch"],
+        ITSAppUsesNonExemptEncryption: false
       }
     },
 

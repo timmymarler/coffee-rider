@@ -36,9 +36,6 @@
     },
 
     "rider-preview": {
-      "ios": {
-        "credentialsSource": "local"
-      },
       "android": { "buildType": "apk" },
       "env": { 
           "APP_NAME": "rider",
