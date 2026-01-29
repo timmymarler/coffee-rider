@@ -23,15 +23,30 @@ export default function HelpScreen() {
       circle: theme.colors.accentMid,
       stroke: theme.colors.danger,
     },
-    searchCR: {
-      fill: theme.colors.accent,
-      circle: theme.colors.accentLight,
-      stroke: theme.colors.primaryMid,
+    searchCRExact: {
+      fill: "#FFD700",
+      circle: "#FFA500",
+      stroke: theme.colors.danger,
     },
-    searchGoogle: {
-      fill: theme.colors.primaryMid,
+    searchCRPartial: {
+      fill: theme.colors.accentMid,
       circle: theme.colors.accentLight,
-      stroke: theme.colors.primaryDark,
+      stroke: theme.colors.accentDark,
+    },
+    searchGoogleExact: {
+      fill: theme.colors.primaryMid,
+      circle: theme.colors.accentMid,
+      stroke: theme.colors.danger,
+    },
+    searchGooglePartial: {
+      fill: theme.colors.primaryMid,
+      circle: theme.colors.primaryLight,
+      stroke: theme.colors.accentDark,
+    },
+    sponsor: {
+      fill: theme.colors.accentMid,
+      circle: theme.colors.accentLight,
+      stroke: "#A855F7",
     },
     cr: {
       fill: theme.colors.accentMid,
@@ -166,33 +181,55 @@ export default function HelpScreen() {
           </Text>
         </View>
 
+        <Text style={styles.subText}>
+          <Text style={styles.controlLabel}>Search Results:</Text> When you search for a place, markers appear with colors indicating both the source and match quality.
+        </Text>
+
         <View style={styles.legendRow}>
-          <SvgPin {...markerStyles.searchCR} size={34} />
+          <SvgPin {...markerStyles.searchCRExact} size={34} />
           <Text style={styles.legendText}>
-            Highlighted Coffee Rider places — match your current search.
+            <Text style={styles.controlLabel}>Exact CR match</Text> — Gold fill, red outline. Coffee Rider place where the name starts with your search term.
           </Text>
         </View>
 
         <View style={styles.legendRow}>
-          <SvgPin {...markerStyles.searchGoogle} size={34} />
+          <SvgPin {...markerStyles.searchCRPartial} size={34} />
           <Text style={styles.legendText}>
-            Search results — temporary places from Google that disappear when search
-            is cleared.
+            <Text style={styles.controlLabel}>Partial CR match</Text> — Accent fill, dark outline. Coffee Rider place found in your search.
+          </Text>
+        </View>
+
+        <View style={styles.legendRow}>
+          <SvgPin {...markerStyles.searchGoogleExact} size={34} />
+          <Text style={styles.legendText}>
+            <Text style={styles.controlLabel}>Exact Google match</Text> — Blue fill, red outline. Google place where the name starts with your search term.
+          </Text>
+        </View>
+
+        <View style={styles.legendRow}>
+          <SvgPin {...markerStyles.searchGooglePartial} size={34} />
+          <Text style={styles.legendText}>
+            <Text style={styles.controlLabel}>Partial Google match</Text> — Blue fill, dark outline. Google place found in your search.
           </Text>
         </View>
 
         <View style={styles.legendRow}>
           <SvgPin {...markerStyles.destination} size={34} />
           <Text style={styles.legendText}>
-            Destination — the place you are navigating to or routing towards.
+            <Text style={styles.controlLabel}>Destination</Text> — Blue fill, red outline. The place you are navigating to or routing towards.
           </Text>
         </View>
 
         <View style={styles.legendRow}>
+          <SvgPin {...markerStyles.sponsor} size={34} />
           <Text style={styles.legendText}>
-            <Text style={styles.controlLabel}>Sponsored places</Text> — Markers with a red outline indicate places with active sponsorships. These markers are slightly larger than regular markers.
+            <Text style={styles.controlLabel}>Sponsored places</Text> — Purple outline indicates places with active sponsorships. These are Coffee Rider places deserving special recognition.
           </Text>
         </View>
+
+        <Text style={[styles.subText, { marginTop: 12 }]}>
+          <Text style={styles.controlLabel}>Offline Search:</Text> When offline, you can still search Coffee Rider places. Network errors are handled gracefully and won't interrupt your search experience.
+        </Text>
       </View>
 
       {/* -------------------------------------------------- */}
