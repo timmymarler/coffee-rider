@@ -37,8 +37,7 @@
 
     "rider-preview": {
       "ios": {
-        "provisioning_profile": "managed",
-        "distribution_certificate": "managed"
+        "credentialsSource": "local"
       },
       "android": { "buildType": "apk" },
       "env": { 
