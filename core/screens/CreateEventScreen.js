@@ -201,15 +201,16 @@ export default function CreateEventScreen() {
   const [tempMinute, setTempMinute] = useState("00");
 
   const handleDatePicker = async (field) => {
-    const currentDate = field === "Start Date" ? formData.startDateTime : formData.endDateTime;
+    // Use selectedDate from calendar if available (from params), otherwise use current form value
+    const defaultDate = initialDate || (field === "Start Date" ? formData.startDateTime : formData.endDateTime);
     try {
       const { action, year, month, day } = await DatePickerAndroid.open({
-        date: currentDate,
+        date: defaultDate,
         mode: "calendar",
       });
       
       if (action === DatePickerAndroid.dateSetAction) {
-        const newDate = new Date(year, month, day, currentDate.getHours(), currentDate.getMinutes());
+        const newDate = new Date(year, month, day, defaultDate.getHours(), defaultDate.getMinutes());
         if (field === "Start Date") {
           updateForm("startDateTime", newDate);
         } else {
@@ -955,7 +956,7 @@ const styles = StyleSheet.create({
   },
   selectedPlaceText: {
     fontSize: 14,
-    color: theme.colors.text,
+    color: theme.colors.primaryDark,
     fontWeight: "500",
   },
   changePlaceButton: {
