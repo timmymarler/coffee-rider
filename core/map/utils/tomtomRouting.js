@@ -160,6 +160,8 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
 
     const response = await fetch(`${url}?${params}`);
 
+    console.log('[tomtomRouting] API Response received. Status:', response.status, 'ok:', response.ok);
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[tomtomRouting] API error response:', {
@@ -179,6 +181,19 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
 
     const route = data.routes[0];
     const legs = route.legs || [];
+    
+    console.log('[tomtomRouting] Route legs structure:', {
+      legsCount: legs.length,
+      legDetails: legs.map((leg, i) => ({
+        index: i,
+        pointsCount: leg.points?.length || 0,
+        hasSummary: !!leg.summary,
+      })),
+      routeSummary: route.summary ? {
+        lengthInMeters: route.summary.lengthInMeters,
+        travelTimeInSeconds: route.summary.travelTimeInSeconds,
+      } : 'none',
+    });
     
     // TomTom returns guidance in route.guidance.instructions array
     let instructions = [];
@@ -230,10 +245,19 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
       }
     });
 
+    console.log('[tomtomRouting] Extracted polyline:', {
+      legsCount: legs.length,
+      totalPoints: allPoints.length,
+      firstPoint: allPoints[0] || null,
+      lastPoint: allPoints[allPoints.length - 1] || null
+    });
+
     // Fallback to summary points if detailed points not available
     if (allPoints.length === 0 && route.summary) {
       allPoints = [origin, destination];
     }
+
+    console.log('[tomtomRouting] Returning result with polyline points:', allPoints.length);
 
     return {
       polyline: allPoints, // Return as array of {latitude, longitude} objects

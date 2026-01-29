@@ -99,6 +99,100 @@
 - Filter by suitability - should show only Bikes/Scooters/Cars ✓
 - Combine filters - should show only events matching both ✓
 
+## 🏆 HOW TO TEST THE SPONSORS FILTER
+
+### Step 1: Set Up Test Data
+
+1. Log in to Firebase Console
+2. Navigate to Firestore → Collections → `users`
+3. Find or create a user document
+4. Add a sponsorship field to the user:
+   ```json
+   {
+     "sponsorship": {
+       "isActive": true,
+       "validTo": <future timestamp>,
+       "lastRenewed": <recent timestamp>
+     },
+     "linkedPlaceId": "<place_id_to_sponsor>"
+   }
+   ```
+5. Replace `<place_id_to_sponsor>` with an actual place ID from the places collection
+
+### Step 2: Test Sponsor Filter Visibility (Admin Only)
+
+1. Open the app and log in as an admin user
+2. Go to the Map tab
+3. Tap the "Filter" button (bottom of screen)
+4. In the amenities grid, you should see a new **Star icon** labeled "Sponsors"
+   - This icon should **only appear for admin users**
+   - Other users won't see this filter option
+
+### Step 3: Toggle the Sponsor Filter
+
+1. Tap the "Sponsors" star filter
+2. The filter indicator badge should appear at the top of the map
+3. Tap "Apply Filters" or the filter button again to activate
+4. The map should now show **only places with active sponsorships**
+
+### Step 4: Verify Sponsored Place Display
+
+1. When the Sponsors filter is active, check that:
+   - ✓ All places with `sponsorship.isActive === true` are displayed
+   - ✓ The sponsored places have a **red danger-colored outline** on their markers
+   - ✓ Sponsored markers are slightly larger (38px vs 36px for regular markers)
+   - ✓ Sponsored places remain visible even if they're outside the current map viewport
+
+### Step 5: Test Expiration Validation
+
+1. Update a sponsored user's `validTo` timestamp to a past date
+2. Wait 2-3 seconds for the listener to update
+3. Check that the expired place **no longer appears** in the Sponsors filter results
+4. The place should still be visible when viewing all places (filter off)
+
+### Step 6: Test Out-of-Region Force Inclusion
+
+1. Pan the map to an area with no sponsored places visible
+2. Make sure a sponsored place exists in a different region
+3. Tap the Sponsors filter
+4. The sponsored place should **appear on the map** even though it's outside your current viewport
+5. Pan the map away from the sponsored place
+6. The place should **remain visible** as long as the filter is active
+
+### Sponsor Filter Test Scenarios
+
+**Scenario 1: Basic Sponsor Display**
+- Create sponsorship in Firestore ✓
+- Log in as admin ✓
+- Toggle Sponsors filter ✓
+- See only sponsored places ✓
+
+**Scenario 2: Access Control**
+- Log in as regular rider ✓
+- Star (Sponsors) filter should NOT appear ✓
+- Admin sees the star filter ✓
+
+**Scenario 3: Expiration Handling**
+- Set validTo to future date ✓
+- Sponsored place should appear ✓
+- Change validTo to past date ✓
+- Sponsored place should disappear ✓
+- Place reappears when you turn filter off ✓
+
+**Scenario 4: Real-time Updates**
+- Create new sponsorship in Firestore ✓
+- App should detect it within 2-3 seconds ✓
+- Sponsored place appears immediately ✓
+- Deactivate sponsorship in Firestore ✓
+- Place disappears from filter immediately ✓
+
+**Scenario 5: Region Override**
+- Pan map far from any sponsored places ✓
+- Activate Sponsors filter ✓
+- Sponsored places from distant region appear ✓
+- Regular filter respects region boundaries ✓
+- Sponsor filter ignores boundaries ✓
+
 ### Scenario 5: Comments
 - Add comment to a place ✓
 - See your name and timestamp ✓

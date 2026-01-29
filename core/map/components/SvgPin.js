@@ -17,6 +17,7 @@ export default function SvgPin({
   circle = theme.colors.accentDark,
   icon = "map-marker",
   iconColor = "#000",
+  strokeWidth = STROKE_WIDTH,
 }) {
   const iconSize = size * 0.45;
 
@@ -32,7 +33,7 @@ export default function SvgPin({
           d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
           fill={fill}
           stroke={stroke}
-          strokeWidth={STROKE_WIDTH}
+          strokeWidth={strokeWidth}
         />
 
         {/* Inner dot */}

@@ -14,18 +14,22 @@ const CACHE_EXPIRY_DAYS = 7; // Routes expire after 7 days
  * @returns {String} Cache key
  */
 function generateCacheKey(startPoint, endPoint, waypoints, routeType) {
-  // Round coordinates to 4 decimal places (~11m precision) to handle slight variations
+  // Round coordinates to 5 decimal places (~1m precision) to handle variations while distinguishing different routes
   const roundCoord = (coord) => {
     if (!coord) return '0,0';
-    return `${(coord.latitude || coord.lat).toFixed(4)},${(coord.longitude || coord.lng).toFixed(4)}`;
+    return `${(coord.latitude || coord.lat).toFixed(5)},${(coord.longitude || coord.lng).toFixed(5)}`;
   };
 
+  // Include waypoint count and coordinates for more specific cache keys
+  // Different waypoint sets should produce different cache keys
   const waypointStr = (waypoints || [])
-    .map(wp => roundCoord(wp))
+    .map((wp, idx) => `${idx}:${roundCoord(wp)}`)
     .join(';');
 
-  const key = `${roundCoord(startPoint)}_${roundCoord(endPoint)}_${waypointStr}_${routeType || 'default'}`;
-  return CACHE_KEY_PREFIX + Buffer.from(key).toString('base64');
+  // Create key without Buffer (not available in React Native)
+  // Use a simple hash-like key combining all parameters
+  const key = `${roundCoord(startPoint)}_${roundCoord(endPoint)}_wp${waypoints?.length || 0}_${waypointStr}_${routeType || 'default'}`;
+  return CACHE_KEY_PREFIX + key.replace(/[.,\-;:]/g, '_').substring(0, 150);
 }
 
 /**

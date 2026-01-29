@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import NetInfo from '@react-native-community/netinfo';
 
 /**
  * Hook to detect if device is online
+ * Uses a simple fetch-based approach (no native modules needed)
  * @returns {Object} {isOnline: boolean, isConnected: boolean, type: string}
  */
 export function useNetworkStatus() {
@@ -13,49 +13,82 @@ export function useNetworkStatus() {
   });
 
   useEffect(() => {
-    // Check current state immediately
-    const unsubscribe = NetInfo.addEventListener(state => {
-      const isConnected = state.isConnected ?? false;
-      const isInternetReachable = state.isInternetReachable ?? false;
+    let isMounted = true;
+    let checkTimeout = null;
 
-      // Consider online if connected AND internet reachable
-      const isOnline = isConnected && isInternetReachable;
+    // Check connectivity by attempting a lightweight fetch
+    const checkStatus = async () => {
+      try {
+        // Try to reach a reliable, lightweight endpoint (1x1 gif)
+        const response = await Promise.race([
+          fetch('https://www.google.com/favicon.ico', { method: 'HEAD' }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), 3000)
+          ),
+        ]);
 
-      setNetworkState({
-        isOnline,
-        isConnected,
-        type: state.type || 'unknown',
-      });
+        const isOnline = response.ok || response.status === 0;
 
-      console.log('[Network]', {
-        isOnline,
-        isConnected,
-        reachable: isInternetReachable,
-        type: state.type,
-      });
-    });
+        if (isMounted) {
+          setNetworkState({
+            isOnline,
+            isConnected: isOnline,
+            type: isOnline ? 'wifi' : 'none',
+          });
 
-    return unsubscribe;
+          console.log('[Network] Status:', { isOnline, online: isOnline });
+        }
+      } catch (error) {
+        // If fetch fails, we're offline
+        if (isMounted) {
+          console.log('[Network] Status: offline (fetch failed)');
+          setNetworkState({
+            isOnline: false,
+            isConnected: false,
+            type: 'none',
+          });
+        }
+      }
+
+      // Schedule next check in 10 seconds
+      if (isMounted) {
+        checkTimeout = setTimeout(checkStatus, 10000);
+      }
+    };
+
+    // Check immediately
+    checkStatus();
+
+    return () => {
+      isMounted = false;
+      if (checkTimeout) clearTimeout(checkTimeout);
+    };
   }, []);
 
   return networkState;
 }
 
 /**
- * Check if currently online (synchronous check of last known state)
- * For immediate needs - actual state may lag slightly
+ * Check if currently online
  */
 let lastKnownOnlineState = true;
 
 export async function checkNetworkStatus() {
   try {
-    const state = await NetInfo.fetch();
-    const isOnline = (state.isConnected ?? false) && (state.isInternetReachable ?? false);
+    const response = await Promise.race([
+      fetch('https://www.google.com/favicon.ico', { method: 'HEAD' }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 3000)
+      ),
+    ]);
+
+    const isOnline = response.ok || response.status === 0;
     lastKnownOnlineState = isOnline;
     return isOnline;
   } catch (error) {
     console.warn('[Network] Error checking status:', error);
-    return lastKnownOnlineState;
+    lastKnownOnlineState = false;
+    return false;
   }
 }
 

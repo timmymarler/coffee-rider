@@ -187,6 +187,12 @@ export default function HelpScreen() {
             Destination — the place you are navigating to or routing towards.
           </Text>
         </View>
+
+        <View style={styles.legendRow}>
+          <Text style={styles.legendText}>
+            <Text style={styles.controlLabel}>Sponsored places</Text> — Markers with a red outline indicate places with active sponsorships. These markers are slightly larger than regular markers.
+          </Text>
+        </View>
       </View>
 
       {/* -------------------------------------------------- */}

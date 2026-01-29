@@ -117,7 +117,10 @@ function distanceBetween(p1, p2) {
 const SUITABILITY_ICON_MAP = {
   bikers: "motorbike",
   scooters: "moped",
-  cyclists: "bicycle",
+  cyclists: "bike",
+  walkers: "walk",
+  cars: "car",
+  evs: "car-electric",
 }
 
 const CATEGORY_ICON_MAP = {
@@ -170,12 +173,14 @@ const EMPTY_FILTERS = {
   suitability: new Set(),
   categories: new Set(),
   amenities: new Set(),
+  sponsor: false,
 };
 
 const DEFAULT_FILTERS = {
   suitability: [],
   categories: [],
   amenities: [],
+  sponsor: false,
 };
 
 const DEFAULT_MAP_STATE = {
@@ -535,10 +540,11 @@ export default function MapScreenRN() {
 
   const [crPlaces, setCrPlaces] = useState([]);
   const [googlePois, setGooglePois] = useState([]);
+  const [sponsoredPlaceIds, setSponsoredPlaceIds] = useState(new Set()); // Track all places with active sponsorship
 
   const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
-  const filtersActive = appliedFilters.suitability.size > 0 || appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0;
+  const filtersActive = appliedFilters.suitability.size > 0 || appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0 || appliedFilters.sponsor;
   const [userLocation, setUserLocation] = useState(null);
 
   const [mapRegion, setMapRegion] = useState(userLocation);
@@ -1039,6 +1045,39 @@ export default function MapScreenRN() {
     return unsub;
   }, [selectedPlaceId]);
 
+  // Load sponsorship data from users to identify sponsored places
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
+      const sponsoredIds = new Set();
+      const now = Date.now();
+
+      snapshot.docs.forEach((doc) => {
+        const userData = doc.data();
+        const sponsorship = userData?.sponsorship;
+        const linkedPlaceId = userData?.linkedPlaceId;
+
+        // Check if user has active sponsorship
+        if (sponsorship?.isActive && linkedPlaceId) {
+          const validTo = sponsorship.validTo?.toMillis?.() || sponsorship.validTo;
+          // Only include if sponsorship hasn't expired
+          if (validTo && validTo > now) {
+            sponsoredIds.add(linkedPlaceId);
+            console.log("[SPONSOR_FILTER] User has active sponsorship for place:", linkedPlaceId);
+          }
+        }
+      });
+
+      console.log("[SPONSOR_FILTER] Sponsored place IDs:", Array.from(sponsoredIds));
+      setSponsoredPlaceIds(sponsoredIds);
+    }, (err) => {
+      if (err.code !== 'permission-denied') {
+        console.error("[MapScreenRN] Error listening to users:", err);
+      }
+    });
+
+    return unsub;
+  }, []);
+
   // Monitor newly created places and ensure they're in crPlaces
   useEffect(() => {
     if (!newlyCreatedPlace) return;
@@ -1423,15 +1462,11 @@ export default function MapScreenRN() {
         },
         (location) => {
           try {
-            console.log("[MAP] Location update:", location.coords.latitude.toFixed(4), location.coords.longitude.toFixed(4), "accuracy:", location.coords.accuracy?.toFixed(1));
-            
             const now = Date.now();
             let coordsToUse = location.coords;
             
             // Filter out inaccurate readings
             if (location.coords.accuracy && location.coords.accuracy > MAX_LOCATION_ACCURACY) {
-              console.log(`[MAP] Ignoring inaccurate location (${location.coords.accuracy.toFixed(1)}m accuracy)`);
-              debugLog("LOCATION_FILTERED", `Poor GPS accuracy: ${location.coords.accuracy.toFixed(0)}m (threshold: ${MAX_LOCATION_ACCURACY}m)`, { accuracy: location.coords.accuracy });
               
               // Dead reckoning: estimate position using heading when GPS is poor
               if (lastGoodGPSRef.current && lastGPSTimeRef.current && location.coords.heading !== undefined && location.coords.heading !== -1) {
@@ -1444,8 +1479,6 @@ export default function MapScreenRN() {
                   const lng = lastGoodGPSRef.current.longitude + (estimatedDistance / 111111 / Math.cos(lastGoodGPSRef.current.latitude * Math.PI / 180)) * Math.sin(heading);
                   
                   coordsToUse = { ...lastGoodGPSRef.current, latitude: lat, longitude: lng };
-                  console.log("[MAP] Using dead reckoning estimate based on heading");
-                  debugLog("DEAD_RECKONING", `Estimated position using heading (${estimatedDistance.toFixed(0)}m ahead)`, { estimatedDistance });
                 }
               }
               
@@ -1456,8 +1489,6 @@ export default function MapScreenRN() {
             if (userLocation) {
               const dist = distanceBetween(userLocation, coordsToUse);
               if (dist < MIN_LOCATION_MOVE_DISTANCE) {
-                console.log(`[MAP] Movement too small (${dist.toFixed(1)}m), ignoring`);
-                debugLog("LOCATION_FILTERED", `Movement too small: ${dist.toFixed(1)}m (threshold: ${MIN_LOCATION_MOVE_DISTANCE}m)`, { distance: dist });
                 return;
               }
               
@@ -1484,10 +1515,7 @@ export default function MapScreenRN() {
               }
             }
             
-            console.log("[MAP] Updating userLocation - setting state");
-            debugLog("GPS_UPDATE", `Position: ${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)} (accuracy: ${location.coords.accuracy?.toFixed(0)}m)`, { lat: location.coords.latitude, lng: location.coords.longitude, accuracy: location.coords.accuracy });
             setUserLocation(coords);
-            console.log("[MAP] setUserLocation call complete");
           } catch (err) {
             console.error("[MAP] Error in location callback:", err);
             debugLog("GPS_ERROR", "Location callback error: " + err.message, { error: err.message });
@@ -1629,7 +1657,7 @@ export default function MapScreenRN() {
     setActiveQuery("");
     setGooglePois([]);
     setSearchInput("");
-    setActiveQuery("");
+    lastSearchRef.current = "";
 
   }
 
@@ -1913,14 +1941,39 @@ export default function MapScreenRN() {
 
     let list = crPlaces.filter((p) => inRegion(p, paddedRegion));
 
+    // If sponsor filter is active, include ALL sponsored places even if outside region
+    if (appliedFilters.sponsor) {
+      const sponsoredPlaces = crPlaces.filter(p => sponsoredPlaceIds.has(p.id));
+      // Add any sponsored places that weren't in the region-filtered list
+      sponsoredPlaces.forEach(sp => {
+        if (!list.find(p => p.id === sp.id)) {
+          console.log("[SPONSOR_FILTER] Adding sponsored place (outside region):", sp.id, sp.title);
+          list = [...list, sp];
+        }
+      });
+    }
+
     if (
       appliedFilters.suitability.size ||
       appliedFilters.categories.size ||
-      appliedFilters.amenities.size
+      appliedFilters.amenities.size ||
+      appliedFilters.sponsor
     ) {
-      list = list.filter((p) =>
-        applyFilters(p, appliedFilters)
-      );
+      console.log("[SPONSOR_FILTER] Filter active - sponsored places in list:", Array.from(sponsoredPlaceIds));
+      
+      list = list.filter((p) => {
+        // Check sponsor filter first
+        if (appliedFilters.sponsor) {
+          const isSponsored = sponsoredPlaceIds.has(p.id);
+          console.log("[SPONSOR_FILTER] Place", p.id, p.title, "- sponsored:", isSponsored);
+          // Only show place if it's in the sponsored list
+          if (!isSponsored) {
+            return false;
+          }
+        }
+        // Then check other filters
+        return applyFilters(p, appliedFilters);
+      });
     }
 
     return list;
@@ -1928,6 +1981,7 @@ export default function MapScreenRN() {
     crPlaces,
     paddedRegion,
     appliedFilters,
+    sponsoredPlaceIds,
   ]);
 
   const searchMarkers = useMemo(() => {
@@ -2433,6 +2487,7 @@ export default function MapScreenRN() {
     const isCr = poi.source === "cr" && !poi._temp;
     const isDestination = routeDestination && poi.id === routeDestination;
     const isTemp = !!poi._temp;
+    const isSponsor = sponsoredPlaceIds.has(poi.id); // Check if place has active sponsorship
 
     const isSearchHitCR = activeQuery && isCr && matchesQuery(poi, activeQuery);
     const isSearchHitGoogle = activeQuery && !isCr && matchesQuery(poi, activeQuery);
@@ -2448,6 +2503,9 @@ export default function MapScreenRN() {
     } else if (isSearchHitGoogle) {
       markerMode = "searchGoogle";
       zIndex = 700; // Lower than searchCR (partial matches)
+    } else if (isSponsor) {
+      markerMode = "sponsor";
+      zIndex = 600; // Higher priority than regular CR places
     } else if (isCr) {
       markerMode = "cr";
       zIndex = 500;
@@ -2460,6 +2518,11 @@ export default function MapScreenRN() {
 
     const markerStyles = {
       destination: {
+        fill: theme.colors.primary,
+        circle: theme.colors.accentMid,
+        stroke: theme.colors.danger,
+      },
+      sponsor: {
         fill: theme.colors.primary,
         circle: theme.colors.accentMid,
         stroke: theme.colors.danger,
@@ -2491,7 +2554,8 @@ export default function MapScreenRN() {
       },
     };
 
-    const { fill, circle, stroke } = markerStyles[markerMode];
+    const { fill, circle, stroke, strokeWidth } = markerStyles[markerMode];
+    const pinSize = isSponsor ? 38 : 36; // Slightly bigger size for sponsors
 
     const handleMarkerPress = (e) => {
       console.log("[MARKER] Marker.onPress on:", poi.title || poi.name, "selectedPlaceId will be:", poi.id);
@@ -2536,7 +2600,7 @@ export default function MapScreenRN() {
           onLongPress={handleMarkerLongPress}
           onPress={() => {}} // Consume the press to avoid double-triggering
         >
-          <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} />
+          <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} strokeWidth={strokeWidth} size={pinSize} />
         </Pressable>
       </Marker>
     );
@@ -2615,8 +2679,7 @@ export default function MapScreenRN() {
             attemptRouteFit();
           }}
         >
-          {crMarkers.map(renderMarker)}
-          {searchMarkers.map(renderMarker)}
+          {activeQuery ? searchMarkers.map(renderMarker) : crMarkers.map(renderMarker)}
           {manualStartPoint && (
             <Marker
               coordinate={manualStartPoint}
@@ -2763,8 +2826,8 @@ export default function MapScreenRN() {
                       })
                     )}
                   >
-                    <MaterialCommunityIcons
-                      name={SUITABILITY_ICON_MAP[a.key] || "check"}
+                  <MaterialCommunityIcons
+                      name={a.icon || "check"}
                       size={22}
                       color={active ? theme.colors.accent : theme.colors.background}
                     />
@@ -2859,6 +2922,37 @@ export default function MapScreenRN() {
                   </TouchableOpacity>
                 );
               })}
+
+              {/* SPONSORS (ADMIN ONLY) */}
+              {role === "admin" && (
+                <TouchableOpacity
+                  key="sponsor"
+                  style={[
+                    styles.iconButton,
+                    draftFilters.sponsor && styles.iconButtonActive,
+                  ]}
+                  onPress={() =>
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      sponsor: !prev.sponsor,
+                    }))
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name="star"
+                    size={32}
+                    color={draftFilters.sponsor ? theme.colors.accent : theme.colors.primaryLight}
+                  />
+                  <Text
+                    style={[
+                      styles.iconLabel,
+                      draftFilters.sponsor && styles.iconLabelActive,
+                    ]}
+                  >
+                    Sponsors
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </ScrollView>
           <TouchableOpacity

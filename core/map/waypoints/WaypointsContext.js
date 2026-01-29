@@ -11,6 +11,15 @@ export function WaypointsProvider({ children }) {
     setWaypoints(prev => [...prev, waypoint]);
   }
 
+  function addWaypointAtStart(waypoint) {
+    console.log("[WaypointsContext] addWaypointAtStart called with:", waypoint);
+    setWaypoints(prev => {
+      const newWaypoints = [waypoint, ...prev];
+      console.log("[WaypointsContext] Waypoints updated. New count:", newWaypoints.length);
+      return newWaypoints;
+    });
+  }
+
   function removeWaypoint(index) {
     setWaypoints(prev => prev.filter((_, i) => i !== index));
   }
@@ -33,6 +42,7 @@ export function WaypointsProvider({ children }) {
       value={{
         waypoints,
         addWaypoint,
+        addWaypointAtStart,
         removeWaypoint,
         reorderWaypoints,
         clearWaypoints,

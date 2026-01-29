@@ -16,10 +16,13 @@ export function applyFilters(poi, filters) {
   if (poi.source === "cr" && filters.suitability.size > 0) {
     if (!Array.isArray(poi.suitability)) return false;
 
-    for (const suitability of filters.suitability) {
-      if (!poi.suitability.includes(suitability)) {
-        return false;
-      }
+    // Use OR logic: place must match at least one selected suitability
+    const hasAnySuitability = Array.from(filters.suitability).some(suitability =>
+      poi.suitability.includes(suitability)
+    );
+    
+    if (!hasAnySuitability) {
+      return false;
     }
   }
 

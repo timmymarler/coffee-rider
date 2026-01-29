@@ -112,7 +112,10 @@ function distanceBetween(p1, p2) {
 const SUITABILITY_ICON_MAP = {
   bikers: "motorbike",
   scooters: "moped",
-  cyclists: "bicycle",
+  cyclists: "bike",
+  walkers: "walk",
+  cars: "car",
+  evs: "car-electric",
 }
 
 const CATEGORY_ICON_MAP = {
@@ -1287,15 +1290,11 @@ export default function MapScreenRN() {
         },
         (location) => {
           try {
-            console.log("[MAP] Location update:", location.coords.latitude.toFixed(4), location.coords.longitude.toFixed(4), "accuracy:", location.coords.accuracy?.toFixed(1));
-            
             const now = Date.now();
             let coordsToUse = location.coords;
             
             // Filter out inaccurate readings
             if (location.coords.accuracy && location.coords.accuracy > MAX_LOCATION_ACCURACY) {
-              console.log(`[MAP] Ignoring inaccurate location (${location.coords.accuracy.toFixed(1)}m accuracy)`);
-              debugLog("LOCATION_FILTERED", `Poor GPS accuracy: ${location.coords.accuracy.toFixed(0)}m (threshold: ${MAX_LOCATION_ACCURACY}m)`, { accuracy: location.coords.accuracy });
               
               // Dead reckoning: estimate position using heading when GPS is poor
               if (lastGoodGPSRef.current && lastGPSTimeRef.current && location.coords.heading !== undefined && location.coords.heading !== -1) {
@@ -1348,10 +1347,7 @@ export default function MapScreenRN() {
               }
             }
             
-            console.log("[MAP] Updating userLocation - setting state");
-            debugLog("GPS_UPDATE", `Position: ${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)} (accuracy: ${location.coords.accuracy?.toFixed(0)}m)`, { lat: location.coords.latitude, lng: location.coords.longitude, accuracy: location.coords.accuracy });
             setUserLocation(coords);
-            console.log("[MAP] setUserLocation call complete");
           } catch (err) {
             console.error("[MAP] Error in location callback:", err);
             debugLog("GPS_ERROR", "Location callback error: " + err.message, { error: err.message });
@@ -2447,7 +2443,7 @@ export default function MapScreenRN() {
                     )}
                   >
                     <MaterialCommunityIcons
-                      name={SUITABILITY_ICON_MAP[a.key] || "check"}
+                      name={a.icon || "check"}
                       size={22}
                       color={active ? theme.colors.accent : theme.colors.background}
                     />
