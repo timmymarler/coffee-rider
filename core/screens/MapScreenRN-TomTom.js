@@ -4,9 +4,9 @@ import { TabBarContext } from "@context/TabBarContext";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
-import { collection, getDocs, onSnapshot } from "firebase/firestore";
+import { collection, getDocs, onSnapshot, getFirestore, updateDoc, doc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -39,7 +39,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
 import { useRouter } from "expo-router";
-import { doc, getDoc } from "firebase/firestore";
+import { getDoc } from "firebase/firestore";
 import { Platform } from "react-native";
 import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
@@ -339,6 +339,15 @@ function matchesQuery(place, query) {
   return title.includes(q) || address.includes(q);
 }
 
+function isExactMatch(place, query) {
+  if (!query) return false;
+  const q = query.toLowerCase();
+  const title = place.title?.toLowerCase() || "";
+  
+  // Exact match if title starts with query or is exact word match
+  return title.startsWith(q);
+}
+
 function toggleFilter(set, value) {
   const next = new Set(set);
   next.has(value) ? next.delete(value) : next.add(value);
@@ -599,6 +608,7 @@ export default function MapScreenRN() {
   const skipNextFollowTickRef = useRef(false);
   const skipNextRegionChangeRef = useRef(false);
   const skipRegionChangeUntilRef = useRef(0);
+  const skipNextRebuildRef = useRef(false); // Skip next effect rebuild (used by toggleFollowMe)
   const isAnimatingRef = useRef(false); // Track if we're doing a programmatic animation
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
@@ -638,7 +648,24 @@ export default function MapScreenRN() {
     setActiveRide(activeRide);
     activeRideRef.current = activeRide;
     endRideRef.current = endRide;
-  }, [activeRide, endRide, setActiveRide]);
+    
+    // When an active ride starts, rebuild the route with current location as origin
+    if (activeRide && routeDestination && userLocation && !followUser) {
+      console.log('[MapScreenRN] Active ride started - rebuilding route from current location');
+      const requestId = ++routeRequestId.current;
+      mapRoute({
+        origin: userLocation,
+        waypoints: waypoints,
+        destination: routeDestination,
+        travelMode: userTravelMode,
+        routeType: userRouteType,
+        requestId,
+        skipFitToView: false, // Fit to view for active rides so user sees full route
+      }).catch(error => {
+        console.warn('[MapScreenRN] Error rebuilding route for active ride:', error);
+      });
+    }
+  }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType]);
   
   const canSaveRoute = 
     capabilities.canSaveRoutes &&
@@ -687,12 +714,21 @@ export default function MapScreenRN() {
   // Network status monitoring
   const networkStatus = useNetworkStatus();
   const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const offlineToastShownRef = useRef(false);
 
   useEffect(() => {
     // Update offline mode based on network status
     setIsOfflineMode(!networkStatus.isOnline);
     if (!networkStatus.isOnline) {
       console.log('[MAP] Device is offline');
+      // Show toast once when going offline
+      if (!offlineToastShownRef.current) {
+        ToastAndroid.show('You are offline - using cached routes', ToastAndroid.LONG);
+        offlineToastShownRef.current = true;
+      }
+    } else {
+      // Reset flag when coming back online
+      offlineToastShownRef.current = false;
     }
   }, [networkStatus.isOnline]);
 
@@ -1245,34 +1281,52 @@ export default function MapScreenRN() {
       const originalOrigin = { ...manualStartPoint };
       
       // Check if the original origin is the same as the destination
-      // If they're the same, don't add it as a waypoint (would create degenerate route)
       const isSameAsDestination = 
         Math.abs(originalOrigin.latitude - routeDestination.latitude) < 0.00001 &&
         Math.abs(originalOrigin.longitude - routeDestination.longitude) < 0.00001;
       
       console.log("[toggleFollowMe] Same as destination?", isSameAsDestination);
       
+      // Shift to Follow Me: origin moves from saved location to current location
+      // Waypoints include the old origin as first waypoint
+      let newWaypoints = [];
       if (!isSameAsDestination) {
-        // Add as waypoint unless it's the destination
-        console.log("[toggleFollowMe] Adding original origin as first waypoint:", originalOrigin.latitude.toFixed(5), originalOrigin.longitude.toFixed(5));
-        
-        addWaypointAtStart({
-          lat: originalOrigin.latitude,
-          lng: originalOrigin.longitude,
-          title: "Original start point",
-          source: "followme",
-        });
+        newWaypoints = [
+          {
+            lat: originalOrigin.latitude,
+            lng: originalOrigin.longitude,
+            title: "Original start point",
+            source: "followme",
+          },
+          ...waypoints,
+        ];
+        console.log("[toggleFollowMe] New waypoints: old origin (", originalOrigin.latitude, ",", originalOrigin.longitude, ") + existing waypoints");
       } else {
-        console.log("[toggleFollowMe] Original origin is the destination, skipping waypoint");
+        newWaypoints = waypoints;
       }
       
-      // Clear manual start point so userLocation becomes the new origin
-      // buildRoute will use: manualStartPoint || userLocation -> now just userLocation
-      console.log("[toggleFollowMe] Clearing manual start point, new origin will be:", userLocation.latitude.toFixed(5), userLocation.longitude.toFixed(5));
-      setManualStartPoint(null);
+      console.log("[toggleFollowMe] Calling mapRoute - origin: current location, waypoints: old origin + saved waypoints");
+      const requestId = ++routeRequestId.current;
       
-      // Reset the loading flag so the effect can run
-      isLoadingSavedRouteRef.current = false;
+      // Add the old origin as the first waypoint
+      addWaypointAtStart({
+        lat: originalOrigin.latitude,
+        lng: originalOrigin.longitude,
+        title: "Original start point",
+        source: "followme",
+      });
+      
+      mapRoute({
+        origin: userLocation,
+        waypoints: newWaypoints,
+        destination: routeDestination,
+        travelMode: userTravelMode,
+        routeType: userRouteType,
+        requestId,
+        skipFitToView: true,
+      }).catch(error => {
+        console.warn('[toggleFollowMe] mapRoute error:', error);
+      });
     } else {
       console.log("[toggleFollowMe] Conditions not met. manualStartPoint:", !!manualStartPoint, "routeDestination:", !!routeDestination);
     }
@@ -1727,9 +1781,10 @@ export default function MapScreenRN() {
         return [];
       }
 
-      return (json?.places || [])
+      const places = json?.places || [];
+      return places
         .map((p) => mapGooglePlace(p, capabilities))
-        .filter(p => p.latitude && p.longitude);
+        .filter(p => p && p.latitude && p.longitude);
     } catch (error) {
       console.log("[GOOGLE] text search fetch error:", error.message);
       throw error; // Propagate to caller for user-facing error message
@@ -1789,16 +1844,12 @@ export default function MapScreenRN() {
         setGooglePois(results);
       } catch (error) {
         if (cancelled) return;
-        setPostbox({
-          type: "error",
-          title: "Search Error",
-          message: error?.message || "Failed to search. Please check your connection.",
-        });
+        console.log("[SEARCH] Google search failed:", error.message);
         setGooglePois([]);
-        return;
+        // Don't return - continue to search local CR places
       }
 
-      // --- Prefer CR match if one exists ---
+      // --- Always try to find CR match, even if Google search failed ---
       const crMatch = crPlaces.find(
         (p) => p.source === "cr" && matchesQuery(p, activeQuery)
       );
@@ -1843,6 +1894,11 @@ export default function MapScreenRN() {
   useEffect(() => {
     console.log("[MAP_EFFECT] Route rebuild effect triggered. routeClearedByUser:", routeClearedByUser, "isLoadingSavedRoute:", isLoadingSavedRouteRef.current, "userLocation:", !!userLocation);
     
+    if (skipNextRebuildRef.current) {
+      console.log("[MAP_EFFECT] Skipping this rebuild per skipNextRebuildRef");
+      skipNextRebuildRef.current = false;
+      return;
+    }
     if (routeClearedByUser) {
       console.log("[MAP_EFFECT] Returning: routeClearedByUser is true");
       return;
@@ -1937,7 +1993,10 @@ export default function MapScreenRN() {
 
     console.log("[MAP_EFFECT] Calling buildRoute");
     const requestId = ++routeRequestId.current;
-    buildRoute({ requestId });
+    buildRoute({ requestId }).catch(error => {
+      console.warn('[MAP_EFFECT] buildRoute error:', error);
+      // Error already handled as toast in buildRoute, no need to display again
+    });
   }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, manualStartPoint]);
 
   // Log routeCoords changes for debugging polyline visibility
@@ -2013,10 +2072,26 @@ export default function MapScreenRN() {
 
   const searchMarkers = useMemo(() => {
     if (!activeQuery) return [];
-    if (!paddedRegion) return [];
 
-    return googlePois.filter((p) => inRegion(p, paddedRegion));
-  }, [googlePois, paddedRegion, activeQuery]);
+    // Add CR places that match the search query (these take priority, include all even out of region)
+    const crSearchMatches = crPlaces.filter(
+      (p) => matchesQuery(p, activeQuery)
+    );
+    
+    // Include Google POIs that are in region, but exclude any that have a matching CR place
+    const googleResults = googlePois.filter((p) => {
+      if (!paddedRegion || !inRegion(p, paddedRegion)) return false;
+      
+      // Exclude if there's a CR place with the same googlePlaceId
+      if (p.id && crSearchMatches.some(cr => cr.googlePlaceId === p.id)) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    return [...googleResults, ...crSearchMatches];
+  }, [googlePois, crPlaces, paddedRegion, activeQuery]);
 
 
   const selectedPlace = useMemo(() => {
@@ -2095,8 +2170,217 @@ export default function MapScreenRN() {
     return null;
   }
 
+  /**
+   * Core routing function that takes explicit parameters
+   * Does not depend on component state - all inputs are passed in
+   * Returns true if route was successfully mapped and displayed
+   */
+  async function mapRoute({
+    origin,
+    waypoints: waypointsList,
+    destination,
+    travelMode,
+    routeType,
+    requestId,
+    skipFitToView = false, // Don't auto-center when in Follow Me mode
+  } = {}) {
+    console.log("[mapRoute] Starting with requestId:", requestId, "waypoints:", waypointsList.length);
+    
+    if (!origin) {
+      console.log("[mapRoute] No origin provided");
+      return false;
+    }
+
+    // Determine final destination
+    let finalDestination = null;
+    
+    if (destination) {
+      finalDestination = normalizeCoord(destination);
+      if (!finalDestination) {
+        console.error('[mapRoute] Failed to normalize destination coordinates:', destination);
+        return false;
+      }
+    } else if (waypointsList.length > 0) {
+      finalDestination = normalizeCoord(waypointsList[waypointsList.length - 1]);
+      if (!finalDestination) {
+        console.error('[mapRoute] Failed to normalize last waypoint coordinates');
+        return false;
+      }
+    }
+
+    if (!finalDestination) {
+      console.error('[mapRoute] No valid final destination');
+      return false;
+    }
+
+    // Determine intermediates
+    let intermediates = [];
+    if (destination) {
+      // Only user-added waypoints go in intermediates; destination will be final
+      intermediates = waypointsList;
+    } else if (waypointsList.length > 0) {
+      // No explicit destination, so all but the last waypoint are intermediates
+      intermediates = waypointsList.slice(0, -1);
+    }
+
+    // Normalize intermediates
+    const normalizedIntermediates = intermediates
+      .map(wp => normalizeCoord(wp))
+      .filter(wp => wp !== null);
+    
+    // Validate origin
+    const startCoord = normalizeCoord(origin);
+    if (!startCoord) {
+      console.error('[mapRoute] Failed to normalize origin:', origin);
+      return false;
+    }
+
+    console.log("[mapRoute] Building route with:");
+    console.log("  - Origin:", startCoord.latitude.toFixed(5), startCoord.longitude.toFixed(5));
+    console.log("  - Waypoints:", normalizedIntermediates.length, normalizedIntermediates.map(w => `${w.latitude.toFixed(5)}, ${w.longitude.toFixed(5)}`));
+    console.log("  - Destination:", finalDestination.latitude.toFixed(5), finalDestination.longitude.toFixed(5));
+
+    // Try cache first if offline or as optimization
+    // BUT: Always skip cache for Follow Me (skipFitToView=true indicates Follow Me)
+    // to ensure we get a fresh route with the new waypoints
+    let result = null;
+    
+    try {
+      // Skip cache if this is a Follow Me request - always fetch fresh
+      if (!skipFitToView) {
+        console.log('[mapRoute] Checking cache...');
+        console.log('[mapRoute] Cache query - origin:', startCoord.latitude.toFixed(5), startCoord.longitude.toFixed(5));
+        console.log('[mapRoute] Cache query - destination:', finalDestination.latitude.toFixed(5), finalDestination.longitude.toFixed(5));
+        console.log('[mapRoute] Cache query - intermediates count:', normalizedIntermediates.length);
+        if (normalizedIntermediates.length > 0) {
+          console.log('[mapRoute] Cache query - intermediates:', normalizedIntermediates.map(w => `${w.latitude.toFixed(5)},${w.longitude.toFixed(5)}`));
+        }
+        console.log('[mapRoute] Cache query - routeType:', routeType);
+        
+        const cachedResult = await getCachedRoute(
+          startCoord,
+          finalDestination,
+          normalizedIntermediates,
+          routeType
+        );
+
+        if (cachedResult) {
+          console.log('[mapRoute] Using cached route - polyline points:', cachedResult.polyline?.length || 0);
+          result = cachedResult;
+        } else if (!networkStatus.isOnline) {
+          console.warn('[mapRoute] Offline and no cached route available');
+          ToastAndroid.show(
+            'Route not in cache. Unable to fetch new route without internet.',
+            ToastAndroid.LONG
+          );
+          return false;
+        }
+      } else {
+        console.log('[mapRoute] Skipping cache for Follow Me - fetching fresh route');
+      }
+    } catch (error) {
+      console.warn('[mapRoute] Error checking cache:', error);
+      // Continue to fetch fresh route if cache check fails
+    }
+
+    // Fetch fresh route if not cached and online
+    if (!result) {
+      console.log('[mapRoute] Fetching fresh route from TomTom...');
+      try {
+        result = await fetchTomTomRoute(
+          startCoord,
+          finalDestination,
+          normalizedIntermediates,
+          travelMode,
+          routeType,
+          routeTypeMap,
+          customHilliness,
+          customWindingness
+        );
+      } catch (error) {
+        console.warn('[mapRoute] Error fetching route from TomTom:', error.message);
+        ToastAndroid.show(
+          `Unable to fetch route: ${error.message}`,
+          ToastAndroid.LONG
+        );
+        return false;
+      }
+
+      // Cache the fresh result
+      if (result?.polyline) {
+        try {
+          await cacheRoute(
+            startCoord,
+            finalDestination,
+            normalizedIntermediates,
+            routeType,
+            result
+          );
+        } catch (error) {
+          console.warn('[mapRoute] Error caching route:', error);
+        }
+      }
+    }
+
+    console.log("[mapRoute] Result received. Has polyline:", !!result?.polyline);
+    if (!result) {
+      console.log("[mapRoute] Result is null, returning");
+      return false;
+    }
+
+    // Check if this result is still relevant (request ID hasn't changed)
+    if (requestId && requestId !== routeRequestId.current) {
+      console.log("[mapRoute] Request ID mismatch - expected:", routeRequestId.current, "got:", requestId, "- discarding stale result");
+      return false;
+    }
+
+    if (!result?.polyline) {
+      console.log("[mapRoute] No polyline in result");
+      return false;
+    }
+
+    // Simplify polyline for rendering
+    const decoded = result.polyline;
+    const simplified = simplifyPolyline(decoded, 0.00005); // ~5m tolerance
+    console.log("[mapRoute] Decoded", decoded.length, "points, simplified to", simplified.length, "points");
+    
+    // Update state with route data
+    setRouteCoords(simplified);
+    setRouteMeta({
+      distanceMeters: result.distanceMeters ?? result.distance,
+      durationSeconds: result.durationSeconds ?? result.duration,
+    });
+    setRouteSteps(result.steps ?? []);
+    setCurrentStepIndex(0);
+    
+    if (typeof result?.distanceMeters === 'number' && result.distanceMeters > 0) {
+      setRouteDistanceMeters(result.distanceMeters);
+    } else if (typeof result?.distance === 'number' && result.distance > 0) {
+      setRouteDistanceMeters(result.distance);
+    } else {
+      setRouteDistanceMeters(null);
+    }
+
+    // Auto-fit view if not in Follow Me and not already fitted
+    if (!skipFitToView && !routeFittedRef.current && !followUser) {
+      routeFittedRef.current = true;
+      mapRef.current?.fitToCoordinates(simplified, {
+        edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
+        animated: true,
+      });
+    }
+    
+    setLastEncodedPolyline(result.polyline);
+    await debugLog("ROUTE_BUILT", `Route built: ${simplified.length} points, ${(result.distanceMeters / 1000).toFixed(1)}km`, { points: simplified.length, distanceKm: (result.distanceMeters / 1000).toFixed(1) });
+    
+    return true;
+  }
+
   async function buildRoute({ destinationOverride = null, requestId } = {}) {
-    console.log("[buildRoute] Starting - destination:", routeDestination, "waypoints:", waypoints.length);
+    // Wrapper that calls mapRoute with current component state
+    const finalRequestId = requestId || routeRequestId.current;
+    console.log("[buildRoute] Starting - requestId:", finalRequestId, "destination:", routeDestination?.title, "waypoints:", waypoints.length);
+    
     if (!routeDestination && !destinationOverride && waypoints.length === 0) {
       console.log("[buildRoute] No destination or waypoints, returning");
       return;
@@ -2106,192 +2390,32 @@ export default function MapScreenRN() {
       return;
     }
 
-    const destination =
-      destinationOverride ||
-      routeDestination ||
-      null;
+    const destination = destinationOverride || routeDestination || null;
 
     if (!destination && waypoints.length === 0) {
       console.log("[buildRoute] No destination and no waypoints, returning");
       return;
     }
 
-    // ─────────────────────────────
-    // Determine final destination
-    // ─────────────────────────────
-    let finalDestination = null;
-    
-    if (destination) {
-      finalDestination = normalizeCoord(destination);
-      if (!finalDestination) {
-        console.error('[buildRoute] Failed to normalize destination coordinates:', destination);
-        return;
-      }
-    } else if (waypoints.length > 0) {
-      finalDestination = normalizeCoord(waypoints[waypoints.length - 1]);
-      if (!finalDestination) {
-        console.error('[buildRoute] Failed to normalize last waypoint coordinates');
-        return;
-      }
-    }
-
-    if (!finalDestination) {
-      console.error('[buildRoute] No valid final destination');
-      return;
-    }
-
-    // ─────────────────────────────
-    // Intermediates
-    // ─────────────────────────────
-    // When routing to a destination, user-added waypoints come BEFORE the destination
-    // so they must be intermediates, with the destination as the final point
-    let intermediates = [];
-    if (destination) {
-      // Only user-added waypoints go in intermediates; destination will be final
-      intermediates = waypoints;
-    } else if (waypoints.length > 0) {
-      // No explicit destination, so all but the last waypoint are intermediates
-      intermediates = waypoints.slice(0, -1);
-    }
-
-    // Normalize intermediates
-    const normalizedIntermediates = intermediates
-      .map(wp => normalizeCoord(wp))
-      .filter(wp => wp !== null);
-    
-    // Validate user location
-    const startCoord = normalizeCoord(manualStartPoint || userLocation);
-    if (!startCoord) {
-      console.error('[buildRoute] Failed to normalize start location:', manualStartPoint || userLocation);
-      return;
-    }
-
-    console.log("[buildRoute] Building route with:");
-    console.log("  - Origin:", startCoord.latitude.toFixed(5), startCoord.longitude.toFixed(5));
-    console.log("  - Waypoints:", normalizedIntermediates.length, normalizedIntermediates.map(w => `${w.latitude.toFixed(5)}, ${w.longitude.toFixed(5)}`));
-    console.log("  - Destination:", finalDestination.latitude.toFixed(5), finalDestination.longitude.toFixed(5));
-
-    // 🔄 TRY CACHE FIRST if offline or as optimization
-    let result = null;
-    
-    try {
-      console.log('[buildRoute] Checking cache...');
-      const cachedResult = await getCachedRoute(
-        startCoord,
-        finalDestination,
-        normalizedIntermediates,
-        userRouteType
-      );
-
-      if (cachedResult) {
-        console.log('[buildRoute] Using cached route');
-        result = cachedResult;
-      } else if (!networkStatus.isOnline) {
-        // Offline and no cache available
-        console.warn('[buildRoute] Offline and no cached route available');
-        setPostbox({
-          title: 'Offline',
-          message: 'Route not in cache. Unable to fetch new route without internet.',
-        });
-        return;
-      }
-    } catch (error) {
-      console.warn('[buildRoute] Error checking cache:', error);
-      // Continue to fetch fresh route if cache check fails
-    }
-
-    // Fetch fresh route if not cached and online
-    if (!result) {
-      console.log('[buildRoute] Fetching fresh route from TomTom...');
-      result = await fetchTomTomRoute(
-        startCoord,
-        finalDestination,
-        normalizedIntermediates,
-        userTravelMode,  // Use user's vehicle type
-        userRouteType,   // Use user's route type preference
-        routeTypeMap,    // Map of route type IDs to TomTom parameters
-        customHilliness, // Custom hilliness for custom routes
-        customWindingness // Custom windingness for custom routes
-      );
-
-      // Cache the fresh result
-      if (result?.polyline) {
-        try {
-          await cacheRoute(
-            startCoord,
-            finalDestination,
-            normalizedIntermediates,
-            userRouteType,
-            result
-          );
-        } catch (error) {
-          console.warn('[buildRoute] Error caching route:', error);
-        }
-      }
-    }
-
-    console.log("[buildRoute] Result received. Has polyline:", !!result?.polyline, "Has distance:", !!result?.distanceMeters);
-    if (!result) {
-      console.log("[buildRoute] Result is null, returning");
-      return;
-    }
-    // This prevents redundant rebuilds when user moves < MIN_ROUTE_REBUILD_DISTANCE_METERS
-    if (startCoord) {
+    // Track what we're using for comparison
+    if (userLocation) {
+      const startCoord = normalizeCoord(manualStartPoint || userLocation);
       lastRouteBuildLocationRef.current = startCoord;
-      lastRouteTypeRef.current = userRouteType; // Also track the route type used
-      lastWaypoints.current = waypoints; // Track waypoints used
-      lastManualStartPointRef.current = manualStartPoint; // Track manual start point for Follow Me detection
+      lastRouteTypeRef.current = userRouteType;
+      lastWaypoints.current = waypoints;
+      lastManualStartPointRef.current = manualStartPoint;
     }
 
-      // Always set routed total distance (meters) for use in WaypointsList
-      if (typeof result?.distanceMeters === 'number' && result.distanceMeters > 0) {
-        setRouteDistanceMeters(result.distanceMeters);
-      } else if (typeof result?.distance === 'number' && result.distance > 0) {
-        setRouteDistanceMeters(result.distance);
-      } else {
-        setRouteDistanceMeters(null);
-      }
-
-    if (!result?.polyline) {
-      console.log("[buildRoute] No polyline in result, returning");
-      return;
-    }
-    if (requestId !== routeRequestId.current) {
-      console.log("[buildRoute] Request ID mismatch, returning");
-      return;
-    }
-
-    // TomTom returns polyline as array of {latitude, longitude} objects
-    const decoded = result.polyline;
-
-    // Simplify polyline to reduce rendering lag - removes ~70% of points
-    // while maintaining visual accuracy
-    const simplified = simplifyPolyline(decoded, 0.00005); // ~5m tolerance
-    console.log("[buildRoute] Decoded", decoded.length, "points, simplified to", simplified.length, "points");
-    
-    console.log("[buildRoute] Setting route coords with", simplified.length, "points");
-    await debugLog("ROUTE_BUILT", `Route built: ${simplified.length} points, ${(result.distanceMeters / 1000).toFixed(1)}km`, { points: simplified.length, distanceKm: (result.distanceMeters / 1000).toFixed(1) });
-    setRouteCoords(simplified);
-    console.log("[buildRoute] setRouteCoords call complete");
-    // 🔑 ADD THIS
-    setRouteMeta({
-      distanceMeters: result.distanceMeters ?? result.distance,
-      durationSeconds: result.durationSeconds ?? result.duration,
+    // Call the core mapRoute function
+    await mapRoute({
+      origin: manualStartPoint || userLocation,
+      waypoints,
+      destination,
+      travelMode: userTravelMode,
+      routeType: userRouteType,
+      requestId: finalRequestId,
+      skipFitToView: false,
     });
-    setRouteSteps(result.steps ?? []);
-    setCurrentStepIndex(0);
-
-    // Only auto-fit if not already fitted AND not in Follow Me mode
-    if (!routeFittedRef.current && !followUser) {
-      routeFittedRef.current = true;
-
-      mapRef.current?.fitToCoordinates(simplified, {
-        edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
-        animated: true,
-      });
-    }
-    setLastEncodedPolyline(result.polyline);
-  
   }
 
   async function loadSavedRouteById(routeId) {
@@ -2305,35 +2429,92 @@ export default function MapScreenRN() {
 
     const route = snap.data();
 
-    loadSavedRoute(route);
+    loadSavedRoute(route, routeId);
     setCurrentLoadedRouteId(routeId);
   }
 
-  function loadSavedRoute(route) {
+  async function loadSavedRoute(route, routeId) {
+    console.log("[loadSavedRoute] ========== LOADING SAVED ROUTE START ==========");
     clearRoute();
     clearWaypoints();
     isLoadingSavedRouteRef.current = true;
 
-    if (route.origin) {
-      setManualStartPoint({
-        latitude: route.origin.lat,
-        longitude: route.origin.lng,
-      });
-    }
-
+    console.log("[loadSavedRoute] Route origin:", route.origin ? `${route.origin.lat}, ${route.origin.lng}` : "null");
+    
     // Waypoints (normalise + rebuild)
+    let actualOrigin = route.origin;
+    let originWasCorrected = false;
+    
     if (Array.isArray(route.waypoints)) {
-      const normalisedWaypoints = route.waypoints.map((wp) => ({
-        latitude: wp.latitude ?? wp.lat,
-        longitude: wp.longitude ?? wp.lng,
-        title: wp.title ?? null,
-        source: wp.source ?? "saved",
-      }));
+      console.log("[loadSavedRoute] Route has", route.waypoints.length, "waypoints:");
+      const normalisedWaypoints = route.waypoints.map((wp, idx) => {
+        const normalized = {
+          latitude: wp.latitude ?? wp.lat,
+          longitude: wp.longitude ?? wp.lng,
+          title: wp.title ?? null,
+          source: wp.source ?? "saved",
+        };
+        console.log(`  [${idx}] ${normalized.latitude}, ${normalized.longitude} (${normalized.title})`);
+        return normalized;
+      });
+
+      // CHECK: If origin looks wrong, use first waypoint as origin
+      if (actualOrigin && route.waypoints.length > 0 && userLocation) {
+        const origLat = actualOrigin.lat ?? actualOrigin.latitude;
+        const origLng = actualOrigin.lng ?? actualOrigin.longitude;
+        const firstWpLat = normalisedWaypoints[0].latitude;
+        const firstWpLng = normalisedWaypoints[0].longitude;
+        const userLat = userLocation.latitude;
+        const userLng = userLocation.longitude;
+        
+        // Calculate rough distances
+        const distOriginToUser = Math.abs(origLat - userLat) + Math.abs(origLng - userLng);
+        const distOriginToFirstWp = Math.abs(origLat - firstWpLat) + Math.abs(origLng - firstWpLng);
+        
+        console.log("[loadSavedRoute] Origin sanity check - distance to user:", distOriginToUser.toFixed(5), "distance to first wp:", distOriginToFirstWp.toFixed(5));
+        
+        // If origin is very close to user but far from first waypoint, it's wrong
+        if (distOriginToUser < 0.001 && distOriginToFirstWp > 0.01) {
+          console.log("[loadSavedRoute] Origin is incorrect! Using first waypoint as actual origin and updating database.");
+          actualOrigin = {
+            lat: firstWpLat,
+            lng: firstWpLng,
+          };
+          originWasCorrected = true;
+        }
+      }
 
       normalisedWaypoints.forEach((wp) => {
         addFromPlace(wp);
       });
     }
+    
+    // Set the origin (using actualOrigin which may have been corrected)
+    if (actualOrigin) {
+      console.log("[loadSavedRoute] Setting origin to:", `${actualOrigin.lat || actualOrigin.latitude}, ${actualOrigin.lng || actualOrigin.longitude}`);
+      setManualStartPoint({
+        latitude: actualOrigin.lat ?? actualOrigin.latitude,
+        longitude: actualOrigin.lng ?? actualOrigin.longitude,
+      });
+    }
+    
+    // If origin was corrected, update the route in Firestore
+    if (originWasCorrected && routeId) {
+      console.log("[loadSavedRoute] Updating route in Firestore with corrected origin");
+      try {
+        await updateDoc(doc(db, "routes", routeId), {
+          origin: {
+            lat: actualOrigin.lat || actualOrigin.latitude,
+            lng: actualOrigin.lng || actualOrigin.longitude,
+          }
+        });
+        console.log("[loadSavedRoute] Route updated successfully in Firestore");
+      } catch (error) {
+        console.error("[loadSavedRoute] Error updating route in Firestore:", error);
+      }
+    }
+    
+    console.log("[loadSavedRoute] Route destination:", route.destination ? `${route.destination.lat || route.destination.latitude}, ${route.destination.lng || route.destination.longitude} (${route.destination.title})` : "null");
     if (route.destination) {
       setRouteDestination({
         latitude: route.destination.latitude ?? route.destination.lat,
@@ -2380,10 +2561,13 @@ export default function MapScreenRN() {
       // 🔑 use the pending-fit system you already built
       pendingFitRef.current = decoded;
       attemptRouteFit();
+      console.log("[loadSavedRoute] Route loaded successfully with polyline. Polyline points:", decoded.length);
     } else {
       // No saved polyline - allow rebuild to fetch from API
       isLoadingSavedRouteRef.current = false;
+      console.log("[loadSavedRoute] No polyline in saved route - will rebuild from API");
     }
+    console.log("[loadSavedRoute] ========== LOADING SAVED ROUTE END ==========");
 
     setRoutingActive(true);
   }
@@ -2518,18 +2702,26 @@ export default function MapScreenRN() {
 
     const isSearchHitCR = activeQuery && isCr && matchesQuery(poi, activeQuery);
     const isSearchHitGoogle = activeQuery && !isCr && matchesQuery(poi, activeQuery);
+    const isExactCR = isSearchHitCR && isExactMatch(poi, activeQuery);
+    const isExactGoogle = isSearchHitGoogle && isExactMatch(poi, activeQuery);
 
     let markerMode = "default";
     let zIndex = 1;
     if (isDestination) {
       markerMode = "destination";
       zIndex = 1000;
+    } else if (isExactCR) {
+      markerMode = "searchCRExact";
+      zIndex = 900; // Highest search priority
     } else if (isSearchHitCR) {
-      markerMode = "searchCR";
-      zIndex = 800; // Higher than searchGoogle
+      markerMode = "searchCRPartial";
+      zIndex = 800; // Partial CR matches
+    } else if (isExactGoogle) {
+      markerMode = "searchGoogleExact";
+      zIndex = 750; // Exact Google matches
     } else if (isSearchHitGoogle) {
-      markerMode = "searchGoogle";
-      zIndex = 700; // Lower than searchCR (partial matches)
+      markerMode = "searchGooglePartial";
+      zIndex = 700; // Partial Google matches
     } else if (isSponsor) {
       markerMode = "sponsor";
       zIndex = 600; // Higher priority than regular CR places
@@ -2550,19 +2742,29 @@ export default function MapScreenRN() {
         stroke: theme.colors.danger,
       },
       sponsor: {
-        fill: theme.colors.primary,
-        circle: theme.colors.accentMid,
-        stroke: theme.colors.danger,
+        fill: theme.colors.accentMid,
+        circle: theme.colors.accentLight,
+        stroke: "#A855F7", // vibrant purple for sponsors
       },
-      searchCR: {
-        fill: "#FFD700",         // bright gold for current places in search
+      searchCRExact: {
+        fill: "#FFD700",         // bright gold for CR places
         circle: "#FFA500",
-        stroke: categoryStroke,  // category-specific outline
+        stroke: theme.colors.danger, // dark red outline for exact match
       },
-      searchGoogle: {
-        fill: "#FFEAA7",         // lighter gold for search results
-        circle: "#FFB84D",
-        stroke: categoryStroke,  // category-specific outline
+      searchCRPartial: {
+        fill: theme.colors.accentMid,    // accent for partial CR matches
+        circle: theme.colors.accentLight,
+        stroke: theme.colors.accentDark, // dark accent outline for partials
+      },
+      searchGoogleExact: {
+        fill: theme.colors.primaryMid,   // primary blue for exact Google matches
+        circle: theme.colors.accentMid,  // accent circle (not sinister)
+        stroke: theme.colors.danger,     // dark red outline for exact matches
+      },
+      searchGooglePartial: {
+        fill: theme.colors.primaryMid,   // primary blue for partial Google matches
+        circle: theme.colors.primaryLight,
+        stroke: theme.colors.accentDark, // dark accent outline for partials
       },
       cr: {
         fill: theme.colors.accentMid,
@@ -3049,18 +3251,6 @@ export default function MapScreenRN() {
         ]}>
           {postbox.title && <Text style={styles.postboxTitle}>{postbox.title}</Text>}
           <Text style={styles.postboxText}>{postbox.message}</Text>
-        </View>
-      )}
-
-      {isOfflineMode && (
-        <View style={styles.offlineBanner}>
-          <MaterialCommunityIcons
-            name="wifi-off"
-            size={20}
-            color={theme.colors.accent}
-            style={{ marginRight: 8 }}
-          />
-          <Text style={styles.offlineBannerText}>Offline Mode - Using cached routes</Text>
         </View>
       )}
 

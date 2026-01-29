@@ -50,6 +50,8 @@ export async function cacheRoute(startPoint, endPoint, waypoints, routeType, rou
     const cacheKey = generateCacheKey(startPoint, endPoint, waypoints, routeType);
     const timestamp = Date.now();
 
+    // Only cache essential route metadata, not the full polyline
+    // (polyline can be re-fetched if needed, but metadata is lightweight)
     const cacheEntry = {
       key: cacheKey,
       timestamp,
@@ -57,7 +59,8 @@ export async function cacheRoute(startPoint, endPoint, waypoints, routeType, rou
       endPoint,
       waypoints: waypoints || [],
       routeType,
-      routeData, // Complete route response
+      distanceMeters: routeData.distanceMeters,
+      durationSeconds: routeData.durationSeconds,
       expiresAt: timestamp + CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
     };
 
@@ -101,7 +104,8 @@ export async function cacheRoute(startPoint, endPoint, waypoints, routeType, rou
     console.log(`[RouteCache] Cached route: ${cacheKey.substring(0, 20)}...`);
     return true;
   } catch (error) {
-    console.error('[RouteCache] Error caching route:', error);
+    // Fail gracefully - caching is nice-to-have, not critical
+    console.warn('[RouteCache] Warning: Could not cache route. Storage may be full. Continuing without cache.', error.message);
     return false;
   }
 }
