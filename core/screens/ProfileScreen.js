@@ -11,7 +11,6 @@ import { AuthContext } from "@context/AuthContext";
 import { RIDER_AMENITIES } from "@core/config/amenities/rider";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
 import { RIDER_SUITABILITY } from "@core/config/suitability/rider";
-import RouteThemeSelector from "@core/components/routing/RouteThemeSelector";
 import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";

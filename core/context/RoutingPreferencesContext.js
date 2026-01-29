@@ -1,5 +1,5 @@
-import { createContext, useCallback, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createContext, useCallback, useEffect, useState } from "react";
 
 export const RoutingPreferencesContext = createContext({
   theme: "rider",

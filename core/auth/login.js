@@ -3,7 +3,7 @@ import { AuthContext } from "@/core/context/AuthContext";
 import { auth } from "@config/firebase";
 import theme from "@themes";
 import { useRouter } from "expo-router";
-import { signInWithEmailAndPassword, signOut, sendEmailVerification } from "firebase/auth";
+import { sendEmailVerification, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { useContext, useState } from "react";
 import {
     ActivityIndicator,

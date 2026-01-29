@@ -1,7 +1,7 @@
-import { useContext, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import theme from "@themes";
+import { useContext } from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 const TRAVEL_MODE_OPTIONS = [
   { id: "car", label: "🚗 Car", description: "Fastest car routes" },

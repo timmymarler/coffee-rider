@@ -1,7 +1,7 @@
-import { useContext } from "react";
-import { View, ScrollView, TouchableOpacity, Text, StyleSheet } from "react-native";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import theme from "@themes";
+import { useContext } from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function RouteTypeBar() {
   const { routeType, setRouteType, availableRouteTypes } = useContext(RoutingPreferencesContext);

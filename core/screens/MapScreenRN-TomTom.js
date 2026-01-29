@@ -1,12 +1,12 @@
 import { db } from "@config/firebase";
-import { TabBarContext } from "@context/TabBarContext";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
+import { TabBarContext } from "@context/TabBarContext";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
 import { collection, getDocs, onSnapshot } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -18,22 +18,23 @@ import * as Location from "expo-location";
 import { classifyPoi } from "../map/classify/classifyPois";
 import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
+import MapRouteTypeSelector from "@core/components/routing/MapRouteTypeSelector";
 import { decode } from "@mapbox/polyline";
 import { SearchBar } from "../map/components/SearchBar";
-import MapRouteTypeSelector from "@core/components/routing/MapRouteTypeSelector";
-import { fetchRoute } from "../map/utils/fetchRoute";
 import { fetchTomTomRoute } from "../map/utils/tomtomRouting";
 
 import { saveRoute } from "@/core/map/routes/saveRoute";
 import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
+import { useNetworkStatus } from "@core/hooks/useNetworkStatus";
 import useActiveRide from "@core/map/routes/useActiveRide";
 import useActiveRideLocations from "@core/map/routes/useActiveRideLocations";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
 import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
+import { cacheRoute, getCachedRoute } from "@core/utils/routeCache";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
@@ -44,8 +45,6 @@ import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
-import { cacheRoute, getCachedRoute, getCachedRoutes, clearRouteCache } from "@core/utils/routeCache";
-import { useNetworkStatus, checkNetworkStatus, getLastKnownNetworkStatus } from "@core/hooks/useNetworkStatus";
 
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
 const FOLLOW_ZOOM = Platform.OS === "ios" ? 6 : 16; // Android: 16, iOS: 6 - More zoomed out for route visibility
@@ -1133,10 +1132,11 @@ export default function MapScreenRN() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          "Location Required",
-          "Location permission is required to use this feature. Please enable it in your device settings."
-        );
+        setPostbox({
+          type: "warning",
+          title: "Location Required",
+          message: "Location permission is required to use this feature. Please enable it in your device settings."
+        });
         return null;
       }
       const current = await Location.getCurrentPositionAsync({
@@ -1145,10 +1145,11 @@ export default function MapScreenRN() {
       setUserLocation(current.coords);
       return current.coords;
     } catch (e) {
-      Alert.alert(
-        "Location Error",
-        "Unable to determine your current location. Please check your settings."
-      );
+      setPostbox({
+        type: "error",
+        title: "Location Error",
+        message: "Unable to determine your current location. Please check your settings."
+      });
       return null;
     }
   }
@@ -1299,17 +1300,22 @@ export default function MapScreenRN() {
     if (!homeAddress || !homeAddress.trim()) {
       console.log("[ROUTE_TO_HOME] No home address set");
       await debugLog("ROUTE_TO_HOME", "No home address set");
-      Alert.alert(
-        "No Home Address",
-        "Please add your home address in the Profile screen to use this feature."
-      );
+      setPostbox({
+        type: "warning",
+        title: "No Home Address",
+        message: "Please add your home address in the Profile screen to use this feature."
+      });
       return;
     }
 
     if (!userLocation) {
       console.log("[ROUTE_TO_HOME] No user location");
       await debugLog("ROUTE_TO_HOME", "No user location available");
-      Alert.alert("No Location", "Unable to determine your current location.");
+      setPostbox({
+        type: "error",
+        title: "No Location",
+        message: "Unable to determine your current location."
+      });
       return;
     }
 
@@ -1324,10 +1330,11 @@ export default function MapScreenRN() {
       if (!homeCoords) {
         console.log("[ROUTE_TO_HOME] Geocoding failed");
         await debugLog("ROUTE_TO_HOME", "Geocoding failed for address", { address: homeAddress });
-        Alert.alert(
-          "Invalid Address",
-          "Unable to find your home address. Please check it in your Profile settings."
-        );
+        setPostbox({
+          type: "error",
+          title: "Invalid Address",
+          message: "Unable to find your home address. Please check it in your Profile settings."
+        });
         return;
       }
 
@@ -1361,7 +1368,11 @@ export default function MapScreenRN() {
     } catch (error) {
       console.error("Error routing to home:", error);
       await debugLog("ROUTE_TO_HOME", "Error: " + error.message, { error });
-      Alert.alert("Error", "Failed to create route to home.");
+      setPostbox({
+        type: "error",
+        title: "Error",
+        message: "Failed to create route to home."
+      });
     }
   }
 
@@ -1689,35 +1700,40 @@ export default function MapScreenRN() {
       fieldMask.push("places.photos");
     }
 
-    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": fieldMask.join(","),
-      },
-      body: JSON.stringify({
-        textQuery: query,
-        locationBias: {
-          circle: {
-            center: { latitude, longitude },
-            radius,
-          },
+    try {
+      const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": fieldMask.join(","),
         },
-        maxResultCount: 20,
-      }),
-      
-    });
+        body: JSON.stringify({
+          textQuery: query,
+          locationBias: {
+            circle: {
+              center: { latitude, longitude },
+              radius,
+            },
+          },
+          maxResultCount: 20,
+        }),
+        
+      });
 
-    const json = await res.json();
-    if (!res.ok) {
-      console.log("[GOOGLE] text search error:", json?.error || json);
-      return [];
+      const json = await res.json();
+      if (!res.ok) {
+        console.log("[GOOGLE] text search error:", json?.error || json);
+        return [];
+      }
+
+      return (json?.places || [])
+        .map((p) => mapGooglePlace(p, capabilities))
+        .filter(p => p.latitude && p.longitude);
+    } catch (error) {
+      console.log("[GOOGLE] text search fetch error:", error.message);
+      throw error; // Propagate to caller for user-facing error message
     }
-
-    return (json?.places || [])
-      .map((p) => mapGooglePlace(p, capabilities))
-      .filter(p => p.latitude && p.longitude);
   }
 
   useEffect(() => {
@@ -1759,17 +1775,28 @@ export default function MapScreenRN() {
         latitudeDelta < 0.08 ? 30000 :
         50000;
 
-      const results = await doTextSearch({
-        query: activeQuery,
-        latitude,
-        longitude,
-        radius,
-        capabilities,
-      });
+      try {
+        const results = await doTextSearch({
+          query: activeQuery,
+          latitude,
+          longitude,
+          radius,
+          capabilities,
+        });
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      setGooglePois(results);
+        setGooglePois(results);
+      } catch (error) {
+        if (cancelled) return;
+        setPostbox({
+          type: "error",
+          title: "Search Error",
+          message: error?.message || "Failed to search. Please check your connection.",
+        });
+        setGooglePois([]);
+        return;
+      }
 
       // --- Prefer CR match if one exists ---
       const crMatch = crPlaces.find(
@@ -3013,8 +3040,14 @@ export default function MapScreenRN() {
         })()
       )}
       {postbox && (
-        <View style={styles.postbox}>
-          <Text style={styles.postboxTitle}>{postbox.title}</Text>
+        <View style={[
+          styles.postbox,
+          postbox.type === 'error' && styles.postboxError,
+          postbox.type === 'warning' && styles.postboxWarning,
+          postbox.type === 'success' && styles.postboxSuccess,
+          postbox.type === 'info' && styles.postboxInfo,
+        ]}>
+          {postbox.title && <Text style={styles.postboxTitle}>{postbox.title}</Text>}
           <Text style={styles.postboxText}>{postbox.message}</Text>
         </View>
       )}
@@ -3445,9 +3478,25 @@ const styles = StyleSheet.create({
     right: 16,
     padding: 12,
     borderRadius: 10,
-    backgroundColor: theme.colors.secondaryMid, // dark green
+    backgroundColor: theme.colors.accentMid, // default blue
     zIndex: 9999,
     elevation: 6,
+  },
+
+  postboxError: {
+    backgroundColor: theme.colors.danger, // red
+  },
+
+  postboxWarning: {
+    backgroundColor: "#f59e0b", // amber/orange
+  },
+
+  postboxSuccess: {
+    backgroundColor: theme.colors.success, // green
+  },
+
+  postboxInfo: {
+    backgroundColor: theme.colors.accentMid, // blue
   },
 
   junctionPanel: {
@@ -3497,13 +3546,13 @@ const styles = StyleSheet.create({
   postboxTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#6ee7b7", // mint
+    color: "#ffffff",
     marginBottom: 2,
   },
 
   postboxText: {
     fontSize: 13,
-    color: "#ecfdf5",
+    color: "#ffffff",
   },
 
   offlineBanner: {

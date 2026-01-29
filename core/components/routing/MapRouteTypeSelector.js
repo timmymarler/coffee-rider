@@ -1,7 +1,7 @@
-import { useContext, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from "react-native";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import theme from "@themes";
+import { useContext, useState } from "react";
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function MapRouteTypeSelector({ visible, onClose }) {
   const { 

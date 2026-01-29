@@ -1,7 +1,7 @@
-import { useContext } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import theme from "@themes";
+import { useContext } from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 const THEME_OPTIONS = [
   { id: "rider", label: "🏍️ Rider", description: "Motorcycle/scooter routes (Vespa, Lambretta)" },

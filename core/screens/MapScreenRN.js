@@ -1521,35 +1521,40 @@ export default function MapScreenRN() {
       fieldMask.push("places.photos");
     }
 
-    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": fieldMask.join(","),
-      },
-      body: JSON.stringify({
-        textQuery: query,
-        locationBias: {
-          circle: {
-            center: { latitude, longitude },
-            radius,
-          },
+    try {
+      const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": fieldMask.join(","),
         },
-        maxResultCount: 20,
-      }),
-      
-    });
+        body: JSON.stringify({
+          textQuery: query,
+          locationBias: {
+            circle: {
+              center: { latitude, longitude },
+              radius,
+            },
+          },
+          maxResultCount: 20,
+        }),
+        
+      });
 
-    const json = await res.json();
-    if (!res.ok) {
-      console.log("[GOOGLE] text search error:", json?.error || json);
-      return [];
+      const json = await res.json();
+      if (!res.ok) {
+        console.log("[GOOGLE] text search error:", json?.error || json);
+        return [];
+      }
+
+      return (json?.places || [])
+        .map((p) => mapGooglePlace(p, capabilities))
+        .filter(p => p.latitude && p.longitude);
+    } catch (error) {
+      console.log("[GOOGLE] text search fetch error:", error.message);
+      throw error; // Propagate to caller for user-facing error message
     }
-
-    return (json?.places || [])
-      .map((p) => mapGooglePlace(p, capabilities))
-      .filter(p => p.latitude && p.longitude);
   }
 
   useEffect(() => {
@@ -1591,17 +1596,28 @@ export default function MapScreenRN() {
         latitudeDelta < 0.08 ? 30000 :
         50000;
 
-      const results = await doTextSearch({
-        query: activeQuery,
-        latitude,
-        longitude,
-        radius,
-        capabilities,
-      });
+      try {
+        const results = await doTextSearch({
+          query: activeQuery,
+          latitude,
+          longitude,
+          radius,
+          capabilities,
+        });
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      setGooglePois(results);
+        setGooglePois(results);
+      } catch (error) {
+        if (cancelled) return;
+        setPostbox({
+          type: "error",
+          title: "Search Error",
+          message: error?.message || "Failed to search. Please check your connection.",
+        });
+        setGooglePois([]);
+        return;
+      }
 
       // --- Prefer CR match if one exists ---
       const crMatch = crPlaces.find(

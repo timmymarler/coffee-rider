@@ -1,5 +1,4 @@
 import Constants from "expo-constants";
-import { decode } from "@mapbox/polyline";
 
 /**
  * Fetch route from TomTom Routing API
