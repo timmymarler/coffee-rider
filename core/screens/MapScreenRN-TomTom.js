@@ -2079,11 +2079,26 @@ export default function MapScreenRN() {
     );
     
     // Include Google POIs that are in region, but exclude any that have a matching CR place
+    // Both by googlePlaceId AND by proximity (within 40 meters)
     const googleResults = googlePois.filter((p) => {
       if (!paddedRegion || !inRegion(p, paddedRegion)) return false;
       
       // Exclude if there's a CR place with the same googlePlaceId
       if (p.id && crSearchMatches.some(cr => cr.googlePlaceId === p.id)) {
+        return false;
+      }
+      
+      // Exclude if there's a CR place within ~40 meters (same location)
+      // This prevents showing duplicates when the CR place doesn't have googlePlaceId set
+      const PROXIMITY_THRESHOLD = 40; // meters
+      const hasProximitMatch = crSearchMatches.some(cr => {
+        const dx = (cr.latitude - p.latitude) * 111320; // meters per degree latitude
+        const dy = (cr.longitude - p.longitude) * (40075000 * Math.cos((cr.latitude * Math.PI) / 180)) / 360; // meters per degree longitude
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        return distance < PROXIMITY_THRESHOLD;
+      });
+      
+      if (hasProximitMatch) {
         return false;
       }
       
