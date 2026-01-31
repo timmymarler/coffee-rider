@@ -888,7 +888,6 @@ export default function MapScreenRN() {
 
   const handleSetStart = () => {
     setSelectedPlaceId(null);
-    setFollowUser(false);
     setManualStartPoint({
       latitude: pendingMapPoint.latitude,
       longitude: pendingMapPoint.longitude,
@@ -1226,9 +1225,6 @@ export default function MapScreenRN() {
   }
 
   function handleRecentre() {
-    // Explicitly disable Follow Me when user taps the red recenter button
-    setFollowUser(false);
-    clearFollowMeInactivityTimeout();
     // Always reset to normal zoom and no tilt
     skipNextRegionChangeRef.current = true;
     recenterOnUser({ zoom: RECENTER_ZOOM, pitch: 0 });
@@ -1613,14 +1609,22 @@ export default function MapScreenRN() {
       return;
     }
 
-    // Disable Follow Me only on user pan, not on programmatic animations
+    // IMPORTANT: Do NOT disable Follow Me during active Follow Me mode
+    // All camera updates during Follow Me are programmatic (from location updates)
+    // Only disable if user manually pans AFTER they were in Follow Me
+    if (followUser) {
+      // Skip pan detection entirely while Follow Me is active - 
+      // map will update continuously as user location changes
+      skipNextRegionChangeRef.current = false;
+      return;
+    }
+
+    // For non-Follow Me mode: Disable if user panned the map
     // isAnimatingRef detects our own recenterOnUser() calls
-    // skipNextRegionChangeRef catches route-to-home and toggle-on animations
-    if (followUser && !isAnimatingRef.current && !skipNextRegionChangeRef.current) {
-      console.log('[MAP] User manually panned - disabling Follow Me');
+    // skipNextRegionChangeRef catches route-to-home and other animations
+    if (!isAnimatingRef.current && !skipNextRegionChangeRef.current) {
+      console.log('[MAP] User manually panned map');
       lastUserPanTimeRef.current = Date.now();
-      setFollowUser(false);
-      clearFollowMeInactivityTimeout();
     }
     skipNextRegionChangeRef.current = false;
     
@@ -1715,7 +1719,6 @@ export default function MapScreenRN() {
     setManualStartPoint(null); 
     routeFittedRef.current = false;
     setCurrentLoadedRouteId(null);
-    setFollowUser(false);          // Disable Follow Me when clearing route
   }
 
   function clearSearch() {
