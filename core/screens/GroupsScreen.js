@@ -74,6 +74,7 @@ export default function GroupsScreen() {
     );
   }
 
+  const [sharedRoutesCollapsed, setSharedRoutesCollapsed] = useState(false);
   const sections = [
     {
       key: "createGroup",
@@ -330,102 +331,110 @@ export default function GroupsScreen() {
             content: (
               <View style={styles.cardWrap}>
                 <CRCard>
-                  <CRLabel>Shared Routes</CRLabel>
-                  {routesLoading ? (
-                    <ActivityIndicator color={theme.colors.primary} />
-                  ) : sharedRoutes.length === 0 ? (
-                    <Text style={{ color: theme.colors.textMuted, marginTop: theme.spacing.md }}>
-                      No shared routes yet.
-                    </Text>
-                  ) : (
-                    sharedRoutes.map((route) => {
-                      const isThisRideActive = activeRide?.rideId === route.id;
-                      
-                      return (
-                        <View key={route.id} style={styles.routeItem}>
-                          <TouchableOpacity
-                            onPress={() => {
-                              setPendingSavedRouteId(route.id);
-                              router.push("/map");
-                            }}
-                          >
-                            <Text style={styles.routeName}>
-                              {route.name || route.title || route.destination?.title || "Untitled route"}
-                            </Text>
-                            {route.distanceMeters && (
-                              <Text style={styles.routeMeta}>
-                                {(route.distanceMeters / 1609).toFixed(1)} mi
-                                {route.waypoints?.length && ` · ${route.waypoints.length} stops`}
-                              </Text>
-                            )}
-                          </TouchableOpacity>
-                          
-                          <View style={{ marginTop: theme.spacing.sm }}>
-                            {isThisRideActive ? (
-                              <CRButton
-                                title="End Ride & Stop Sharing"
-                                variant="danger"
+                  <TouchableOpacity
+                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+                    onPress={() => setSharedRoutesCollapsed((prev) => !prev)}
+                  >
+                    <CRLabel>Shared Routes</CRLabel>
+                    <Ionicons
+                      name={sharedRoutesCollapsed ? "chevron-down" : "chevron-up"}
+                      size={20}
+                      color={theme.colors.primary}
+                    />
+                  </TouchableOpacity>
+                  {!sharedRoutesCollapsed && (
+                    <View>
+                      {routesLoading ? (
+                        <ActivityIndicator color={theme.colors.primary} />
+                      ) : sharedRoutes.length === 0 ? (
+                        <Text style={{ color: theme.colors.textMuted, marginTop: theme.spacing.md }}>
+                          No shared routes yet.
+                        </Text>
+                      ) : (
+                        sharedRoutes.map((route) => {
+                          const isThisRideActive = activeRide?.rideId === route.id;
+                          return (
+                            <View key={route.id} style={styles.routeItem}>
+                              <TouchableOpacity
                                 onPress={() => {
-                                  Alert.alert(
-                                    "End Ride?",
-                                    "This will stop sharing your location with other riders.",
-                                    [
-                                      { text: "Cancel", style: "cancel" },
-                                      {
-                                        text: "End Ride",
-                                        style: "destructive",
-                                        onPress: endRide,
-                                      },
-                                    ]
-                                  );
+                                  setPendingSavedRouteId(route.id);
+                                  router.push("/map");
                                 }}
-                              />
-                            ) : (
-                              <CRButton
-                                title={isStarting ? "Starting…" : "Start Ride & Share Location"}
-                                loading={isStarting}
-                                disabled={!!activeRide} // Disable if already on a different ride
-                                onPress={() => {
-                                  if (!selectedGroupId) {
-                                    Alert.alert("No group selected");
-                                    return;
-                                  }
-                                  
-                                  Alert.alert(
-                                    "Start Ride?",
-                                    "This will share your location with other riders on this route in real-time.",
-                                    [
-                                      { text: "Cancel", style: "cancel" },
-                                      {
-                                        text: "Start Ride",
-                                        onPress: async () => {
-                                          await startRide(
-                                            route.id,
-                                            selectedGroupId,
-                                            route.name || route.title || "Untitled Route"
-                                          );
-                                          
-                                          // Switch to Maps tab and enable Follow Me after route loads
-                                          setPendingSavedRouteId(route.id);
-                                          setEnableFollowMeAfterLoad(true);
-                                          router.push("/map");
-                                        },
-                                      },
-                                    ]
-                                  );
-                                }}
-                              />
-                            )}
-                            
-                            {activeRide && !isThisRideActive && (
-                              <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 4, textAlign: "center" }}>
-                                End current ride to start this one
-                              </Text>
-                            )}
-                          </View>
-                        </View>
-                      );
-                    })
+                              >
+                                <Text style={styles.routeName}>
+                                  {route.name || route.title || route.destination?.title || "Untitled route"}
+                                </Text>
+                                {route.distanceMeters && (
+                                  <Text style={styles.routeMeta}>
+                                    {(route.distanceMeters / 1609).toFixed(1)} mi
+                                    {route.waypoints?.length && ` · ${route.waypoints.length} stops`}
+                                  </Text>
+                                )}
+                              </TouchableOpacity>
+                              <View style={{ marginTop: theme.spacing.sm }}>
+                                {isThisRideActive ? (
+                                  <CRButton
+                                    title="End Ride & Stop Sharing"
+                                    variant="danger"
+                                    onPress={() => {
+                                      Alert.alert(
+                                        "End Ride?",
+                                        "This will stop sharing your location with other riders.",
+                                        [
+                                          { text: "Cancel", style: "cancel" },
+                                          {
+                                            text: "End Ride",
+                                            style: "destructive",
+                                            onPress: endRide,
+                                          },
+                                        ]
+                                      );
+                                    }}
+                                  />
+                                ) : (
+                                  <CRButton
+                                    title={isStarting ? "Starting…" : "Start Ride & Share Location"}
+                                    loading={isStarting}
+                                    disabled={!!activeRide}
+                                    onPress={() => {
+                                      if (!selectedGroupId) {
+                                        Alert.alert("No group selected");
+                                        return;
+                                      }
+                                      Alert.alert(
+                                        "Start Ride?",
+                                        "This will share your location with other riders on this route in real-time.",
+                                        [
+                                          { text: "Cancel", style: "cancel" },
+                                          {
+                                            text: "Start Ride",
+                                            onPress: async () => {
+                                              await startRide(
+                                                route.id,
+                                                selectedGroupId,
+                                                route.name || route.title || "Untitled Route"
+                                              );
+                                              setPendingSavedRouteId(route.id);
+                                              setEnableFollowMeAfterLoad(true);
+                                              router.push("/map");
+                                            },
+                                          },
+                                        ]
+                                      );
+                                    }}
+                                  />
+                                )}
+                                {activeRide && !isThisRideActive && (
+                                  <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 4, textAlign: "center" }}>
+                                    End current ride to start this one
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+                          );
+                        })
+                      )}
+                    </View>
                   )}
                 </CRCard>
               </View>
