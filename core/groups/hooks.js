@@ -1,3 +1,56 @@
+// Fetch events for a group
+export function useGroupEvents(groupId) {
+    // Debug: log groupId passed to hook
+    useEffect(() => {
+      console.log('[useGroupEvents] groupId:', groupId);
+    }, [groupId]);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!groupId) {
+      setEvents([]);
+      setLoading(false);
+      return undefined;
+    }
+
+    // Calculate date range: now to 30 days from now
+    const now = new Date();
+    const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    // Query events collection for this group and next 30 days
+    const q = query(
+      collection(db, "events"),
+      where("groupId", "==", groupId),
+      where("startDateTime", ">=", now),
+      where("startDateTime", "<=", in30Days)
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        try {
+          const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setEvents(rows);
+          setError(null);
+          setLoading(false);
+        } catch (err) {
+          setError(err.message);
+          setLoading(false);
+        }
+      },
+      (err) => {
+        setError(err.message);
+        setLoading(false);
+      }
+    );
+
+    return unsub;
+  }, [groupId]);
+
+  return { events, loading, error };
+}
 import { db } from "@config/firebase";
 import { collection, collectionGroup, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
 import { useEffect, useState } from "react";

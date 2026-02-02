@@ -4,6 +4,7 @@ import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY, shareEvent } from "@core/map/events/sharedEvents";
 import { getCapabilities } from "@core/roles/capabilities";
 import { useAllUserGroups } from "@core/groups/hooks";
+// Remove DropDownPicker import
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
@@ -57,7 +58,8 @@ export default function CalendarScreen() {
   // Share event modal state
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [selectedVisibility, setSelectedVisibility] = useState(EVENT_VISIBILITY.PRIVATE);
-  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [selectedGroupIds, setSelectedGroupIds] = useState([]);
+  const [groupCardExpanded, setGroupCardExpanded] = useState(false);
   const [sharing, setSharing] = useState(false);
 
   // Memoize the useEvents filter to avoid unnecessary refetches
@@ -117,26 +119,38 @@ export default function CalendarScreen() {
 
   const handleShareEvent = async () => {
     if (!selectedEvent) return;
-
     try {
       setSharing(true);
       const capabilities = getCapabilities(profile?.role || "guest");
-      
-      await shareEvent({
-        eventId: selectedEvent.id,
-        visibility: selectedVisibility,
-        groupId: selectedVisibility === EVENT_VISIBILITY.GROUP ? selectedGroupId : null,
-        capabilities,
-        userId: user?.uid,
-      });
-
+      if (selectedVisibility === EVENT_VISIBILITY.GROUP) {
+        if (!selectedGroupIds.length) {
+          Alert.alert("Select at least one group");
+          return;
+        }
+        await Promise.all(selectedGroupIds.map(async (groupId) => {
+          await shareEvent({
+            eventId: selectedEvent.id,
+            visibility: selectedVisibility,
+            groupId,
+            capabilities,
+            userId: user?.uid,
+          });
+        }));
+      } else {
+        await shareEvent({
+          eventId: selectedEvent.id,
+          visibility: selectedVisibility,
+          groupId: null,
+          capabilities,
+          userId: user?.uid,
+        });
+      }
       Alert.alert("Success", "Event shared successfully!");
       setShareModalVisible(false);
       setSelectedVisibility(EVENT_VISIBILITY.PRIVATE);
-      setSelectedGroupId(null);
+      setSelectedGroupIds([]);
     } catch (err) {
       console.error("Error sharing event:", err);
-      // User-friendly error messages
       let errorMessage = "Failed to share event. Please try again.";
       if (err.message?.includes("own events")) {
         errorMessage = "You can only share events you created.";
@@ -151,15 +165,13 @@ export default function CalendarScreen() {
 
   const openShareModal = () => {
     if (!selectedEvent) return;
-    
     // Pre-populate visibility if the event already has one
     if (selectedEvent.visibility) {
       setSelectedVisibility(selectedEvent.visibility);
       if (selectedEvent.visibility === EVENT_VISIBILITY.GROUP && selectedEvent.groupId) {
-        setSelectedGroupId(selectedEvent.groupId);
+        setSelectedGroupIds([selectedEvent.groupId]);
       }
     }
-    
     setShareModalVisible(true);
   };
 
@@ -853,28 +865,57 @@ export default function CalendarScreen() {
               </TouchableOpacity>
 
               {selectedVisibility === EVENT_VISIBILITY.GROUP && groups?.length > 0 && (
-                <View style={styles.groupSelector}>
-                  {groups.map((group) => (
-                    <TouchableOpacity
-                      key={group.id}
-                      style={[
-                        styles.groupOption,
-                        selectedGroupId === group.id &&
-                          styles.groupOptionSelected,
-                      ]}
-                      onPress={() => setSelectedGroupId(group.id)}
-                    >
-                      <Text
-                        style={[
-                          styles.groupOptionText,
-                          selectedGroupId === group.id &&
-                            styles.groupOptionTextSelected,
-                        ]}
-                      >
-                        {group.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                <View style={{ marginVertical: 12 }}>
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                      borderWidth: 1,
+                      borderRadius: 8,
+                      padding: 12,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                    onPress={() => setGroupCardExpanded((prev) => !prev)}
+                  >
+                    <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: '500' }}>
+                      {selectedGroupIds.length === 0
+                        ? 'Select groups...'
+                        : `${selectedGroupIds.length} group${selectedGroupIds.length > 1 ? 's' : ''} selected`}
+                    </Text>
+                    <Ionicons
+                      name={groupCardExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={22}
+                      color={theme.colors.text}
+                    />
+                  </TouchableOpacity>
+                  {groupCardExpanded && (
+                    <View style={{ maxHeight: 400, marginTop: 8, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }}>
+                      <ScrollView style={{ maxHeight: 400 }}>
+                        {groups.map((group) => (
+                          <TouchableOpacity
+                            key={group.id}
+                            style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border, justifyContent: 'space-between' }}
+                            onPress={() => {
+                              setSelectedGroupIds((selected) =>
+                                selected.includes(group.id)
+                                  ? selected.filter((id) => id !== group.id)
+                                  : [...selected, group.id]
+                              );
+                            }}
+                          >
+                            <Text style={{ color: theme.colors.text, fontSize: 15 }}>{group.name}</Text>
+                            <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: theme.colors.accentMid, backgroundColor: selectedGroupIds.includes(group.id) ? theme.colors.accentMid : theme.colors.surface, alignItems: 'center', justifyContent: 'center', marginLeft: 12 }}>
+                              {selectedGroupIds.includes(group.id) && (
+                                <Ionicons name="checkmark" size={18} color={theme.colors.surface} />
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
                 </View>
               )}
 

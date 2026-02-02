@@ -71,59 +71,7 @@ export default function GroupsScreen() {
   const { capabilities, user } = useContext(AuthContext) || {};
   const { mapActions } = useContext(TabBarContext);
   const canAccessGroups = capabilities?.canAccessGroups === true;
-  const [creating, setCreating] = useState(false);
-  const [actingOnInvite, setActingOnInvite] = useState(null);
-  const [revokingInvite, setRevokingInvite] = useState(null);
-  const [inviteeInput, setInviteeInput] = useState("");
-  const [sendingInvite, setSendingInvite] = useState(false);
-  const [selectedGroupId, setSelectedGroupId] = useState(null);
-  const [groupName, setGroupName] = useState("");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [removingMemberId, setRemovingMemberId] = useState(null);
-  const [leavingGroup, setLeavingGroup] = useState(false);
-  // Collapsible section state
-  const [membersExpanded, setMembersExpanded] = useState(true);
-  const [sharedRoutesExpanded, setSharedRoutesExpanded] = useState(true);
-<<<<<<< HEAD
-=======
-  const [eventsExpanded, setEventsExpanded] = useState(true);
 
-  // Log selectedGroupId changes to verify dropdown selection
-  useEffect(() => {
-    if (selectedGroupId) {
-      console.log('Dropdown selectedGroupId changed:', selectedGroupId);
-    }
-  }, [selectedGroupId]);
-  // Guard: wait for user and groups to load
-  const userLoaded = !!user?.uid;
-  const groupsLoaded = !groupsLoading && Array.isArray(groups);
-  const validGroupId = userLoaded && groupsLoaded && selectedGroupId;
-
-  // Only log and fetch if ready
-  if (userLoaded && groupsLoaded) {
-    console.log('Groups array:', groups);
-    console.log('Selected Group ID:', selectedGroupId);
-  }
-
-  // Safe lookup for selectedGroup
-  const selectedGroup = groupsLoaded && selectedGroupId
-    ? groups.find(g => g.id === selectedGroupId)
-    : undefined;
-  if (selectedGroup) {
-    console.log('Selected Group:', selectedGroup);
-  }
-
-  // Fetch events for selected group (always pass selectedGroupId, let hook handle null)
-  const { events: groupEvents, loading: eventsLoading, error: eventsError } = useGroupEvents(selectedGroupId);
-  if (selectedGroupId) {
-    console.log('Group Events:', groupEvents);
-  }
-  const router = useRouter();
-  const { capabilities, user } = useContext(AuthContext) || {};
-  const { mapActions } = useContext(TabBarContext);
-  const canAccessGroups = capabilities?.canAccessGroups === true;
-
->>>>>>> event-modal-ui-update
 
   // Hooks
   const { invites, loading: invitesLoading, error: invitesError } = useInvitesEnriched(user?.uid, user?.email);
@@ -174,127 +122,6 @@ export default function GroupsScreen() {
             <CRInput
               placeholder="Coffee Crew"
               value={groupName}
-<<<<<<< HEAD
-                  <TouchableOpacity
-                    onPress={() => setSharedRoutesExpanded((prev) => !prev)}
-                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 }}
-                  >
-                    <CRLabel>Shared Routes</CRLabel>
-                    <MaterialCommunityIcons
-                      name={sharedRoutesExpanded ? "chevron-up" : "chevron-down"}
-                      size={24}
-                      color={theme.colors.text}
-                    />
-                  </TouchableOpacity>
-                  {sharedRoutesExpanded && (
-                    routesLoading ? (
-                      <ActivityIndicator color={theme.colors.primary} />
-                    ) : sharedRoutes.length === 0 ? (
-                      <Text style={{ color: theme.colors.textMuted, marginTop: theme.spacing.md }}>
-                        No shared routes yet.
-                      </Text>
-                    ) : (
-                      sharedRoutes.map((route) => {
-                        const isThisRideActive = activeRide?.rideId === route.id;
-                        return (
-                          <View key={route.id} style={styles.routeItem}>
-                            <TouchableOpacity
-                              onPress={() => {
-                                setPendingSavedRouteId(route.id);
-                                router.push("/map");
-                              }}
-                            >
-                              <Text style={styles.routeName}>
-                                {route.name || route.title || route.destination?.title || "Untitled route"}
-                              </Text>
-                              {route.distanceMeters && (
-                                <Text style={styles.routeMeta}>
-                                  {(route.distanceMeters / 1609).toFixed(1)} mi
-                                  {route.waypoints?.length && ` · ${route.waypoints.length} stops`}
-                                </Text>
-                              )}
-                            </TouchableOpacity>
-                            <View style={{ marginTop: theme.spacing.sm }}>
-                              {isThisRideActive ? (
-                                <CRButton
-                                  title="End Ride & Stop Sharing"
-                                  variant="danger"
-                                  onPress={() => {
-                                    Alert.alert(
-                                      "End Ride?",
-                                      "This will stop sharing your location with other riders.",
-                                      [
-                                        { text: "Cancel", style: "cancel" },
-                                        {
-                                          text: "End Ride",
-                                          style: "destructive",
-                                          onPress: endRide,
-                                        },
-                                      ]
-                                    );
-                                  }}
-                                />
-                              ) : (
-                                <View style={{ flex: 1, alignItems: 'flex-end', justifyContent: 'center' }}>
-                                  <TouchableOpacity
-                                    style={{
-                                      backgroundColor: theme.colors.accent,
-                                      paddingVertical: 8,
-                                      paddingHorizontal: 18,
-                                      borderRadius: 8,
-                                      minWidth: 100,
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      flexDirection: 'row',
-                                      gap: 8,
-                                    }}
-                                    onPress={() => {
-                                      if (!selectedGroupId) {
-                                        Alert.alert("No group selected");
-                                        return;
-                                      }
-                                      Alert.alert(
-                                        "Start Ride?",
-                                        "This will share your location with other riders on this route in real-time.",
-                                        [
-                                          { text: "Cancel", style: "cancel" },
-                                          {
-                                            text: "Join Ride",
-                                            onPress: async () => {
-                                              await startRide(
-                                                route.id,
-                                                selectedGroupId,
-                                                route.name || route.title || "Untitled Route"
-                                              );
-                                              setPendingSavedRouteId(route.id);
-                                              setEnableFollowMeAfterLoad(true);
-                                              router.push("/map");
-                                            },
-                                          },
-                                        ]
-                                      );
-                                    }}
-                                    disabled={!!activeRide || isStarting}
-                                  >
-                                    <MaterialCommunityIcons name="navigation-variant" size={16} color={theme.colors.primary} />
-                                    <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: "600" }}>
-                                      {isStarting ? "Joining…" : "Join Ride"}
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              )}
-                              {activeRide && !isThisRideActive && (
-                                <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 4, textAlign: "center" }}>
-                                  End current ride to start this one
-                                </Text>
-                              )}
-                            </View>
-                          </View>
-                        );
-                      })
-                    )
-                  )}
-=======
               onChangeText={setGroupName}
               autoCapitalize="words"
             />
@@ -373,7 +200,6 @@ export default function GroupsScreen() {
                 placeholderStyle={styles.dropdownPlaceholder}
                 arrowIconStyle={{ tintColor: theme.colors.text }}
               />
->>>>>>> event-modal-ui-update
             )}
           </CRCard>
         </View>
@@ -597,14 +423,8 @@ export default function GroupsScreen() {
               <View style={styles.cardWrap}>
                 <CRCard>
                   <TouchableOpacity
-<<<<<<< HEAD
-<<<<<<< HEAD
-                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
-                    onPress={() => setSharedRoutesCollapsed((prev) => !prev)}
-=======
                     onPress={() => setSharedRoutesExpanded((prev) => !prev)}
                     style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 }}
->>>>>>> event-modal-ui-update
                   >
                     <CRLabel>Routes</CRLabel>
                     <MaterialCommunityIcons
@@ -675,89 +495,6 @@ export default function GroupsScreen() {
                                       flexDirection: 'row',
                                       gap: 8,
                                     }}
-<<<<<<< HEAD
-                                  />
-                                ) : (
-                                  <CRButton
-                                    title={isStarting ? "Starting…" : "Start Ride & Share Location"}
-                                    loading={isStarting}
-                                    disabled={!!activeRide}
-=======
-                    onPress={() => setSharedRoutesExpanded((prev) => !prev)}
-                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 }}
-                  >
-                    <CRLabel>Shared Routes</CRLabel>
-                    <MaterialCommunityIcons
-                      name={sharedRoutesExpanded ? "chevron-up" : "chevron-down"}
-                      size={24}
-                      color={theme.colors.text}
-                    />
-                  </TouchableOpacity>
-                  {sharedRoutesExpanded && (
-                    routesLoading ? (
-                      <ActivityIndicator color={theme.colors.primary} />
-                    ) : sharedRoutes.length === 0 ? (
-                      <Text style={{ color: theme.colors.textMuted, marginTop: theme.spacing.md }}>
-                        No shared routes yet.
-                      </Text>
-                    ) : (
-                      sharedRoutes.map((route) => {
-                        const isThisRideActive = activeRide?.rideId === route.id;
-                        return (
-                          <View key={route.id} style={styles.routeItem}>
-                            <TouchableOpacity
-                              onPress={() => {
-                                setPendingSavedRouteId(route.id);
-                                router.push("/map");
-                              }}
-                            >
-                              <Text style={styles.routeName}>
-                                {route.name || route.title || route.destination?.title || "Untitled route"}
-                              </Text>
-                              {route.distanceMeters && (
-                                <Text style={styles.routeMeta}>
-                                  {(route.distanceMeters / 1609).toFixed(1)} mi
-                                  {route.waypoints?.length && ` · ${route.waypoints.length} stops`}
-                                </Text>
-                              )}
-                            </TouchableOpacity>
-                            <View style={{ marginTop: theme.spacing.sm }}>
-                              {isThisRideActive ? (
-                                <CRButton
-                                  title="End Ride & Stop Sharing"
-                                  variant="danger"
-                                  onPress={() => {
-                                    Alert.alert(
-                                      "End Ride?",
-                                      "This will stop sharing your location with other riders.",
-                                      [
-                                        { text: "Cancel", style: "cancel" },
-                                        {
-                                          text: "End Ride",
-                                          style: "destructive",
-                                          onPress: endRide,
-                                        },
-                                      ]
-                                    );
-                                  }}
-                                />
-                              ) : (
-                                <View style={{ flex: 1, alignItems: 'flex-end', justifyContent: 'center' }}>
-                                  <TouchableOpacity
-                                    style={{
-                                      backgroundColor: theme.colors.accent,
-                                      paddingVertical: 8,
-                                      paddingHorizontal: 18,
-                                      borderRadius: 8,
-                                      minWidth: 100,
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      flexDirection: 'row',
-                                      gap: 8,
-                                    }}
->>>>>>> 597bdd0 (Full restore: all files and features as of 2026-02-02)
-=======
->>>>>>> event-modal-ui-update
                                     onPress={() => {
                                       if (!selectedGroupId) {
                                         Alert.alert("No group selected");
@@ -769,15 +506,7 @@ export default function GroupsScreen() {
                                         [
                                           { text: "Cancel", style: "cancel" },
                                           {
-<<<<<<< HEAD
-<<<<<<< HEAD
-                                            text: "Start Ride",
-=======
                                             text: "Join Ride",
->>>>>>> 597bdd0 (Full restore: all files and features as of 2026-02-02)
-=======
-                                            text: "Join Ride",
->>>>>>> event-modal-ui-update
                                             onPress: async () => {
                                               await startRide(
                                                 route.id,
@@ -792,22 +521,6 @@ export default function GroupsScreen() {
                                         ]
                                       );
                                     }}
-<<<<<<< HEAD
-<<<<<<< HEAD
-                                  />
-                                )}
-                                {activeRide && !isThisRideActive && (
-                                  <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 4, textAlign: "center" }}>
-                                    End current ride to start this one
-                                  </Text>
-                                )}
-                              </View>
-                            </View>
-                          );
-                        })
-                      )}
-                    </View>
-=======
                                     disabled={!!activeRide || isStarting}
                                   >
                                     <MaterialCommunityIcons name="navigation-variant" size={16} color={theme.colors.primary} />
@@ -823,30 +536,10 @@ export default function GroupsScreen() {
                                 </Text>
                               )}
                             </View>
-=======
-                                    disabled={!!activeRide || isStarting}
-                                  >
-                                    <MaterialCommunityIcons name="navigation-variant" size={16} color={theme.colors.primary} />
-                                    <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: "600" }}>
-                                      {isStarting ? "Joining…" : "Join Ride"}
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              )}
-                              {activeRide && !isThisRideActive && (
-                                <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 4, textAlign: "center" }}>
-                                  End current ride to start this one
-                                </Text>
-                              )}
-                            </View>
->>>>>>> event-modal-ui-update
                           </View>
                         );
                       })
                     )
-<<<<<<< HEAD
->>>>>>> 597bdd0 (Full restore: all files and features as of 2026-02-02)
-=======
                   )}
                 </CRCard>
               </View>
@@ -905,7 +598,6 @@ export default function GroupsScreen() {
                         );
                       })
                     )
->>>>>>> event-modal-ui-update
                   )}
                 </CRCard>
               </View>
