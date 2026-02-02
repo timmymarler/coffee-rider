@@ -17,12 +17,13 @@ import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity,
 import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+
 export default function GroupsScreen() {
   const router = useRouter();
   const { capabilities, user } = useContext(AuthContext) || {};
   const { mapActions } = useContext(TabBarContext);
   const canAccessGroups = capabilities?.canAccessGroups === true;
-  
+
   // State declarations
   const [creating, setCreating] = useState(false);
   const [actingOnInvite, setActingOnInvite] = useState(null);
@@ -34,7 +35,10 @@ export default function GroupsScreen() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [removingMemberId, setRemovingMemberId] = useState(null);
   const [leavingGroup, setLeavingGroup] = useState(false);
-  
+  // Collapsible section state
+  const [membersExpanded, setMembersExpanded] = useState(true);
+  const [sharedRoutesExpanded, setSharedRoutesExpanded] = useState(true);
+
   // Hooks
   const { invites, loading: invitesLoading, error: invitesError } = useInvitesEnriched(user?.uid, user?.email);
   const { invites: sentInvites, loading: sentInvitesLoading } = useSentInvitesEnriched(user?.uid);
@@ -87,10 +91,21 @@ export default function GroupsScreen() {
               onChangeText={setGroupName}
               autoCapitalize="words"
             />
-            <CRButton
-              title={creating ? "Creating…" : "Create Group"}
-              loading={creating}
-              onPress={async () => {
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: theme.colors.accent,
+                  paddingVertical: 8,
+                  paddingHorizontal: 18,
+                  borderRadius: 8,
+                  minWidth: 100,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8,
+                  opacity: creating || !groupName.trim() || !user?.uid ? 0.6 : 1,
+                }}
+                onPress={async () => {
                 if (!groupName.trim()) return Alert.alert("Group name required");
                 if (!user?.uid) return Alert.alert("Please sign in to create a group");
                 try {
@@ -110,8 +125,12 @@ export default function GroupsScreen() {
                 }
               }}
               disabled={creating || !groupName.trim() || !user?.uid}
-              style={{ marginTop: theme.spacing.md }}
-            />
+            >
+                <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: "600" }}>
+                  {creating ? "Creating…" : "Create Group"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </CRCard>
         </View>
       ),
@@ -145,6 +164,7 @@ export default function GroupsScreen() {
                 textStyle={styles.dropdownText}
                 dropDownContainerStyle={styles.dropdownMenuStyle}
                 placeholderStyle={styles.dropdownPlaceholder}
+                arrowIconStyle={{ tintColor: theme.colors.text }}
               />
             )}
           </CRCard>
@@ -163,10 +183,21 @@ export default function GroupsScreen() {
               onChangeText={setInviteeInput}
               autoCapitalize="none"
             />
-            <CRButton
-              title={sendingInvite ? "Sending…" : "Send Invite"}
-              loading={sendingInvite}
-              onPress={async () => {
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: theme.colors.accent,
+                  paddingVertical: 8,
+                  paddingHorizontal: 18,
+                  borderRadius: 8,
+                  minWidth: 100,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8,
+                  opacity: sendingInvite || !inviteeInput.trim() || !selectedGroupId ? 0.6 : 1,
+                }}
+                onPress={async () => {
                 if (!inviteeInput.trim()) return;
                 if (!user?.uid) return Alert.alert("Please sign in to send invites");
                 try {
@@ -190,8 +221,12 @@ export default function GroupsScreen() {
                 }
               }}
               disabled={sendingInvite || !inviteeInput.trim() || !selectedGroupId}
-              style={{ marginTop: theme.spacing.md }}
-            />
+            >
+                <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: "600" }}>
+                  {sendingInvite ? "Sending…" : "Send Invite"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </CRCard>
         </View>
       ),
@@ -203,121 +238,144 @@ export default function GroupsScreen() {
             content: (
               <View style={styles.cardWrap}>
                 <CRCard>
-                  <CRLabel>Members</CRLabel>
-                  {membersLoading ? (
-                    <ActivityIndicator color={theme.colors.primary} />
-                  ) : members.length === 0 ? (
-                    <Text style={{ color: theme.colors.textMuted, marginTop: theme.spacing.md }}>
-                      No members yet.
-                    </Text>
-                  ) : (
+                  <TouchableOpacity
+                    onPress={() => setMembersExpanded((prev) => !prev)}
+                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 }}
+                  >
+                    <CRLabel>Members</CRLabel>
+                    <MaterialCommunityIcons
+                      name={membersExpanded ? "chevron-up" : "chevron-down"}
+                      size={24}
+                      color={theme.colors.text}
+                    />
+                  </TouchableOpacity>
+                  {membersExpanded && (
                     <>
-                      {members.map((m) => {
-                        const isCurrentUser = m.uid === user?.uid;
-                        const isOwner = m.role === "owner";
-                        const currentUserIsOwner = members.find(member => member.uid === user?.uid)?.role === "owner";
-                        const canRemove = currentUserIsOwner && !isCurrentUser && !isOwner; // Owner can remove non-owner members (except self)
-                        const hasActiveRide = activeRides[m.uid];
-                        
-                        return (
-                          <View key={m.uid} style={styles.memberItem}>
-                            <View style={{ flex: 1 }}>
-                              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                                <Text style={styles.memberName}>
-                                  {m.displayName || m.email || m.uid}
-                                  {isCurrentUser ? " (you)" : ""}
-                                </Text>
-                                {hasActiveRide && (
-                                  <MaterialCommunityIcons
-                                    name="crosshairs-gps"
-                                    size={14}
-                                    color={theme.colors.danger}
-                                  />
+                      {membersLoading ? (
+                        <ActivityIndicator color={theme.colors.primary} />
+                      ) : members.length === 0 ? (
+                        <Text style={{ color: theme.colors.textMuted, marginTop: theme.spacing.md }}>
+                          No members yet.
+                        </Text>
+                      ) : (
+                        <>
+                          {members.map((m) => {
+                            const isCurrentUser = m.uid === user?.uid;
+                            const isOwner = m.role === "owner";
+                            const currentUserIsOwner = members.find(member => member.uid === user?.uid)?.role === "owner";
+                            const canRemove = currentUserIsOwner && !isCurrentUser && !isOwner;
+                            const hasActiveRide = activeRides[m.uid];
+                            return (
+                              <View key={m.uid} style={styles.memberItem}>
+                                <View style={{ flex: 1 }}>
+                                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                    <Text style={styles.memberName}>
+                                      {m.displayName || m.email || m.uid}
+                                      {isCurrentUser ? " (you)" : ""}
+                                    </Text>
+                                    {hasActiveRide && (
+                                      <MaterialCommunityIcons
+                                        name="crosshairs-gps"
+                                        size={14}
+                                        color={theme.colors.danger}
+                                      />
+                                    )}
+                                  </View>
+                                  <Text style={styles.memberRole}>
+                                    {isOwner ? "Owner" : "Member"}
+                                  </Text>
+                                </View>
+                                {canRemove && (
+                                  <View style={{ flex: 1, alignItems: 'flex-end', justifyContent: 'center' }}>
+                                    <TouchableOpacity
+                                      style={{
+                                        backgroundColor: theme.colors.danger,
+                                        paddingVertical: 8,
+                                        paddingHorizontal: 18,
+                                        borderRadius: 8,
+                                        minWidth: 70,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                      }}
+                                      onPress={() => {
+                                        Alert.alert(
+                                          "Remove Member?",
+                                          `Remove ${m.displayName || m.email || m.uid} from the group?`,
+                                          [
+                                            { text: "Cancel", style: "cancel" },
+                                            {
+                                              text: "Remove",
+                                              style: "destructive",
+                                              onPress: async () => {
+                                                setRemovingMemberId(m.uid);
+                                                try {
+                                                  await removeGroupMember({
+                                                    groupId: selectedGroupId,
+                                                    memberId: m.uid,
+                                                    userId: user?.uid,
+                                                    capabilities,
+                                                  });
+                                                  Alert.alert("Removed", "Member has been removed from the group.");
+                                                } catch (err) {
+                                                  Alert.alert("Unable to remove", err?.message || "Unexpected error");
+                                                } finally {
+                                                  setRemovingMemberId(null);
+                                                }
+                                              },
+                                            },
+                                          ]
+                                        );
+                                      }}
+                                      disabled={removingMemberId === m.uid}
+                                    >
+                                      <Text style={{ color: theme.colors.intext, fontSize: 15, fontWeight: "600" }}>
+                                        {removingMemberId === m.uid ? "…" : "Remove"}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  </View>
                                 )}
                               </View>
-                              <Text style={styles.memberRole}>
-                                {isOwner ? "Owner" : "Member"}
-                              </Text>
-                            </View>
-                            {canRemove && (
-                              <TouchableOpacity
-                                style={{ marginLeft: theme.spacing.md }}
-                                onPress={() => {
-                                  Alert.alert(
-                                    "Remove Member?",
-                                    `Remove ${m.displayName || m.email || m.uid} from the group?`,
-                                    [
-                                      { text: "Cancel", style: "cancel" },
-                                      {
-                                        text: "Remove",
-                                        style: "destructive",
-                                        onPress: async () => {
-                                          setRemovingMemberId(m.uid);
-                                          try {
-                                            await removeGroupMember({
-                                              groupId: selectedGroupId,
-                                              memberId: m.uid,
-                                              userId: user?.uid,
-                                              capabilities,
-                                            });
-                                            Alert.alert("Removed", "Member has been removed from the group.");
-                                          } catch (err) {
-                                            Alert.alert("Unable to remove", err?.message || "Unexpected error");
-                                          } finally {
-                                            setRemovingMemberId(null);
-                                          }
-                                        },
-                                      },
-                                    ]
-                                  );
-                                }}
-                                disabled={removingMemberId === m.uid}
-                              >
-                                <Text style={{ color: theme.colors.danger, fontSize: 12, fontWeight: "500" }}>
-                                  {removingMemberId === m.uid ? "…" : "Remove"}
-                                </Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        );
-                      })}
-                      {/* Leave Group button - only for non-owners */}
-                      {members.find(m => m.uid === user?.uid)?.role !== "owner" && (
-                        <CRButton
-                          title={leavingGroup ? "Leaving…" : "Leave Group"}
-                          variant="danger"
-                          loading={leavingGroup}
-                          onPress={() => {
-                            Alert.alert(
-                              "Leave Group?",
-                              "You will no longer have access to this group and its shared routes.",
-                              [
-                                { text: "Cancel", style: "cancel" },
-                                {
-                                  text: "Leave",
-                                  style: "destructive",
-                                  onPress: async () => {
-                                    setLeavingGroup(true);
-                                    try {
-                                      await leaveGroup({
-                                        groupId: selectedGroupId,
-                                        userId: user?.uid,
-                                      });
-                                      setSelectedGroupId(null);
-                                      Alert.alert("Left", "You have left the group.");
-                                    } catch (err) {
-                                      Alert.alert("Unable to leave", err?.message || "Unexpected error");
-                                    } finally {
-                                      setLeavingGroup(false);
-                                    }
-                                  },
-                                },
-                              ]
                             );
-                          }}
-                          disabled={leavingGroup}
-                          style={{ marginTop: theme.spacing.md }}
-                        />
+                          })}
+                          {/* Leave Group button - only for non-owners */}
+                          {members.find(m => m.uid === user?.uid)?.role !== "owner" && (
+                            <CRButton
+                              title={leavingGroup ? "Leaving…" : "Leave Group"}
+                              variant="danger"
+                              loading={leavingGroup}
+                              onPress={() => {
+                                Alert.alert(
+                                  "Leave Group?",
+                                  "You will no longer have access to this group and its shared routes.",
+                                  [
+                                    { text: "Cancel", style: "cancel" },
+                                    {
+                                      text: "Leave",
+                                      style: "destructive",
+                                      onPress: async () => {
+                                        setLeavingGroup(true);
+                                        try {
+                                          await leaveGroup({
+                                            groupId: selectedGroupId,
+                                            userId: user?.uid,
+                                          });
+                                          setSelectedGroupId(null);
+                                          Alert.alert("Left", "You have left the group.");
+                                        } catch (err) {
+                                          Alert.alert("Unable to leave", err?.message || "Unexpected error");
+                                        } finally {
+                                          setLeavingGroup(false);
+                                        }
+                                      },
+                                    },
+                                  ]
+                                );
+                              }}
+                              disabled={leavingGroup}
+                              style={{ marginTop: theme.spacing.md }}
+                            />
+                          )}
+                        </>
                       )}
                     </>
                   )}
@@ -330,96 +388,124 @@ export default function GroupsScreen() {
             content: (
               <View style={styles.cardWrap}>
                 <CRCard>
-                  <CRLabel>Shared Routes</CRLabel>
-                  {routesLoading ? (
-                    <ActivityIndicator color={theme.colors.primary} />
-                  ) : sharedRoutes.length === 0 ? (
-                    <Text style={{ color: theme.colors.textMuted, marginTop: theme.spacing.md }}>
-                      No shared routes yet.
-                    </Text>
-                  ) : (
-                    sharedRoutes.map((route) => {
-                      const isThisRideActive = activeRide?.rideId === route.id;
-                      return (
-                        <View key={route.id} style={styles.routeItem}>
-                          <TouchableOpacity
-                            onPress={() => {
-                              setPendingSavedRouteId(route.id);
-                              router.push("/map");
-                            }}
-                          >
-                            <Text style={styles.routeName}>
-                              {route.name || route.title || route.destination?.title || "Untitled route"}
-                            </Text>
-                            {route.distanceMeters && (
-                              <Text style={styles.routeMeta}>
-                                {(route.distanceMeters / 1609).toFixed(1)} mi
-                                {route.waypoints?.length && ` · ${route.waypoints.length} stops`}
+                  <TouchableOpacity
+                    onPress={() => setSharedRoutesExpanded((prev) => !prev)}
+                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 }}
+                  >
+                    <CRLabel>Shared Routes</CRLabel>
+                    <MaterialCommunityIcons
+                      name={sharedRoutesExpanded ? "chevron-up" : "chevron-down"}
+                      size={24}
+                      color={theme.colors.text}
+                    />
+                  </TouchableOpacity>
+                  {sharedRoutesExpanded && (
+                    routesLoading ? (
+                      <ActivityIndicator color={theme.colors.primary} />
+                    ) : sharedRoutes.length === 0 ? (
+                      <Text style={{ color: theme.colors.textMuted, marginTop: theme.spacing.md }}>
+                        No shared routes yet.
+                      </Text>
+                    ) : (
+                      sharedRoutes.map((route) => {
+                        const isThisRideActive = activeRide?.rideId === route.id;
+                        return (
+                          <View key={route.id} style={styles.routeItem}>
+                            <TouchableOpacity
+                              onPress={() => {
+                                setPendingSavedRouteId(route.id);
+                                router.push("/map");
+                              }}
+                            >
+                              <Text style={styles.routeName}>
+                                {route.name || route.title || route.destination?.title || "Untitled route"}
                               </Text>
-                            )}
-                          </TouchableOpacity>
-                          <View style={{ marginTop: theme.spacing.sm }}>
-                            {isThisRideActive ? (
-                              <CRButton
-                                title="End Ride & Stop Sharing"
-                                variant="danger"
-                                onPress={() => {
-                                  Alert.alert(
-                                    "End Ride?",
-                                    "This will stop sharing your location with other riders.",
-                                    [
-                                      { text: "Cancel", style: "cancel" },
-                                      {
-                                        text: "End Ride",
-                                        style: "destructive",
-                                        onPress: endRide,
-                                      },
-                                    ]
-                                  );
-                                }}
-                              />
-                            ) : (
-                              <CRButton
-                                title={isStarting ? "Starting…" : "Start Ride & Share Location"}
-                                loading={isStarting}
-                                disabled={!!activeRide}
-                                onPress={() => {
-                                  if (!selectedGroupId) {
-                                    Alert.alert("No group selected");
-                                    return;
-                                  }
-                                  Alert.alert(
-                                    "Start Ride?",
-                                    "This will share your location with other riders on this route in real-time.",
-                                    [
-                                      { text: "Cancel", style: "cancel" },
-                                      {
-                                        text: "Start Ride",
-                                        onPress: async () => {
-                                          await startRide(
-                                            route.id,
-                                            selectedGroupId,
-                                            route.name || route.title || "Untitled Route"
-                                          );
-                                          setPendingSavedRouteId(route.id);
-                                          setEnableFollowMeAfterLoad(true);
-                                          router.push("/map");
+                              {route.distanceMeters && (
+                                <Text style={styles.routeMeta}>
+                                  {(route.distanceMeters / 1609).toFixed(1)} mi
+                                  {route.waypoints?.length && ` · ${route.waypoints.length} stops`}
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                            <View style={{ marginTop: theme.spacing.sm }}>
+                              {isThisRideActive ? (
+                                <CRButton
+                                  title="End Ride & Stop Sharing"
+                                  variant="danger"
+                                  onPress={() => {
+                                    Alert.alert(
+                                      "End Ride?",
+                                      "This will stop sharing your location with other riders.",
+                                      [
+                                        { text: "Cancel", style: "cancel" },
+                                        {
+                                          text: "End Ride",
+                                          style: "destructive",
+                                          onPress: endRide,
                                         },
-                                      },
-                                    ]
-                                  );
-                                }}
-                              />
-                            )}
-                            {activeRide && !isThisRideActive && (
-                              <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 4, textAlign: "center" }}>
-                                End current ride to start this one
-                              </Text>
-                            )}
+                                      ]
+                                    );
+                                  }}
+                                />
+                              ) : (
+                                <View style={{ flex: 1, alignItems: 'flex-end', justifyContent: 'center' }}>
+                                  <TouchableOpacity
+                                    style={{
+                                      backgroundColor: theme.colors.accent,
+                                      paddingVertical: 8,
+                                      paddingHorizontal: 18,
+                                      borderRadius: 8,
+                                      minWidth: 100,
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      flexDirection: 'row',
+                                      gap: 8,
+                                    }}
+                                    onPress={() => {
+                                      if (!selectedGroupId) {
+                                        Alert.alert("No group selected");
+                                        return;
+                                      }
+                                      Alert.alert(
+                                        "Start Ride?",
+                                        "This will share your location with other riders on this route in real-time.",
+                                        [
+                                          { text: "Cancel", style: "cancel" },
+                                          {
+                                            text: "Join Ride",
+                                            onPress: async () => {
+                                              await startRide(
+                                                route.id,
+                                                selectedGroupId,
+                                                route.name || route.title || "Untitled Route"
+                                              );
+                                              setPendingSavedRouteId(route.id);
+                                              setEnableFollowMeAfterLoad(true);
+                                              router.push("/map");
+                                            },
+                                          },
+                                        ]
+                                      );
+                                    }}
+                                    disabled={!!activeRide || isStarting}
+                                  >
+                                    <MaterialCommunityIcons name="navigation-variant" size={16} color={theme.colors.primary} />
+                                    <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: "600" }}>
+                                      {isStarting ? "Joining…" : "Join Ride"}
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+                              )}
+                              {activeRide && !isThisRideActive && (
+                                <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 4, textAlign: "center" }}>
+                                  End current ride to start this one
+                                </Text>
+                              )}
+                            </View>
                           </View>
-                        </View>
-                      );
-                    })
+                        );
+                      })
+                    )
                   )}
                 </CRCard>
               </View>
@@ -636,7 +722,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   memberName: {
-    color: theme.colors.text,
+    color: theme.colors.accentMid,
     fontWeight: "600",
   },
   memberRole: {
