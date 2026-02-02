@@ -25,8 +25,8 @@ import { addDoc, collection, doc, getDocs, serverTimestamp, setDoc } from "fireb
 import AuthLayout from "./AuthLayout";
 
 const ROLES = [
-  { id: "rider", label: "Rider", description: "Find coffee stops" },
-  { id: "pro", label: "Pro", description: "Rider + full features" },
+  { id: "user", label: "User", description: "Find coffee stops" },
+  { id: "pro", label: "Pro", description: "User + full features" },
   { id: "place-owner", label: "Place Owner", description: "Manage your café" },
 ];
 
@@ -40,7 +40,7 @@ export default function RegisterScreen({ onBack }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [displayName, setDisplayName] = useState("");
-  const [selectedRole, setSelectedRole] = useState("rider");
+  const [selectedRole, setSelectedRole] = useState("user");
   const [placeName, setPlaceName] = useState("");
   const [placeCategory, setPlaceCategory] = useState("cafe");
   

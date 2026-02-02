@@ -30,8 +30,6 @@ function FloatingTabBar({ state }) {
   // Get endRide from map actions context - the map screen will provide it
   const endRide = useContext(TabBarContext).mapActions?.endRide;
 
-  console.log('[FloatingTabBar] activeRide from context:', activeRide?.rideId || 'null');
-
   // Determine which tabs are accessible based on capabilities
   const { emailVerified } = useContext(AuthContext) || {};
   const canAccessMap = capabilities?.canAccessMap === true;
@@ -278,9 +276,6 @@ function LayoutContent() {
     // Optionally, show a loading spinner here
     return null;
   }
-
-  // Debug logging
-  console.log('[LayoutContent] user:', user ? user.email : null, 'isGuest:', isGuest, 'emailVerified:', emailVerified);
 
   // Not authenticated and not in guest mode, OR authenticated but not verified: show login screen
   if ((!user && !isGuest) || (user && !emailVerified)) {
