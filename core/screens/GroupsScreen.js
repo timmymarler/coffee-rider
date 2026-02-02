@@ -4,7 +4,7 @@ import { CRInput } from "@components-ui/CRInput";
 import { CRLabel } from "@components-ui/CRLabel";
 import { AuthContext } from "@context/AuthContext";
 import { TabBarContext } from "@context/TabBarContext";
-import { useAllUserGroups, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
+import { useAllUserGroups, useGroupEvents, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
 import { acceptInvite, createGroup, declineInvite, leaveGroup, removeGroupMember, revokeInvite, sendInvite } from "@core/groups/service";
 import useActiveRide from "@core/map/routes/useActiveRide";
 import { useGroupSharedRoutes, useMembersActiveRides } from "@core/map/routes/useSharedRides";
@@ -19,12 +19,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 
 export default function GroupsScreen() {
-  const router = useRouter();
-  const { capabilities, user } = useContext(AuthContext) || {};
-  const { mapActions } = useContext(TabBarContext);
-  const canAccessGroups = capabilities?.canAccessGroups === true;
-
-  // State declarations
+  // State declarations (move to top for correct initialization)
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [eventModalVisible, setEventModalVisible] = useState(false);
   const [creating, setCreating] = useState(false);
   const [actingOnInvite, setActingOnInvite] = useState(null);
   const [revokingInvite, setRevokingInvite] = useState(null);
@@ -38,6 +35,43 @@ export default function GroupsScreen() {
   // Collapsible section state
   const [membersExpanded, setMembersExpanded] = useState(true);
   const [sharedRoutesExpanded, setSharedRoutesExpanded] = useState(true);
+  const [eventsExpanded, setEventsExpanded] = useState(true);
+
+  // Log selectedGroupId changes to verify dropdown selection
+  useEffect(() => {
+    if (selectedGroupId) {
+      console.log('Dropdown selectedGroupId changed:', selectedGroupId);
+    }
+  }, [selectedGroupId]);
+  // Guard: wait for user and groups to load
+  const userLoaded = !!user?.uid;
+  const groupsLoaded = !groupsLoading && Array.isArray(groups);
+  const validGroupId = userLoaded && groupsLoaded && selectedGroupId;
+
+  // Only log and fetch if ready
+  if (userLoaded && groupsLoaded) {
+    console.log('Groups array:', groups);
+    console.log('Selected Group ID:', selectedGroupId);
+  }
+
+  // Safe lookup for selectedGroup
+  const selectedGroup = groupsLoaded && selectedGroupId
+    ? groups.find(g => g.id === selectedGroupId)
+    : undefined;
+  if (selectedGroup) {
+    console.log('Selected Group:', selectedGroup);
+  }
+
+  // Fetch events for selected group (always pass selectedGroupId, let hook handle null)
+  const { events: groupEvents, loading: eventsLoading, error: eventsError } = useGroupEvents(selectedGroupId);
+  if (selectedGroupId) {
+    console.log('Group Events:', groupEvents);
+  }
+  const router = useRouter();
+  const { capabilities, user } = useContext(AuthContext) || {};
+  const { mapActions } = useContext(TabBarContext);
+  const canAccessGroups = capabilities?.canAccessGroups === true;
+
 
   // Hooks
   const { invites, loading: invitesLoading, error: invitesError } = useInvitesEnriched(user?.uid, user?.email);
@@ -392,7 +426,7 @@ export default function GroupsScreen() {
                     onPress={() => setSharedRoutesExpanded((prev) => !prev)}
                     style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 }}
                   >
-                    <CRLabel>Shared Routes</CRLabel>
+                    <CRLabel>Routes</CRLabel>
                     <MaterialCommunityIcons
                       name={sharedRoutesExpanded ? "chevron-up" : "chevron-down"}
                       size={24}
@@ -503,6 +537,64 @@ export default function GroupsScreen() {
                               )}
                             </View>
                           </View>
+                        );
+                      })
+                    )
+                  )}
+                </CRCard>
+              </View>
+            ),
+          },
+          {
+            key: "events",
+            content: (
+              <View style={styles.cardWrap}>
+                <CRCard>
+                  <TouchableOpacity
+                    onPress={() => setEventsExpanded((prev) => !prev)}
+                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 }}
+                  >
+                    <CRLabel>Events</CRLabel>
+                    <MaterialCommunityIcons
+                      name={eventsExpanded ? "chevron-up" : "chevron-down"}
+                      size={24}
+                      color={theme.colors.text}
+                    />
+                  </TouchableOpacity>
+                  {eventsExpanded && (
+                    eventsLoading ? (
+                      <ActivityIndicator color={theme.colors.primary} />
+                    ) : eventsError ? (
+                      <Text style={{ color: theme.colors.danger, marginTop: theme.spacing.md }}>{eventsError}</Text>
+                    ) : groupEvents.length === 0 ? (
+                      <Text style={{ color: theme.colors.textMuted, marginTop: theme.spacing.md }}>
+                        No events scheduled.
+                      </Text>
+                    ) : (
+                      groupEvents.map(event => {
+                        // Format date & time
+                        let dateTimeString = '';
+                        if (event.startDateTime) {
+                          const dateObj = event.startDateTime instanceof Date ? event.startDateTime : (event.startDateTime.toDate ? event.startDateTime.toDate() : null);
+                          if (dateObj) {
+                            dateTimeString = `${dateObj.toLocaleDateString()} ${dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                          }
+                        }
+                        return (
+                          <TouchableOpacity
+                            key={event.id}
+                            onPress={() => {
+                              setSelectedEvent(event);
+                              setEventModalVisible(true);
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <View style={{ marginTop: theme.spacing.md, marginBottom: theme.spacing.sm, padding: 12, borderRadius: 8, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border }}>
+                              <Text style={{ color: theme.colors.accentMid, fontWeight: 'bold', fontSize: 15 }}>{event.title}</Text>
+                              <Text style={{ color: theme.colors.text, fontSize: 13, marginTop: 2 }}>{event.placeName}</Text>
+                              <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 4 }}>{dateTimeString}</Text>
+                            </View>
+                          </TouchableOpacity>
                         );
                       })
                     )
@@ -667,6 +759,60 @@ export default function GroupsScreen() {
         }}
         scrollEnabled={true}
       />
+      {/* Event Details Modal */}
+      {eventModalVisible && selectedEvent && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+        }}>
+          <View style={{
+            backgroundColor: theme.colors.surface,
+            borderRadius: 16,
+            padding: 24,
+            minWidth: 280,
+            maxWidth: 340,
+            shadowColor: '#000',
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 10,
+          }}>
+            <Text style={{ color: theme.colors.accentMid, fontWeight: 'bold', fontSize: 20, marginBottom: 8 }}>{selectedEvent.title}</Text>
+            <Text style={{ color: theme.colors.text, fontSize: 15, marginBottom: 6 }}>{selectedEvent.placeName}</Text>
+            {selectedEvent.startDateTime && (
+              <Text style={{ color: theme.colors.textMuted, fontSize: 14, marginBottom: 10 }}>
+                {(() => {
+                  const dateObj = selectedEvent.startDateTime instanceof Date ? selectedEvent.startDateTime : (selectedEvent.startDateTime.toDate ? selectedEvent.startDateTime.toDate() : null);
+                  return dateObj ? `${dateObj.toLocaleDateString()} ${dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '';
+                })()}
+              </Text>
+            )}
+            {selectedEvent.description && (
+              <Text style={{ color: theme.colors.accentDark, fontSize: 14, marginBottom: 10 }}>{selectedEvent.description}</Text>
+            )}
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: theme.colors.primaryDark,
+                  paddingVertical: 10,
+                  paddingHorizontal: 24,
+                  borderRadius: 8,
+                  alignItems: 'center',
+                }}
+                onPress={() => setEventModalVisible(false)}
+              >
+                <Text style={{ color: theme.colors.text, fontWeight: '600', fontSize: 16 }}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
