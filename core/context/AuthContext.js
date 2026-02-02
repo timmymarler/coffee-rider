@@ -3,11 +3,11 @@
 import { auth, db } from "@config/firebase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-    createUserWithEmailAndPassword,
-    onAuthStateChanged,
-    signInWithEmailAndPassword,
-    signOut,
-    updateProfile
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile
 } from "firebase/auth";
 import { deleteDoc, doc } from "firebase/firestore";
 import { createContext, useEffect, useState } from "react";
@@ -16,8 +16,8 @@ import { AppState } from "react-native";
 import { getCapabilities } from "@core/roles/capabilities";
 import { checkVersionStatus, fetchVersionInfo } from "@core/utils/versionCheck";
 import {
-    ensureUserDocument,
-    getUserProfile
+  ensureUserDocument,
+  getUserProfile
 } from "@firebaseLocal/users";
 import Constants from "expo-constants";
 
@@ -127,7 +127,6 @@ export default function AuthProvider({ children }) {
         session.lastUsed = Date.now();
         session.expiresAt = Date.now() + SESSION_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
         await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session));
-        console.log('[AuthContext] Session activity updated');
       }
     } catch (err) {
       console.error('[AuthContext] Error updating session:', err);

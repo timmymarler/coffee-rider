@@ -78,7 +78,6 @@ export default function useActiveRide(user) {
             setActiveRide(rideData);
           }
         } else {
-          console.log('[useActiveRide] Ride snapshot does not exist - setting to null');
           setActiveRide(null);
         }
       },
@@ -96,7 +95,6 @@ export default function useActiveRide(user) {
     );
 
     return () => {
-      console.log('[useActiveRide] Cleaning up listener');
       unsubscribe();
     };
   }, [user?.uid]);

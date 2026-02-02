@@ -36,12 +36,10 @@ export function useNetworkStatus() {
             type: isOnline ? 'wifi' : 'none',
           });
 
-          console.log('[Network] Status:', { isOnline, online: isOnline });
         }
       } catch (error) {
         // If fetch fails, we're offline
         if (isMounted) {
-          console.log('[Network] Status: offline (fetch failed)');
           setNetworkState({
             isOnline: false,
             isConnected: false,
