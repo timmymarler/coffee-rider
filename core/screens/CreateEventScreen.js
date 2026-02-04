@@ -70,11 +70,9 @@ export default function CreateEventScreen() {
     try {
       const searchTerm = placeName.trim().toLowerCase();
       console.log("[CreateEvent] Searching for places with name containing:", searchTerm);
-      
       // Get all places and filter client-side for case-insensitive substring match
       const q = await getDocs(collection(db, "places"));
       console.log("[CreateEvent] Total places in collection:", q.docs.length);
-      
       if (q.docs.length > 0) {
         console.log("[CreateEvent] Sample places:", q.docs.slice(0, 3).map(doc => {
           const data = doc.data();
@@ -84,7 +82,6 @@ export default function CreateEventScreen() {
           };
         }));
       }
-      
       const matches = q.docs
         .map(doc => {
           const data = doc.data();
@@ -103,22 +100,23 @@ export default function CreateEventScreen() {
           // Sort by relevance - exact matches first, then starts with, then contains
           const aName = (a.name || a.title || "").toLowerCase();
           const bName = (b.name || b.title || "").toLowerCase();
-          
           if (aName === searchTerm) return -1;
           if (bName === searchTerm) return 1;
           if (aName.startsWith(searchTerm)) return -1;
           if (bName.startsWith(searchTerm)) return 1;
           return 0;
         });
-      
       console.log("[CreateEvent] Found matches:", matches.length, matches);
       setPlaceMatches(matches);
-
       // Always show selection modal (even if no matches found)
       console.log("[CreateEvent] Showing place selection modal");
       setShowPlaceSelectionModal(true);
     } catch (err) {
       console.error("Error searching places:", err);
+      if (err && err.message) {
+        // Log Firestore index error message to terminal for copy-paste
+        console.log("[Firestore Index Error]", err.message);
+      }
     } finally {
       setIsSearching(false);
     }
@@ -292,48 +290,11 @@ export default function CreateEventScreen() {
             />
           </View>
 
-          {/* Place Selection - Place Owner */}
-          {profile?.role === "place-owner" && userPlaces.length > 0 && (
-            <View style={styles.field}>
-              <Text style={styles.label}>Place *</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={{ marginTop: 8 }}
-              >
-                {userPlaces.map((place) => (
-                  <TouchableOpacity
-                    key={place.id}
-                    style={[
-                      styles.placeButton,
-                      formData.placeId === place.id &&
-                        styles.placeButtonActive,
-                    ]}
-                    onPress={() => {
-                      updateForm("placeId", place.id);
-                      updateForm("placeName", place.name);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.placeButtonText,
-                        formData.placeId === place.id &&
-                          styles.placeButtonTextActive,
-                      ]}
-                    >
-                      {place.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
 
-          {/* Place Selection - Pro User */}
-          {profile?.role === "pro" && (
+          {/* Place Selection - All except Place Owner */}
+          {profile?.role !== "place-owner" && (
             <View style={styles.field}>
               <Text style={styles.label}>Place *</Text>
-              
               {/* Selected Place Display */}
               {formData.placeName && (
                 <View style={[styles.selectedPlaceContainer]}>
@@ -343,7 +304,6 @@ export default function CreateEventScreen() {
                   </TouchableOpacity>
                 </View>
               )}
-              
               {/* Place Search Input */}
               {!formData.placeName && (
                 <View style={styles.placeSearchContainer}>
@@ -365,6 +325,16 @@ export default function CreateEventScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+            </View>
+          )}
+
+          {/* Place Selection - Place Owner only (auto-selected, not editable) */}
+          {profile?.role === "place-owner" && userPlaces.length > 0 && (
+            <View style={styles.field}>
+              <Text style={styles.label}>Place *</Text>
+              <View style={[styles.selectedPlaceContainer]}>
+                <Text style={styles.selectedPlaceText}>{userPlaces[0].name}</Text>
+              </View>
             </View>
           )}
 

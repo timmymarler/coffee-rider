@@ -49,15 +49,23 @@ export async function shareEvent({ eventId, visibility, groupId = null, capabili
     throw new Error(`You can only share your own events. Owner: ${owner}, You: ${userId}`);
   }
 
-  const updateData = {
+  // If sharing to multiple groups, groupId can be an array
+  let updateData = {
     visibility,
     updatedAt: serverTimestamp(),
   };
 
   if (visibility === EVENT_VISIBILITY.GROUP) {
-    updateData.groupId = groupId;
+    // Accept array or string for groupId
+    if (Array.isArray(groupId)) {
+      updateData.groupIds = groupId;
+      updateData.groupId = null;
+    } else {
+      updateData.groupIds = [groupId];
+      updateData.groupId = groupId;
+    }
   } else {
-    // Remove groupId if changing away from group visibility
+    updateData.groupIds = [];
     updateData.groupId = null;
   }
 

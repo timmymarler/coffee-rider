@@ -22,7 +22,7 @@ export function useGroupEvents(groupId) {
     // Query events collection for this group and next 30 days
     const q = query(
       collection(db, "events"),
-      where("groupId", "==", groupId),
+      where("groupIds", "array-contains", groupId),
       where("startDateTime", ">=", now),
       where("startDateTime", "<=", in30Days)
     );

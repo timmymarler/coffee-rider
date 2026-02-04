@@ -127,15 +127,13 @@ export default function CalendarScreen() {
           Alert.alert("Select at least one group");
           return;
         }
-        await Promise.all(selectedGroupIds.map(async (groupId) => {
-          await shareEvent({
-            eventId: selectedEvent.id,
-            visibility: selectedVisibility,
-            groupId,
-            capabilities,
-            userId: user?.uid,
-          });
-        }));
+        await shareEvent({
+          eventId: selectedEvent.id,
+          visibility: selectedVisibility,
+          groupId: selectedGroupIds, // Pass array of group IDs
+          capabilities,
+          userId: user?.uid,
+        });
       } else {
         await shareEvent({
           eventId: selectedEvent.id,
@@ -168,8 +166,14 @@ export default function CalendarScreen() {
     // Pre-populate visibility if the event already has one
     if (selectedEvent.visibility) {
       setSelectedVisibility(selectedEvent.visibility);
-      if (selectedEvent.visibility === EVENT_VISIBILITY.GROUP && selectedEvent.groupId) {
-        setSelectedGroupIds([selectedEvent.groupId]);
+      if (selectedEvent.visibility === EVENT_VISIBILITY.GROUP) {
+        if (Array.isArray(selectedEvent.groupIds)) {
+          setSelectedGroupIds(selectedEvent.groupIds);
+        } else if (selectedEvent.groupId) {
+          setSelectedGroupIds([selectedEvent.groupId]);
+        } else {
+          setSelectedGroupIds([]);
+        }
       }
     }
     setShareModalVisible(true);
@@ -595,7 +599,7 @@ export default function CalendarScreen() {
         </View>
 
         {/* Create Event Button (for place owners & pro users) */}
-        {profile?.role === "place-owner" || profile?.role === "pro" ? (
+        {profile?.role === "place-owner" || profile?.role === "pro" || profile?.role === "admin" ? (
           <TouchableOpacity
             style={styles.createEventButton}
             onPress={() => router.push({
