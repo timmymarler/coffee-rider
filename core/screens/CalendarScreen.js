@@ -11,14 +11,15 @@ import theme from "@themes";
 import { useRouter } from "expo-router";
 import { useCallback, useContext, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  PanResponder
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -38,12 +39,32 @@ const REGIONS = [
 ];
 
 export default function CalendarScreen() {
+    // PanResponder for swipe gestures
+    const panResponder = PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Only respond to horizontal swipes
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dx < -40) {
+          // Swipe left: next month
+          const next = new Date(selectedDate);
+          next.setMonth(next.getMonth() + 1);
+          setSelectedDate(next);
+        } else if (gestureState.dx > 40) {
+          // Swipe right: previous month
+          const prev = new Date(selectedDate);
+          prev.setMonth(prev.getMonth() - 1);
+          setSelectedDate(prev);
+        }
+      },
+    });
   const router = useRouter();
   const { user, profile } = useContext(AuthContext);
   const insets = useSafeAreaInsets();
   const { colors, spacing } = theme;
 
-  const [viewMode, setViewMode] = useState("month"); // "month", "week", "day"
+  // Only month view needed
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [filters, setFilters] = useState({
     regions: [],
@@ -343,8 +364,10 @@ export default function CalendarScreen() {
             key={item.id}
             style={styles.eventCard}
             onPress={() => {
-              setSelectedEvent(item);
-              setShowEventModal(true);
+              router.push({
+                pathname: '/create-event',
+                params: { eventId: item.id, edit: 'true' }
+              });
             }}
           >
             <View style={styles.eventTime}>
@@ -417,40 +440,52 @@ export default function CalendarScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.headerControls, { paddingTop: 12, paddingRight: insets.top + 12 }]}>
-          <View style={styles.viewToggle}>
-            {["month", "week", "day"].map((mode) => (
-              <TouchableOpacity
-                key={mode}
-                style={[
-                  styles.viewButton,
-                  viewMode === mode && styles.viewButtonActive,
-                ]}
-                onPress={() => setViewMode(mode)}
-              >
-                <Text
-                  style={[
-                    styles.viewButtonText,
-                    viewMode === mode && styles.viewButtonTextActive,
-                  ]}
-                >
-                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
+      <View style={[styles.headerControls, { paddingTop: 12, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingRight: insets.top + 12 }]}> 
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity 
+              style={styles.headerNavButtonLarge} 
+              onPress={() => {
+                const prev = new Date(selectedDate);
+                prev.setMonth(prev.getMonth() - 1);
+                setSelectedDate(prev);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.headerNavButtonTextLarge}>{'<'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerTodayButton}
+              onPress={() => setSelectedDate(new Date())}
+              activeOpacity={0.8}
+            >
+              <Text style={{ fontSize: 20, fontWeight: '700', color: colors.accentMid }}>Today</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerNavButtonLarge}
+              onPress={() => {
+                const next = new Date(selectedDate);
+                next.setMonth(next.getMonth() + 1);
+                setSelectedDate(next);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.headerNavButtonTextLarge}>{'>'}</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => setShowFilters(!showFilters)}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="options"
-              size={28}
-              color={filtersActive ? colors.accentMid : colors.primaryLight}
-            />
-          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.filterButton} 
+            onPress={() => setShowFilters(!showFilters)} 
+            activeOpacity={0.8} 
+          > 
+            <Ionicons 
+              name="options" 
+              size={28} 
+              color={filtersActive ? colors.accentMid : colors.primaryLight} 
+            /> 
+          </TouchableOpacity> 
         </View>
+      </View>
 
       {showFilters && (
         <ScrollView
@@ -544,47 +579,20 @@ export default function CalendarScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: theme.spacing.xl * 5 }}
       >
-        {/* Month Header */}
-        <View style={styles.monthHeader}>
-          <TouchableOpacity
-            onPress={() => {
-              const prev = new Date(selectedDate);
-              prev.setMonth(prev.getMonth() - 1);
-              setSelectedDate(prev);
-            }}
-          >
-            <Text style={styles.monthHeaderButton}>← Prev</Text>
-          </TouchableOpacity>
+        {/* Month Title in place of old header */}
+        <View style={styles.monthHeaderTitleBar}>
           <Text style={styles.monthHeaderTitle}>
             {selectedDate.toLocaleDateString("en-US", {
               month: "long",
               year: "numeric",
             })}
           </Text>
-          <TouchableOpacity
-            onPress={() => {
-              const next = new Date(selectedDate);
-              next.setMonth(next.getMonth() + 1);
-              setSelectedDate(next);
-            }}
-          >
-            <Text style={styles.monthHeaderButton}>Next →</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Calendar Grid */}
-        {viewMode === "month" && (
-          <View style={styles.calendarGrid}>
-            {renderCalendarGrid()}
-          </View>
-        )}
-
-        {/* Week View */}
-        {viewMode === "week" && (
-          <View style={styles.weekGrid}>
-            {renderWeekView()}
-          </View>
-        )}
+        {/* Calendar Grid (always month view) */}
+        <View style={styles.calendarGrid} {...panResponder.panHandlers}>
+          {renderCalendarGrid()}
+        </View>
 
         {/* Selected Date Events */}
         <View style={styles.eventsSection}>
@@ -986,6 +994,53 @@ export default function CalendarScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerNavButtonLarge: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryDark,
+    marginHorizontal: 2,
+    shadowColor: theme.colors.accentMid,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  headerNavButtonTextLarge: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: theme.colors.accentMid,
+  },
+  headerTodayButton: {
+    minWidth: 80,
+    height: 52,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryDark,
+    marginHorizontal: 2,
+    paddingHorizontal: 12,
+    shadowColor: theme.colors.accentMid,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  monthHeaderTitleBar: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    backgroundColor: theme.colors.primaryMid,
+    borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    overflow: 'hidden',
+    width: '100%',
+  },
   container: {
     flex: 1,
   },

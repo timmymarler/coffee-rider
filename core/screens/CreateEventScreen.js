@@ -2,8 +2,13 @@
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { useEventForm } from "@core/hooks/useEventForm";
+import { useEvents } from "@core/hooks/useEvents";
 import theme from "@themes";
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useNavigation } from '@react-navigation/native';
+import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
+import { useAllUserGroups } from "@core/groups/hooks";
 import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import {
@@ -24,14 +29,149 @@ import {
 } from "react-native";
 
 export default function CreateEventScreen() {
+      const navigation = useNavigation();
+    // Set header title using navigation (react-navigation)
+    useEffect(() => {
+      if (navigation && typeof navigation.setOptions === 'function') {
+        navigation.setOptions({ title: 'Event' });
+      }
+    }, [navigation]);
   const router = useRouter();
   const { user, profile } = useContext(AuthContext);
   const { colors, spacing } = theme;
-  const { selectedDate } = useLocalSearchParams();
-  
+  const params = useLocalSearchParams();
+  const { selectedDate, eventId, edit } = params;
+
   // Parse selectedDate if provided
   const initialDate = selectedDate ? new Date(selectedDate) : null;
   const { formData, updateForm, submitForm, submitting, error } = useEventForm(initialDate, profile?.role);
+  const { updateEvent } = useEvents();
+
+  // Track initial form state for edit mode
+  const [initialFormData, setInitialFormData] = useState(null);
+
+  // Group sharing state
+  const [visibility, setVisibility] = useState(EVENT_VISIBILITY.PRIVATE);
+  const [selectedGroupIds, setSelectedGroupIds] = useState([]);
+
+  // Edit mode: fetch event data if eventId is present
+  useEffect(() => {
+    async function fetchEventForEdit() {
+      if (eventId && edit === 'true') {
+        try {
+          const eventRef = doc(db, 'events', eventId);
+          const eventSnap = await getDoc(eventRef);
+          if (eventSnap.exists()) {
+            const eventData = eventSnap.data();
+            // Pre-fill form fields
+            updateForm('title', eventData.title || '');
+            updateForm('description', eventData.description || '');
+            updateForm('placeId', eventData.placeId || '');
+            updateForm('placeName', eventData.placeName || '');
+            updateForm('startDateTime', eventData.startDateTime?.toDate ? eventData.startDateTime.toDate() : new Date(eventData.startDateTime));
+            updateForm('endDateTime', eventData.endDateTime?.toDate ? eventData.endDateTime.toDate() : new Date(eventData.endDateTime));
+            updateForm('maxAttendees', eventData.maxAttendees || null);
+            updateForm('suitability', eventData.suitability || []);
+            updateForm('region', eventData.region || '');
+            updateForm('recurrence', eventData.recurrence || 'one-off');
+            updateForm('recurrenceEndDate', eventData.recurrenceEndDate || null);
+            updateForm('recurrenceDayOfWeek', eventData.recurrenceDayOfWeek || null);
+            updateForm('recurrencePattern', eventData.recurrencePattern || 'date');
+            updateForm('recurrenceDateOfMonth', eventData.recurrenceDateOfMonth || 1);
+            updateForm('recurrenceDayOfMonth', eventData.recurrenceDayOfMonth || 1);
+            updateForm('recurrenceDayOfWeekMonthly', eventData.recurrenceDayOfWeekMonthly || 3);
+            updateForm('visibility', eventData.visibility || EVENT_VISIBILITY.PRIVATE);
+            setVisibility(eventData.visibility || EVENT_VISIBILITY.PRIVATE);
+            setSelectedGroupIds(eventData.groupIds || []);
+            // Store initial form data for change detection
+            setInitialFormData({
+              title: eventData.title || '',
+              description: eventData.description || '',
+              placeId: eventData.placeId || '',
+              placeName: eventData.placeName || '',
+              startDateTime: eventData.startDateTime?.toDate ? eventData.startDateTime.toDate() : new Date(eventData.startDateTime),
+              endDateTime: eventData.endDateTime?.toDate ? eventData.endDateTime.toDate() : new Date(eventData.endDateTime),
+              maxAttendees: eventData.maxAttendees || null,
+              suitability: eventData.suitability || [],
+              region: eventData.region || '',
+              recurrence: eventData.recurrence || 'one-off',
+              recurrenceEndDate: eventData.recurrenceEndDate || null,
+              recurrenceDayOfWeek: eventData.recurrenceDayOfWeek || null,
+              recurrencePattern: eventData.recurrencePattern || 'date',
+              recurrenceDateOfMonth: eventData.recurrenceDateOfMonth || 1,
+              recurrenceDayOfMonth: eventData.recurrenceDayOfMonth || 1,
+              recurrenceDayOfWeekMonthly: eventData.recurrenceDayOfWeekMonthly || 3,
+              visibility: eventData.visibility || EVENT_VISIBILITY.PRIVATE,
+              groupIds: eventData.groupIds || [],
+            });
+          }
+        } catch (err) {
+          console.error('Error loading event for edit:', err);
+        }
+      }
+    }
+    fetchEventForEdit();
+    // If not editing, clear all fields except date/time
+    if (!eventId || edit !== 'true') {
+      updateForm('title', '');
+      updateForm('description', '');
+      updateForm('placeId', '');
+      updateForm('placeName', '');
+      updateForm('maxAttendees', null);
+      updateForm('suitability', []);
+      updateForm('region', '');
+      updateForm('recurrence', 'one-off');
+      updateForm('recurrenceEndDate', null);
+      updateForm('recurrenceDayOfWeek', null);
+      updateForm('recurrencePattern', 'date');
+      updateForm('recurrenceDateOfMonth', 1);
+      updateForm('recurrenceDayOfMonth', 1);
+      updateForm('recurrenceDayOfWeekMonthly', 3);
+      updateForm('visibility', EVENT_VISIBILITY.PRIVATE);
+      setVisibility(EVENT_VISIBILITY.PRIVATE);
+      setSelectedGroupIds([]);
+      // Set date fields to selected date from Calendar
+      if (selectedDate) {
+        const date = new Date(selectedDate);
+        const startDateTime = new Date(date.setHours(9, 0, 0, 0)); // Default 9:00 AM
+        const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // +1 hour
+        updateForm('startDateTime', startDateTime);
+        updateForm('endDateTime', endDateTime);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, edit]);
+    // Helper: check if all required fields are filled for new event
+    function isFormComplete() {
+      return (
+        formData.title.trim() &&
+        formData.placeId &&
+        formData.placeName &&
+        formData.startDateTime &&
+        formData.endDateTime &&
+        formData.region.trim() &&
+        formData.suitability.length > 0
+      );
+    }
+
+    // Helper: check if form has changed in edit mode
+    function isFormChanged() {
+      if (!initialFormData) return false;
+      // Compare all relevant fields
+      return [
+        'title', 'description', 'placeId', 'placeName', 'startDateTime', 'endDateTime', 'maxAttendees', 'suitability', 'region', 'recurrence', 'recurrenceEndDate', 'recurrenceDayOfWeek', 'recurrencePattern', 'recurrenceDateOfMonth', 'recurrenceDayOfMonth', 'recurrenceDayOfWeekMonthly', 'visibility', 'groupIds'
+      ].some((key) => {
+        if (Array.isArray(formData[key])) {
+          return JSON.stringify(formData[key]) !== JSON.stringify(initialFormData[key]);
+        }
+        if (formData[key] instanceof Date && initialFormData[key] instanceof Date) {
+          return formData[key].getTime() !== initialFormData[key].getTime();
+        }
+        return formData[key] !== initialFormData[key];
+      });
+    }
+  const [groupCardExpanded, setGroupCardExpanded] = useState(false);
+  const { groups } = useAllUserGroups(user?.uid);
 
   const [userPlaces, setUserPlaces] = useState([]);
   const [loadingPlaces, setLoadingPlaces] = useState(false);
@@ -123,22 +263,102 @@ export default function CreateEventScreen() {
   }
 
   // Handle place selection from search results
-  function handleSelectPlace(place) {
+  async function handleSelectPlace(place) {
     updateForm("placeId", place.id);
     updateForm("placeName", place.name);
     setPlaceName(""); // Clear search
     setPlaceMatches([]);
     setShowPlaceSelectionModal(false);
     console.log("[CreateEvent] Selected place:", place.name);
+
+    // Try to get address/location from place object or Firestore
+    let address = place.address;
+    let location = place.location;
+    // If not present, fetch from Firestore
+    if (!address || !location) {
+      try {
+        const placeRef = doc(db, "places", place.id);
+        const placeSnap = await getDoc(placeRef);
+        if (placeSnap.exists()) {
+          const data = placeSnap.data();
+          address = address || data.address;
+          location = location || data.location;
+        }
+      } catch (err) {
+        console.warn("Could not fetch place address/location:", err);
+      }
+    }
+
+    // Map address/location to region
+    const region = getRegionFromAddressOrLocation(address, location);
+    if (region) {
+      updateForm("region", region);
+    }
   }
 
   // Handle clearing place selection
   function handleClearPlace() {
     updateForm("placeId", null);
     updateForm("placeName", "");
+    updateForm("region", "");
     setPlaceName("");
     setPlaceMatches([]);
   }
+// Helper: Map address/location to region
+function getRegionFromAddressOrLocation(address, location) {
+  // 1. Use postcode mapping only (ignore lat/lng)
+  if (!address && !location) return "";
+
+  // 2. Fallback: postcode mapping
+  if (!address && !location) return "";
+  const postcodeRegionMap = [
+    { prefix: ["SW", "PL", "TR", "EX", "TQ"], region: "South West" },
+    { prefix: ["SE", "BR", "CR", "DA", "ME", "CT"], region: "South East" },
+    { prefix: ["E", "EC", "N", "NW", "SE", "SW", "W", "WC"], region: "London" },
+    { prefix: ["B", "CV", "DY", "WS", "WV"], region: "West Midlands" },
+    { prefix: ["LE", "NG", "DE"], region: "East Midlands" },
+    { prefix: ["CB", "CO", "IP", "NR", "PE"], region: "East of England" },
+    { prefix: ["L", "M", "OL", "PR", "SK", "WA", "WN"], region: "North West" },
+    { prefix: ["NE", "SR", "TS"], region: "North East" },
+    { prefix: ["BD", "DN", "HD", "HG", "HU", "LS", "S", "WF", "YO"], region: "Yorkshire and the Humber" },
+    { prefix: ["CF", "LD", "NP", "SA", "SY"], region: "Wales" },
+    { prefix: ["AB", "DD", "EH", "FK", "G", "IV", "KA", "KW", "KY", "ML", "PA", "PH", "TD"], region: "Scotland" },
+    { prefix: ["BT"], region: "Northern Ireland" },
+  ];
+  let postcode = "";
+  if (address) {
+    const match = address.match(/([A-Z]{1,2}\d{1,2}[A-Z]?)/i);
+    if (match) {
+      postcode = match[1].toUpperCase();
+    }
+  }
+  let selectedRegion = "";
+  // Special case: SY13 (Whitchurch) should be West Midlands
+  if (postcode === "SY13") {
+    selectedRegion = "West Midlands";
+  } else if (postcode) {
+    for (const entry of postcodeRegionMap) {
+      if (entry.prefix.some((p) => postcode.startsWith(p))) {
+        selectedRegion = entry.region;
+        break;
+      }
+    }
+  }
+  if (postcode || selectedRegion) {
+    console.log(`[Region Debug] Postcode: ${postcode}, Region: ${selectedRegion}`);
+  }
+  if (selectedRegion) {
+    return selectedRegion;
+  }
+
+  // 3. Fallback: city name
+  if (address && address.toLowerCase().includes("london")) return "London";
+  if (address && address.toLowerCase().includes("manchester")) return "North West";
+  if (address && address.toLowerCase().includes("birmingham")) return "West Midlands";
+  // ...add more city mappings as needed
+
+  return "";
+}
 
   const handleSubmit = async () => {
     // Validate place selection for all users
@@ -185,12 +405,31 @@ export default function CreateEventScreen() {
       }
     }
 
-    const success = await submitForm();
-    if (success) {
-      Alert.alert("Success", "Event created successfully!");
-      router.back();
+    // If editing, update the event instead of creating a new one
+    if (eventId && edit === 'true') {
+      try {
+        await updateEvent(eventId, {
+          ...formData,
+          visibility,
+          groupIds: visibility === EVENT_VISIBILITY.GROUP ? selectedGroupIds : [],
+        });
+        Alert.alert("Success", "Event updated successfully!");
+        router.replace({ pathname: '/calendar' });
+      } catch (err) {
+        Alert.alert("Error", err.message || "Failed to update event");
+      }
     } else {
-      Alert.alert("Error", error || "Failed to create event");
+      // Pass visibility and groupIds directly to submitForm to ensure they are saved
+      const success = await submitForm({
+        visibility,
+        groupIds: visibility === EVENT_VISIBILITY.GROUP ? selectedGroupIds : [],
+      });
+      if (success) {
+        Alert.alert("Success", "Event created successfully!");
+        router.replace({ pathname: '/calendar' });
+      } else {
+        Alert.alert("Error", error || "Failed to create event");
+      }
     }
   };
 
@@ -246,16 +485,19 @@ export default function CreateEventScreen() {
     setEditingTimeField(null);
   };
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.closeButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Create Event</Text>
-        <View style={{ width: 50 }} />
-      </View>
+  // Set screen header title dynamically using expo-router navigation options
+  useEffect(() => {
+    if (typeof router.setOptions === 'function') {
+      router.setOptions({
+        title: eventId && edit === 'true' ? 'Edit Event' : 'Create Event',
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, edit]);
 
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
+      {/* No page header here; rely on screen header */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
@@ -423,7 +665,20 @@ export default function CreateEventScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Region *</Text>
             <View style={styles.regionContainer}>
-              {["Wales", "South East", "Midlands", "East of England", "North", "London"].map(
+              {[
+                "South West",
+                "South East",
+                "London",
+                "West Midlands",
+                "East Midlands",
+                "East of England",
+                "North West",
+                "North East",
+                "Yorkshire and the Humber",
+                "Wales",
+                "Scotland",
+                "Northern Ireland"
+              ].map(
                 (region) => (
                   <TouchableOpacity
                     key={region}
@@ -512,6 +767,103 @@ export default function CreateEventScreen() {
             </View>
           </View>
 
+          {/* Visibility & Group Sharing - Updated UI */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Event Visibility</Text>
+            <View style={{ gap: 8 }}>
+              {/* Private Option */}
+              <TouchableOpacity
+                style={[
+                  styles.visibilityOption,
+                  visibility === EVENT_VISIBILITY.PRIVATE && styles.visibilityOptionSelected,
+                ]}
+                onPress={() => setVisibility(EVENT_VISIBILITY.PRIVATE)}
+              >
+                <View style={styles.visibilityIconWrap}>
+                  <Ionicons name="lock-closed" size={20} color={visibility === EVENT_VISIBILITY.PRIVATE ? colors.accentMid : colors.text} />
+                </View>
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Private</Text>
+                  <Text style={styles.optionDesc}>Only you can see this</Text>
+                </View>
+                <Ionicons name={visibility === EVENT_VISIBILITY.PRIVATE ? "radio-button-on" : "radio-button-off"} size={20} color={colors.accentMid} />
+              </TouchableOpacity>
+
+              {/* Group Option */}
+              <TouchableOpacity
+                style={[
+                  styles.visibilityOption,
+                  visibility === EVENT_VISIBILITY.GROUP && styles.visibilityOptionSelected,
+                ]}
+                onPress={() => setVisibility(EVENT_VISIBILITY.GROUP)}
+              >
+                <View style={styles.visibilityIconWrap}>
+                  <MaterialCommunityIcons name="account-multiple" size={20} color={visibility === EVENT_VISIBILITY.GROUP ? colors.accentMid : colors.text} />
+                </View>
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Group</Text>
+                  <Text style={styles.optionDesc}>Share with selected groups</Text>
+                </View>
+                <Ionicons name={visibility === EVENT_VISIBILITY.GROUP ? "radio-button-on" : "radio-button-off"} size={20} color={colors.accentMid} />
+              </TouchableOpacity>
+
+              {visibility === EVENT_VISIBILITY.GROUP && (
+                <View style={styles.groupSelector}>
+                  {groups && groups.length > 0 ? (
+                    groups.map((group) => (
+                      <TouchableOpacity
+                        key={group.id}
+                        style={[
+                          styles.groupOption,
+                          selectedGroupIds.includes(group.id) && styles.groupOptionSelected,
+                        ]}
+                        onPress={() => {
+                          setSelectedGroupIds((selected) =>
+                            selected.includes(group.id)
+                              ? selected.filter((id) => id !== group.id)
+                              : [...selected, group.id]
+                          );
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.groupOptionText,
+                            selectedGroupIds.includes(group.id) && styles.groupOptionTextSelected,
+                          ]}
+                        >
+                          {group.name}
+                        </Text>
+                        {selectedGroupIds.includes(group.id) && (
+                          <Ionicons name="checkmark-circle" size={18} color={colors.accentMid} style={{ marginLeft: 8 }} />
+                        )}
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <Text style={styles.noGroupsText}>No groups available. Create a group first.</Text>
+                  )}
+                </View>
+              )}
+
+              {/* Public Option */}
+              <TouchableOpacity
+                style={[
+                  styles.visibilityOption,
+                  visibility === EVENT_VISIBILITY.PUBLIC && styles.visibilityOptionSelected,
+                ]}
+                onPress={() => setVisibility(EVENT_VISIBILITY.PUBLIC)}
+              >
+                <View style={styles.visibilityIconWrap}>
+                  <Ionicons name="globe" size={20} color={visibility === EVENT_VISIBILITY.PUBLIC ? colors.accentMid : colors.text} />
+                </View>
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Public</Text>
+                  <Text style={styles.optionDesc}>Anyone can see this</Text>
+                </View>
+                <Ionicons name={visibility === EVENT_VISIBILITY.PUBLIC ? "radio-button-on" : "radio-button-off"} size={20} color={colors.accentMid} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* Error Message */}
           {error && (
             <View style={styles.errorContainer}>
@@ -522,13 +874,13 @@ export default function CreateEventScreen() {
           {/* Submit Button */}
           <TouchableOpacity
             style={[styles.submitButton, submitting && { opacity: 0.7 }]}
-            disabled={submitting}
+            disabled={submitting || (eventId && edit === 'true' ? !isFormChanged() : !isFormComplete())}
             onPress={handleSubmit}
           >
             {submitting ? (
               <ActivityIndicator size="small" color={colors.primaryDark} />
             ) : (
-              <Text style={styles.submitButtonText}>Create Event</Text>
+              <Text style={styles.submitButtonText}>Save</Text>
             )}
           </TouchableOpacity>
 
@@ -679,6 +1031,77 @@ export default function CreateEventScreen() {
 }
 
 const styles = StyleSheet.create({
+    // --- Sharing/Visibility Styles (match SavedRoutesScreen) ---
+    visibilityOption: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      marginBottom: 8,
+      borderRadius: 10,
+      backgroundColor: "rgba(255, 255, 255, 0.05)",
+      borderWidth: 1,
+      borderColor: "transparent",
+    },
+    visibilityOptionSelected: {
+      backgroundColor: "rgba(255, 216, 92, 0.1)",
+      borderColor: theme.colors.accentMid,
+    },
+    visibilityIconWrap: {
+      width: 28,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    optionTextContainer: {
+      flex: 1,
+      marginLeft: 12,
+    },
+    optionTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    optionDesc: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+    },
+    groupSelector: {
+      marginLeft: 32,
+      marginTop: 8,
+      marginBottom: 12,
+      gap: 6,
+    },
+    groupOption: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: "rgba(255, 255, 255, 0.05)",
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 4,
+    },
+    groupOptionSelected: {
+      backgroundColor: "rgba(255, 216, 92, 0.15)",
+      borderColor: theme.colors.accentMid,
+    },
+    groupOptionText: {
+      fontSize: 13,
+      color: theme.colors.text,
+    },
+    groupOptionTextSelected: {
+      color: theme.colors.accentMid,
+      fontWeight: "600",
+    },
+    noGroupsText: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+      fontStyle: "italic",
+      marginLeft: 32,
+      marginBottom: 12,
+    },
   container: {
     flex: 1,
   },
@@ -687,9 +1110,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.primaryMid,
+    borderBottomWidth: 0,
+    borderRadius: 12,
+    marginBottom: 4,
+    shadowColor: theme.colors.accentMid,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   closeButton: {
     fontSize: 14,
@@ -697,26 +1127,37 @@ const styles = StyleSheet.create({
     color: theme.colors.accentMid,
   },
   title: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: "700",
     color: theme.colors.text,
+    marginBottom: 4,
   },
   content: {
     flex: 1,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.background,
+    borderRadius: 12,
   },
   field: {
     marginBottom: theme.spacing.lg,
+    backgroundColor: theme.colors.primaryDark,
+    borderRadius: 8,
+    padding: 12,
+    shadowColor: theme.colors.accentMid,
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
   label: {
     color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 8,
   },
   input: {
-    backgroundColor: theme.colors.inputBackground,
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.inputBorder,
     borderRadius: 8,
@@ -724,27 +1165,39 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     color: theme.colors.inputText,
+    marginBottom: 4,
   },
   dateButton: {
-    backgroundColor: theme.colors.inputBackground,
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.inputBorder,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    shadowColor: theme.colors.accentMid,
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   dateButtonText: {
     fontSize: 14,
-    color: theme.colors.inputText,
+    color: theme.colors.accentMid,
+    fontWeight: "700",
   },
   placeButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
     borderColor: theme.colors.inputBorder,
-    borderRadius: 6,
+    borderRadius: 8,
     marginRight: 8,
-    backgroundColor: theme.colors.inputBackground,
+    backgroundColor: theme.colors.primaryMid,
+    shadowColor: theme.colors.accentMid,
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   placeButtonActive: {
     backgroundColor: theme.colors.accentMid,

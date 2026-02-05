@@ -1788,8 +1788,10 @@ export default function MapScreenRN() {
         latitudeDelta < 0.08 ? 30000 :
         50000;
 
+
+      let results = [];
       try {
-        const results = await doTextSearch({
+        results = await doTextSearch({
           query: activeQuery,
           latitude,
           longitude,
@@ -1807,29 +1809,32 @@ export default function MapScreenRN() {
         // Don't return - continue to search local CR places
       }
 
-      // --- Always try to find CR match, even if Google search failed ---
-      const crMatch = crPlaces.find(
-        (p) => p.source === "cr" && matchesQuery(p, activeQuery)
+      // --- Center map on exact match if found ---
+      let exactMatch = null;
+      // Check CR places for exact match
+      exactMatch = crPlaces.find(
+        (p) => p.source === "cr" && isExactMatch(p, activeQuery)
       );
+      // If not found, check Google results for exact match
+      if (!exactMatch && results.length) {
+        exactMatch = results.find((p) => isExactMatch(p, activeQuery));
+      }
 
-      if (crMatch && mapRef.current) {
-        // Select it so PlaceCard opens
-        setSelectedPlaceId(crMatch.id);
-
-        // Zoom to CR place
+      if (exactMatch && mapRef.current) {
+        setSelectedPlaceId(exactMatch.id);
         mapRef.current.animateCamera(
           {
             center: {
-              latitude: crMatch.latitude,
-              longitude: crMatch.longitude,
+              latitude: exactMatch.latitude,
+              longitude: exactMatch.longitude,
             },
           },
           { duration: 600 }
         );
-
-        return; // ⛔ important: don't auto-fit to all results
+        return; // Centered on exact match, skip fitToCoordinates
       }
 
+      // Fallback: fit to all results as before
       if (results.length && mapRef.current) {
         mapRef.current.fitToCoordinates(
           results.map(p => ({

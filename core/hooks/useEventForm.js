@@ -160,30 +160,34 @@ export function useEventForm(initialDate = null, userRole = null) {
     return events;
   };
 
-  const submitForm = async () => {
+  // Accept overrides for fields (e.g., visibility, groupIds)
+  const submitForm = async (overrides = {}) => {
     try {
       setSubmitting(true);
       setError(null);
 
-      if (!formData.title || !formData.placeId) {
+      const merged = { ...formData, ...overrides };
+      if (!merged.title || !merged.placeId) {
         throw new Error("Title and place are required");
       }
 
       // Generate a seriesId for recurring events
-      const seriesId = formData.recurrence !== "one-off" ? `series-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : null;
+      const seriesId = merged.recurrence !== "one-off" ? `series-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : null;
 
       const baseEvent = {
-        title: formData.title,
-        description: formData.description,
-        placeId: formData.placeId,
-        placeName: formData.placeName,
-        startDateTime: formData.startDateTime,
-        endDateTime: formData.endDateTime,
-        maxAttendees: formData.maxAttendees,
-        suitability: formData.suitability,
-        region: formData.region,
-        recurrence: formData.recurrence,
-        recurrenceType: formData.recurrence,
+        title: merged.title,
+        description: merged.description,
+        placeId: merged.placeId,
+        placeName: merged.placeName,
+        startDateTime: merged.startDateTime,
+        endDateTime: merged.endDateTime,
+        maxAttendees: merged.maxAttendees,
+        suitability: merged.suitability,
+        region: merged.region,
+        recurrence: merged.recurrence,
+        recurrenceType: merged.recurrence,
+        visibility: merged.visibility,
+        groupIds: merged.groupIds || [],
         ...(seriesId && { seriesId }),
       };
 
@@ -216,6 +220,7 @@ export function useEventForm(initialDate = null, userRole = null) {
         recurrenceDayOfMonth: 1,
         recurrenceDayOfWeekMonthly: 3,
         visibility: getDefaultVisibility(),
+        groupIds: [],
       });
 
       setSubmitting(false);

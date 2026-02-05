@@ -10,6 +10,8 @@ function getTitleFromPath(pathname) {
   if (pathname === "/groups") return "Groups";
   if (pathname === "/profile") return "Profile";
   if (pathname === "/help") return "Help";
+  if (pathname === "/calendar") return "Calendar";
+  if (pathname.includes("create-event")) return "Event";
   return "Coffee Rider";
 }
 
