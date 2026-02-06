@@ -1,6 +1,7 @@
 // core/hooks/useEvents.js
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
+import { useAllUserGroups } from "@core/groups/hooks";
 import {
     addDoc,
     collection,
@@ -15,11 +16,12 @@ import {
 import { useContext, useEffect, useState } from "react";
 
 export function useEvents(filters = {}) {
-  const { user } = useContext(AuthContext);
+  const { user, profile } = useContext(AuthContext);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const { groups: userGroups } = useAllUserGroups(user?.uid);
   useEffect(() => {
     if (!user) {
       setLoading(false);
@@ -47,26 +49,34 @@ export function useEvents(filters = {}) {
           ...doc.data(),
         }));
 
-        // Filter client-side for visibility and ownership
-        eventsList = eventsList.filter((event) => {
-          // Always include events created by current user
-          if (event.userId === user.uid || event.createdBy === user.uid) {
-            return true;
-          }
-          
-          // Include public events
-          if (event.visibility === "public") {
-            return true;
-          }
-          
-          // Include group events if user is in the group
-          // (TODO: check user's groups - for now just include them)
-          if (event.visibility === "group") {
-            return true;
-          }
-          
-          return false;
-        });
+        // Get user group IDs
+        const userGroupIds = (userGroups || []).map(g => g.id);
+
+        // Admins can see all events
+        if (profile?.role === 'admin') {
+          // No filtering for admin
+        } else {
+          // Filter client-side for visibility and ownership
+          eventsList = eventsList.filter((event) => {
+            // Always include events created by current user
+            if (event.userId === user.uid || event.createdBy === user.uid) {
+              return true;
+            }
+            // Include public events
+            if (event.visibility === "public") {
+              return true;
+            }
+            // Include private events (if user is creator)
+            if (event.visibility === "private" && (event.userId === user.uid || event.createdBy === user.uid)) {
+              return true;
+            }
+            // Include group events if user is in the group
+            if (event.visibility === "group" && Array.isArray(event.groupIds) && event.groupIds.some(gid => userGroupIds.includes(gid))) {
+              return true;
+            }
+            return false;
+          });
+        }
 
         // Apply other filters
         if (filters.placeId) {
@@ -95,7 +105,7 @@ export function useEvents(filters = {}) {
     }
 
     fetchEvents();
-  }, [user, filters]);
+  }, [user, filters, userGroups]);
 
   const createEvent = async (eventData) => {
     if (!user) throw new Error("User not authenticated");

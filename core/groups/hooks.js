@@ -1,15 +1,21 @@
 // Fetch events for a group
+import { db } from "@config/firebase";
+import { AuthContext } from "@context/AuthContext";
+import { collection, collectionGroup, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
+import { useContext, useEffect, useState } from "react";
+import { GROUP_INVITE_STATUS, GROUP_INVITES_COLLECTION, GROUP_MEMBERS_SUBCOLLECTION, GROUPS_COLLECTION } from "./constants";
 export function useGroupEvents(groupId) {
-    // Debug: log groupId passed to hook
-    useEffect(() => {
-      console.log('[useGroupEvents] groupId:', groupId);
-    }, [groupId]);
+  const { user } = useContext(AuthContext);
+  // Debug: log groupId passed to hook
+  useEffect(() => {
+    console.log('[useGroupEvents] groupId:', groupId);
+  }, [groupId]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!groupId) {
+    if (!groupId || !user) {
       setEvents([]);
       setLoading(false);
       return undefined;
@@ -47,14 +53,10 @@ export function useGroupEvents(groupId) {
     );
 
     return unsub;
-  }, [groupId]);
+  }, [groupId, user]);
 
   return { events, loading, error };
 }
-import { db } from "@config/firebase";
-import { collection, collectionGroup, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
-import { useEffect, useState } from "react";
-import { GROUP_INVITE_STATUS, GROUP_INVITES_COLLECTION, GROUP_MEMBERS_SUBCOLLECTION, GROUPS_COLLECTION } from "./constants";
 
 export function usePendingInvites(userId, userEmail) {
   const [invites, setInvites] = useState([]);

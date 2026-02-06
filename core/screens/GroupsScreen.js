@@ -68,7 +68,7 @@ export default function GroupsScreen() {
     console.log('Group Events:', groupEvents);
   }
   const router = useRouter();
-  const { capabilities, user } = useContext(AuthContext) || {};
+  const { capabilities, user, profile } = useContext(AuthContext) || {};
   const { mapActions } = useContext(TabBarContext);
   const canAccessGroups = capabilities?.canAccessGroups === true;
 
@@ -187,7 +187,10 @@ export default function GroupsScreen() {
                 setOpen={setDropdownOpen}
                 items={groups.map((g) => ({ label: g.name, value: g.id }))}
                 value={selectedGroupId}
-                setValue={setSelectedGroupId}
+                setValue={(val) => {
+                  // Only update selectedGroupId after dropdown closes to avoid reset bug
+                  if (!dropdownOpen) setSelectedGroupId(val);
+                }}
                 placeholder="Select a group..."
                 listMode="SCROLLVIEW"
                 maxHeight={200}
@@ -199,6 +202,25 @@ export default function GroupsScreen() {
                 dropDownContainerStyle={styles.dropdownMenuStyle}
                 placeholderStyle={styles.dropdownPlaceholder}
                 arrowIconStyle={{ tintColor: theme.colors.text }}
+                renderListItem={({ item, selected, onPress, disabled, style }) => {
+                  // Custom: update selectedGroupId on item press, but close dropdown first
+                  const isSelected = item.value === selectedGroupId;
+                  return (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setDropdownOpen(false);
+                        setTimeout(() => setSelectedGroupId(item.value), 0);
+                      }}
+                      disabled={disabled}
+                      style={[{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16 }, style]}
+                    >
+                      <Text style={[styles.listItemLabel, { flex: 1 }]}>{item.label}</Text>
+                      {isSelected && (
+                        <MaterialCommunityIcons name="check" size={22} color={theme.colors.accentMid} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                }}
               />
             )}
           </CRCard>
@@ -584,8 +606,21 @@ export default function GroupsScreen() {
                           <TouchableOpacity
                             key={event.id}
                             onPress={() => {
-                              setSelectedEvent(event);
-                              setEventModalVisible(true);
+                              // Admins can always edit
+                              if (profile?.role === 'admin') {
+                                setSelectedEvent(event);
+                                setEventModalVisible(true);
+                                return;
+                              }
+                              // Only allow event creator or group owner to edit
+                              const isCreator = event.createdBy === user?.uid;
+                              const isOwner = members?.find(m => m.uid === user?.uid)?.role === 'owner';
+                              if (isCreator || isOwner) {
+                                setSelectedEvent(event);
+                                setEventModalVisible(true);
+                              } else {
+                                Alert.alert('Permission Denied', 'You do not have permission to edit this event.');
+                              }
                             }}
                             activeOpacity={0.8}
                           >

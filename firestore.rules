@@ -212,26 +212,32 @@ service cloud.firestore {
 
     /* EVENTS - USER CALENDAR EVENTS */
     match /events/{eventId} {
-      allow create: if isAuthed() && request.resource.data.userId == request.auth.uid;
+      allow create: if isAuthed() && (
+        hasRole('admin') ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && request.resource.data.userId == request.auth.uid
+      );
       allow read: if isAuthed() && (
-        // Can read own events
-        resource.data.userId == request.auth.uid ||
-        // Can read public events
-        resource.data.visibility == 'public' ||
-        // Can read group events if member of the group
-        (resource.data.visibility == 'group' && isGroupMember(resource.data.groupId))
+        hasRole('admin') ||
+        // Pro/place-owner can read their own events
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && resource.data.userId == request.auth.uid) ||
+        // Group events: allow if user is a member of any group in groupIds
+        (resource.data.visibility == 'group' &&
+          resource.data.groupIds is list &&
+          resource.data.groupIds.size() > 0 &&
+          resource.data.groupIds.hasAny([g for g in resource.data.groupIds if exists(/databases/$(database)/documents/groups/$(g)/members/$(request.auth.uid))])
+        ) ||
+        // Public events: allow all authed users
+        (resource.data.visibility == 'public')
       );
       allow update: if isAuthed() && (
-        // Can update own events (check both userId and createdBy for backwards compatibility)
-        resource.data.userId == request.auth.uid ||
-        resource.data.createdBy == request.auth.uid
+        hasRole('admin') ||
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && (resource.data.userId == request.auth.uid || resource.data.createdBy == request.auth.uid))
       );
       allow delete: if isAuthed() && (
-        // Can delete own events (check both userId and createdBy for backwards compatibility)
-        resource.data.userId == request.auth.uid ||
-        resource.data.createdBy == request.auth.uid
+        hasRole('admin') ||
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && (resource.data.userId == request.auth.uid || resource.data.createdBy == request.auth.uid))
       );
-      allow list: if isAuthed();
+      allow list: if isAuthed() && hasRole('admin');
     }
     
   }

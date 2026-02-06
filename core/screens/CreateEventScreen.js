@@ -1,31 +1,31 @@
 // core/screens/CreateEventScreen.js
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
+import { useAllUserGroups } from "@core/groups/hooks";
 import { useEventForm } from "@core/hooks/useEventForm";
 import { useEvents } from "@core/hooks/useEvents";
-import theme from "@themes";
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useNavigation } from '@react-navigation/native';
 import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
-import { useAllUserGroups } from "@core/groups/hooks";
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import theme from "@themes";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    DatePickerAndroid,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  DatePickerAndroid,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 
 export default function CreateEventScreen() {
@@ -408,11 +408,22 @@ function getRegionFromAddressOrLocation(address, location) {
     // If editing, update the event instead of creating a new one
     if (eventId && edit === 'true') {
       try {
-        await updateEvent(eventId, {
-          ...formData,
-          visibility,
-          groupIds: visibility === EVENT_VISIBILITY.GROUP ? selectedGroupIds : [],
-        });
+        // Admins can always update
+        if (profile?.role === 'admin') {
+          await updateEvent(eventId, {
+            ...formData,
+            visibility,
+            groupIds: visibility === EVENT_VISIBILITY.GROUP ? selectedGroupIds : [],
+            // Optionally add admin override marker
+            adminOverride: true,
+          });
+        } else {
+          await updateEvent(eventId, {
+            ...formData,
+            visibility,
+            groupIds: visibility === EVENT_VISIBILITY.GROUP ? selectedGroupIds : [],
+          });
+        }
         Alert.alert("Success", "Event updated successfully!");
         router.replace({ pathname: '/calendar' });
       } catch (err) {
@@ -515,7 +526,7 @@ function getRegionFromAddressOrLocation(address, location) {
               onChangeText={(value) => updateForm("title", value)}
               placeholder="Coffee & Cycling Meetup"
               placeholderTextColor={colors.textMuted}
-              style={styles.input}
+              style={[styles.input, { color: colors.accentMid }]}
             />
           </View>
 
@@ -527,7 +538,7 @@ function getRegionFromAddressOrLocation(address, location) {
               onChangeText={(value) => updateForm("description", value)}
               placeholder="Tell people about your event..."
               placeholderTextColor={colors.textMuted}
-              style={[styles.input, { height: 80 }]}
+              style={[styles.input, { height: 80, color: colors.accentMid }]}
               multiline
             />
           </View>

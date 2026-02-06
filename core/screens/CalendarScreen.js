@@ -1,9 +1,9 @@
 // core/screens/CalendarScreen.js
 import { AuthContext } from "@context/AuthContext";
+import { useAllUserGroups } from "@core/groups/hooks";
 import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY, shareEvent } from "@core/map/events/sharedEvents";
 import { getCapabilities } from "@core/roles/capabilities";
-import { useAllUserGroups } from "@core/groups/hooks";
 // Remove DropDownPicker import
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -14,12 +14,12 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-  PanResponder
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -364,10 +364,18 @@ export default function CalendarScreen() {
             key={item.id}
             style={styles.eventCard}
             onPress={() => {
-              router.push({
-                pathname: '/create-event',
-                params: { eventId: item.id, edit: 'true' }
-              });
+              // Permission check: only allow edit if user is creator or admin
+              const isCreator = item.createdBy === user?.uid || item.userId === user?.uid;
+              const isAdmin = profile?.role === 'admin';
+              if (isCreator || isAdmin) {
+                router.push({
+                  pathname: '/create-event',
+                  params: { eventId: item.id, edit: 'true' }
+                });
+              } else {
+                setSelectedEvent(item);
+                setShowEventModal(true);
+              }
             }}
           >
             <View style={styles.eventTime}>
