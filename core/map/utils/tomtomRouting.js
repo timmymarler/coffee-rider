@@ -214,13 +214,49 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
     const steps = instructions.length > 0 ? instructions.map((instr, idx) => {
       // The end point is the location of the next instruction (or current if last)
       const endPoint = idx < instructions.length - 1 ? instructions[idx + 1].point : instr.point;
-      
+
+      let maneuver = instr.maneuver || "STRAIGHT";
+      let instruction = instr.text || "Continue";
+      let extra = {};
+
+      // Handle roundabout maneuvers
+      if (maneuver.startsWith("ROUNDABOUT")) {
+        // TomTom may provide exit number in instruction or as a property
+        const exitMatch = instruction.match(/exit (\d+)/i);
+        let exitNumber = instr.exitNumber || (exitMatch ? parseInt(exitMatch[1], 10) : undefined);
+        if (maneuver === "ROUNDABOUT_ENTER") {
+          instruction = exitNumber
+            ? `Enter roundabout and take exit ${exitNumber}`
+            : "Enter roundabout";
+          extra.exitNumber = exitNumber;
+        } else if (maneuver === "ROUNDABOUT_EXIT") {
+          instruction = exitNumber
+            ? `Exit roundabout at exit ${exitNumber}`
+            : "Exit roundabout";
+          extra.exitNumber = exitNumber;
+        }
+      } else if (maneuver === "STRAIGHT") {
+        // Only use 'continue straight' if not approaching a roundabout
+        const nextInstr = instructions[idx + 1];
+        if (nextInstr) {
+          const nextManeuver = nextInstr.maneuver || "";
+          if (nextManeuver.startsWith("ROUNDABOUT")) {
+            instruction = "Approach roundabout";
+          } else if (nextManeuver.startsWith("TURN")) {
+            instruction = "Continue straight to next junction";
+          } else {
+            instruction = "Continue straight";
+          }
+        }
+      }
+
       return {
-        maneuver: instr.maneuver || "STRAIGHT",
-        instruction: instr.text || "Continue",
+        maneuver,
+        instruction,
         distance: instr.distance || (idx < instructions.length - 1 ? 100 : 0),
         position: instr.point, // Where this instruction starts
         end: endPoint, // Where this instruction ends (at next maneuver point)
+        ...extra,
       };
     }) : [];
 

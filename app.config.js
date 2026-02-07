@@ -54,27 +54,22 @@ export default {
     name: DISPLAY_NAME[APP_NAME],
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
-
+    version: "2.5.0",
     icon: `${brandFolder}/icon.png`,
     splash: {
       image: `${brandFolder}/splash.png`,
       resizeMode: "contain",
       backgroundColor: "#ffffff"
     },
-
     assetBundlePatterns: ["**/*"],
-
     extra: {
       appName: APP_NAME,
-
       eas: {
         projectId: "93932a29-f9a5-4f08-8b1d-6c9030e8bc59"
       },
-
       googleMapsApiKey: googleMapsApiKey,
       googlePlacesApiKey: googlePlacesApiKey,
       tomtomApiKey: tomtomApiKey,
-
       firebase: {
         apiKey: isIOS
           ? process.env.EXPO_PUBLIC_FIREBASE_API_KEY_IOS

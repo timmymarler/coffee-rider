@@ -3150,17 +3150,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           const meta = MANEUVER_ICON_MAP[m] || MANEUVER_ICON_MAP.STRAIGHT;
           const dist = nextJunctionDistance;
           const distText = dist != null ? formatDistanceImperial(dist) : "";
+          // Show roundabout exit number if present
+          const roundaboutExit = (m.startsWith("ROUNDABOUT") && step.exitNumber) ? step.exitNumber : null;
           return (
             <View style={styles.junctionPanel}>
               {/* Large direction icon */}
               <MaterialCommunityIcons name={meta.icon} size={64} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
-              
               {/* Distance and label section */}
               <View style={styles.junctionContent}>
                 {distText ? (
                   <Text style={styles.junctionDistance}>{distText}</Text>
                 ) : null}
                 <Text style={styles.junctionLabel}>{meta.label}</Text>
+                {roundaboutExit && (
+                  <Text style={styles.junctionTitle}>Exit {roundaboutExit}</Text>
+                )}
               </View>
             </View>
           );

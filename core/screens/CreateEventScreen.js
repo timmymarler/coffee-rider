@@ -28,6 +28,8 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { useSavedRoutes } from "@core/map/routes/useSavedRoutes";
+import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
 
 export default function CreateEventScreen() {
       const navigation = useNavigation();
@@ -186,6 +188,42 @@ export default function CreateEventScreen() {
   const [showPlaceSelectionModal, setShowPlaceSelectionModal] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
 
+
+  // Get user's groups
+  // Already have: const { groups } = useAllUserGroups(user?.uid);
+
+  // Get routes for dropdown
+  let routeDropdownRoutes = [];
+  let routeDropdownLoading = false;
+
+  // Private: show only user's own routes
+  // Group: show only shared routes for selected groups
+  // Public: show only public routes
+  const { routes: userRoutes, loading: userRoutesLoading } = useSavedRoutes(false);
+  const { routes: publicRoutes, loading: publicRoutesLoading } = useSavedRoutes(true);
+
+  // For group visibility, fetch shared routes for up to 3 groups (fixed slots)
+  const groupId1 = selectedGroupIds[0] || "";
+  const groupId2 = selectedGroupIds[1] || "";
+  const groupId3 = selectedGroupIds[2] || "";
+  const groupHook1 = useGroupSharedRoutes(groupId1);
+  const groupHook2 = useGroupSharedRoutes(groupId2);
+  const groupHook3 = useGroupSharedRoutes(groupId3);
+  const groupRoutes = [...groupHook1.routes, ...groupHook2.routes, ...groupHook3.routes];
+  const groupRoutesLoading = groupHook1.loading || groupHook2.loading || groupHook3.loading;
+
+  if (visibility === EVENT_VISIBILITY.PRIVATE) {
+    routeDropdownRoutes = userRoutes;
+    routeDropdownLoading = userRoutesLoading;
+  } else if (visibility === EVENT_VISIBILITY.GROUP) {
+    routeDropdownRoutes = groupRoutes;
+    routeDropdownLoading = groupRoutesLoading;
+  } else if (visibility === EVENT_VISIBILITY.PUBLIC) {
+    // Only show public routes
+    routeDropdownRoutes = publicRoutes.filter(r => r.visibility === EVENT_VISIBILITY.PUBLIC);
+    routeDropdownLoading = publicRoutesLoading;
+  }
+
   // Load places for this place owner or show search for Pro users
   useEffect(() => {
     if (profile?.role === "place-owner" && profile?.linkedPlaceId) {
@@ -266,6 +304,15 @@ export default function CreateEventScreen() {
 
   // Handle place selection from search results
   async function handleSelectPlace(place) {
+    // Robust null/undefined checks
+    if (!place || !place.id) {
+      Alert.alert("Error", "Selected place is missing an ID. Please try again or refresh.");
+      return;
+    }
+    if (!place.name || typeof place.name !== "string" || place.name.trim().length === 0) {
+      Alert.alert("Error", "Selected place is missing a name. Please try again or refresh.");
+      return;
+    }
     updateForm("placeId", place.id);
     updateForm("placeName", place.name);
     setPlaceName(""); // Clear search
@@ -285,16 +332,23 @@ export default function CreateEventScreen() {
           const data = placeSnap.data();
           address = address || data.address;
           location = location || data.location;
+        } else {
+          Alert.alert("Error", "Could not fetch place details from database. Please try again.");
         }
       } catch (err) {
         console.warn("Could not fetch place address/location:", err);
+        Alert.alert("Error", "Failed to fetch place details. Please try again.");
       }
     }
 
     // Map address/location to region
-    const region = getRegionFromAddressOrLocation(address, location);
-    if (region) {
-      updateForm("region", region);
+    if (!address && !location) {
+      Alert.alert("Warning", "Selected place is missing address/location. Region will not be set.");
+    } else {
+      const region = getRegionFromAddressOrLocation(address, location);
+      if (region) {
+        updateForm("region", region);
+      }
     }
   }
 
@@ -581,12 +635,14 @@ function getRegionFromAddressOrLocation(address, location) {
                 </View>
               )}
 
-              {/* Route Dropdown (lists public routes) */}
+              {/* Route Dropdown (filtered by event visibility/group) */}
               <View style={{ marginTop: 16 }}>
                 <Text style={styles.label}>Route</Text>
                 <RouteDropdown
                   selectedRouteId={formData.routeId || null}
                   setSelectedRouteId={routeId => updateForm('routeId', routeId)}
+                  routes={routeDropdownRoutes}
+                  loading={routeDropdownLoading}
                 />
               </View>
             </View>

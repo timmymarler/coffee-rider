@@ -629,12 +629,12 @@ export default function PlaceCard({
   const handleSavePlace = async () => {
     if (!capabilities.canAddVenue || !uid) {
       setAddError("You need permission and a signed-in account to add places.");
+      console.warn("[SAVE PLACE] Permission denied: canAddVenue=", capabilities.canAddVenue, "uid=", uid);
       return;
     }
 
     try {
       setAddError(null);
-      console.log("[SAVE] Starting save with manualName=", manualName, "category=", category);
       const isNewPlace = place.source === "google" || place._temp === true;
 
       const resolvedAddress =
@@ -679,7 +679,6 @@ export default function PlaceCard({
       }
 
       const docId = googlePlaceId || safePlace.id;
-      console.log("[SAVE] docId=", docId, "googlePlaceId=", googlePlaceId, "safePlace.id=", safePlace.id);
       const placeRef = doc(db, "places", docId);
 
       const payload = {

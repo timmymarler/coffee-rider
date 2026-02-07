@@ -1,10 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import theme from "@themes";
-import { useSavedRoutes } from "@core/map/routes/useSavedRoutes";
-
-export default function RouteDropdown({ selectedRouteId, setSelectedRouteId }) {
-  const { routes, loading } = useSavedRoutes(true);
+export default function RouteDropdown({ selectedRouteId, setSelectedRouteId, routes, loading }) {
   const [open, setOpen] = useState(false);
   const colors = theme.colors;
 
