@@ -179,6 +179,7 @@ export function useEventForm(initialDate = null, userRole = null) {
         description: merged.description,
         placeId: merged.placeId,
         placeName: merged.placeName,
+        routeId: merged.routeId || null,
         startDateTime: merged.startDateTime,
         endDateTime: merged.endDateTime,
         maxAttendees: merged.maxAttendees,

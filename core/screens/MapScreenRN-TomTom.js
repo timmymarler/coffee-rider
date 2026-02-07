@@ -537,7 +537,21 @@ function normalizeCoord(obj) {
 /* MAIN SCREEN                                                        */
 /* ------------------------------------------------------------------ */
 
-export default function MapScreenRN() {
+export default function MapScreenRN({ placeId, openPlaceCard }) {
+    // Open PlaceCard and zoom to marker if placeId and openPlaceCard are provided
+    useEffect(() => {
+      if (placeId && openPlaceCard && mapRef.current) {
+        setSelectedPlaceId(placeId);
+        // Find the place in crPlaces or googlePois
+        let place = crPlaces.find(p => p.id === placeId) || googlePois.find(p => p.id === placeId);
+        if (place && place.latitude && place.longitude) {
+          mapRef.current.animateCamera({
+            center: { latitude: place.latitude, longitude: place.longitude },
+            zoom: 16
+          }, { duration: 600 });
+        }
+      }
+    }, [placeId, openPlaceCard, crPlaces, googlePois]);
   const mapRef = useRef();
   const insets = useSafeAreaInsets();
 

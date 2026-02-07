@@ -13,7 +13,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -794,60 +794,111 @@ export default function GroupsScreen() {
         }}
         scrollEnabled={true}
       />
-      {/* Event Details Modal */}
-      {eventModalVisible && selectedEvent && (
-        <View style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 9999,
-        }}>
-          <View style={{
-            backgroundColor: theme.colors.surface,
-            borderRadius: 16,
-            padding: 24,
-            minWidth: 280,
-            maxWidth: 340,
-            shadowColor: '#000',
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 10,
-          }}>
-            <Text style={{ color: theme.colors.accentMid, fontWeight: 'bold', fontSize: 20, marginBottom: 8 }}>{selectedEvent.title}</Text>
-            <Text style={{ color: theme.colors.text, fontSize: 15, marginBottom: 6 }}>{selectedEvent.placeName}</Text>
-            {selectedEvent.startDateTime && (
-              <Text style={{ color: theme.colors.textMuted, fontSize: 14, marginBottom: 10 }}>
-                {(() => {
-                  const dateObj = selectedEvent.startDateTime instanceof Date ? selectedEvent.startDateTime : (selectedEvent.startDateTime.toDate ? selectedEvent.startDateTime.toDate() : null);
-                  return dateObj ? `${dateObj.toLocaleDateString()} ${dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '';
-                })()}
-              </Text>
+      {/* Event Details Modal (matches CalendarScreen) */}
+      <Modal
+        visible={eventModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEventModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: theme.colors.surface, borderRadius: 16, padding: 0, minWidth: 300, maxWidth: 380, width: '90%', maxHeight: '80%' }}>
+            {selectedEvent && (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ padding: 0 }} contentContainerStyle={{ padding: 24 }}>
+                {/* Header with close button */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text style={{ color: theme.colors.accentMid, fontWeight: '700', fontSize: 18, flex: 1 }}>{selectedEvent.title}</Text>
+                  <TouchableOpacity onPress={() => setEventModalVisible(false)}>
+                    <MaterialCommunityIcons name="close" size={28} color={theme.colors.accentMid} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Subtitle with place name, now white, with location icon and link */}
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}
+                  disabled={!selectedEvent.placeId}
+                  onPress={() => {
+                    if (selectedEvent.placeId) {
+                      // Navigate to Maps screen and open PlaceCard for the place
+                      router.push({
+                        pathname: '/map',
+                        params: { placeId: selectedEvent.placeId, openPlaceCard: true }
+                      });
+                    }
+                  }}
+                >
+                  <MaterialCommunityIcons name="map-marker" size={18} color={theme.colors.text} style={{ marginRight: 6 }} />
+                  <Text style={{ color: theme.colors.text, fontSize: 14 }}>
+                    {selectedEvent.placeName || 'No location'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Event details */}
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ color: theme.colors.accentDark, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Place</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 16, fontWeight: '500', lineHeight: 24 }}>{selectedEvent.placeName}</Text>
+                </View>
+
+                {selectedEvent.startDateTime && (
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ color: theme.colors.accentDark, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Date & Time</Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 16, fontWeight: '500', lineHeight: 24 }}>
+                      {(() => {
+                        let eventDate;
+                        if (selectedEvent.startDateTime.toDate && typeof selectedEvent.startDateTime.toDate === 'function') {
+                          eventDate = selectedEvent.startDateTime.toDate();
+                        } else if (selectedEvent.startDateTime instanceof Date) {
+                          eventDate = selectedEvent.startDateTime;
+                        } else {
+                          eventDate = new Date(selectedEvent.startDateTime);
+                        }
+                        return eventDate.toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: true,
+                        });
+                      })()}
+                    </Text>
+                  </View>
+                )}
+
+                {selectedEvent.region && (
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ color: theme.colors.accentDark, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Region</Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 16, fontWeight: '500', lineHeight: 24 }}>{selectedEvent.region}</Text>
+                  </View>
+                )}
+
+                {selectedEvent.suitability && selectedEvent.suitability.length > 0 && (
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ color: theme.colors.accentDark, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Suitability</Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 16, fontWeight: '500', lineHeight: 24 }}>{selectedEvent.suitability.join(', ')}</Text>
+                  </View>
+                )}
+
+                {selectedEvent.attendees && (
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ color: theme.colors.accentDark, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Attendees</Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 16, fontWeight: '500', lineHeight: 24 }}>{selectedEvent.attendees.length} people</Text>
+                  </View>
+                )}
+
+                {selectedEvent.description && (
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ color: theme.colors.accentDark, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Description</Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 16, fontWeight: '500', lineHeight: 24 }}>{selectedEvent.description}</Text>
+                  </View>
+                )}
+
+                <View style={{ height: 20 }} />
+              </ScrollView>
             )}
-            {selectedEvent.description && (
-              <Text style={{ color: theme.colors.accentDark, fontSize: 14, marginBottom: 10 }}>{selectedEvent.description}</Text>
-            )}
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-              <TouchableOpacity
-                style={{
-                  backgroundColor: theme.colors.primaryDark,
-                  paddingVertical: 10,
-                  paddingHorizontal: 24,
-                  borderRadius: 8,
-                  alignItems: 'center',
-                }}
-                onPress={() => setEventModalVisible(false)}
-              >
-                <Text style={{ color: theme.colors.text, fontWeight: '600', fontSize: 16 }}>Close</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
-      )}
+      </Modal>
     </SafeAreaView>
   );
 }

@@ -2,6 +2,7 @@
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { useAllUserGroups } from "@core/groups/hooks";
+import RouteDropdown from "@core/components/RouteDropdown";
 import { useEventForm } from "@core/hooks/useEventForm";
 import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
@@ -68,6 +69,7 @@ export default function CreateEventScreen() {
             updateForm('description', eventData.description || '');
             updateForm('placeId', eventData.placeId || '');
             updateForm('placeName', eventData.placeName || '');
+            updateForm('routeId', eventData.routeId || null);
             updateForm('startDateTime', eventData.startDateTime?.toDate ? eventData.startDateTime.toDate() : new Date(eventData.startDateTime));
             updateForm('endDateTime', eventData.endDateTime?.toDate ? eventData.endDateTime.toDate() : new Date(eventData.endDateTime));
             updateForm('maxAttendees', eventData.maxAttendees || null);
@@ -578,6 +580,15 @@ function getRegionFromAddressOrLocation(address, location) {
                   </TouchableOpacity>
                 </View>
               )}
+
+              {/* Route Dropdown (lists public routes) */}
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.label}>Route</Text>
+                <RouteDropdown
+                  selectedRouteId={formData.routeId || null}
+                  setSelectedRouteId={routeId => updateForm('routeId', routeId)}
+                />
+              </View>
             </View>
           )}
 

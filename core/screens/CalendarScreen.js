@@ -11,15 +11,15 @@ import theme from "@themes";
 import { useRouter } from "expo-router";
 import { useCallback, useContext, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  PanResponder,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Modal,
+    PanResponder,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -647,10 +647,24 @@ export default function CalendarScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Subtitle with place name */}
-                <Text style={styles.eventModalSubtitle}>
-                  {selectedEvent.placeName || "No location"}
-                </Text>
+                {/* Subtitle with place name, now white, with location icon and link */}
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}
+                  disabled={!selectedEvent.placeId}
+                  onPress={() => {
+                    if (selectedEvent.placeId) {
+                      router.push({
+                        pathname: '/map',
+                        params: { placeId: selectedEvent.placeId, openPlaceCard: true }
+                      });
+                    }
+                  }}
+                >
+                  <MaterialCommunityIcons name="map-marker" size={18} color={theme.colors.text} style={{ marginRight: 6 }} />
+                  <Text style={{ color: theme.colors.text, fontSize: 14 }}>
+                    {selectedEvent.placeName || 'No location'}
+                  </Text>
+                </TouchableOpacity>
 
                 {/* Event details */}
                 <View style={styles.eventModalSection}>
