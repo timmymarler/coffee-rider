@@ -139,7 +139,7 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
       routeType: tomtomRouteType,
       computeTravelTimeFor: "all",
       traffic: "true",
-      instructionsType: "text",
+      instructionsType: "coded",
       language: "en-GB",
     });
     
