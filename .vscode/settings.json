@@ -6,7 +6,7 @@
   },
   "workbench.colorTheme": "Dracula Official",
   "terminal.integrated.colorScheme": "Dracula",
-  "terminal.integrated.fontFamily": "Consolas",
+  "terminal.integrated.fontFamily": "monospace",
   "terminal.integrated.fontSize": 13,
   "terminal.integrated.cursorStyle": "block"
 }

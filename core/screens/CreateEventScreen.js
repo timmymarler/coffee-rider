@@ -1,8 +1,8 @@
 // core/screens/CreateEventScreen.js
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
-import { useAllUserGroups } from "@core/groups/hooks";
 import RouteDropdown from "@core/components/RouteDropdown";
+import { useAllUserGroups } from "@core/groups/hooks";
 import { useEventForm } from "@core/hooks/useEventForm";
 import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
@@ -15,7 +15,6 @@ import { useContext, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  DatePickerAndroid,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -30,6 +29,7 @@ import {
 } from "react-native";
 import { useSavedRoutes } from "@core/map/routes/useSavedRoutes";
 import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function CreateEventScreen() {
       const navigation = useNavigation();
@@ -180,7 +180,8 @@ export default function CreateEventScreen() {
   const [userPlaces, setUserPlaces] = useState([]);
   const [loadingPlaces, setLoadingPlaces] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [datePickerMode, setDatePickerMode] = useState("startDateTime"); // "startDateTime" or "endDateTime"
+  const [datePickerField, setDatePickerField] = useState(null); // "Start Date" or "End Date"
+  const [datePickerValue, setDatePickerValue] = useState(new Date());
   
   // Place search state for Pro users
   const [placeName, setPlaceName] = useState("");
@@ -504,26 +505,27 @@ function getRegionFromAddressOrLocation(address, location) {
   const [tempHour, setTempHour] = useState("00");
   const [tempMinute, setTempMinute] = useState("00");
 
-  const handleDatePicker = async (field) => {
-    // Use selectedDate from calendar if available (from params), otherwise use current form value
-    const defaultDate = initialDate || (field === "Start Date" ? formData.startDateTime : formData.endDateTime);
-    try {
-      const { action, year, month, day } = await DatePickerAndroid.open({
-        date: defaultDate,
-        mode: "calendar",
-      });
-      
-      if (action === DatePickerAndroid.dateSetAction) {
-        const newDate = new Date(year, month, day, defaultDate.getHours(), defaultDate.getMinutes());
-        if (field === "Start Date") {
-          updateForm("startDateTime", newDate);
-        } else {
-          updateForm("endDateTime", newDate);
-        }
+  const handleDatePicker = (field) => {
+    // Open the date picker for the given field
+    setDatePickerField(field);
+    setDatePickerValue(field === "Start Date" ? formData.startDateTime : formData.endDateTime);
+    setShowDatePicker(true);
+  };
+
+  const onDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (event.type === 'set' && selectedDate) {
+      // Keep the time from the previous value
+      const prev = datePickerField === "Start Date" ? formData.startDateTime : formData.endDateTime;
+      const newDate = new Date(selectedDate);
+      newDate.setHours(prev.getHours(), prev.getMinutes());
+      if (datePickerField === "Start Date") {
+        updateForm("startDateTime", newDate);
+      } else {
+        updateForm("endDateTime", newDate);
       }
-    } catch ({ code, message }) {
-      console.warn("Error picking date:", message);
     }
+    setDatePickerField(null);
   };
 
   const openTimeEditor = (field) => {
@@ -721,6 +723,18 @@ function getRegionFromAddressOrLocation(address, location) {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Date Picker Modal (cross-platform) */}
+          {showDatePicker && (
+            <DateTimePicker
+              value={datePickerValue}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={onDateChange}
+              minimumDate={new Date(2000, 0, 1)}
+              maximumDate={new Date(2100, 11, 31)}
+            />
+          )}
 
           {/* Max Attendees */}
           <View style={styles.field}>

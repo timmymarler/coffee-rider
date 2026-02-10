@@ -45,6 +45,7 @@ export default function CalendarScreen() {
         // Only respond to horizontal swipes
         return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
       },
+      onStartShouldSetPanResponderCapture: () => true, // Ensure parent captures gesture first
       onPanResponderRelease: (evt, gestureState) => {
         if (gestureState.dx < -40) {
           // Swipe left: next month
@@ -582,51 +583,56 @@ export default function CalendarScreen() {
         </ScrollView>
       )}
 
-      <ScrollView 
-        style={styles.content} 
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: theme.spacing.xl * 5 }}
+      <View
+        style={{ flex: 1 }}
+        {...panResponder.panHandlers}
       >
-        {/* Month Title in place of old header */}
-        <View style={styles.monthHeaderTitleBar}>
-          <Text style={styles.monthHeaderTitle}>
-            {selectedDate.toLocaleDateString("en-US", {
-              month: "long",
-              year: "numeric",
-            })}
-          </Text>
-        </View>
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: theme.spacing.xl * 5 }}
+        >
+          {/* Month Title in place of old header */}
+          <View style={styles.monthHeaderTitleBar}>
+            <Text style={styles.monthHeaderTitle}>
+              {selectedDate.toLocaleDateString("en-US", {
+                month: "long",
+                year: "numeric",
+              })}
+            </Text>
+          </View>
 
-        {/* Calendar Grid (always month view) */}
-        <View style={styles.calendarGrid} {...panResponder.panHandlers}>
-          {renderCalendarGrid()}
-        </View>
+          {/* Calendar Grid (always month view) */}
+          <View style={styles.calendarGrid} pointerEvents="box-none">
+            {renderCalendarGrid()}
+          </View>
 
-        {/* Selected Date Events */}
-        <View style={styles.eventsSection}>
-          <Text style={styles.selectedDateTitle}>
-            {selectedDate.toLocaleDateString("en-US", {
-              weekday: "long",
-              month: "short",
-              day: "numeric",
-            })}
-          </Text>
-          {renderEventsList()}
-        </View>
+          {/* Selected Date Events */}
+          <View style={styles.eventsSection}>
+            <Text style={styles.selectedDateTitle}>
+              {selectedDate.toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "short",
+                day: "numeric",
+              })}
+            </Text>
+            {renderEventsList()}
+          </View>
 
-        {/* Create Event Button (for place owners & pro users) */}
-        {profile?.role === "place-owner" || profile?.role === "pro" || profile?.role === "admin" ? (
-          <TouchableOpacity
-            style={styles.createEventButton}
-            onPress={() => router.push({
-              pathname: "/create-event",
-              params: { selectedDate: selectedDate.toISOString() }
-            })}
-          >
-            <Text style={styles.createEventButtonText}>+ Create Event</Text>
-          </TouchableOpacity>
-        ) : null}
-      </ScrollView>
+          {/* Create Event Button (for place owners & pro users) */}
+          {profile?.role === "place-owner" || profile?.role === "pro" || profile?.role === "admin" ? (
+            <TouchableOpacity
+              style={styles.createEventButton}
+              onPress={() => router.push({
+                pathname: "/create-event",
+                params: { selectedDate: selectedDate.toISOString() }
+              })}
+            >
+              <Text style={styles.createEventButtonText}>+ Create Event</Text>
+            </TouchableOpacity>
+          ) : null}
+        </ScrollView>
+      </View>
 
       {/* Event Details Modal */}
       <Modal

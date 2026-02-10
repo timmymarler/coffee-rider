@@ -2927,7 +2927,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               <Polyline
                 key={`base-${routeVersion}`}
                 coordinates={routeCoords}
-                strokeWidth={6}
+                strokeWidth={isNavigationMode ? 10 : 6}
                 strokeColor={theme.colors.primaryMuted}
                 zIndex={900}
               />
@@ -2936,7 +2936,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               <Polyline
                 key={`active-${routeVersion}`}
                 coordinates={routeCoords}
-                strokeWidth={3}
+                strokeWidth={isNavigationMode ? 5 : 3}
                 strokeColor={theme.colors.primary}
                 zIndex={1000}
               />
