@@ -818,32 +818,9 @@ export default function CalendarScreen() {
                       <MaterialCommunityIcons name="trash-can" size={20} color={theme.colors.text} />
                       <Text style={styles.deleteEventButtonFooterText}>Delete Event</Text>
                     </TouchableOpacity>
+
                   )}
                 </View>
-  eventModalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 24,
-    marginBottom: 8,
-    marginHorizontal: 20,
-  },
-  deleteEventButtonFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    backgroundColor: theme.colors.danger,
-    borderRadius: 8,
-  },
-  deleteEventButtonFooterText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.colors.text,
-    marginLeft: 8,
-  },
 
                 <View style={{ height: 20 }} />
               </ScrollView>
@@ -1712,5 +1689,29 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: theme.colors.text,
+  },
+  eventModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 24,
+    marginBottom: 8,
+    marginHorizontal: 20,
+  },
+  deleteEventButtonFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    backgroundColor: theme.colors.danger,
+    borderRadius: 8,
+  },
+  deleteEventButtonFooterText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginLeft: 8,
   },
 });
