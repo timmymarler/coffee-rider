@@ -45,6 +45,7 @@ export default function CalendarScreen() {
         // Only respond to horizontal swipes
         return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
       },
+      onStartShouldSetPanResponderCapture: () => true, // Ensure parent captures gesture first
       onPanResponderRelease: (evt, gestureState) => {
         if (gestureState.dx < -40) {
           // Swipe left: next month
@@ -582,51 +583,56 @@ export default function CalendarScreen() {
         </ScrollView>
       )}
 
-      <ScrollView 
-        style={styles.content} 
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: theme.spacing.xl * 5 }}
+      <View
+        style={{ flex: 1 }}
+        {...panResponder.panHandlers}
       >
-        {/* Month Title in place of old header */}
-        <View style={styles.monthHeaderTitleBar}>
-          <Text style={styles.monthHeaderTitle}>
-            {selectedDate.toLocaleDateString("en-US", {
-              month: "long",
-              year: "numeric",
-            })}
-          </Text>
-        </View>
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: theme.spacing.xl * 5 }}
+        >
+          {/* Month Title in place of old header */}
+          <View style={styles.monthHeaderTitleBar}>
+            <Text style={styles.monthHeaderTitle}>
+              {selectedDate.toLocaleDateString("en-US", {
+                month: "long",
+                year: "numeric",
+              })}
+            </Text>
+          </View>
 
-        {/* Calendar Grid (always month view) */}
-        <View style={styles.calendarGrid} {...panResponder.panHandlers}>
-          {renderCalendarGrid()}
-        </View>
+          {/* Calendar Grid (always month view) */}
+          <View style={styles.calendarGrid} pointerEvents="box-none">
+            {renderCalendarGrid()}
+          </View>
 
-        {/* Selected Date Events */}
-        <View style={styles.eventsSection}>
-          <Text style={styles.selectedDateTitle}>
-            {selectedDate.toLocaleDateString("en-US", {
-              weekday: "long",
-              month: "short",
-              day: "numeric",
-            })}
-          </Text>
-          {renderEventsList()}
-        </View>
+          {/* Selected Date Events */}
+          <View style={styles.eventsSection}>
+            <Text style={styles.selectedDateTitle}>
+              {selectedDate.toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "short",
+                day: "numeric",
+              })}
+            </Text>
+            {renderEventsList()}
+          </View>
 
-        {/* Create Event Button (for place owners & pro users) */}
-        {profile?.role === "place-owner" || profile?.role === "pro" || profile?.role === "admin" ? (
-          <TouchableOpacity
-            style={styles.createEventButton}
-            onPress={() => router.push({
-              pathname: "/create-event",
-              params: { selectedDate: selectedDate.toISOString() }
-            })}
-          >
-            <Text style={styles.createEventButtonText}>+ Create Event</Text>
-          </TouchableOpacity>
-        ) : null}
-      </ScrollView>
+          {/* Create Event Button (for place owners & pro users) */}
+          {profile?.role === "place-owner" || profile?.role === "pro" || profile?.role === "admin" ? (
+            <TouchableOpacity
+              style={styles.createEventButton}
+              onPress={() => router.push({
+                pathname: "/create-event",
+                params: { selectedDate: selectedDate.toISOString() }
+              })}
+            >
+              <Text style={styles.createEventButtonText}>+ Create Event</Text>
+            </TouchableOpacity>
+          ) : null}
+        </ScrollView>
+      </View>
 
       {/* Event Details Modal */}
       <Modal
@@ -737,78 +743,107 @@ export default function CalendarScreen() {
                   </TouchableOpacity>
                 )}
 
-                {/* Delete button - only for event creator */}
-                {selectedEvent.createdBy === user?.uid && (
-                  <TouchableOpacity
-                    style={styles.deleteEventButton}
-                    onPress={() => {
-                      // Check if this is part of a series
-                      const isSeriesEvent = selectedEvent.seriesId && selectedEvent.recurrence && selectedEvent.recurrence !== "one-off";
-                      
-                      if (isSeriesEvent) {
-                        Alert.alert(
-                          "Delete Event",
-                          "Delete this event or the entire series?",
-                          [
-                            { text: "Cancel", onPress: () => {} },
-                            {
-                              text: "Delete This Event",
-                              onPress: async () => {
-                                try {
-                                  await deleteEvent(selectedEvent.id);
-                                  setShowEventModal(false);
-                                  setRefreshTrigger(prev => prev + 1);
-                                } catch (error) {
-                                  Alert.alert("Error", "Failed to delete event. Please try again.");
-                                  console.error("Delete error:", error);
-                                }
+                {/* Modal Footer: Save and Delete buttons side by side */}
+                <View style={styles.eventModalFooter}>
+                  {/* Save button placeholder (if needed) */}
+                  {/* <TouchableOpacity style={styles.saveEventButton} onPress={...}>
+                    <Text style={styles.saveEventButtonText}>Save</Text>
+                  </TouchableOpacity> */}
+                  {(selectedEvent.createdBy === user?.uid || profile?.role === 'admin') && (
+                    <TouchableOpacity
+                      style={styles.deleteEventButtonFooter}
+                      onPress={() => {
+                        // Check if this is part of a series
+                        const isSeriesEvent = selectedEvent.seriesId && selectedEvent.recurrence && selectedEvent.recurrence !== "one-off";
+                        if (isSeriesEvent) {
+                          Alert.alert(
+                            "Delete Event",
+                            "Delete this event or the entire series?",
+                            [
+                              { text: "Cancel", onPress: () => {} },
+                              {
+                                text: "Delete This Event",
+                                onPress: async () => {
+                                  try {
+                                    await deleteEvent(selectedEvent.id);
+                                    setShowEventModal(false);
+                                    setRefreshTrigger(prev => prev + 1);
+                                  } catch (error) {
+                                    Alert.alert("Error", "Failed to delete event. Please try again.");
+                                    console.error("Delete error:", error);
+                                  }
+                                },
                               },
-                            },
-                            {
-                              text: "Delete Series",
-                              onPress: async () => {
-                                try {
-                                  await deleteEventSeries(selectedEvent.seriesId);
-                                  setShowEventModal(false);
-                                  setRefreshTrigger(prev => prev + 1);
-                                } catch (error) {
-                                  Alert.alert("Error", "Failed to delete series. Please try again.");
-                                  console.error("Delete series error:", error);
-                                }
+                              {
+                                text: "Delete Series",
+                                onPress: async () => {
+                                  try {
+                                    await deleteEventSeries(selectedEvent.seriesId);
+                                    setShowEventModal(false);
+                                    setRefreshTrigger(prev => prev + 1);
+                                  } catch (error) {
+                                    Alert.alert("Error", "Failed to delete series. Please try again.");
+                                    console.error("Delete series error:", error);
+                                  }
+                                },
+                                style: "destructive",
                               },
-                              style: "destructive",
-                            },
-                          ]
-                        );
-                      } else {
-                        Alert.alert(
-                          "Delete Event",
-                          "Are you sure you want to delete this event?",
-                          [
-                            { text: "Cancel", onPress: () => {} },
-                            {
-                              text: "Delete",
-                              onPress: async () => {
-                                try {
-                                  await deleteEvent(selectedEvent.id);
-                                  setShowEventModal(false);
-                                  setRefreshTrigger(prev => prev + 1);
-                                } catch (error) {
-                                  Alert.alert("Error", "Failed to delete event. Please try again.");
-                                  console.error("Delete error:", error);
-                                }
+                            ]
+                          );
+                        } else {
+                          Alert.alert(
+                            "Delete Event",
+                            "Are you sure you want to delete this event?",
+                            [
+                              { text: "Cancel", onPress: () => {} },
+                              {
+                                text: "Delete",
+                                onPress: async () => {
+                                  try {
+                                    await deleteEvent(selectedEvent.id);
+                                    setShowEventModal(false);
+                                    setRefreshTrigger(prev => prev + 1);
+                                  } catch (error) {
+                                    Alert.alert("Error", "Failed to delete event. Please try again.");
+                                    console.error("Delete error:", error);
+                                  }
+                                },
+                                style: "destructive",
                               },
-                              style: "destructive",
-                            },
-                          ]
-                        );
-                      }
-                    }}
-                  >
-                    <MaterialCommunityIcons name="trash-can" size={20} color={colors.danger} />
-                    <Text style={styles.deleteEventButtonText}>Delete Event</Text>
-                  </TouchableOpacity>
-                )}
+                            ]
+                          );
+                        }
+                      }}
+                    >
+                      <MaterialCommunityIcons name="trash-can" size={20} color={theme.colors.text} />
+                      <Text style={styles.deleteEventButtonFooterText}>Delete Event</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+  eventModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 24,
+    marginBottom: 8,
+    marginHorizontal: 20,
+  },
+  deleteEventButtonFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    backgroundColor: theme.colors.danger,
+    borderRadius: 8,
+  },
+  deleteEventButtonFooterText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginLeft: 8,
+  },
 
                 <View style={{ height: 20 }} />
               </ScrollView>

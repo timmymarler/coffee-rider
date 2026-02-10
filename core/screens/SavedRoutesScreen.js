@@ -277,32 +277,86 @@ export default function SavedRoutesScreen() {
         </TouchableOpacity>
 
         <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handleOpenRoute(item.id)}
-          >
-            <Ionicons
-              name="map-outline"
-              size={18}
-              color={theme.colors.accentMid}
-            />
-            <Text style={styles.actionLabel}>View on Map</Text>
-          </TouchableOpacity>
-
           {canShare && (
             <TouchableOpacity
-              style={styles.actionButton}
+              style={styles.shareRouteButton}
               onPress={() => openShareModal(item)}
             >
               <MaterialCommunityIcons
                 name="share-variant"
                 size={18}
-                color={theme.colors.accentMid}
+                color={theme.colors.primaryDark}
               />
-              <Text style={styles.actionLabel}>Share</Text>
+              <Text style={styles.shareRouteButtonText}>Share</Text>
+            </TouchableOpacity>
+          )}
+          {(item.createdBy === user?.uid || capabilities?.role === 'admin') && (
+            <TouchableOpacity
+              style={styles.deleteRouteButton}
+              onPress={() => handleDeleteRoute(item)}
+            >
+              <MaterialCommunityIcons name="trash-can" size={18} color={theme.colors.text} />
+              <Text style={styles.deleteRouteButtonText}>Delete</Text>
             </TouchableOpacity>
           )}
         </View>
+        async function handleDeleteRoute(route) {
+          Alert.alert(
+            "Delete Route",
+            "Are you sure you want to delete this route? This cannot be undone.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Delete",
+                style: "destructive",
+                onPress: async () => {
+                  try {
+                    // Remove from Firestore
+                    const { db } = await import("@config/firebase");
+                    const { doc, deleteDoc } = await import("firebase/firestore");
+                    await deleteDoc(doc(db, "routes", route.id));
+                    // Optionally show a toast or refresh
+                  } catch (err) {
+                    Alert.alert("Error", "Failed to delete route. Please try again.");
+                    console.error("Delete route error:", err);
+                  }
+                },
+              },
+            ]
+          );
+        }
+        shareRouteButton: {
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          paddingVertical: 10,
+          backgroundColor: theme.colors.accentMid,
+          borderRightWidth: 1,
+          borderRightColor: theme.colors.border,
+        },
+        shareRouteButtonText: {
+          fontSize: 13,
+          fontWeight: '500',
+          color: theme.colors.primaryDark,
+        },
+        deleteRouteButton: {
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          paddingVertical: 10,
+          backgroundColor: theme.colors.danger,
+          borderTopRightRadius: 8,
+          borderBottomRightRadius: 8,
+        },
+        deleteRouteButtonText: {
+          fontSize: 13,
+          fontWeight: '500',
+          color: theme.colors.text,
+        },
       </View>
     );
   }
