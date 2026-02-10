@@ -57,14 +57,6 @@ export default function HelpScreen() {
 
   return (
     <ScrollView ref={scrollRef} contentContainerStyle={styles.container}>
-            {/* LATEST FEATURES */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>What's New</Text>
-              <Text style={styles.bullet}>• Roundabout navigation instructions now shown in the info panel</Text>
-              <Text style={styles.bullet}>• Thicker route polyline in satnav (Follow Me) mode for better visibility</Text>
-              <Text style={styles.bullet}>• Custom navigation arrow icon replaces the blue dot in Follow Me mode</Text>
-              <Text style={styles.bullet}>• Default location dot remains during normal map panning</Text>
-            </View>
       {/* -------------------------------------------------- */}
       {/* HEADER                                            */}
       {/* -------------------------------------------------- */}
@@ -579,7 +571,7 @@ export default function HelpScreen() {
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    paddingBottom: 80, // Increased to avoid tab bar overlap
+    paddingBottom: 40,
     backgroundColor: theme.colors.primaryLight,
   },
 

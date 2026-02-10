@@ -1006,7 +1006,7 @@ export default function PlaceCard({
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 140 : 140}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 60}
     >
       <Pressable onPress={onClose} style={styles.closeButton}>
         <Ionicons name="close" size={22} color="#fff" />
@@ -1480,7 +1480,7 @@ export default function PlaceCard({
                     // Scroll to bottom after keyboard opens
                     setTimeout(() => {
                       scrollViewRef.current?.scrollToEnd({ animated: true });
-                    }, 300);
+                    }, 100);
                   }}
                 />
                 <TouchableOpacity
@@ -1826,7 +1826,7 @@ function createStyles(theme) {
     },
 
     scrollContent: {
-      paddingBottom: 320, // Increased to ensure input is visible above keyboard
+      paddingBottom: 200,
     },
   
     rateRow: {

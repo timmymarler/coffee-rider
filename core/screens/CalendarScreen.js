@@ -743,84 +743,78 @@ export default function CalendarScreen() {
                   </TouchableOpacity>
                 )}
 
-                {/* Modal Footer: Save and Delete buttons side by side */}
-                <View style={styles.eventModalFooter}>
-                  {/* Save button placeholder (if needed) */}
-                  {/* <TouchableOpacity style={styles.saveEventButton} onPress={...}>
-                    <Text style={styles.saveEventButtonText}>Save</Text>
-                  </TouchableOpacity> */}
-                  {(selectedEvent.createdBy === user?.uid || profile?.role === 'admin') && (
-                    <TouchableOpacity
-                      style={styles.deleteEventButtonFooter}
-                      onPress={() => {
-                        // Check if this is part of a series
-                        const isSeriesEvent = selectedEvent.seriesId && selectedEvent.recurrence && selectedEvent.recurrence !== "one-off";
-                        if (isSeriesEvent) {
-                          Alert.alert(
-                            "Delete Event",
-                            "Delete this event or the entire series?",
-                            [
-                              { text: "Cancel", onPress: () => {} },
-                              {
-                                text: "Delete This Event",
-                                onPress: async () => {
-                                  try {
-                                    await deleteEvent(selectedEvent.id);
-                                    setShowEventModal(false);
-                                    setRefreshTrigger(prev => prev + 1);
-                                  } catch (error) {
-                                    Alert.alert("Error", "Failed to delete event. Please try again.");
-                                    console.error("Delete error:", error);
-                                  }
-                                },
+                {/* Delete button - only for event creator */}
+                {selectedEvent.createdBy === user?.uid && (
+                  <TouchableOpacity
+                    style={styles.deleteEventButton}
+                    onPress={() => {
+                      // Check if this is part of a series
+                      const isSeriesEvent = selectedEvent.seriesId && selectedEvent.recurrence && selectedEvent.recurrence !== "one-off";
+                      
+                      if (isSeriesEvent) {
+                        Alert.alert(
+                          "Delete Event",
+                          "Delete this event or the entire series?",
+                          [
+                            { text: "Cancel", onPress: () => {} },
+                            {
+                              text: "Delete This Event",
+                              onPress: async () => {
+                                try {
+                                  await deleteEvent(selectedEvent.id);
+                                  setShowEventModal(false);
+                                  setRefreshTrigger(prev => prev + 1);
+                                } catch (error) {
+                                  Alert.alert("Error", "Failed to delete event. Please try again.");
+                                  console.error("Delete error:", error);
+                                }
                               },
-                              {
-                                text: "Delete Series",
-                                onPress: async () => {
-                                  try {
-                                    await deleteEventSeries(selectedEvent.seriesId);
-                                    setShowEventModal(false);
-                                    setRefreshTrigger(prev => prev + 1);
-                                  } catch (error) {
-                                    Alert.alert("Error", "Failed to delete series. Please try again.");
-                                    console.error("Delete series error:", error);
-                                  }
-                                },
-                                style: "destructive",
+                            },
+                            {
+                              text: "Delete Series",
+                              onPress: async () => {
+                                try {
+                                  await deleteEventSeries(selectedEvent.seriesId);
+                                  setShowEventModal(false);
+                                  setRefreshTrigger(prev => prev + 1);
+                                } catch (error) {
+                                  Alert.alert("Error", "Failed to delete series. Please try again.");
+                                  console.error("Delete series error:", error);
+                                }
                               },
-                            ]
-                          );
-                        } else {
-                          Alert.alert(
-                            "Delete Event",
-                            "Are you sure you want to delete this event?",
-                            [
-                              { text: "Cancel", onPress: () => {} },
-                              {
-                                text: "Delete",
-                                onPress: async () => {
-                                  try {
-                                    await deleteEvent(selectedEvent.id);
-                                    setShowEventModal(false);
-                                    setRefreshTrigger(prev => prev + 1);
-                                  } catch (error) {
-                                    Alert.alert("Error", "Failed to delete event. Please try again.");
-                                    console.error("Delete error:", error);
-                                  }
-                                },
-                                style: "destructive",
+                              style: "destructive",
+                            },
+                          ]
+                        );
+                      } else {
+                        Alert.alert(
+                          "Delete Event",
+                          "Are you sure you want to delete this event?",
+                          [
+                            { text: "Cancel", onPress: () => {} },
+                            {
+                              text: "Delete",
+                              onPress: async () => {
+                                try {
+                                  await deleteEvent(selectedEvent.id);
+                                  setShowEventModal(false);
+                                  setRefreshTrigger(prev => prev + 1);
+                                } catch (error) {
+                                  Alert.alert("Error", "Failed to delete event. Please try again.");
+                                  console.error("Delete error:", error);
+                                }
                               },
-                            ]
-                          );
-                        }
-                      }}
-                    >
-                      <MaterialCommunityIcons name="trash-can" size={20} color={theme.colors.text} />
-                      <Text style={styles.deleteEventButtonFooterText}>Delete Event</Text>
-                    </TouchableOpacity>
-
-                  )}
-                </View>
+                              style: "destructive",
+                            },
+                          ]
+                        );
+                      }
+                    }}
+                  >
+                    <MaterialCommunityIcons name="trash-can" size={20} color={colors.danger} />
+                    <Text style={styles.deleteEventButtonText}>Delete Event</Text>
+                  </TouchableOpacity>
+                )}
 
                 <View style={{ height: 20 }} />
               </ScrollView>
@@ -1689,29 +1683,5 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: theme.colors.text,
-  },
-  eventModalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 24,
-    marginBottom: 8,
-    marginHorizontal: 20,
-  },
-  deleteEventButtonFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    backgroundColor: theme.colors.danger,
-    borderRadius: 8,
-  },
-  deleteEventButtonFooterText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.colors.text,
-    marginLeft: 8,
   },
 });
