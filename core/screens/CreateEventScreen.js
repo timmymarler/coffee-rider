@@ -1,8 +1,8 @@
 // core/screens/CreateEventScreen.js
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
-import { useAllUserGroups } from "@core/groups/hooks";
 import RouteDropdown from "@core/components/RouteDropdown";
+import { useAllUserGroups } from "@core/groups/hooks";
 import { useEventForm } from "@core/hooks/useEventForm";
 import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";

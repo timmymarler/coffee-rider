@@ -1,3 +1,13 @@
-env: load .env
-env: export EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID EXPO_PUBLIC_FIREBASE_API_KEY_IOS EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID EXPO_PUBLIC_TOMTOM_API_KEY APP_NAME
-- Installing CocoaPods...
+★ eas-cli@16.32.0 is now available.
+To upgrade, run:
+npm install -g eas-cli
+Proceeding with outdated version.
+
+Resolved "production" environment for the build. Learn more: https://docs.expo.dev/eas/environment-variables/#setting-the-environment-for-your-builds
+No environment variables with visibility "Plain text" and "Sensitive" found for the "production" environment on EAS.
+Environment variables loaded from the "rider" build profile "env" configuration: APP_NAME, EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS, EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID, EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS, EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID, EXPO_PUBLIC_FIREBASE_API_KEY_IOS, EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID, EXPO_PUBLIC_TOMTOM_API_KEY.
+
+✔ Using remote iOS credentials (Expo server)
+
+If you provide your Apple account credentials we will be able to generate all necessary build credentials and fully validate them.
+This is optional, but without Apple account access you will need to provide all the missing values manually and we can only run minimal validation on them.

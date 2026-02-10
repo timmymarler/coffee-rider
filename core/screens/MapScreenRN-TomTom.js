@@ -2768,7 +2768,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           ref={mapRef}
           key={mapKey}
           style={StyleSheet.absoluteFill}
-          showsUserLocation={!isNavigationMode}
+          showsUserLocation={true}
           pitchEnabled
           showsMyLocationButton={false}
           minZoomLevel={Platform.OS === "ios" ? 1 : 0}
@@ -2940,24 +2940,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 strokeColor={theme.colors.primary}
                 zIndex={1000}
               />
-
-            {/* Custom user location arrow for navigation mode */}
-            {isNavigationMode && userLocation && (
-              <Marker
-                coordinate={{
-                  latitude: userLocation.latitude,
-                  longitude: userLocation.longitude,
-                }}
-                rotation={userLocation.heading ?? 0}
-                zIndex={1001}
-              >
-                <MaterialCommunityIcons
-                  name="navigation"
-                  size={32}
-                  color={theme.colors.primary}
-                />
-              </Marker>
-            )}
         </MapView>
       ) : (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.primaryDark }}>

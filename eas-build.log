@@ -7,3 +7,9 @@ Resolved "production" environment for the build. Learn more: https://docs.expo.d
 No environment variables with visibility "Plain text" and "Sensitive" found for the "production" environment on EAS.
 Environment variables loaded from the "production" build profile "env" configuration: APP_NAME, EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS, EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID, EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS, EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID, EXPO_PUBLIC_FIREBASE_API_KEY_IOS, EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID.
 
+
+
+✔ Using remote iOS credentials (Expo server)
+
+If you provide your Apple account credentials we will be able to generate all necessary build credentials and fully validate them.
+This is optional, but without Apple account access you will need to provide all the missing values manually and we can only run minimal validation on them.

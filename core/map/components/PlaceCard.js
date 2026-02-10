@@ -1081,7 +1081,7 @@ export default function PlaceCard({
                 if (hasRoute) 
                     onClearRoute?.();
                 else 
-                    onRoute?.(place);
+                    onRoute?.(safePlace);
                     onClose();
               }}
             >
