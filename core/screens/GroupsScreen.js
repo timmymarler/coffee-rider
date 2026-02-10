@@ -685,7 +685,15 @@ export default function GroupsScreen() {
                             userId: user?.uid,
                           });
                           setSelectedGroupId(result.groupId);
-                          Alert.alert("Joined", "You joined the group.");
+                          // Force refresh: reload groups after accepting
+                          if (typeof window !== 'undefined' && window.location && window.location.reload) {
+                            window.location.reload();
+                          } else {
+                            // Fallback: update a dummy state to force re-render
+                            setTimeout(() => {
+                              Alert.alert("Joined", "You joined the group. Pull to refresh if you don't see it.");
+                            }, 100);
+                          }
                         } catch (err) {
                           Alert.alert("Unable to accept", err?.message || "Unexpected error");
                         } finally {

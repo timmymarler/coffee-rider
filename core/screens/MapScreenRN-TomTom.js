@@ -2768,7 +2768,24 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           ref={mapRef}
           key={mapKey}
           style={StyleSheet.absoluteFill}
-          showsUserLocation={true}
+          showsUserLocation={!isNavigationMode}
+                    {/* Custom user location icon (navigation arrow) only in Follow Me mode */}
+                    {isNavigationMode && userLocation && (
+                      <Marker
+                        coordinate={userLocation}
+                        anchor={{ x: 0.5, y: 0.5 }}
+                        zIndex={2000}
+                        tracksViewChanges={false}
+                        tappable={false}
+                      >
+                        <MaterialCommunityIcons
+                          name="navigation-variant"
+                          size={36}
+                          color={theme.colors.primary}
+                          style={{ opacity: 0.95 }}
+                        />
+                      </Marker>
+                    )}
           pitchEnabled
           showsMyLocationButton={false}
           minZoomLevel={Platform.OS === "ios" ? 1 : 0}
