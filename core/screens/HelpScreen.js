@@ -571,7 +571,7 @@ export default function HelpScreen() {
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    paddingBottom: 40,
+    paddingBottom: 140, // Further increased for extra space above Tab Bar
     backgroundColor: theme.colors.primaryLight,
   },
 

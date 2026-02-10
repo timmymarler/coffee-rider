@@ -29,20 +29,23 @@ import {
 } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
+
+const PLACE_CARD_MAX_HEIGHT = 0.7 * Dimensions.get("window").height;
+const PLACE_CARD_EXTRA_SCROLL = Math.round(PLACE_CARD_MAX_HEIGHT * 0.5);
 import { RIDER_CATEGORIES } from "../../config/categories/rider";
 
 
@@ -1005,7 +1008,7 @@ export default function PlaceCard({
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 60}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 120 : 100}
     >
       <Pressable onPress={onClose} style={styles.closeButton}>
         <Ionicons name="close" size={22} color="#fff" />
@@ -1115,10 +1118,10 @@ export default function PlaceCard({
       <ScrollView
         ref={scrollViewRef}
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: PLACE_CARD_EXTRA_SCROLL }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-      >      
+      >
         <View style={styles.info}>
           {canAddPlace ? (
             <TextInput

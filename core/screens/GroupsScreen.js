@@ -75,6 +75,10 @@ export default function GroupsScreen() {
 
   // Hooks
   const { invites, loading: invitesLoading, error: invitesError } = useInvitesEnriched(user?.uid, user?.email);
+  const [localInvites, setLocalInvites] = useState([]);
+  useEffect(() => {
+    setLocalInvites(invites);
+  }, [invites]);
   const { invites: sentInvites, loading: sentInvitesLoading } = useSentInvitesEnriched(user?.uid);
   const { groups, loading: groupsLoading } = useAllUserGroups(user?.uid);
   const { routes: sharedRoutes, loading: routesLoading } = useGroupSharedRoutes(selectedGroupId);
@@ -395,41 +399,45 @@ export default function GroupsScreen() {
                           })}
                           {/* Leave Group button - only for non-owners */}
                           {members.find(m => m.uid === user?.uid)?.role !== "owner" && (
-                            <CRButton
-                              title={leavingGroup ? "Leaving…" : "Leave Group"}
-                              variant="danger"
-                              loading={leavingGroup}
-                              onPress={() => {
-                                Alert.alert(
-                                  "Leave Group?",
-                                  "You will no longer have access to this group and its shared routes.",
-                                  [
-                                    { text: "Cancel", style: "cancel" },
-                                    {
-                                      text: "Leave",
-                                      style: "destructive",
-                                      onPress: async () => {
-                                        setLeavingGroup(true);
-                                        try {
-                                          await leaveGroup({
-                                            groupId: selectedGroupId,
-                                            userId: user?.uid,
-                                          });
-                                          setSelectedGroupId(null);
-                                          Alert.alert("Left", "You have left the group.");
-                                        } catch (err) {
-                                          Alert.alert("Unable to leave", err?.message || "Unexpected error");
-                                        } finally {
-                                          setLeavingGroup(false);
-                                        }
+                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md }}>
+                              <CRButton
+                                title={leavingGroup ? "Leaving…" : "Leave Group"}
+                                variant="danger"
+                                loading={leavingGroup}
+                                onPress={() => {
+                                  Alert.alert(
+                                    "Leave Group?",
+                                    "You will no longer have access to this group and its shared routes.",
+                                    [
+                                      { text: "Cancel", style: "cancel" },
+                                      {
+                                        text: "Leave",
+                                        style: "destructive",
+                                        onPress: async () => {
+                                          setLeavingGroup(true);
+                                          try {
+                                            await leaveGroup({
+                                              groupId: selectedGroupId,
+                                              userId: user?.uid,
+                                            });
+                                            setSelectedGroupId(null); // Hide Leave button immediately
+                                            setTimeout(() => {
+                                              Alert.alert("Left", "You have left the group.");
+                                            }, 100);
+                                          } catch (err) {
+                                            Alert.alert("Unable to leave", err?.message || "Unexpected error");
+                                          } finally {
+                                            setLeavingGroup(false);
+                                          }
+                                        },
                                       },
-                                    },
-                                  ]
-                                );
-                              }}
-                              disabled={leavingGroup}
-                              style={{ marginTop: theme.spacing.md }}
-                            />
+                                    ]
+                                  );
+                                }}
+                                disabled={leavingGroup}
+                                style={{ minWidth: 120, alignSelf: 'flex-end' }}
+                              />
+                            </View>
                           )}
                         </>
                       )}
@@ -653,12 +661,12 @@ export default function GroupsScreen() {
             )}
             {invitesLoading ? (
               <ActivityIndicator color={theme.colors.primary} />
-            ) : invites.length === 0 ? (
+            ) : localInvites.length === 0 ? (
               <Text style={{ color: theme.colors.textMuted, marginTop: theme.spacing.md }}>
                 No pending invites.
               </Text>
             ) : (
-              invites.map((invite) => (
+              localInvites.map((invite) => (
                 <View key={invite.id} style={styles.inviteItem}>
                   <Text style={styles.inviteGroupName}>
                     {invite.groupName || invite.groupId}
@@ -684,7 +692,11 @@ export default function GroupsScreen() {
                             inviteId: invite.id,
                             userId: user?.uid,
                           });
-                          setSelectedGroupId(result.groupId);
+                          setLocalInvites(localInvites.filter(i => i.id !== invite.id));
+                          setSelectedGroupId(null);
+                          setTimeout(() => {
+                            setSelectedGroupId(result.groupId);
+                          }, 500);
                           Alert.alert("Joined", "You joined the group.");
                         } catch (err) {
                           Alert.alert("Unable to accept", err?.message || "Unexpected error");
@@ -706,6 +718,7 @@ export default function GroupsScreen() {
                             inviteId: invite.id,
                             userId: user?.uid,
                           });
+                          setLocalInvites(localInvites.filter(i => i.id !== invite.id));
                           Alert.alert("Declined", "Invite declined.");
                         } catch (err) {
                           Alert.alert("Unable to decline", err?.message || "Unexpected error");
