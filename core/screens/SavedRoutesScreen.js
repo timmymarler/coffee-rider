@@ -300,31 +300,34 @@ export default function SavedRoutesScreen() {
             </TouchableOpacity>
           )}
         </View>
-        async function handleDeleteRoute(route) {
-          Alert.alert(
-            "Delete Route",
-            "Are you sure you want to delete this route? This cannot be undone.",
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Delete",
-                style: "destructive",
-                onPress: async () => {
-                  try {
-                    // Remove from Firestore
-                    const { db } = await import("@config/firebase");
-                    const { doc, deleteDoc } = await import("firebase/firestore");
-                    await deleteDoc(doc(db, "routes", route.id));
-                    // Optionally show a toast or refresh
-                  } catch (err) {
-                    Alert.alert("Error", "Failed to delete route. Please try again.");
-                    console.error("Delete route error:", err);
-                  }
+  // Move this function to the top level of the component
+        // Add this at the top level inside SavedRoutesScreen
+          async function handleDeleteRoute(route) {
+            Alert.alert(
+              "Delete Route",
+              "Are you sure you want to delete this route? This cannot be undone.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      // Remove from Firestore
+                      const { db } = await import("@config/firebase");
+                      const { doc, deleteDoc } = await import("firebase/firestore");
+                      await deleteDoc(doc(db, "routes", route.id));
+                      // Optionally show a toast or refresh
+                    } catch (err) {
+                      Alert.alert("Error", "Failed to delete route. Please try again.");
+                      console.error("Delete route error:", err);
+                    }
+                  },
                 },
-              },
-            ]
-          );
-        }
+              ]
+            );
+          }
+      // Add these to StyleSheet.create at the end of the file
         shareRouteButton: {
           flex: 1,
           flexDirection: 'row',
