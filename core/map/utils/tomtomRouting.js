@@ -64,8 +64,8 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
     windingness = customWindingness || windingness;
   }
   
-  const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
-
+//  const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
+const tomtomApiKey = "Zuz4K5BVwI4T4AdzqFtqTJPjEzpbqxqs";
   if (!tomtomApiKey) {
     throw new Error("TomTom API key not configured");
   }

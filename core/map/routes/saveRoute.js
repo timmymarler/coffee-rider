@@ -12,6 +12,9 @@ export async function saveRoute({
   routeMeta,
   polyline,
   routeId, // if provided, will update instead of create
+  tomtomSteps,
+  tomtomGuidance,
+  tomtomRawRoute,
 }) {
   if (!user) throw new Error("User required to save route");
   if (!capabilities?.canSaveRoutes) {
@@ -26,6 +29,10 @@ export async function saveRoute({
     distanceMeters: routeMeta?.distanceMeters ?? null,
     durationSeconds: routeMeta?.durationSeconds ?? null,
     updatedAt: serverTimestamp(),
+    // Debug fields for TomTom
+    tomtomSteps: tomtomSteps ?? null,
+    tomtomGuidance: tomtomGuidance ?? null,
+    tomtomRawRoute: tomtomRawRoute ?? null,
   };
 
   // If name is provided, include it (for new routes or when creating new from existing)

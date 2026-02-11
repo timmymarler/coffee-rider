@@ -1,4 +1,3 @@
-
 import "dotenv/config";
 
 const isIOS = process.env.EAS_BUILD_PLATFORM === 'ios';
@@ -84,6 +83,7 @@ export default {
 
     ios: {
       bundleIdentifier: IOS_BUNDLE[APP_NAME],
+      buildNumber: "2",
       googleServicesFile: "./GoogleService-Info.plist",
       infoPlist: {
         NSLocationWhenInUseUsageDescription: "Coffee Rider needs your location to show nearby places and help with group rides.",

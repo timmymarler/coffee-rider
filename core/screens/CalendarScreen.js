@@ -11,15 +11,15 @@ import theme from "@themes";
 import { useRouter } from "expo-router";
 import { useCallback, useContext, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    PanResponder,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Modal,
+  PanResponder,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
