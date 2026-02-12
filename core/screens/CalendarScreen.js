@@ -42,21 +42,26 @@ export default function CalendarScreen() {
     // PanResponder for swipe gestures
     const panResponder = PanResponder.create({
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        // Only respond to horizontal swipes
-        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
+        // Only respond to horizontal swipes, not taps
+        const shouldRespond = Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
+        if (shouldRespond) {
+          console.log('PanResponder: Should respond to swipe', gestureState.dx);
+        }
+        return shouldRespond;
       },
-      onStartShouldSetPanResponderCapture: () => true, // Ensure parent captures gesture first
+      onStartShouldSetPanResponderCapture: () => false,
       onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.dx < -40) {
-          // Swipe left: next month
-          const next = new Date(selectedDate);
-          next.setMonth(next.getMonth() + 1);
-          setSelectedDate(next);
-        } else if (gestureState.dx > 40) {
-          // Swipe right: previous month
+        console.log('PanResponder: Release', gestureState.dx);
+        if (gestureState.dx > 40) {
+          console.log('PanResponder: Swipe right (previous month)');
           const prev = new Date(selectedDate);
           prev.setMonth(prev.getMonth() - 1);
           setSelectedDate(prev);
+        } else if (gestureState.dx < -40) {
+          console.log('PanResponder: Swipe left (next month)');
+          const next = new Date(selectedDate);
+          next.setMonth(next.getMonth() + 1);
+          setSelectedDate(next);
         }
       },
     });
@@ -447,13 +452,17 @@ export default function CalendarScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.headerControls, { paddingTop: 12, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingRight: insets.top + 12 }]}> 
+    <View style={[styles.container, { backgroundColor: colors.background }]}>  
+      {/* Month navigation header (no PanResponder here) */}
+      <View
+        style={[styles.headerControls, { paddingTop: 12, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingRight: insets.top + 12 }]}
+      >
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity 
               style={styles.headerNavButtonLarge} 
               onPress={() => {
+                console.log('Button: Previous month');
                 const prev = new Date(selectedDate);
                 prev.setMonth(prev.getMonth() - 1);
                 setSelectedDate(prev);
@@ -472,6 +481,7 @@ export default function CalendarScreen() {
             <TouchableOpacity
               style={styles.headerNavButtonLarge}
               onPress={() => {
+                console.log('Button: Next month');
                 const next = new Date(selectedDate);
                 next.setMonth(next.getMonth() + 1);
                 setSelectedDate(next);
@@ -582,10 +592,7 @@ export default function CalendarScreen() {
         </ScrollView>
       )}
 
-      <View
-        style={{ flex: 1 }}
-        {...panResponder.panHandlers}
-      >
+      <View style={{ flex: 1 }}>
         <ScrollView
           style={styles.content}
           showsVerticalScrollIndicator={false}
@@ -601,8 +608,8 @@ export default function CalendarScreen() {
             </Text>
           </View>
 
-          {/* Calendar Grid (always month view) */}
-          <View style={styles.calendarGrid} pointerEvents="box-none">
+          {/* Calendar Grid (always month view) with PanResponder for swipe gestures */}
+          <View style={styles.calendarGrid} pointerEvents="box-none" {...panResponder.panHandlers}>
             {renderCalendarGrid()}
           </View>
 
