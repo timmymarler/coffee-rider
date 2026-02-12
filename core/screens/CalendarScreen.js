@@ -365,10 +365,9 @@ export default function CalendarScreen() {
             key={item.id}
             style={styles.eventCard}
             onPress={() => {
-              // Permission check: only allow edit if user is creator or admin
+              // Only the creator can edit the event
               const isCreator = item.createdBy === user?.uid || item.userId === user?.uid;
-              const isAdmin = profile?.role === 'admin';
-              if (isCreator || isAdmin) {
+              if (isCreator) {
                 router.push({
                   pathname: '/create-event',
                   params: { eventId: item.id, edit: 'true' }
