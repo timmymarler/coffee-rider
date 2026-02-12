@@ -53,7 +53,7 @@ export default {
     name: DISPLAY_NAME[APP_NAME],
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
-    version: "2.5.0",
+    version: "2.6.5",
     icon: `${brandFolder}/icon.png`,
     splash: {
       image: `${brandFolder}/splash.png`,
@@ -97,6 +97,7 @@ export default {
 
     android: {
       package: ANDROID_PACKAGE[APP_NAME],
+      versionCode: 2,
       permissions: [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
