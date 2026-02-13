@@ -2608,6 +2608,17 @@ export default function MapScreenRN() {
                   <Text style={styles.junctionDistance}>{distText}</Text>
                 ) : null}
                 <Text style={styles.junctionLabel}>{meta.label}</Text>
+                {routeDistanceMeters && routeMeta?.durationSeconds && (
+                  <Text style={styles.junctionRemaining}>
+                    {formatDistanceImperial(routeDistanceMeters)} • {(() => {
+                      const totalMins = Math.round(routeMeta.durationSeconds / 60);
+                      const hours = Math.floor(totalMins / 60);
+                      const mins = totalMins % 60;
+                      return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+                    })()} remaining
+                  </Text>
+                )}
+              </View>
               </View>
             </View>
           );
@@ -3057,6 +3068,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "rgba(245, 245, 240, 0.95)",
     lineHeight: 56,
+  },
+  junctionRemaining: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "rgba(245, 245, 240, 0.8)",
+    marginTop: 4,
   },
   junctionLabel: {
     fontSize: 14,

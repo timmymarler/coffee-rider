@@ -10,7 +10,7 @@ import useWaypoints from "./useWaypoints";
 // It receives `waypoints` as a prop (which may include destination).
 // It may still call useWaypoints() ONLY for mutations during transition.
 
-export default function WaypointsList({ waypoints, onClearAll, routeOrigin, routedTotalMeters }) {
+export default function WaypointsList({ waypoints, onClearAll, routeOrigin, routedTotalMeters, routedTotalDurationSeconds }) {
   // ⚠️ DO NOT destructure `waypoints` from context here
   const [collapsed, setCollapsed] = useState(true);
   const reorderableWaypoints = waypoints.filter(wp => !wp.isTerminal);
@@ -29,6 +29,17 @@ export default function WaypointsList({ waypoints, onClearAll, routeOrigin, rout
     }
     const yards = meters * 1.09361;
     return `${Math.round(yards)} yd`;
+  }
+
+  function formatDurationHMS(seconds) {
+    if (seconds == null || seconds <= 0) return "";
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
   }
 
   if (!waypoints?.length) return null;
@@ -104,11 +115,14 @@ export default function WaypointsList({ waypoints, onClearAll, routeOrigin, rout
           <Text style={styles.label} numberOfLines={1}>
             {destination.title}
           </Text>
-          {typeof routedTotalMeters === 'number' && routedTotalMeters > 0 && (
+          {(typeof routedTotalMeters === 'number' && routedTotalMeters > 0) || (typeof routedTotalDurationSeconds === 'number' && routedTotalDurationSeconds > 0) ? (
             <Text style={styles.distance}>
-              {`${formatDistanceImperial(routedTotalMeters)} routed`}
+              {[
+                formatDistanceImperial(routedTotalMeters),
+                formatDurationHMS(routedTotalDurationSeconds),
+              ].filter(Boolean).join(' • ')} routed
             </Text>
-          )}
+          ) : null}
         </View>
       )}
     </View>

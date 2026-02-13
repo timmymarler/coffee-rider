@@ -178,8 +178,11 @@ function FloatingTabBar({ state }) {
                 if (mapActions?.canRefreshRoute?.()) {
                   mapActions?.refreshRoute?.();
                 }
+              } else if (mapActions?.selectedPlaceId) {
+                // When NOT following and a place is selected: route to that place with Follow Me
+                mapActions?.routeToSelectedPlace?.();
               } else {
-                // When NOT following: route to home
+                // When NOT following and no place selected: route to home
                 mapActions?.routeToHome?.();
               }
             }}

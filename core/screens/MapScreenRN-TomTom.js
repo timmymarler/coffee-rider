@@ -1388,7 +1388,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       routeFittedRef.current = false;
       setRouteClearedByUser(false); // Ensure route building is not blocked
 
-      // Set home as destination - this will trigger buildRoute via useEffect
+      // Set home as destination
       await debugLog("ROUTE_TO_HOME", "Route to home initiated", { lat: homeCoords.lat, lng: homeCoords.lng });
       
       setRouteDestination({
@@ -1398,7 +1398,27 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       });
       setIsHomeDestination(true);
       
-      // Enable Follow Me mode to guide to home
+      // Build route BEFORE enabling Follow Me (since Follow Me skips route building)
+      const requestId = ++routeRequestId.current;
+      console.log("[ROUTE_TO_HOME] Building route before enabling Follow Me, requestId:", requestId);
+      
+      await mapRoute({
+        origin: userLocation,
+        waypoints: [],
+        destination: {
+          latitude: homeCoords.lat,
+          longitude: homeCoords.lng,
+          name: "Home",
+        },
+        travelMode: userTravelMode,
+        routeType: userRouteType,
+        requestId: requestId,
+        skipFitToView: false, // Allow initial fit
+      }).catch(error => {
+        console.warn('[ROUTE_TO_HOME] mapRoute error:', error);
+      });
+      
+      // Now enable Follow Me mode to guide to home
       skipNextFollowTickRef.current = true;
       skipNextRegionChangeRef.current = true;
       await recenterOnUser({ zoom: FOLLOW_ZOOM });
@@ -1464,6 +1484,28 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [followUser, activeRide]);
 
+  /**
+   * Route to the currently selected place and start Follow Me navigation
+   * Used by the Follow Me tab button when a place is selected
+   */
+  async function routeToSelectedPlace() {
+    if (!selectedPlace) return;
+    
+    // Route to the selected place
+    await handleRoute(selectedPlace);
+    
+    // Close the place card
+    setSelectedPlaceId(null);
+    clearTempIfSafe();
+    
+    // Start Follow Me navigation after a brief delay to ensure route is set up
+    setTimeout(() => {
+      if (!followUser && userLocation) {
+        console.log('[routeToSelectedPlace] Starting Follow Me');
+        toggleFollowMe();
+      }
+    }, 300);
+  }
 
   useEffect(() => {
     setMapActions({
@@ -1474,13 +1516,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       canRefreshRoute: () => userLocation && (waypoints.length > 0 || routeDestination),
       refreshRoute: handleRefreshRouteToNextWaypoint,
       routeToHome: routeToHome,
+      routeToSelectedPlace: routeToSelectedPlace,
       endRide: endRide,
+      selectedPlaceId: selectedPlaceId,
     });
 
     return () => {
       setMapActions(null);
     };
-  }, [followUser, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress, endRide]);
+  }, [followUser, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress, endRide, selectedPlace, selectedPlaceId]);
 
   useEffect(() => {
     let subscription;
@@ -3219,6 +3263,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   <Text style={styles.junctionDistance}>{distText}</Text>
                 ) : null}
                 <Text style={styles.junctionLabel}>{label}</Text>
+                {routeDistanceMeters && routeMeta?.durationSeconds && (
+                  <Text style={styles.junctionRemaining}>
+                    {formatDistanceImperial(routeDistanceMeters)} • {(() => {
+                      const totalMins = Math.round(routeMeta.durationSeconds / 60);
+                      const hours = Math.floor(totalMins / 60);
+                      const mins = totalMins % 60;
+                      return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+                    })()} remaining
+                  </Text>
+                )}
               </View>
             </View>
           );
@@ -3249,6 +3303,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               : (typeof routeMeta?.distanceMeters === 'number' && routeMeta.distanceMeters > 0
                   ? routeMeta.distanceMeters
                   : undefined)
+          }
+          // Pass route duration in seconds
+          routedTotalDurationSeconds={
+            typeof routeMeta?.durationSeconds === 'number' && routeMeta.durationSeconds > 0
+              ? routeMeta.durationSeconds
+              : undefined
           }
         />
       )}
@@ -3698,6 +3758,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "rgba(245, 245, 240, 0.95)",
     lineHeight: 56,
+  },
+  junctionRemaining: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "rgba(245, 245, 240, 0.8)",
+    marginTop: 4,
   },
   junctionLabel: {
     fontSize: 14,
