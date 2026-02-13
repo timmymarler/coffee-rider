@@ -1,17 +1,19 @@
 import "dotenv/config";
 
 const isIOS = process.env.EAS_BUILD_PLATFORM === 'ios';
+
+// For API keys, try platform-specific first, then fall back to generic if available
 const googleMapsApiKey = isIOS
-  ? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS
-  : process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID;
+  ? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+  : process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 const googlePlacesApiKey = isIOS
-  ? process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS
-  : process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID;
+  ? process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS || process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY
+  : process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID || process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
 const tomtomApiKey = isIOS
-  ? process.env.EXPO_PUBLIC_TOMTOM_API_KEY_IOS
-  : process.env.EXPO_PUBLIC_TOMTOM_API_KEY_ANDROID;
+  ? process.env.EXPO_PUBLIC_TOMTOM_API_KEY_IOS || process.env.EXPO_PUBLIC_TOMTOM_API_KEY
+  : process.env.EXPO_PUBLIC_TOMTOM_API_KEY_ANDROID || process.env.EXPO_PUBLIC_TOMTOM_API_KEY;
 
 // Use these variables wherever you need the keys
 // Read the app variant from ENV or default to rider
