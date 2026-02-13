@@ -153,8 +153,13 @@ const AMENITY_ICON_MAP = {
     TURN_SLIGHT_LEFT: { icon: "arrow-left-top-bold", label: "Slight left" },
     TURN_SLIGHT_RIGHT: { icon: "arrow-right-top-bold", label: "Slight right" },
     STRAIGHT: { icon: "arrow-up-bold", label: "Continue straight" },
-    ROUNDABOUT_ENTER: { icon: "rotate-clockwise", label: "Enter roundabout" },
-    ROUNDABOUT_EXIT: { icon: "rotate-clockwise", label: "Exit roundabout" },
+    ROUNDABOUT_ENTER: { icon: "rotate-right", label: "Enter roundabout" },
+    ROUNDABOUT_EXIT: { icon: "rotate-right", label: "Exit roundabout" },
+    ROUNDABOUT_ENTER_LEFT: { icon: "rotate-left", label: "Enter roundabout (left)" },
+    ROUNDABOUT_EXIT_LEFT: { icon: "rotate-left", label: "Exit roundabout (left)" },
+    ROUNDABOUT_ENTER_RIGHT: { icon: "rotate-right", label: "Enter roundabout (right)" },
+    ROUNDABOUT_EXIT_RIGHT: { icon: "rotate-right", label: "Exit roundabout (right)" },
+    ROUNDABOUT_CROSS: { icon: "rotate-right", label: "Proceed through roundabout" },
     MERGE_LEFT: { icon: "arrow-left-bottom", label: "Merge left" },
     MERGE_RIGHT: { icon: "arrow-right-bottom", label: "Merge right" },
   };
@@ -1004,7 +1009,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       })),
       routeMeta,
       polyline: lastEncodedPolyline, // see note below
+      // Debug: Save TomTom steps, guidance, and rawRoute for analysis
+      tomtomSteps: routeSteps,
+      tomtomGuidance: (routeSteps && routeSteps.length > 0 && routeSteps[0].instruction) ? undefined : undefined, // Placeholder, see below
+      tomtomRawRoute: undefined, // Placeholder, see below
     });
+
+    // Note: tomtomGuidance and tomtomRawRoute are not available in state by default.
+    // If you want to save them, you need to expose them in state when building the route.
+    // For now, only tomtomSteps (routeSteps) is saved. To save more, update mapRoute/buildRoute to store guidance/rawRoute in state.
     
     setPostbox({
       type: "success",
@@ -3143,15 +3156,59 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       {/* Junction panel (top-left) during navigation - helmet visible */}
       {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
         (() => {
+          // Debug: log all steps and current step index
+          console.log('[JunctionPanel] routeSteps:', routeSteps);
+          console.log('[JunctionPanel] currentStepIndex:', currentStepIndex, 'nextStepIndex:', Math.min(currentStepIndex + 2, routeSteps.length - 1));
           // Show the NEXT step's maneuver (what's coming), not the current step
           const nextStepIndex = Math.min(currentStepIndex + 1, routeSteps.length - 1);
           const step = routeSteps[nextStepIndex];
-          const m = step?.maneuver || "STRAIGHT";
-          const meta = MANEUVER_ICON_MAP[m] || MANEUVER_ICON_MAP.STRAIGHT;
+          let m = step?.maneuver || "STRAIGHT";
+          // Normalize maneuver type for lookup
+          if (typeof m === "string") m = m.trim().toUpperCase();
+          let meta = MANEUVER_ICON_MAP[m];
+          if (!meta) {
+            // Try fallback for common roundabout variants
+            if (m.includes("ROUNDABOUT")) {
+              meta = MANEUVER_ICON_MAP.ROUNDABOUT_ENTER;
+            } else {
+              meta = MANEUVER_ICON_MAP.STRAIGHT;
+            }
+          }
           const dist = nextJunctionDistance;
           const distText = dist != null ? formatDistanceImperial(dist) : "";
-          // Show roundabout exit number if present
-          const roundaboutExit = (m.startsWith("ROUNDABOUT") && step.exitNumber) ? step.exitNumber : null;
+          // Prefer TomTom's instruction for roundabouts, else use label
+          let label = meta.label;
+          let roundaboutExit = null;
+          if (m.includes("ROUNDABOUT")) {
+            // Trace roundabout exit extraction
+            console.log('[JunctionPanel] step:', step);
+            console.log('[JunctionPanel] FULL STEP OBJECT:', JSON.stringify(step));
+            if (typeof step.exitNumber === "number" && step.exitNumber > 0) {
+              roundaboutExit = step.exitNumber;
+              console.log('[JunctionPanel] Found step.exitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
+            }
+            // If not found, try parsing from instruction text
+            if (!roundaboutExit && step?.instruction) {
+              const match = step.instruction.match(/exit\s*(\d+)/i);
+              if (match) {
+                roundaboutExit = parseInt(match[1], 10);
+                console.log('[JunctionPanel] Parsed exit from instruction:', roundaboutExit, 'step:', JSON.stringify(step));
+              }
+            }
+            if (roundaboutExit) {
+              label = `Take exit no. ${roundaboutExit}`;
+              console.log('[JunctionPanel] Set label:', label, 'exitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
+            } else if (step?.instruction && step.instruction !== "Continue") {
+              label = step.instruction;
+              console.log('[JunctionPanel] Fallback to step.instruction:', label, 'exitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
+            } else if (meta.label) {
+              label = meta.label;
+              console.log('[JunctionPanel] Fallback to meta.label:', label, 'exitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
+            } else {
+              label = "Proceed through roundabout";
+              console.log('[JunctionPanel] Fallback to default label:', label, 'exitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
+            }
+          }
           return (
             <View style={styles.junctionPanel}>
               {/* Large direction icon */}
@@ -3161,10 +3218,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 {distText ? (
                   <Text style={styles.junctionDistance}>{distText}</Text>
                 ) : null}
-                <Text style={styles.junctionLabel}>{meta.label}</Text>
-                {roundaboutExit && (
-                  <Text style={styles.junctionTitle}>Exit {roundaboutExit}</Text>
-                )}
+                <Text style={styles.junctionLabel}>{label}</Text>
               </View>
             </View>
           );

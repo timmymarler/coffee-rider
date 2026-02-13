@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 
+
 /**
  * Fetch route from TomTom Routing API
  * @param {Object} origin - {latitude, longitude}
@@ -64,8 +65,7 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
     windingness = customWindingness || windingness;
   }
   
-//  const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
-const tomtomApiKey = "Zuz4K5BVwI4T4AdzqFtqTJPjEzpbqxqs";
+const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
   if (!tomtomApiKey) {
     throw new Error("TomTom API key not configured");
   }
@@ -219,22 +219,23 @@ const tomtomApiKey = "Zuz4K5BVwI4T4AdzqFtqTJPjEzpbqxqs";
       let instruction = instr.text || "Continue";
       let extra = {};
 
-      // Handle roundabout maneuvers
+      // Handle roundabout maneuvers and extract exit number
       if (maneuver.startsWith("ROUNDABOUT")) {
         // TomTom may provide exit number in instruction or as a property
-        const exitMatch = instruction.match(/exit (\d+)/i);
-        let exitNumber = instr.exitNumber || (exitMatch ? parseInt(exitMatch[1], 10) : undefined);
-        if (maneuver === "ROUNDABOUT_ENTER") {
-          instruction = exitNumber
-            ? `Enter roundabout and take exit ${exitNumber}`
-            : "Enter roundabout";
-          extra.exitNumber = exitNumber;
-        } else if (maneuver === "ROUNDABOUT_EXIT") {
-          instruction = exitNumber
-            ? `Exit roundabout at exit ${exitNumber}`
-            : "Exit roundabout";
-          extra.exitNumber = exitNumber;
+        let exitNumber = instr.exitNumber;
+        if (!exitNumber) {
+          // Try to extract from instruction text (e.g., "Take the 2nd exit")
+          const exitMatch = instruction.match(/exit (\d+)/i);
+          if (exitMatch) {
+            exitNumber = parseInt(exitMatch[1], 10);
+          }
         }
+        if (exitNumber) {
+          instruction = `Take exit ${exitNumber}`;
+        } else {
+          instruction = "Enter roundabout";
+        }
+        extra.roundaboutExitNumber = exitNumber;
       } else if (maneuver === "STRAIGHT") {
         // Only use 'continue straight' if not approaching a roundabout
         const nextInstr = instructions[idx + 1];

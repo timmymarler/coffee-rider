@@ -45,7 +45,10 @@ export default function CalendarScreen() {
         // Only respond to horizontal swipes
         return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
       },
-      onStartShouldSetPanResponderCapture: () => true, // Ensure parent captures gesture first
+      onStartShouldSetPanResponderCapture: (evt, gestureState) => {
+        // Only capture if it's a horizontal swipe, not a tap
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 20;
+      },
       onPanResponderRelease: (evt, gestureState) => {
         if (gestureState.dx < -40) {
           // Swipe left: next month
@@ -582,10 +585,7 @@ export default function CalendarScreen() {
         </ScrollView>
       )}
 
-      <View
-        style={{ flex: 1 }}
-        {...panResponder.panHandlers}
-      >
+      <View style={{ flex: 1 }}>
         <ScrollView
           style={styles.content}
           showsVerticalScrollIndicator={false}
@@ -602,7 +602,7 @@ export default function CalendarScreen() {
           </View>
 
           {/* Calendar Grid (always month view) */}
-          <View style={styles.calendarGrid} pointerEvents="box-none">
+          <View style={styles.calendarGrid} pointerEvents="box-none" {...panResponder.panHandlers}>
             {renderCalendarGrid()}
           </View>
 
