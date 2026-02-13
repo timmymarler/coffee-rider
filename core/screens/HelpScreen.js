@@ -150,6 +150,17 @@ export default function HelpScreen() {
             <Text style={styles.controlLabel}>Route to Home</Text> — when not following, long press the Follow Me icon to create a route from your current location to your home address. Make sure you've added your home address in your Profile first. This will automatically enable Follow Me mode to guide you home.
           </Text>
         </View>
+        <View style={styles.controlRow}>
+          <MaterialCommunityIcons
+            name="map-marker-path"
+            size={22}
+            color={theme.colors.primary}
+            style={styles.controlIcon}
+          />
+          <Text style={styles.controlText}>
+            <Text style={styles.controlLabel}>Route to Selected Place</Text> — tap any place marker to open its details card, then long press the Follow Me icon to route to that place with Follow Me automatically enabled. The place card will close and navigation will start immediately.
+          </Text>
+        </View>
         <Text style={styles.sectionTitle}>Map actions</Text>
         <View style={styles.legendRow}>
           <SvgPin {...markerStyles.cr} size={24} />
@@ -264,6 +275,10 @@ export default function HelpScreen() {
 
         <Text style={[styles.subText, { marginTop: 12 }]}>
           <Text style={styles.controlLabel}>Waypoints:</Text> Long press on any location to add waypoints. Your route will recalculate to pass through all waypoints in order while maintaining your selected route optimization.
+        </Text>
+
+        <Text style={[styles.subText, { marginTop: 12 }]}>
+          <Text style={styles.controlLabel}>Route Information:</Text> When you create a route, the waypoints panel shows the total distance and estimated time remaining to your destination. During navigation (Follow Me active), the blue direction box at the top shows distance to the next turn and total remaining distance and time below the turn instruction.
         </Text>
       </View>
 
