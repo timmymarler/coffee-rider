@@ -12,7 +12,7 @@ import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { useRouter } from "expo-router";
-import { useContext, useEffect, useState, useRef } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
