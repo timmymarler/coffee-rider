@@ -67,7 +67,9 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
   
 const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
   if (!tomtomApiKey) {
-    throw new Error("TomTom API key not configured");
+    console.error('[tomtomRouting] Constants.expoConfig:', Constants.expoConfig);
+    console.error('[tomtomRouting] Constants.expoConfig?.extra:', Constants.expoConfig?.extra);
+    throw new Error("TomTom API key not configured. Check console logs for config details.");
   }
 
   if (!origin || !destination) {
@@ -322,7 +324,9 @@ export async function fetchTomTomMatrix(origin, destinations) {
   const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
 
   if (!tomtomApiKey) {
-    throw new Error("TomTom API key not configured");
+    console.error('[fetchTomTomMatrix] Constants.expoConfig:', Constants.expoConfig);
+    console.error('[fetchTomTomMatrix] Constants.expoConfig?.extra:', Constants.expoConfig?.extra);
+    throw new Error("TomTom API key not configured. Check console logs for config details.");
   }
 
   if (!origin || !destinations || destinations.length === 0) {
