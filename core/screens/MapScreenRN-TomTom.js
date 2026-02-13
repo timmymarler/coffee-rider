@@ -6,7 +6,7 @@ import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
 import { collection, doc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from "react-native";
+import { AppState, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -45,6 +45,9 @@ import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
+
+const mapStyleLight = require("@config/mapStyleLight.json");
+const mapStyleDark = require("@config/mapStyleDark.json");
 
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
 const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17; // Android: 17, iOS: 7 - More zoomed in for better detail
@@ -558,6 +561,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
     }, [placeId, openPlaceCard, crPlaces, googlePois]);
   const mapRef = useRef();
+  const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
 
   const TAB_BAR_HEIGHT = 56; // matches FloatingTabBar height
@@ -2825,6 +2829,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           ref={mapRef}
           key={mapKey}
           style={StyleSheet.absoluteFill}
+          customMapStyle={colorScheme === 'dark' ? mapStyleDark : mapStyleLight}
           showsUserLocation={true}
           pitchEnabled
           showsMyLocationButton={false}
