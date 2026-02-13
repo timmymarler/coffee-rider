@@ -12,7 +12,7 @@ import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { useRouter } from "expo-router";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -75,9 +75,14 @@ export default function GroupsScreen() {
 
   // Hooks
   const { invites, loading: invitesLoading, error: invitesError } = useInvitesEnriched(user?.uid, user?.email);
+  // Local state for pending invites, only update from hook if not just acted locally
   const [localInvites, setLocalInvites] = useState([]);
+  const justActedOnInvite = useRef(false);
   useEffect(() => {
-    setLocalInvites(invites);
+    if (!justActedOnInvite.current) {
+      setLocalInvites(invites);
+    }
+    justActedOnInvite.current = false;
   }, [invites]);
   const { invites: sentInvites, loading: sentInvitesLoading } = useSentInvitesEnriched(user?.uid);
   const { groups, loading: groupsLoading } = useAllUserGroups(user?.uid);
@@ -692,7 +697,9 @@ export default function GroupsScreen() {
                             inviteId: invite.id,
                             userId: user?.uid,
                           });
-                          setLocalInvites(localInvites.filter(i => i.id !== invite.id));
+                          // Remove invite from local state immediately and prevent next effect from resetting
+                          justActedOnInvite.current = true;
+                          setLocalInvites(prev => prev.filter(i => i.id !== invite.id));
                           setSelectedGroupId(null);
                           setTimeout(() => {
                             setSelectedGroupId(result.groupId);
@@ -718,7 +725,9 @@ export default function GroupsScreen() {
                             inviteId: invite.id,
                             userId: user?.uid,
                           });
-                          setLocalInvites(localInvites.filter(i => i.id !== invite.id));
+                          // Remove invite from local state immediately and prevent next effect from resetting
+                          justActedOnInvite.current = true;
+                          setLocalInvites(prev => prev.filter(i => i.id !== invite.id));
                           Alert.alert("Declined", "Invite declined.");
                         } catch (err) {
                           Alert.alert("Unable to decline", err?.message || "Unexpected error");

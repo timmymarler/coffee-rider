@@ -13,13 +13,9 @@ const tomtomApiKey = isIOS
   ? process.env.EXPO_PUBLIC_TOMTOM_API_KEY_IOS
   : process.env.EXPO_PUBLIC_TOMTOM_API_KEY_ANDROID;
 
-
 // Use these variables wherever you need the keys
 // Read the app variant from ENV or default to rider
 const APP_NAME = process.env.APP_NAME || "rider";
-
-// Set build number for EAS/Expo
-const BUILD_NUMBER = 2;
 
 // Brand folders for icons & splash
 const BRAND_ASSETS = {
@@ -59,7 +55,7 @@ export default {
     name: DISPLAY_NAME[APP_NAME],
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
-      version: "2.6.5",
+    version: "2.6.5",
     icon: `${brandFolder}/icon.png`,
     splash: {
       image: `${brandFolder}/splash.png`,
@@ -121,9 +117,6 @@ export default {
         foregroundImage: `${brandFolder}/adaptive-icon.png`,
         backgroundColor: "#FFFFFF"
       }
-      },
-      version: "2.6.5",
-      buildNumber: "3",
-            versionCode: 1,
+    }
   }
 };
