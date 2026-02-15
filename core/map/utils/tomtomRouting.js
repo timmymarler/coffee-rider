@@ -141,7 +141,7 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       routeType: tomtomRouteType,
       computeTravelTimeFor: "all",
       traffic: "true",
-      instructionsType: "coded",
+      instructionsType: "coded",  // Get structured instruction codes (e.g., ROUNDABOUT_1, ROUNDABOUT_2)
       language: "en-GB",
     });
     
@@ -210,6 +210,15 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       legKeys: legs[0] ? Object.keys(legs[0]) : [],
       guidanceKeys: route.guidance ? Object.keys(route.guidance) : [],
     });
+    
+    // Log all instructions with full details
+    console.log('[tomtomRouting] ALL INSTRUCTIONS FROM TOMTOM:');
+    instructions.forEach((instr, idx) => {
+      console.log(`  [${idx}]:`, JSON.stringify(instr, null, 2));
+      if (instr.maneuver && instr.maneuver.includes('ROUNDABOUT')) {
+        console.log(`    --> ROUNDABOUT FOUND: maneuver=${instr.maneuver}, all keys:`, Object.keys(instr));
+      }
+    });
 
     // Convert TomTom instructions into steps format for navigation
     // Each instruction contains maneuver type, text description, and distance
@@ -222,30 +231,63 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       let extra = {};
 
       // Handle roundabout maneuvers and extract exit number
-      if (maneuver.startsWith("ROUNDABOUT")) {
-        // TomTom may provide exit number in instruction or as a property
-        let exitNumber = instr.exitNumber;
+      // TomTom uses codes like: ROUNDABOUT_0, ROUNDABOUT_1, ROUNDABOUT_2, etc.
+      // Or simply: ROUNDABOUT, ROUNDABOUT_LEFT, ROUNDABOUT_RIGHT, ROUNDABOUT_STRAIGHT
+      if (maneuver.includes("ROUNDABOUT")) {
+        let exitNumber = null;
+        
+        // Priority 1: Direct roundaboutExitNumber field (this is what TomTom provides!)
+        if (typeof instr.roundaboutExitNumber === "number" && instr.roundaboutExitNumber > 0) {
+          exitNumber = instr.roundaboutExitNumber;
+          console.log('[tomtomRouting] Roundabout: Found roundaboutExitNumber field:', exitNumber);
+        }
+        
+        // Priority 2: Alternative exitNumber field
+        if (!exitNumber && typeof instr.exitNumber === "number" && instr.exitNumber > 0) {
+          exitNumber = instr.exitNumber;
+          console.log('[tomtomRouting] Roundabout: Found exitNumber field:', exitNumber);
+        }
+        
+        // Priority 3: Extract from maneuver code (e.g., "ROUNDABOUT_2" -> 2)
         if (!exitNumber) {
-          // Try to extract from instruction text (e.g., "Take the 2nd exit")
-          const exitMatch = instruction.match(/exit (\d+)/i);
-          if (exitMatch) {
-            exitNumber = parseInt(exitMatch[1], 10);
+          const roundaboutMatch = maneuver.match(/ROUNDABOUT[_-]?(\d+)/i);
+          if (roundaboutMatch) {
+            exitNumber = parseInt(roundaboutMatch[1], 10);
+            console.log('[tomtomRouting] Roundabout: Extracted from maneuver code:', exitNumber, 'from:', maneuver);
           }
         }
-        if (exitNumber) {
+        
+        // Set instruction text based on what we found
+        if (exitNumber && exitNumber > 0) {
           instruction = `Take exit ${exitNumber}`;
+          console.log('[tomtomRouting] Roundabout: Final instruction with number:', instruction);
+        } else if (maneuver.includes("STRAIGHT")) {
+          instruction = "Go straight through roundabout";
+          console.log('[tomtomRouting] Roundabout: Direct straight through');
+        } else if (maneuver.includes("LEFT")) {
+          instruction = "Exit left from roundabout";
+          console.log('[tomtomRouting] Roundabout: Exit left (no number)');
+        } else if (maneuver.includes("RIGHT")) {
+          instruction = "Exit right from roundabout";
+          console.log('[tomtomRouting] Roundabout: Exit right (no number)');
         } else {
           instruction = "Enter roundabout";
+          console.log('[tomtomRouting] Roundabout: Enter (no exit info)');
         }
+        
         extra.roundaboutExitNumber = exitNumber;
+        
+        // Debug log to see all available fields in instr
+        console.log('[tomtomRouting] Roundabout instruction object keys:', Object.keys(instr));
+        console.log('[tomtomRouting] Full roundabout instruction:', JSON.stringify(instr, null, 2));
       } else if (maneuver === "STRAIGHT") {
         // Only use 'continue straight' if not approaching a roundabout
         const nextInstr = instructions[idx + 1];
         if (nextInstr) {
           const nextManeuver = nextInstr.maneuver || "";
-          if (nextManeuver.startsWith("ROUNDABOUT")) {
+          if (nextManeuver.includes("ROUNDABOUT")) {
             instruction = "Approach roundabout";
-          } else if (nextManeuver.startsWith("TURN")) {
+          } else if (nextManeuver.includes("TURN")) {
             instruction = "Continue straight to next junction";
           } else {
             instruction = "Continue straight";

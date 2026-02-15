@@ -57,7 +57,7 @@ export default {
     name: DISPLAY_NAME[APP_NAME],
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
-    version: "2.8.0",
+    version: "2.8.1",
     icon: `${brandFolder}/icon.png`,
     splash: {
       image: `${brandFolder}/splash.png`,
@@ -87,7 +87,7 @@ export default {
 
     ios: {
       bundleIdentifier: IOS_BUNDLE[APP_NAME],
-      buildNumber: "3",
+      buildNumber: "5",
       googleServicesFile: "./GoogleService-Info.plist",
       infoPlist: {
         NSLocationWhenInUseUsageDescription: "Coffee Rider needs your location to show nearby places and help with group rides.",

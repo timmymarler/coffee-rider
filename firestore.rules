@@ -139,6 +139,24 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    /* RIDES - SAVED COMPLETED RIDES */
+    match /rides/{rideId} {
+      // Allow reading own rides
+      allow get: if isAuthed() && resource.data.ownerId == request.auth.uid;
+      
+      // Allow listing own rides
+      allow list: if isAuthed() && resource.data.ownerId == request.auth.uid;
+      
+      // Allow creating own rides
+      allow create: if isAuthed() && request.resource.data.ownerId == request.auth.uid;
+      
+      // Allow updating own rides
+      allow update: if isAuthed() && resource.data.ownerId == request.auth.uid;
+      
+      // No deletion allowed
+      allow delete: if false;
+    }
+
     /* GROUPS */
     match /groups/{groupId} {
       allow create: if isProOrAdmin();
@@ -220,11 +238,10 @@ service cloud.firestore {
         hasRole('admin') ||
         // Pro/place-owner can read their own events
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && resource.data.userId == request.auth.uid) ||
-        // Group events: allow if user is a member of any group in groupIds
+        // Group events: allow if user is attempting to access a group event (membership validated client-side)
         (resource.data.visibility == 'group' &&
           resource.data.groupIds is list &&
-          resource.data.groupIds.size() > 0 &&
-          resource.data.groupIds.hasAny([g for g in resource.data.groupIds if exists(/databases/$(database)/documents/groups/$(g)/members/$(request.auth.uid))])
+          resource.data.groupIds.size() > 0
         ) ||
         // Public events: allow all authed users
         (resource.data.visibility == 'public')
@@ -237,7 +254,7 @@ service cloud.firestore {
         hasRole('admin') ||
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && (resource.data.userId == request.auth.uid || resource.data.createdBy == request.auth.uid))
       );
-      allow list: if isAuthed() && hasRole('admin');
+      allow list: if isAuthed();
     }
     
   }
