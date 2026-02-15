@@ -24,6 +24,7 @@ import { SearchBar } from "../map/components/SearchBar";
 import { fetchTomTomRoute } from "../map/utils/tomtomRouting";
 
 import { saveRoute } from "@/core/map/routes/saveRoute";
+import { saveRide } from "@/core/map/routes/saveRide";
 import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
@@ -634,6 +635,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const isAnimatingRef = useRef(false); // Track if we're doing a programmatic animation
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
+  const previousFollowUserRef = useRef(false); // Track previous Follow Me state to detect when it turn off
   const {
     waypoints,
     addFromPlace,
@@ -696,6 +698,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [showSaveRouteModal, setShowSaveRouteModal] = useState(false);
   const [saveRouteName, setSaveRouteName] = useState("");
   const [currentLoadedRouteId, setCurrentLoadedRouteId] = useState(null);
+
+  const [showSaveRideModal, setShowSaveRideModal] = useState(false);
+  const [saveRideName, setSaveRideName] = useState("");
+  const [pendingRidePolyline, setPendingRidePolyline] = useState(null);
+  const [viewedRideId, setViewedRideId] = useState(null); // Track if viewing a saved ride
 
   const {
     pendingSavedRouteId,
@@ -1036,6 +1043,77 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (routeDestination) return routeDestination;
     if (waypoints.length > 0) return waypoints[waypoints.length - 1];
     return null;
+  }
+
+  async function handleSaveRide(rideName) {
+    if (!pendingRidePolyline || !pendingRidePolyline.length || !user) return;
+    if (!capabilities.canSaveRoutes) {
+      setPostbox({ type: "info", message: "Your account cannot save rides." });
+      return;
+    }
+
+    try {
+      // If viewing a saved ride, save it as a route instead
+      if (viewedRideId) {
+        // Convert ride polyline to route format and save as route
+        const firstPoint = pendingRidePolyline[0];
+        const lastPoint = pendingRidePolyline[pendingRidePolyline.length - 1];
+        
+        await saveRoute({
+          user,
+          capabilities,
+          name: rideName || "Saved Ride",
+          origin: {
+            latitude: firstPoint.latitude,
+            longitude: firstPoint.longitude,
+          },
+          destination: {
+            latitude: lastPoint.latitude,
+            longitude: lastPoint.longitude,
+            title: rideName || "Destination",
+          },
+          polyline: pendingRidePolyline,
+          routeMeta: {
+            distanceMeters: routeDistanceMeters,
+            durationSeconds: routeMeta?.durationSeconds,
+          },
+          waypoints: [], // Rides don't have waypoints, just the polyline
+        });
+
+        setPostbox({
+          type: "success",
+          message: "Ride saved as route successfully!",
+        });
+        setViewedRideId(null);
+      } else {
+        // Tracking a ride - save it as a ride
+        await saveRide({
+          user,
+          capabilities,
+          name: rideName || undefined,
+          polyline: pendingRidePolyline,
+          routeMeta: {
+            distanceMeters: routeDistanceMeters,
+            durationSeconds: routeMeta?.durationSeconds,
+          },
+          completedAt: new Date(),
+        });
+
+        setPostbox({
+          type: "success",
+          message: "Ride saved successfully!",
+        });
+      }
+      setShowSaveRideModal(false);
+      setSaveRideName("");
+      setPendingRidePolyline(null);
+    } catch (error) {
+      console.error("[handleSaveRide] Error saving ride:", error);
+      setPostbox({
+        type: "error",
+        message: "Failed to save ride. Please try again.",
+      });
+    }
   }
 
   /* ------------------------------------------------------------ */
@@ -1470,11 +1548,56 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     const d = distanceBetweenMeters(userLocation, step.end);
     setNextJunctionDistance(d);
-    // Advance to next step when within ~30m of end
-    if (d !== null && d < 30 && idx < routeSteps.length - 1) {
+    // Advance to next step only after current step is passed
+    if (d !== null && d <= 0 && idx < routeSteps.length - 1) {
       setCurrentStepIndex(idx + 1);
     }
   }, [userLocation, isNavigationMode, routeSteps, currentStepIndex]);
+
+  // Compute traveled and remaining polyline portions for Follow Me mode
+  const { traveledPolyline, remainingPolyline } = useMemo(() => {
+    if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation) {
+      return { traveledPolyline: [], remainingPolyline: routeCoords };
+    }
+
+    // Find the closest coordinate to current user location
+    let closestIdx = 0;
+    let minDistance = Infinity;
+    for (let i = 0; i < routeCoords.length; i++) {
+      const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIdx = i;
+      }
+    }
+
+    // Split polyline at the current user location
+    return {
+      traveledPolyline: routeCoords.slice(0, closestIdx + 1),
+      remainingPolyline: routeCoords.slice(closestIdx),
+    };
+  }, [followUser, routeCoords, userLocation]);
+
+  // Detect when Follow Me is turned off with a tracked ride
+  useEffect(() => {
+    // Only show save ride if:
+    // 1. Follow Me was previously on but is now off
+    // 2. There's a traveled polyline (accentDark line)
+    // 3. The traveled polyline has meaningful distance (more than just starting point)
+    
+    // Check if we just turned OFF Follow Me
+    if (previousFollowUserRef.current === true && followUser === false) {
+      if (traveledPolyline && traveledPolyline.length > 1) {
+        // Save the traveled polyline and show the modal
+        setPendingRidePolyline(traveledPolyline);
+        setShowSaveRideModal(true);
+        setSaveRideName("");
+      }
+    }
+    
+    // Update the ref for next time
+    previousFollowUserRef.current = followUser;
+  }, [followUser, traveledPolyline]);
 
   // Keep screen awake during Follow Me or active ride
   useEffect(() => {
@@ -1617,6 +1740,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         },
         (error) => {
           console.error("[MAP] Location watch error:", error);
+          
+          // Handle specific location permission/service errors
+          if (error?.code === 'PERMISSION_DENIED' || error?.message?.includes('permission')) {
+            ToastAndroid.show('Location permission required to use map', ToastAndroid.SHORT);
+          } else if (error?.code === 'POSITION_UNAVAILABLE' || error?.message?.includes('Cannot obtain')) {
+            // This is a temporary GPS signal loss - don't overwhelm with ToastAndroid
+            debugLog("GPS_UNAVAILABLE", "GPS signal temporarily unavailable");
+          } else if (error?.code === 'TIMEOUT') {
+            debugLog("GPS_TIMEOUT", "Location request timeout");
+          } else {
+            debugLog("GPS_ERROR", "Unexpected location error: " + error?.message || error);
+          }
         }
       );
     })();
@@ -1676,7 +1811,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   useEffect(() => {
     if (!pendingSavedRouteId) return;
 
-    loadSavedRouteById(pendingSavedRouteId);
+    // Check if it's a ride or a route
+    const checkAndLoadData = async () => {
+      // First try to load as a ride
+      const rideRef = doc(db, "rides", pendingSavedRouteId);
+      const rideSnap = await getDoc(rideRef);
+      
+      if (rideSnap.exists()) {
+        // It's a ride
+        loadSavedRide(rideSnap.data(), pendingSavedRouteId);
+      } else {
+        // Try as a route
+        loadSavedRouteById(pendingSavedRouteId);
+      }
+    };
+
+    checkAndLoadData();
     setPendingSavedRouteId(null);
     
     // Enable Follow Me if requested (e.g., when starting an active ride)
@@ -2559,6 +2709,48 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setRoutingActive(true);
   }
 
+  async function loadSavedRideById(rideId) {
+    const ref = doc(db, "rides", rideId);
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      console.warn("[MAP] saved ride not found", rideId);
+      return;
+    }
+
+    const ride = snap.data();
+    loadSavedRide(ride, rideId);
+  }
+
+  async function loadSavedRide(ride, rideId) {
+    clearRoute();
+    clearWaypoints();
+
+    if (ride.ridePolyline && Array.isArray(ride.ridePolyline)) {
+      const decoded = ride.ridePolyline;
+      
+      // Set the polyline so it's visible on map
+      pendingFitRef.current = decoded;
+      attemptRouteFit();
+
+      // Set title to show this is a completed ride
+      setRouteDestination({
+        title: ride.name || "Completed Ride",
+        latitude: decoded[decoded.length - 1]?.latitude || 0,
+        longitude: decoded[decoded.length - 1]?.longitude || 0,
+      });
+
+      setRoutingActive(true);
+
+      // Track that we're viewing a saved ride (for save-as-route flow)
+      setViewedRideId(rideId);
+      setPendingRidePolyline(decoded);
+
+      // Show save modal for converting to route
+      setShowSaveRideModal(true);
+    }
+  }
+
   function handleNavigate(placeOverride = null) {
     const destination = placeOverride || routeDestination;
     if (!userLocation) return;
@@ -2994,11 +3186,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 zIndex={900}
               />
 
-            {/* Active route */}
+            {/* Traveled route (during Follow Me) */}
+              {followUser && traveledPolyline.length > 1 && (
+                <Polyline
+                  key={`traveled-${routeVersion}`}
+                  coordinates={traveledPolyline}
+                  strokeWidth={isNavigationMode && followUser ? 7 : 5}
+                  strokeColor={theme.colors.accentDark}
+                  zIndex={1001}
+                />
+              )}
+
+            {/* Remaining route */}
               <Polyline
                 key={`active-${routeVersion}`}
-                coordinates={routeCoords}
-                strokeWidth={isNavigationMode ? 5 : 3}
+                coordinates={followUser && remainingPolyline.length > 0 ? remainingPolyline : routeCoords}
+                strokeWidth={isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)}
                 strokeColor={theme.colors.primary}
                 zIndex={1000}
               />
@@ -3232,7 +3435,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             // Trace roundabout exit extraction
             console.log('[JunctionPanel] step:', step);
             console.log('[JunctionPanel] FULL STEP OBJECT:', JSON.stringify(step));
-            if (typeof step.exitNumber === "number" && step.exitNumber > 0) {
+            // Check for roundaboutExitNumber (primary field from TomTom)
+            if (typeof step.roundaboutExitNumber === "number" && step.roundaboutExitNumber > 0) {
+              roundaboutExit = step.roundaboutExitNumber;
+              console.log('[JunctionPanel] Found step.roundaboutExitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
+            }
+            // Also check for exitNumber as fallback
+            if (!roundaboutExit && typeof step.exitNumber === "number" && step.exitNumber > 0) {
               roundaboutExit = step.exitNumber;
               console.log('[JunctionPanel] Found step.exitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
             }
@@ -3647,6 +3856,59 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         </View>
       </Modal>
 
+      {/* Save Ride Modal */}
+      <Modal
+        visible={showSaveRideModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowSaveRideModal(false);
+          setSaveRideName("");
+          setPendingRidePolyline(null);
+          setViewedRideId(null);
+        }}
+      >
+        <View style={styles.saveRouteModalOverlay}>
+          <View style={styles.saveRouteModalContent}>
+            <Text style={styles.saveRouteModalTitle}>
+              {viewedRideId ? "Save as Route" : "Save Ride"}
+            </Text>
+            
+            <TextInput
+              style={styles.saveRouteInput}
+              placeholder={viewedRideId ? "Route name" : "Ride name (optional)"}
+              placeholderTextColor={theme.colors.primaryLight}
+              value={saveRideName}
+              onChangeText={setSaveRideName}
+              returnKeyType="done"
+            />
+
+            <View style={styles.saveRouteModalButtons}>
+              <TouchableOpacity
+                style={[styles.saveRouteModalButton, styles.saveRouteModalButtonSave]}
+                onPress={() => handleSaveRide(saveRideName || undefined)}
+              >
+                <Text style={styles.saveRouteModalButtonText}>
+                  {viewedRideId ? "Save as Route" : "Save"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.saveRouteModalButton, styles.saveRouteModalButtonCancel]}
+                onPress={() => {
+                  setShowSaveRideModal(false);
+                  setSaveRideName("");
+                  setPendingRidePolyline(null);
+                  setViewedRideId(null);
+                }}
+              >
+                <Text style={styles.saveRouteModalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Route Type Selector Modal */}
       <MapRouteTypeSelector
         visible={showRouteTypeSelector}
@@ -3710,7 +3972,7 @@ const styles = StyleSheet.create({
   },
   postbox: {
     position: "absolute",
-    top: 70,
+    bottom: 70,
     left: 16,
     right: 16,
     padding: 12,
@@ -3738,7 +4000,7 @@ const styles = StyleSheet.create({
 
   junctionPanel: {
     position: "absolute",
-    top: 20,
+    bottom: 100,
     left: 20,
     flexDirection: "row",
     alignItems: "center",

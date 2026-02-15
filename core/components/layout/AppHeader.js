@@ -22,6 +22,9 @@ export default function AppHeader() {
 
   const title = getTitleFromPath(pathname);
 
+  // Hide title for these screens to save space
+  const hideTitle = ["Map", "Saved Routes", "Groups", "Calendar", "Profile", "Help"].includes(title);
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.left}>
@@ -33,9 +36,11 @@ export default function AppHeader() {
         <Text style={styles.brand}>Coffee Rider</Text>
       </View>
 
-      <Text style={styles.title} numberOfLines={1}>
-        {title}
-      </Text>
+      {!hideTitle && (
+        <Text style={styles.title} numberOfLines={1}>
+          {title}
+        </Text>
+      )}
 
       <TouchableOpacity
         style={styles.help}
@@ -58,6 +63,8 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.border,
     paddingHorizontal: 16,
     paddingBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
   },
 
   left: {
@@ -82,6 +89,8 @@ const styles = StyleSheet.create({
   help: {
     position: "absolute",
     right: 16,
-    bottom: 10,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
   },
 });

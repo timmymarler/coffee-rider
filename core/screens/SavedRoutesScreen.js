@@ -4,7 +4,8 @@ import { CRScreen } from "@core/components/ui/CRScreen";
 import { AuthContext } from "@core/context/AuthContext";
 import { useAllUserGroups } from "@core/groups/hooks";
 import { RIDE_VISIBILITY, shareRoute } from "@core/map/routes/sharedRides";
-import { useSavedRoutes } from "@core/map/routes/useSavedRoutes"; // assuming this already exists
+import { useSavedRoutes } from "@core/map/routes/useSavedRoutes";
+import { useSavedRides } from "@core/map/routes/useSavedRides";
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
@@ -56,12 +57,14 @@ export default function SavedRoutesScreen() {
   const { user, capabilities } = useContext(AuthContext);
   const { groups } = useAllUserGroups(user?.uid);
 
+  const [viewMode, setViewMode] = useState("routes"); // 'routes' or 'rides'
   const [sortBy, setSortBy] = useState("created");
   const [filterBy, setFilterBy] = useState("all");
 
   // Include public routes when viewing all or explicitly public
   const includePublic = filterBy === "all" || filterBy === "public";
-  const { routes, loading } = useSavedRoutes(includePublic);
+  const { routes, loading: loadingRoutes } = useSavedRoutes(includePublic);
+  const { rides, loading: loadingRides } = useSavedRides();
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [selectedVisibility, setSelectedVisibility] = useState(RIDE_VISIBILITY.PRIVATE);
@@ -113,11 +116,31 @@ export default function SavedRoutesScreen() {
         );
     }
   }, [routes, sortBy, filterBy]);
+
+  const sortedRides = useMemo(() => {
+    if (!rides) return [];
+    // Rides are sorted by completedAt (newest first)
+    return [...rides].sort((a, b) => {
+      const aTime = a.completedAt?.seconds ?? 0;
+      const bTime = b.completedAt?.seconds ?? 0;
+      return bTime - aTime;
+    });
+  }, [rides]);
+
   const canShare = capabilities?.canShareRoutes === true;
 
   function handleOpenRoute(routeId) {
     setPendingSavedRouteId(routeId);
     router.push("/map");
+  }
+
+  function handleOpenRide(rideId) {
+    const ride = sortedRides.find(r => r.id === rideId);
+    if (ride) {
+      // Store ride polyline as a temporary route so map can display it
+      setPendingSavedRouteId(rideId);
+      router.push("/map");
+    }
   }
 
   async function handleShareRoute() {
@@ -167,57 +190,99 @@ export default function SavedRoutesScreen() {
   function renderHeader() {
     return (
       <View style={styles.header}>
-        <Text style={styles.headerLabel}>Sort by:</Text>
-        <View style={styles.sortRow}>
-          {SORT_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.key}
-              onPress={() => setSortBy(opt.key)}
+        {/* Routes/Rides Toggle */}
+        <View style={styles.toggleRow}>
+          <TouchableOpacity
+            onPress={() => setViewMode("routes")}
+            style={[
+              styles.toggleButton,
+              viewMode === "routes" && styles.toggleButtonActive,
+            ]}
+          >
+            <Text
               style={[
-                styles.sortPill,
-                sortBy === opt.key && styles.sortPillActive,
+                styles.toggleButtonText,
+                viewMode === "routes" && styles.toggleButtonTextActive,
               ]}
             >
-              <Text
-                style={[
-                  styles.sortPillText,
-                  sortBy === opt.key && styles.sortPillTextActive,
-                ]}
-              >
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+              Routes
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setViewMode("rides")}
+            style={[
+              styles.toggleButton,
+              viewMode === "rides" && styles.toggleButtonActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.toggleButtonText,
+                viewMode === "rides" && styles.toggleButtonTextActive,
+              ]}
+            >
+              Rides
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.headerLabel}>Filter:</Text>
-        <View style={styles.sortRow}>
-          {FILTER_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.key}
-              onPress={() => setFilterBy(opt.key)}
-              style={[
-                styles.sortPill,
-                filterBy === opt.key && styles.sortPillActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.sortPillText,
-                  filterBy === opt.key && styles.sortPillTextActive,
-                ]}
-              >
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* Only show sort/filter for routes view */}
+        {viewMode === "routes" && (
+          <>
+            <Text style={styles.headerLabel}>Sort by:</Text>
+            <View style={styles.sortRow}>
+              {SORT_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.key}
+                  onPress={() => setSortBy(opt.key)}
+                  style={[
+                    styles.sortPill,
+                    sortBy === opt.key && styles.sortPillActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.sortPillText,
+                      sortBy === opt.key && styles.sortPillTextActive,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.headerLabel}>Filter:</Text>
+            <View style={styles.sortRow}>
+              {FILTER_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.key}
+                  onPress={() => setFilterBy(opt.key)}
+                  style={[
+                    styles.sortPill,
+                    filterBy === opt.key && styles.sortPillActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.sortPillText,
+                      filterBy === opt.key && styles.sortPillTextActive,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
       </View>
     );
   }
 
   function renderItem({ item }) {
-    const groupInfo = item.visibility === RIDE_VISIBILITY.GROUP && item.groupId 
+    const isRide = viewMode === "rides";
+    const groupInfo = !isRide && item.visibility === RIDE_VISIBILITY.GROUP && item.groupId 
       ? groups?.find(g => g.id === item.groupId)
       : null;
 
@@ -225,22 +290,22 @@ export default function SavedRoutesScreen() {
       <View style={styles.cardContainer}>
         <TouchableOpacity
           style={styles.card}
-          onPress={() => handleOpenRoute(item.id)}
+          onPress={() => (isRide ? handleOpenRide(item.id) : handleOpenRoute(item.id))}
         >
           <View style={styles.titleRow}>
             <Text style={styles.title} numberOfLines={1}>
               {item.name ||
                 item.title ||
                 item.destination?.title ||
-                "Untitled route"}
+                "Untitled"}
             </Text>
-            {item.visibility === RIDE_VISIBILITY.PUBLIC && (
+            {!isRide && item.visibility === RIDE_VISIBILITY.PUBLIC && (
               <View style={styles.badge}>
                 <Ionicons name="globe" size={12} color={theme.colors.accentMid} />
                 <Text style={styles.badgeText}>Public</Text>
               </View>
             )}
-            {groupInfo && (
+            {!isRide && groupInfo && (
               <View style={styles.badge}>
                 <MaterialCommunityIcons name="account-multiple" size={12} color={theme.colors.accentMid} />
                 <Text style={styles.badgeText}>{groupInfo.name}</Text>
@@ -255,31 +320,42 @@ export default function SavedRoutesScreen() {
               </Text>
             )}
 
-            {item.waypoints?.length != null && (
+            {item.durationSeconds != null && (
+              <Text style={styles.meta}>
+                · {Math.floor(item.durationSeconds / 60)} mins
+              </Text>
+            )}
+
+            {!isRide && item.waypoints?.length != null && (
               <Text style={styles.meta}>
                 · {item.waypoints.length} stops
               </Text>
             )}
 
-            {item.ratingAvg != null && (
+            {!isRide && item.ratingAvg != null && (
               <Text style={styles.meta}>
                 · ★ {item.ratingAvg.toFixed(1)}
               </Text>
             )}
           </View>
 
-          {item.createdAt?.seconds && (
+          {isRide && item.completedAt?.seconds ? (
+            <Text style={styles.subtle}>
+              Completed{" "}
+              {new Date(item.completedAt.seconds * 1000).toLocaleDateString()}
+            </Text>
+          ) : !isRide && item.createdAt?.seconds ? (
             <Text style={styles.subtle}>
               Created{" "}
               {new Date(item.createdAt.seconds * 1000).toLocaleDateString()}
             </Text>
-          )}
+          ) : null}
         </TouchableOpacity>
 
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => handleOpenRoute(item.id)}
+            onPress={() => (isRide ? handleOpenRide(item.id) : handleOpenRoute(item.id))}
           >
             <Ionicons
               name="map-outline"
@@ -289,7 +365,22 @@ export default function SavedRoutesScreen() {
             <Text style={styles.actionLabel}>View on Map</Text>
           </TouchableOpacity>
 
-          {canShare && (
+          {isRide ? (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => {
+                // Open ride on map and show save route option
+                handleOpenRide(item.id);
+              }}
+            >
+              <MaterialCommunityIcons
+                name="content-save-outline"
+                size={18}
+                color={theme.colors.accentMid}
+              />
+              <Text style={styles.actionLabel}>Save Route</Text>
+            </TouchableOpacity>
+          ) : canShare ? (
             <TouchableOpacity
               style={styles.actionButton}
               onPress={() => openShareModal(item)}
@@ -301,24 +392,31 @@ export default function SavedRoutesScreen() {
               />
               <Text style={styles.actionLabel}>Share</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
       </View>
     );
   }
 
-  if (loading) {
+  const isLoading = viewMode === "routes" ? loadingRoutes : loadingRides;
+  const displayData = viewMode === "routes" ? sortedRoutes : sortedRides;
+
+  if (isLoading) {
     return (
       <CRScreen>
         <View style={styles.center}>
-          <Text style={styles.subtle}>Loading routes…</Text>
+          <Text style={styles.subtle}>
+            Loading {viewMode === "routes" ? "routes" : "rides"}…
+          </Text>
         </View>
       </CRScreen>
     );
   }
 
   const emptyMessage =
-    filterBy === "shared"
+    viewMode === "rides"
+      ? "No saved rides yet"
+      : filterBy === "shared"
       ? "No shared routes"
       : filterBy === "public"
       ? "No public routes"
@@ -329,7 +427,7 @@ export default function SavedRoutesScreen() {
   return (
     <CRScreen padded={false}>
       <FlatList
-        data={sortedRoutes}
+        data={displayData}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         ListHeaderComponent={renderHeader}
@@ -541,6 +639,37 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: theme.colors.text,
     marginBottom: 8,
+  },
+
+  toggleRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+
+  toggleButton: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: theme.colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  toggleButtonActive: {
+    backgroundColor: theme.colors.primary,
+  },
+
+  toggleButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: theme.colors.textMuted,
+  },
+
+  toggleButtonTextActive: {
+    color: theme.colors.onPrimary,
+    fontWeight: "700",
   },
 
   sortRow: {
