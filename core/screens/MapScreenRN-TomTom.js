@@ -2640,7 +2640,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     console.log("[buildRoute] 🚀 About to call mapRoute with firstIsStartPoint:", firstIsStartPoint, "followUser:", followUser);
     
-    if (firstIsStartPoint && waypoints.length >= 1) {
+    if (followUser) {
+      // Follow Me mode: ALWAYS route from current location through all waypoints
+      // Ignore the firstIsStartPoint flag - treat all waypoints as intermediates
+      routeWaypoints = waypoints;
+      finalDestination = destination || (waypoints.length > 0 ? waypoints[waypoints.length - 1] : null);
+      console.log("[buildRoute] Follow Me active: routing from current location through", waypoints.length, 'waypoints');
+    } else if (firstIsStartPoint && waypoints.length >= 1) {
       // Start point is explicit: waypoints[0] is origin, rest are intermediates or destination
       routeWaypoints = waypoints.length > 2 ? waypoints.slice(1, -1) : waypoints.length === 2 ? [] : [];
       finalDestination = destination || (waypoints.length > 1 ? waypoints[waypoints.length - 1] : null);
