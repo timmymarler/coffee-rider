@@ -2610,9 +2610,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     const destination = destinationOverride || routeDestination || null;
 
-    // Allow routing if we have a destination OR if we have at least 1 waypoint
-    if (!destination && waypoints.length < 1) {
-      console.log("[buildRoute] No destination or waypoints, returning");
+    // Allow routing if we have a destination OR if we have at least 2 waypoints
+    // Single waypoint alone doesn't draw a polyline - must wait for destination or second waypoint
+    if (!destination && waypoints.length < 2) {
+      console.log("[buildRoute] Need destination or 2+ waypoints to route. waypoints:", waypoints.length);
       return;
     }
 
@@ -2628,20 +2629,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // If we have waypoints, use waypoints[0] as the origin; otherwise use userLocation
     const origin = waypoints.length > 0 ? waypoints[0] : userLocation;
     
-    // Handle destination logic for different waypoint counts:
-    // - 0 waypoints: use explicit destination only
-    // - 1 waypoint: use that waypoint as destination (no intermediates)
-    // - 2+ waypoints: use all but first as intermediates, plus explicit destination if provided
-    let routeWaypoints = [];
-    let finalDestination = destination;
-    
-    if (waypoints.length === 1 && !destination) {
-      // Single waypoint, no explicit destination → use waypoint as destination
-      finalDestination = waypoints[0];
-    } else if (waypoints.length > 1) {
-      // Multiple waypoints → first is origin, rest are intermediates
-      routeWaypoints = waypoints.slice(1);
-    }
+    // Multiple waypoints: first is origin, rest are intermediates, use explicit destination if provided
+    // Otherwise, last waypoint is the destination
+    const routeWaypoints = waypoints.length > 1 ? waypoints.slice(1, -1) : [];
+    const finalDestination = destination || (waypoints.length > 1 ? waypoints[waypoints.length - 1] : null);
     
     await mapRoute({
       origin,
