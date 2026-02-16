@@ -1353,51 +1353,59 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Turning ON: Build route from nearest point on saved route through remaining waypoints
+    // Turning ON: Use existing polyline if available, otherwise rebuild from snap point
     if (waypoints.length > 0) {
-      // Find the closest point on the existing route polyline to snap to
-      let snapPoint = userLocation; // Default to current location if no polyline
-      
-      if (routeCoords && routeCoords.length >= 2) {
-        // Find the closest point on the saved route polyline
-        let minDistance = Infinity;
-        let closestIdx = 0;
+      // If we already have a calculated polyline with sufficient points, use it as-is
+      // This avoids re-routing which can cause weird diversions
+      if (routeCoords && routeCoords.length > 10) {
+        console.log("[toggleFollowMe] Using existing polyline (" + routeCoords.length + " points), no re-route needed");
+        // Just enable Follow Me - the existing polyline will be used as-is
+      } else {
+        // No good polyline yet - need to calculate one
+        // Find the closest point on the existing route polyline to snap to
+        let snapPoint = userLocation; // Default to current location if no polyline
         
-        // Sample every Nth point for performance
-        const sampleInterval = Math.max(1, Math.floor(routeCoords.length / 50));
-        
-        for (let i = 0; i < routeCoords.length; i += sampleInterval) {
-          const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
-          if (dist < minDistance) {
-            minDistance = dist;
-            closestIdx = i;
+        if (routeCoords && routeCoords.length >= 2) {
+          // Find the closest point on the saved route polyline
+          let minDistance = Infinity;
+          let closestIdx = 0;
+          
+          // Sample every Nth point for performance
+          const sampleInterval = Math.max(1, Math.floor(routeCoords.length / 50));
+          
+          for (let i = 0; i < routeCoords.length; i += sampleInterval) {
+            const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
+            if (dist < minDistance) {
+              minDistance = dist;
+              closestIdx = i;
+            }
           }
+          
+          snapPoint = routeCoords[closestIdx];
+          console.log("[toggleFollowMe] Snapped to polyline point at index", closestIdx, 'distance:', minDistance.toFixed(0), 'meters');
         }
         
-        snapPoint = routeCoords[closestIdx];
-        console.log("[toggleFollowMe] Snapped to polyline point at index", closestIdx, 'distance:', minDistance.toFixed(0), 'meters');
-      }
-      
-      // Build route from snap point through waypoints to destination
-      const requestId = ++routeRequestId.current;
-      const wayPointsToUse = waypoints;
-      const destToUse = routeDestination || (waypoints.length > 0 ? waypoints[waypoints.length - 1] : null);
-      
-      console.log("[toggleFollowMe] Rebuilding route from snapped point. waypoints:", wayPointsToUse.length, "destination:", !!destToUse);
-      
-      try {
-        await mapRoute({
-          origin: snapPoint,
-          waypoints: wayPointsToUse.length > 1 ? wayPointsToUse.slice(0, -1) : [],
-          destination: destToUse,
-          travelMode: userTravelMode,
-          routeType: userRouteType,
-          requestId,
-          skipFitToView: true,
-        });
-      } catch (error) {
-        console.warn('[toggleFollowMe] mapRoute error:', error);
-        return; // Don't enable Follow Me if route calculation fails
+        // Build route from snap point through waypoints to destination
+        const requestId = ++routeRequestId.current;
+        const wayPointsToUse = waypoints;
+        const destToUse = routeDestination || (waypoints.length > 0 ? waypoints[waypoints.length - 1] : null);
+        
+        console.log("[toggleFollowMe] Rebuilding route from snapped point. waypoints:", wayPointsToUse.length, "destination:", !!destToUse);
+        
+        try {
+          await mapRoute({
+            origin: snapPoint,
+            waypoints: wayPointsToUse.length > 1 ? wayPointsToUse.slice(0, -1) : [],
+            destination: destToUse,
+            travelMode: userTravelMode,
+            routeType: userRouteType,
+            requestId,
+            skipFitToView: true,
+          });
+        } catch (error) {
+          console.warn('[toggleFollowMe] mapRoute error:', error);
+          return; // Don't enable Follow Me if route calculation fails
+        }
       }
     } else {
       console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length);
