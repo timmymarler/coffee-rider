@@ -1353,96 +1353,31 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Turning ON: Use existing polyline if available, otherwise rebuild from snap point
+    // Turning ON: Prepend current location and rebuild route
     if (waypoints.length > 0) {
-      console.log("[toggleFollowMe] routeCoords available?", !!routeCoords, "length:", routeCoords?.length);
+      console.log("[toggleFollowMe] Prepending current location to waypoints and rebuilding route");
       
-      // If we already have a calculated polyline with sufficient points, use it as-is
-      // This avoids re-routing which can cause weird diversions
-      if (routeCoords && routeCoords.length > 10) {
-        console.log("[toggleFollowMe] Using existing polyline (" + routeCoords.length + " points), prepending current location");
-        
-        // CRITICAL: Set these BEFORE modifying state to prevent MAP_EFFECT from rebuilding
-        skipNextRebuildRef.current = true;
-        skipNextFollowTickRef.current = true;
-        skipNextRegionChangeRef.current = true;
-        skipRegionChangeUntilRef.current = Date.now() + 2000;
-        setFollowUser(true);
-        
-        // Now prepend current location to the existing polyline
-        const currentLocationCoord = {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-        };
-        const newCoords = [currentLocationCoord, ...routeCoords];
-        console.log("[toggleFollowMe] Updated polyline with current location, new length:", newCoords.length);
-        setRouteCoords(newCoords);
-        
-        // Recenter + zoom + tilt
-        await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
-        return; // Exit early - we've handled everything
-      } else {
-        console.log("[toggleFollowMe] No good polyline available, will rebuild. routeCoords:", routeCoords?.length ?? 0);
-        
-        // No good polyline yet - need to calculate one
-        // Find the closest point on the existing route polyline to snap to
-        let snapPoint = userLocation; // Default to current location if no polyline
-        
-        if (routeCoords && routeCoords.length >= 2) {
-          // Find the closest point on the saved route polyline
-          let minDistance = Infinity;
-          let closestIdx = 0;
-          
-          // Sample every Nth point for performance
-          const sampleInterval = Math.max(1, Math.floor(routeCoords.length / 50));
-          
-          for (let i = 0; i < routeCoords.length; i += sampleInterval) {
-            const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
-            if (dist < minDistance) {
-              minDistance = dist;
-              closestIdx = i;
-            }
-          }
-          
-          snapPoint = routeCoords[closestIdx];
-          console.log("[toggleFollowMe] Snapped to polyline point at index", closestIdx, 'distance:', minDistance.toFixed(0), 'meters');
-        }
-        
-        // Build route from snap point through waypoints to destination
-        const requestId = ++routeRequestId.current;
-        const wayPointsToUse = waypoints;
-        const destToUse = routeDestination || (waypoints.length > 0 ? waypoints[waypoints.length - 1] : null);
-        
-        console.log("[toggleFollowMe] Rebuilding route from snapped point. waypoints:", wayPointsToUse.length, "destination:", !!destToUse);
-        
-        try {
-          await mapRoute({
-            origin: snapPoint,
-            waypoints: wayPointsToUse.length > 1 ? wayPointsToUse.slice(0, -1) : [],
-            destination: destToUse,
-            travelMode: userTravelMode,
-            routeType: userRouteType,
-            requestId,
-            skipFitToView: true,
-          });
-        } catch (error) {
-          console.warn('[toggleFollowMe] mapRoute error:', error);
-          return; // Don't enable Follow Me if route calculation fails
-        }
-        
-        // Enable Follow Me mode after route is built
-        skipNextFollowTickRef.current = true;
-        skipNextRegionChangeRef.current = true;
-        skipRegionChangeUntilRef.current = Date.now() + 2000;
-        setFollowUser(true);
-        
-        // Recenter + zoom + tilt
-        await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
-      }
+      // Add current location as first waypoint
+      addWaypointAtStart({
+        lat: userLocation.latitude,
+        lng: userLocation.longitude,
+        title: "Follow Me start",
+        source: "followme",
+        isStartPoint: false, // Not a start point - just a waypoint to route through
+      });
     } else {
-      console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length);
+      console.log("[toggleFollowMe] No waypoints available");
       return;
     }
+
+    // Enable Follow Me mode
+    skipNextFollowTickRef.current = true;
+    skipNextRegionChangeRef.current = true;
+    skipRegionChangeUntilRef.current = Date.now() + 2000;
+    setFollowUser(true);
+    
+    // Recenter + zoom + tilt
+    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
 
     // Now enable follow mode and start 15-minute inactivity timer
     // (routeSteps are now guaranteed to be populated from the mapRoute call above)
