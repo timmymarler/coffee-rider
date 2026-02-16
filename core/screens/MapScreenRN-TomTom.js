@@ -1358,46 +1358,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Clear the loaded route ID since we're converting to a recalculated Follow Me route
       setCurrentLoadedRouteId(null);
       
-      // Only prepend current location if the first waypoint is NOT an explicit start point
-      // If user set a start point, honor it instead of replacing with current location
-      const firstIsExplicitStart = waypoints[0]?.isStartPoint === true;
-      
-      let allWaypoints;
-      if (firstIsExplicitStart) {
-        // Use the explicit start point, don't prepend current location
-        allWaypoints = waypoints;
-        console.log("[toggleFollowMe] Using explicit start point at", waypoints[0].title);
-      } else {
-        // Prepend current location as the new first waypoint
-        addWaypointAtStart({
-          lat: userLocation.latitude,
-          lng: userLocation.longitude,
-          title: "Follow Me start",
-          source: "followme",
-          isStartPoint: true,
-        });
-        
-        allWaypoints = [
-          {
-            lat: userLocation.latitude,
-            lng: userLocation.longitude,
-            title: "Follow Me start",
-            source: "followme",
-          },
-          ...waypoints,
-        ];
-        console.log("[toggleFollowMe] Prepending current location as start point");
-      }
-      
-      // Rebuild the route immediately with the updated waypoints
+      // Always start from current location, but route through any explicit start points
+      // Current Location → [Start Points + Waypoints] → Destination
       const requestId = ++routeRequestId.current;
-      const origin = allWaypoints[0];
-      const intermediates = allWaypoints.slice(1);
+      
+      // Build waypoints array: if first waypoint is an explicit start point, include it as a waypoint to route through
+      let routeWaypoints = waypoints;
       
       try {
         await mapRoute({
-          origin,
-          waypoints: intermediates,
+          origin: userLocation,
+          waypoints: routeWaypoints,
           destination: routeDestination,
           travelMode: userTravelMode,
           routeType: userRouteType,
