@@ -28,13 +28,15 @@ export default function useWaypoints() {
   }
 
   function addFromMapPress({ latitude, longitude, geocodeResult, isStartPoint = false }) {
-    addWaypoint({
+    const waypointData = {
       lat: latitude,
       lng: longitude,
       title: deriveWaypointTitle(geocodeResult),
       source: "manual",
       isStartPoint, // Mark whether this was explicitly set as a start point
-    });
+    };
+    console.log("[useWaypoints.addFromMapPress] Adding waypoint with isStartPoint:", isStartPoint, "waypointData:", waypointData);
+    addWaypoint(waypointData);
   }
 
   function formatPoint({ latitude, longitude, geocodeResult }) {

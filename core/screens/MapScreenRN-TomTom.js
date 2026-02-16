@@ -903,12 +903,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const handleAddWaypoint = () => {
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
+    console.log("[handleAddWaypoint] Adding waypoint with isStartPoint=false");
     addFromMapPress({ ...pendingMapPoint, isStartPoint: false });
     closeAddPointMenu();
   };
 
   const handleSetStart = () => {
     setSelectedPlaceId(null);
+    console.log("[handleSetStart] Adding start point with isStartPoint=true");
     addFromMapPress({ ...pendingMapPoint, isStartPoint: true });
     closeAddPointMenu();
   };
@@ -2618,8 +2620,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const firstIsStartPoint = waypoints.length > 0 && waypoints[0]?.isStartPoint;
     const canRoute = destination || waypoints.length > 1 || (waypoints.length === 1 && !firstIsStartPoint);
     
+    console.log("[buildRoute] firstIsStartPoint:", firstIsStartPoint, "waypoints.length:", waypoints.length, "destination:", !!destination, "waypoints[0]:", waypoints[0]);
+    
     if (!canRoute) {
-      console.log("[buildRoute] Need destination or waypoints to route. waypoints:", waypoints.length, "firstIsStartPoint:", firstIsStartPoint);
+      console.log("[buildRoute] ❌ RETURNING EARLY - Blocked - Need destination or waypoints to route. waypoints:", waypoints.length, "firstIsStartPoint:", firstIsStartPoint);
+      console.log("[buildRoute] ❌ Route will NOT be drawn for single start point");
       return;
     }
 
@@ -2640,17 +2645,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     let routeWaypoints = [];
     let finalDestination = destination;
     
+    console.log("[buildRoute] 🚀 About to call mapRoute with firstIsStartPoint:", firstIsStartPoint);
+    
     if (firstIsStartPoint && waypoints.length > 1) {
       // Start point is explicit: waypoints[0] is origin, rest are intermediates
       routeWaypoints = waypoints.length > 2 ? waypoints.slice(1, -1) : [];
       finalDestination = destination || waypoints[waypoints.length - 1];
+      console.log("[buildRoute] Case: firstIsStartPoint=true, 2+ waypoints → route from waypoints[0]");
     } else if (!firstIsStartPoint && waypoints.length > 1) {
       // Regular waypoints from userLocation: all waypoints are intermediates or destination
       routeWaypoints = waypoints.length > 2 ? waypoints.slice(0, -1) : [];
       finalDestination = destination || waypoints[waypoints.length - 1];
+      console.log("[buildRoute] Case: firstIsStartPoint=false, 2+ waypoints → route from userLocation");
     } else if (!firstIsStartPoint && waypoints.length === 1 && !destination) {
       // Single waypoint without explicit start: just userLocation → waypoint[0]
       finalDestination = waypoints[0];
+      console.log("[buildRoute] Case: firstIsStartPoint=false, 1 waypoint, no destination → userLocation→waypoints[0]");
     }
     
     await mapRoute({
@@ -2662,6 +2672,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       requestId: finalRequestId,
       skipFitToView: false,
     });
+    console.log("[buildRoute] ✅ mapRoute called successfully with origin, waypoints, and destination");
   }
 
   async function loadSavedRouteById(routeId) {
