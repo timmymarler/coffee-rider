@@ -1362,6 +1362,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         lng: userLocation.longitude,
         title: "Follow Me start",
         source: "followme",
+        isStartPoint: true,
       });
       
       // Rebuild the route immediately with the updated waypoints
@@ -2728,6 +2729,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         lng: actualOrigin.lng ?? actualOrigin.longitude,
         title: "Route start",
         source: "saved",
+        isStartPoint: true,
       };
       
       // Add as first waypoint using the context function
