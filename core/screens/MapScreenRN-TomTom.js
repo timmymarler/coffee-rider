@@ -2634,7 +2634,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   async function buildRoute({ destinationOverride = null, requestId } = {}) {
     // Wrapper that calls mapRoute with current component state
     const finalRequestId = requestId || routeRequestId.current;
-    console.log("[buildRoute] Starting - requestId:", finalRequestId, "destination:", routeDestination?.title, "waypoints:", waypoints.length);
+    console.log("[buildRoute] Starting - requestId:", finalRequestId, "destination:", routeDestination?.title, "waypoints:", waypoints.length, "followUser:", followUser, "currentLoadedRouteId:", currentLoadedRouteId);
     
     if (!routeDestination && !destinationOverride && waypoints.length === 0) {
       console.log("[buildRoute] No destination or waypoints, returning");
