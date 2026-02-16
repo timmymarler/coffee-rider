@@ -903,13 +903,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const handleAddWaypoint = () => {
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
-    addFromMapPress(pendingMapPoint);
+    addFromMapPress({ ...pendingMapPoint, isStartPoint: false });
     closeAddPointMenu();
   };
 
   const handleSetStart = () => {
     setSelectedPlaceId(null);
-    addFromMapPress(pendingMapPoint);
+    addFromMapPress({ ...pendingMapPoint, isStartPoint: true });
     closeAddPointMenu();
   };
 
@@ -2610,10 +2610,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     const destination = destinationOverride || routeDestination || null;
 
-    // Allow routing if we have a destination OR if we have at least 2 waypoints
-    // Single waypoint alone doesn't draw a polyline - must wait for destination or second waypoint
-    if (!destination && waypoints.length < 2) {
-      console.log("[buildRoute] Need destination or 2+ waypoints to route. waypoints:", waypoints.length);
+    // Allow routing if:
+    // - Explicit destination, OR
+    // - 2+ waypoints, OR
+    // - 1 waypoint that's not an explicit start point (route from userLocation to that point)
+    const firstIsStartPoint = waypoints.length > 0 && waypoints[0]?.isStartPoint;
+    const canRoute = destination || waypoints.length > 1 || (waypoints.length === 1 && !firstIsStartPoint);
+    
+    if (!canRoute) {
+      console.log("[buildRoute] Need destination or waypoints to route. waypoints:", waypoints.length, "firstIsStartPoint:", firstIsStartPoint);
       return;
     }
 
@@ -2626,13 +2631,29 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Call the core mapRoute function
-    // If we have waypoints, use waypoints[0] as the origin; otherwise use userLocation
-    const origin = waypoints.length > 0 ? waypoints[0] : userLocation;
+    // Check if first waypoint is an explicit start point or just a regular waypoint
+    const firstIsStartPoint = waypoints.length > 0 && waypoints[0]?.isStartPoint;
     
-    // Multiple waypoints: first is origin, rest are intermediates, use explicit destination if provided
-    // Otherwise, last waypoint is the destination
-    const routeWaypoints = waypoints.length > 1 ? waypoints.slice(1, -1) : [];
-    const finalDestination = destination || (waypoints.length > 1 ? waypoints[waypoints.length - 1] : null);
+    // If first waypoint is NOT explicitly a start point, origin is userLocation
+    // Otherwise, waypoints[0] is the origin
+    const origin = firstIsStartPoint ? waypoints[0] : userLocation;
+    
+    // Build the waypoints array for routing
+    let routeWaypoints = [];
+    let finalDestination = destination;
+    
+    if (firstIsStartPoint && waypoints.length > 1) {
+      // Start point is explicit: waypoints[0] is origin, rest are intermediates
+      routeWaypoints = waypoints.length > 2 ? waypoints.slice(1, -1) : [];
+      finalDestination = destination || waypoints[waypoints.length - 1];
+    } else if (!firstIsStartPoint && waypoints.length > 1) {
+      // Regular waypoints from userLocation: all waypoints are intermediates or destination
+      routeWaypoints = waypoints.length > 2 ? waypoints.slice(0, -1) : [];
+      finalDestination = destination || waypoints[waypoints.length - 1];
+    } else if (!firstIsStartPoint && waypoints.length === 1 && !destination) {
+      // Single waypoint without explicit start: just userLocation → waypoint[0]
+      finalDestination = waypoints[0];
+    }
     
     await mapRoute({
       origin,

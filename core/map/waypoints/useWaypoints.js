@@ -27,12 +27,13 @@ export default function useWaypoints() {
     });
   }
 
-  function addFromMapPress({ latitude, longitude, geocodeResult }) {
+  function addFromMapPress({ latitude, longitude, geocodeResult, isStartPoint = false }) {
     addWaypoint({
       lat: latitude,
       lng: longitude,
       title: deriveWaypointTitle(geocodeResult),
       source: "manual",
+      isStartPoint, // Mark whether this was explicitly set as a start point
     });
   }
 
