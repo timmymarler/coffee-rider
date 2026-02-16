@@ -3693,6 +3693,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   addFromMapPress({
                     latitude: pendingMarker.latitude,
                     longitude: pendingMarker.longitude,
+                    isStartPoint: true,
                   });
                 }
               }}
