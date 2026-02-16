@@ -1353,24 +1353,41 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Turning ON: Build route from current location through waypoints
+    // Turning ON: Build route from nearest point on saved route through remaining waypoints
     if (waypoints.length > 0) {
-      // Always rebuild from current location through the route's waypoints/destination
-      // This ensures we have a valid route that starts from where we are now
+      // Find the closest point on the existing route polyline to snap to
+      let snapPoint = userLocation; // Default to current location if no polyline
       
+      if (routeCoords && routeCoords.length >= 2) {
+        // Find the closest point on the saved route polyline
+        let minDistance = Infinity;
+        let closestIdx = 0;
+        
+        // Sample every Nth point for performance
+        const sampleInterval = Math.max(1, Math.floor(routeCoords.length / 50));
+        
+        for (let i = 0; i < routeCoords.length; i += sampleInterval) {
+          const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestIdx = i;
+          }
+        }
+        
+        snapPoint = routeCoords[closestIdx];
+        console.log("[toggleFollowMe] Snapped to polyline point at index", closestIdx, 'distance:', minDistance.toFixed(0), 'meters');
+      }
+      
+      // Build route from snap point through waypoints to destination
       const requestId = ++routeRequestId.current;
-      const origin = userLocation;
-      
-      // For saved routes, pass waypoints and destination as-is
-      // For ad-hoc routes, pass the last waypoint as destination if no explicit destination
       const wayPointsToUse = waypoints;
       const destToUse = routeDestination || (waypoints.length > 0 ? waypoints[waypoints.length - 1] : null);
       
-      console.log("[toggleFollowMe] Rebuilding route from current location. waypoints:", wayPointsToUse.length, "destination:", !!destToUse);
+      console.log("[toggleFollowMe] Rebuilding route from snapped point. waypoints:", wayPointsToUse.length, "destination:", !!destToUse);
       
       try {
         await mapRoute({
-          origin,
+          origin: snapPoint,
           waypoints: wayPointsToUse.length > 1 ? wayPointsToUse.slice(0, -1) : [],
           destination: destToUse,
           travelMode: userTravelMode,
