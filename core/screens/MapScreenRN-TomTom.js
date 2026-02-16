@@ -2628,11 +2628,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     console.log("[buildRoute] 🚀 About to call mapRoute with firstIsStartPoint:", firstIsStartPoint);
     
-    if (firstIsStartPoint && waypoints.length > 1) {
-      // Start point is explicit: waypoints[0] is origin, rest are intermediates
-      routeWaypoints = waypoints.length > 2 ? waypoints.slice(1, -1) : [];
-      finalDestination = destination || waypoints[waypoints.length - 1];
-      console.log("[buildRoute] Case: firstIsStartPoint=true, 2+ waypoints → route from waypoints[0]");
+    if (firstIsStartPoint && waypoints.length >= 1) {
+      // Start point is explicit: waypoints[0] is origin, rest are intermediates or destination
+      routeWaypoints = waypoints.length > 2 ? waypoints.slice(1, -1) : waypoints.length === 2 ? [] : [];
+      finalDestination = destination || (waypoints.length > 1 ? waypoints[waypoints.length - 1] : null);
+      console.log("[buildRoute] Case: firstIsStartPoint=true → route from waypoints[0] through intermediates to destination");
     } else if (!firstIsStartPoint && waypoints.length > 1) {
       // Regular waypoints from userLocation: all waypoints are intermediates or destination
       routeWaypoints = waypoints.length > 2 ? waypoints.slice(0, -1) : [];
