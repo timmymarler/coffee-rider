@@ -2627,12 +2627,26 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Call the core mapRoute function
     // If we have waypoints, use waypoints[0] as the origin; otherwise use userLocation
     const origin = waypoints.length > 0 ? waypoints[0] : userLocation;
-    const routeWaypoints = waypoints.length > 0 ? waypoints.slice(1) : [];
+    
+    // Handle destination logic for different waypoint counts:
+    // - 0 waypoints: use explicit destination only
+    // - 1 waypoint: use that waypoint as destination (no intermediates)
+    // - 2+ waypoints: use all but first as intermediates, plus explicit destination if provided
+    let routeWaypoints = [];
+    let finalDestination = destination;
+    
+    if (waypoints.length === 1 && !destination) {
+      // Single waypoint, no explicit destination → use waypoint as destination
+      finalDestination = waypoints[0];
+    } else if (waypoints.length > 1) {
+      // Multiple waypoints → first is origin, rest are intermediates
+      routeWaypoints = waypoints.slice(1);
+    }
     
     await mapRoute({
       origin,
       waypoints: routeWaypoints,
-      destination,
+      destination: finalDestination,
       travelMode: userTravelMode,
       routeType: userRouteType,
       requestId: finalRequestId,
