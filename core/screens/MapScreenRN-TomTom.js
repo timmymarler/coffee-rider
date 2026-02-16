@@ -1353,93 +1353,47 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Turning ON: Prepend current location to waypoints to continue from here
+    // Turning ON: Build route from current location through waypoints
     if (waypoints.length > 0) {
-      // If this is a saved route with an existing polyline, use it as-is and just prepend current location
-      // This avoids re-routing which could create a different path
-      if (currentLoadedRouteId && routeCoords && routeCoords.length > 0) {
-        console.log("[toggleFollowMe] Using existing saved route polyline, prepending current location");
-        console.log("[toggleFollowMe] Current routeCoords length:", routeCoords.length);
-        console.log("[toggleFollowMe] First point:", routeCoords[0]);
-        console.log("[toggleFollowMe] Last point:", routeCoords[routeCoords.length - 1]);
-        
-        // CRITICAL: Skip the next MAP_EFFECT rebuild to prevent it from recalculating the route
-        // when state updates trigger the effect
-        skipNextRebuildRef.current = true;
-        
-        // Now update the polyline with current location prepended
-        const currentLocationCoord = {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-        };
-        const newCoords = [currentLocationCoord, ...routeCoords];
-        console.log("[toggleFollowMe] New polyline length after prepend:", newCoords.length);
-        setRouteCoords(newCoords);
-        console.log("[toggleFollowMe] setRouteCoords called with", newCoords.length, "points");
-        
-        // Set followUser to enable Follow Me tracking
-        skipNextFollowTickRef.current = true;
-        skipNextRegionChangeRef.current = true;
-        skipRegionChangeUntilRef.current = Date.now() + 2000;
-        setFollowUser(true);
-        
-        // Recenter + zoom + tilt
-        await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
-        return; // Exit early - we've handled everything
-      } else {
-        // No saved route - need to re-route from current location through waypoints
-        console.log("[toggleFollowMe] No saved route, calculating new route from current location");
-        
-        // Prepend current location as the new first waypoint
-        addWaypointAtStart({
-          lat: userLocation.latitude,
-          lng: userLocation.longitude,
-          title: "Follow Me start",
-          source: "followme",
-          isStartPoint: true,
+      // Always rebuild from current location through the route's waypoints/destination
+      // This ensures we have a valid route that starts from where we are now
+      
+      const requestId = ++routeRequestId.current;
+      const origin = userLocation;
+      
+      // For saved routes, pass waypoints and destination as-is
+      // For ad-hoc routes, pass the last waypoint as destination if no explicit destination
+      const wayPointsToUse = waypoints;
+      const destToUse = routeDestination || (waypoints.length > 0 ? waypoints[waypoints.length - 1] : null);
+      
+      console.log("[toggleFollowMe] Rebuilding route from current location. waypoints:", wayPointsToUse.length, "destination:", !!destToUse);
+      
+      try {
+        await mapRoute({
+          origin,
+          waypoints: wayPointsToUse.length > 1 ? wayPointsToUse.slice(0, -1) : [],
+          destination: destToUse,
+          travelMode: userTravelMode,
+          routeType: userRouteType,
+          requestId,
+          skipFitToView: true,
         });
-        
-        // Rebuild the route immediately with the updated waypoints
-        const requestId = ++routeRequestId.current;
-        
-        // Extract origin and intermediates from the new waypoints array
-        const allWaypoints = [
-          {
-            lat: userLocation.latitude,
-            lng: userLocation.longitude,
-            title: "Follow Me start",
-            source: "followme",
-          },
-          ...waypoints,
-        ];
-        const origin = allWaypoints[0];
-        const intermediates = allWaypoints.slice(1);
-        
-        try {
-          await mapRoute({
-            origin,
-            waypoints: intermediates,
-            destination: routeDestination,
-            travelMode: userTravelMode,
-            routeType: userRouteType,
-            requestId,
-            skipFitToView: true,
-          });
-        } catch (error) {
-          console.warn('[toggleFollowMe] mapRoute error:', error);
-          return; // Don't enable Follow Me if route calculation fails
-        }
+      } catch (error) {
+        console.warn('[toggleFollowMe] mapRoute error:', error);
+        return; // Don't enable Follow Me if route calculation fails
       }
     } else {
-      console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length, "routeDestination:", !!routeDestination);
+      console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length);
       return;
     }
 
-    // Recenter + zoom + tilt (for ad-hoc routes)
+    // Enable Follow Me mode
     skipNextFollowTickRef.current = true;
     skipNextRegionChangeRef.current = true;
     skipRegionChangeUntilRef.current = Date.now() + 2000;
     setFollowUser(true);
+    
+    // Recenter + zoom + tilt
     await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
 
     // Now enable follow mode and start 15-minute inactivity timer
