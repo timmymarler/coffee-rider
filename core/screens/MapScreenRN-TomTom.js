@@ -1353,7 +1353,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Turning ON: Prepend current location to waypoints to continue from here
+    // Turning ON: Route from current location through waypoints to destination
+    console.log("[toggleFollowMe] Attempting to start Follow Me");
+    console.log("[toggleFollowMe] Current waypoints:", waypoints.length, "waypoints");
+    waypoints.forEach((wp, idx) => {
+      console.log(`  [${idx}] ${wp.lat.toFixed(5)}, ${wp.lng.toFixed(5)} - isStartPoint: ${wp.isStartPoint}, title: ${wp.title}`);
+    });
+    console.log("[toggleFollowMe] Destination:", routeDestination ? `${routeDestination.latitude.toFixed(5)}, ${routeDestination.longitude.toFixed(5)}` : "none");
+    
     if (waypoints.length > 0) {
       // Clear the loaded route ID since we're converting to a recalculated Follow Me route
       setCurrentLoadedRouteId(null);
@@ -2676,6 +2683,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     clearWaypoints();
     isLoadingSavedRouteRef.current = true;
 
+    console.log("[loadSavedRoute] Starting to load route:", route.title);
+    console.log("[loadSavedRoute] Route has", route.waypoints?.length || 0, "waypoints, origin:", !!route.origin, "destination:", !!route.destination);
+
     // Waypoints (normalise + rebuild)
     let actualOrigin = route.origin;
     let originWasCorrected = false;
@@ -2709,7 +2719,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         });
       }
 
-      waypointsToAdd.forEach((wp) => {
+      console.log("[loadSavedRoute] Adding", waypointsToAdd.length, "waypoints from saved route");
+      waypointsToAdd.forEach((wp, idx) => {
+        console.log("[loadSavedRoute] Adding waypoint", idx, "without isStartPoint flag");
         addFromPlace(wp);
       });
     }
@@ -2724,6 +2736,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         isStartPoint: true,
       };
       
+      console.log("[loadSavedRoute] Adding origin as first waypoint with isStartPoint: true");
       // Add as first waypoint using the context function
       addWaypointAtStart(originWaypoint);
     }
