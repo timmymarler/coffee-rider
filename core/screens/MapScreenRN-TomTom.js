@@ -1365,15 +1365,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           longitude: userLocation.longitude,
         };
         setRouteCoords([currentLocationCoord, ...routeCoords]);
-        
-        // Also update waypoints to reflect the new start
-        addWaypointAtStart({
-          lat: userLocation.latitude,
-          lng: userLocation.longitude,
-          title: "Follow Me start",
-          source: "followme",
-          isStartPoint: true,
-        });
+        // Don't update waypoints for saved routes - they're already correct
+        // Just use the existing polyline as-is
       } else {
         // No saved route - need to re-route from current location through waypoints
         console.log("[toggleFollowMe] No saved route, calculating new route from current location");
