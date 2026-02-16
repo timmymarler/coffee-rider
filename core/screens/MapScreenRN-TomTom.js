@@ -2187,6 +2187,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     if (!hasInputs) {
       if (routeCoords.length > 0) {
+        console.log('[MAP_EFFECT] ⚠️  Clearing routeCoords - hasInputs is false. routeDestination:', !!routeDestination, 'waypoints:', waypoints.length, 'followUser:', followUser);
         setRouteCoords([]);
       }
       return;
@@ -2600,6 +2601,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
     
     // Update state with route data
+    console.log('[mapRoute] 📍 Setting routeCoords to', finalRouteCoords.length, 'points (polyline with destination');
     setRouteCoords(finalRouteCoords);
     setRouteMeta({
       distanceMeters: result.distanceMeters ?? result.distance,
