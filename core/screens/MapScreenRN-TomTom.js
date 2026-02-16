@@ -2631,9 +2631,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Call the core mapRoute function
-    // Check if first waypoint is an explicit start point or just a regular waypoint
-    const firstIsStartPoint = waypoints.length > 0 && waypoints[0]?.isStartPoint;
-    
     // If first waypoint is NOT explicitly a start point, origin is userLocation
     // Otherwise, waypoints[0] is the origin
     const origin = firstIsStartPoint ? waypoints[0] : userLocation;
