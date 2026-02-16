@@ -1365,23 +1365,34 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Clear the loaded route ID since we're converting to a recalculated Follow Me route
       setCurrentLoadedRouteId(null);
       
-      // Always route from current location through waypoints
-      const requestId = ++routeRequestId.current;
+      // Set followUser=true FIRST so that when state updates trigger MAP_EFFECT,
+      // buildRoute will use the correct Follow Me logic (current location as origin)
+      setFollowUser(true);
       
-      try {
-        await mapRoute({
-          origin: userLocation,
-          waypoints: waypoints,
-          destination: routeDestination,
-          travelMode: userTravelMode,
-          routeType: userRouteType,
-          requestId,
-          skipFitToView: true,
+      // Add current location as first waypoint (unless it's already there as a start point)
+      const firstIsStartPoint = waypoints[0]?.isStartPoint === true;
+      const distanceToFirst = waypoints[0] ? 
+        Math.sqrt(
+          Math.pow(userLocation.latitude - waypoints[0].lat, 2) +
+          Math.pow(userLocation.longitude - waypoints[0].lng, 2)
+        ) : Infinity;
+      
+      // Only prepend current location if it's not already the first waypoint
+      if (distanceToFirst > 0.0001) {
+        console.log("[toggleFollowMe] Prepending current location as waypoint");
+        addWaypointAtStart({
+          lat: userLocation.latitude,
+          lng: userLocation.longitude,
+          title: "Current location",
+          source: "followme",
         });
-      } catch (error) {
-        console.warn('[toggleFollowMe] mapRoute error:', error);
-        return; // Don't enable Follow Me if route calculation fails
+      } else {
+        console.log("[toggleFollowMe] Current location already at or near first waypoint");
       }
+      
+      // MAP_EFFECT will trigger and buildRoute will handle the routing
+      // with followUser=true logic (current location → waypoints → destination)
+      
     } else {
       console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length, "routeDestination:", !!routeDestination);
     }
@@ -1392,9 +1403,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     skipRegionChangeUntilRef.current = Date.now() + 2000;
     await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
 
-    // Now enable follow mode and start 15-minute inactivity timer
-    // (routeSteps are now guaranteed to be populated from the mapRoute call above)
-    setFollowUser(true);
+    // Start 15-minute inactivity timer
+    // (routeSteps will be populated by buildRoute triggered via MAP_EFFECT)
     resetFollowMeInactivityTimeout();
   }
 
