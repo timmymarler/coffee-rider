@@ -2610,9 +2610,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     const destination = destinationOverride || routeDestination || null;
 
-    // Allow routing if we have a destination OR if we have at least 2 waypoints (start + at least one other)
-    if (!destination && waypoints.length < 2) {
-      console.log("[buildRoute] Not enough waypoints for routing without explicit destination. waypoints:", waypoints.length);
+    // Allow routing if we have a destination OR if we have at least 1 waypoint
+    if (!destination && waypoints.length < 1) {
+      console.log("[buildRoute] No destination or waypoints, returning");
       return;
     }
 
