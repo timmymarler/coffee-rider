@@ -1355,48 +1355,68 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     // Turning ON: Prepend current location to waypoints to continue from here
     if (waypoints.length > 0) {
-      // Clear the loaded route ID since we're converting to a recalculated Follow Me route
-      setCurrentLoadedRouteId(null);
-      
-      // Prepend current location as the new first waypoint
-      addWaypointAtStart({
-        lat: userLocation.latitude,
-        lng: userLocation.longitude,
-        title: "Follow Me start",
-        source: "followme",
-        isStartPoint: true,
-      });
-      
-      // Rebuild the route immediately with the updated waypoints
-      // The context will have updated with the prepended waypoint
-      const requestId = ++routeRequestId.current;
-      
-      // Extract origin and intermediates from the new waypoints array
-      const allWaypoints = [
-        {
+      // If this is a saved route with an existing polyline, use it as-is and just prepend current location
+      // This avoids re-routing which could create a different path
+      if (currentLoadedRouteId && routeCoords && routeCoords.length > 0) {
+        console.log("[toggleFollowMe] Using existing saved route polyline, prepending current location");
+        // Just prepend current location to existing polyline
+        const currentLocationCoord = {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+        };
+        setRouteCoords([currentLocationCoord, ...routeCoords]);
+        
+        // Also update waypoints to reflect the new start
+        addWaypointAtStart({
           lat: userLocation.latitude,
           lng: userLocation.longitude,
           title: "Follow Me start",
           source: "followme",
-        },
-        ...waypoints,
-      ];
-      const origin = allWaypoints[0];
-      const intermediates = allWaypoints.slice(1);
-      
-      try {
-        await mapRoute({
-          origin,
-          waypoints: intermediates,
-          destination: routeDestination,
-          travelMode: userTravelMode,
-          routeType: userRouteType,
-          requestId,
-          skipFitToView: true,
+          isStartPoint: true,
         });
-      } catch (error) {
-        console.warn('[toggleFollowMe] mapRoute error:', error);
-        return; // Don't enable Follow Me if route calculation fails
+      } else {
+        // No saved route - need to re-route from current location through waypoints
+        console.log("[toggleFollowMe] No saved route, calculating new route from current location");
+        
+        // Prepend current location as the new first waypoint
+        addWaypointAtStart({
+          lat: userLocation.latitude,
+          lng: userLocation.longitude,
+          title: "Follow Me start",
+          source: "followme",
+          isStartPoint: true,
+        });
+        
+        // Rebuild the route immediately with the updated waypoints
+        const requestId = ++routeRequestId.current;
+        
+        // Extract origin and intermediates from the new waypoints array
+        const allWaypoints = [
+          {
+            lat: userLocation.latitude,
+            lng: userLocation.longitude,
+            title: "Follow Me start",
+            source: "followme",
+          },
+          ...waypoints,
+        ];
+        const origin = allWaypoints[0];
+        const intermediates = allWaypoints.slice(1);
+        
+        try {
+          await mapRoute({
+            origin,
+            waypoints: intermediates,
+            destination: routeDestination,
+            travelMode: userTravelMode,
+            routeType: userRouteType,
+            requestId,
+            skipFitToView: true,
+          });
+        } catch (error) {
+          console.warn('[toggleFollowMe] mapRoute error:', error);
+          return; // Don't enable Follow Me if route calculation fails
+        }
       }
     } else {
       console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length, "routeDestination:", !!routeDestination);
