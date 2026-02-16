@@ -1359,12 +1359,19 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // This avoids re-routing which could create a different path
       if (currentLoadedRouteId && routeCoords && routeCoords.length > 0) {
         console.log("[toggleFollowMe] Using existing saved route polyline, prepending current location");
+        console.log("[toggleFollowMe] Current routeCoords length:", routeCoords.length);
+        console.log("[toggleFollowMe] First point:", routeCoords[0]);
+        console.log("[toggleFollowMe] Last point:", routeCoords[routeCoords.length - 1]);
+        
         // Just prepend current location to existing polyline
         const currentLocationCoord = {
           latitude: userLocation.latitude,
           longitude: userLocation.longitude,
         };
-        setRouteCoords([currentLocationCoord, ...routeCoords]);
+        const newCoords = [currentLocationCoord, ...routeCoords];
+        console.log("[toggleFollowMe] New polyline length after prepend:", newCoords.length);
+        setRouteCoords(newCoords);
+        console.log("[toggleFollowMe] setRouteCoords called with", newCoords.length, "points");
         // Don't update waypoints for saved routes - they're already correct
         // Just use the existing polyline as-is
       } else {
