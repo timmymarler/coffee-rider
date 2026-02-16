@@ -1353,30 +1353,69 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Turning ON: Prepend current location and rebuild route
+    // Turning ON: Prepend current location to waypoints to continue from here
     if (waypoints.length > 0) {
-      console.log("[toggleFollowMe] Prepending current location to waypoints and rebuilding route");
+      // Clear the loaded route ID since we're converting to a recalculated Follow Me route
+      setCurrentLoadedRouteId(null);
       
-      // Set these FIRST so MAP_EFFECT will rebuild (not return early for saved routes)
-      skipNextFollowTickRef.current = true;
-      skipNextRegionChangeRef.current = true;
-      skipRegionChangeUntilRef.current = Date.now() + 2000;
-      setFollowUser(true); // Set this BEFORE adding waypoint so MAP_EFFECT rebuilds
+      // Only prepend current location if the first waypoint is NOT an explicit start point
+      // If user set a start point, honor it instead of replacing with current location
+      const firstIsExplicitStart = waypoints[0]?.isStartPoint === true;
       
-      // Add current location as first waypoint (this will trigger MAP_EFFECT)
-      addWaypointAtStart({
-        lat: userLocation.latitude,
-        lng: userLocation.longitude,
-        title: "Follow Me start",
-        source: "followme",
-        isStartPoint: false, // Not a start point - just a waypoint to route through
-      });
+      let allWaypoints;
+      if (firstIsExplicitStart) {
+        // Use the explicit start point, don't prepend current location
+        allWaypoints = waypoints;
+        console.log("[toggleFollowMe] Using explicit start point at", waypoints[0].title);
+      } else {
+        // Prepend current location as the new first waypoint
+        addWaypointAtStart({
+          lat: userLocation.latitude,
+          lng: userLocation.longitude,
+          title: "Follow Me start",
+          source: "followme",
+          isStartPoint: true,
+        });
+        
+        allWaypoints = [
+          {
+            lat: userLocation.latitude,
+            lng: userLocation.longitude,
+            title: "Follow Me start",
+            source: "followme",
+          },
+          ...waypoints,
+        ];
+        console.log("[toggleFollowMe] Prepending current location as start point");
+      }
+      
+      // Rebuild the route immediately with the updated waypoints
+      const requestId = ++routeRequestId.current;
+      const origin = allWaypoints[0];
+      const intermediates = allWaypoints.slice(1);
+      
+      try {
+        await mapRoute({
+          origin,
+          waypoints: intermediates,
+          destination: routeDestination,
+          travelMode: userTravelMode,
+          routeType: userRouteType,
+          requestId,
+          skipFitToView: true,
+        });
+      } catch (error) {
+        console.warn('[toggleFollowMe] mapRoute error:', error);
+        return; // Don't enable Follow Me if route calculation fails
+      }
     } else {
-      console.log("[toggleFollowMe] No waypoints available");
-      return;
+      console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length, "routeDestination:", !!routeDestination);
     }
-    
+
     // Recenter + zoom + tilt
+    skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
+    skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
+    skipRegionChangeUntilRef.current = Date.now() + 2000;
     await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
 
     // Now enable follow mode and start 15-minute inactivity timer
@@ -2124,7 +2163,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     if (!hasInputs) {
       if (routeCoords.length > 0) {
-        console.log('[MAP_EFFECT] ⚠️  Clearing routeCoords - hasInputs is false. routeDestination:', !!routeDestination, 'waypoints:', waypoints.length, 'followUser:', followUser);
         setRouteCoords([]);
       }
       return;
@@ -2538,7 +2576,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
     
     // Update state with route data
-    console.log('[mapRoute] 📍 Setting routeCoords to', finalRouteCoords.length, 'points (polyline with destination');
     setRouteCoords(finalRouteCoords);
     setRouteMeta({
       distanceMeters: result.distanceMeters ?? result.distance,
@@ -2573,7 +2610,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   async function buildRoute({ destinationOverride = null, requestId } = {}) {
     // Wrapper that calls mapRoute with current component state
     const finalRequestId = requestId || routeRequestId.current;
-    console.log("[buildRoute] Starting - requestId:", finalRequestId, "destination:", routeDestination?.title, "waypoints:", waypoints.length, "followUser:", followUser, "currentLoadedRouteId:", currentLoadedRouteId);
+    console.log("[buildRoute] Starting - requestId:", finalRequestId, "destination:", routeDestination?.title, "waypoints:", waypoints.length);
     
     if (!routeDestination && !destinationOverride && waypoints.length === 0) {
       console.log("[buildRoute] No destination or waypoints, returning");
