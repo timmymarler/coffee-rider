@@ -2610,8 +2610,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     const destination = destinationOverride || routeDestination || null;
 
-    if (!destination && waypoints.length === 0) {
-      console.log("[buildRoute] No destination and no waypoints, returning");
+    // Allow routing if we have a destination OR if we have at least 2 waypoints (start + at least one other)
+    if (!destination && waypoints.length < 2) {
+      console.log("[buildRoute] Not enough waypoints for routing without explicit destination. waypoints:", waypoints.length);
       return;
     }
 
@@ -3665,12 +3666,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               ]}
             >
               <MaterialCommunityIcons
-                name="flag-triangle"
+                name="flag"
                 size={26}
                 color={theme.colors.accent}
                 style={{ marginRight: 12 }}
               />
-              <Text style={styles.pointMenuText}>Add waypoint</Text>
+              <Text style={styles.pointMenuText}>Add start point</Text>
             </Pressable>
 
             <Pressable
