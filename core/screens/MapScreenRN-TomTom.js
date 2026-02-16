@@ -1363,7 +1363,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.log("[toggleFollowMe] First point:", routeCoords[0]);
         console.log("[toggleFollowMe] Last point:", routeCoords[routeCoords.length - 1]);
         
-        // Just prepend current location to existing polyline
+        // IMPORTANT: Set followUser to true FIRST to prevent MAP_EFFECT from rebuilding the route
+        // when context updates happen below
+        skipNextFollowTickRef.current = true;
+        skipNextRegionChangeRef.current = true;
+        skipRegionChangeUntilRef.current = Date.now() + 2000;
+        setFollowUser(true); // Enable Follow Me first
+        
+        // Now update the polyline with current location prepended
         const currentLocationCoord = {
           latitude: userLocation.latitude,
           longitude: userLocation.longitude,
@@ -1374,6 +1381,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.log("[toggleFollowMe] setRouteCoords called with", newCoords.length, "points");
         // Don't update waypoints for saved routes - they're already correct
         // Just use the existing polyline as-is
+        
+        // Recenter + zoom + tilt AFTER updating polyline
+        skipNextFollowTickRef.current = true;
+        await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
+        return; // Exit early - we've handled everything
       } else {
         // No saved route - need to re-route from current location through waypoints
         console.log("[toggleFollowMe] No saved route, calculating new route from current location");
@@ -1420,12 +1432,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
     } else {
       console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length, "routeDestination:", !!routeDestination);
+      return;
     }
 
-    // Recenter + zoom + tilt
-    skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
-    skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
+    // Recenter + zoom + tilt (for ad-hoc routes)
+    skipNextFollowTickRef.current = true;
+    skipNextRegionChangeRef.current = true;
     skipRegionChangeUntilRef.current = Date.now() + 2000;
+    setFollowUser(true);
     await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
 
     // Now enable follow mode and start 15-minute inactivity timer
