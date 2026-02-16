@@ -1363,12 +1363,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.log("[toggleFollowMe] First point:", routeCoords[0]);
         console.log("[toggleFollowMe] Last point:", routeCoords[routeCoords.length - 1]);
         
-        // IMPORTANT: Set followUser to true FIRST to prevent MAP_EFFECT from rebuilding the route
-        // when context updates happen below
-        skipNextFollowTickRef.current = true;
-        skipNextRegionChangeRef.current = true;
-        skipRegionChangeUntilRef.current = Date.now() + 2000;
-        setFollowUser(true); // Enable Follow Me first
+        // CRITICAL: Skip the next MAP_EFFECT rebuild to prevent it from recalculating the route
+        // when state updates trigger the effect
+        skipNextRebuildRef.current = true;
         
         // Now update the polyline with current location prepended
         const currentLocationCoord = {
@@ -1379,11 +1376,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.log("[toggleFollowMe] New polyline length after prepend:", newCoords.length);
         setRouteCoords(newCoords);
         console.log("[toggleFollowMe] setRouteCoords called with", newCoords.length, "points");
-        // Don't update waypoints for saved routes - they're already correct
-        // Just use the existing polyline as-is
         
-        // Recenter + zoom + tilt AFTER updating polyline
+        // Set followUser to enable Follow Me tracking
         skipNextFollowTickRef.current = true;
+        skipNextRegionChangeRef.current = true;
+        skipRegionChangeUntilRef.current = Date.now() + 2000;
+        setFollowUser(true);
+        
+        // Recenter + zoom + tilt
         await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
         return; // Exit early - we've handled everything
       } else {
