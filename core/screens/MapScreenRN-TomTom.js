@@ -1354,7 +1354,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Turning ON: Prepend current location to waypoints to continue from here
-    if (waypoints.length > 0 && routeDestination) {
+    if (waypoints.length > 0) {
       // Clear the loaded route ID since we're converting to a recalculated Follow Me route
       setCurrentLoadedRouteId(null);
       
