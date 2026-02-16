@@ -1365,17 +1365,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Clear the loaded route ID since we're converting to a recalculated Follow Me route
       setCurrentLoadedRouteId(null);
       
-      // Always start from current location, but route through any explicit start points
-      // Current Location → [Start Points + Waypoints] → Destination
+      // Always route from current location through waypoints
       const requestId = ++routeRequestId.current;
-      
-      // Build waypoints array: if first waypoint is an explicit start point, include it as a waypoint to route through
-      let routeWaypoints = waypoints;
       
       try {
         await mapRoute({
           origin: userLocation,
-          waypoints: routeWaypoints,
+          waypoints: waypoints,
           destination: routeDestination,
           travelMode: userTravelMode,
           routeType: userRouteType,
@@ -2627,13 +2623,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Call the core mapRoute function
     // If first waypoint is NOT explicitly a start point, origin is userLocation
     // Otherwise, waypoints[0] is the origin
-    const origin = firstIsStartPoint ? waypoints[0] : userLocation;
+    // EXCEPT: When Follow Me is active, ALWAYS use userLocation as origin
+    let origin;
+    if (followUser) {
+      // Follow Me: always route from current location
+      origin = userLocation;
+      console.log("[buildRoute] Follow Me active - using userLocation as origin");
+    } else {
+      // Normal routing: use explicit start point if set, otherwise user location
+      origin = firstIsStartPoint ? waypoints[0] : userLocation;
+    }
     
     // Build the waypoints array for routing
     let routeWaypoints = [];
     let finalDestination = destination;
     
-    console.log("[buildRoute] 🚀 About to call mapRoute with firstIsStartPoint:", firstIsStartPoint);
+    console.log("[buildRoute] 🚀 About to call mapRoute with firstIsStartPoint:", firstIsStartPoint, "followUser:", followUser);
     
     if (firstIsStartPoint && waypoints.length >= 1) {
       // Start point is explicit: waypoints[0] is origin, rest are intermediates or destination
