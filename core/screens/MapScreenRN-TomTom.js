@@ -1355,12 +1355,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     // Turning ON: Use existing polyline if available, otherwise rebuild from snap point
     if (waypoints.length > 0) {
+      console.log("[toggleFollowMe] routeCoords available?", !!routeCoords, "length:", routeCoords?.length);
+      
       // If we already have a calculated polyline with sufficient points, use it as-is
       // This avoids re-routing which can cause weird diversions
       if (routeCoords && routeCoords.length > 10) {
         console.log("[toggleFollowMe] Using existing polyline (" + routeCoords.length + " points), prepending current location");
         
-        // Prepend current location to the existing polyline
+        // CRITICAL: Set these BEFORE modifying state to prevent MAP_EFFECT from rebuilding
+        skipNextRebuildRef.current = true;
+        skipNextFollowTickRef.current = true;
+        skipNextRegionChangeRef.current = true;
+        skipRegionChangeUntilRef.current = Date.now() + 2000;
+        setFollowUser(true);
+        
+        // Now prepend current location to the existing polyline
         const currentLocationCoord = {
           latitude: userLocation.latitude,
           longitude: userLocation.longitude,
@@ -1368,8 +1377,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         const newCoords = [currentLocationCoord, ...routeCoords];
         console.log("[toggleFollowMe] Updated polyline with current location, new length:", newCoords.length);
         setRouteCoords(newCoords);
-        // Don't call mapRoute - just use the existing route
+        
+        // Recenter + zoom + tilt
+        await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
+        return; // Exit early - we've handled everything
       } else {
+        console.log("[toggleFollowMe] No good polyline available, will rebuild. routeCoords:", routeCoords?.length ?? 0);
+        
         // No good polyline yet - need to calculate one
         // Find the closest point on the existing route polyline to snap to
         let snapPoint = userLocation; // Default to current location if no polyline
@@ -1415,20 +1429,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           console.warn('[toggleFollowMe] mapRoute error:', error);
           return; // Don't enable Follow Me if route calculation fails
         }
+        
+        // Enable Follow Me mode after route is built
+        skipNextFollowTickRef.current = true;
+        skipNextRegionChangeRef.current = true;
+        skipRegionChangeUntilRef.current = Date.now() + 2000;
+        setFollowUser(true);
+        
+        // Recenter + zoom + tilt
+        await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
       }
     } else {
       console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length);
       return;
     }
-
-    // Enable Follow Me mode
-    skipNextFollowTickRef.current = true;
-    skipNextRegionChangeRef.current = true;
-    skipRegionChangeUntilRef.current = Date.now() + 2000;
-    setFollowUser(true);
-    
-    // Recenter + zoom + tilt
-    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
 
     // Now enable follow mode and start 15-minute inactivity timer
     // (routeSteps are now guaranteed to be populated from the mapRoute call above)
