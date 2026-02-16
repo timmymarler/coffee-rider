@@ -1358,8 +1358,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // If we already have a calculated polyline with sufficient points, use it as-is
       // This avoids re-routing which can cause weird diversions
       if (routeCoords && routeCoords.length > 10) {
-        console.log("[toggleFollowMe] Using existing polyline (" + routeCoords.length + " points), no re-route needed");
-        // Just enable Follow Me - the existing polyline will be used as-is
+        console.log("[toggleFollowMe] Using existing polyline (" + routeCoords.length + " points), prepending current location");
+        
+        // Prepend current location to the existing polyline
+        const currentLocationCoord = {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+        };
+        const newCoords = [currentLocationCoord, ...routeCoords];
+        console.log("[toggleFollowMe] Updated polyline with current location, new length:", newCoords.length);
+        setRouteCoords(newCoords);
+        // Don't call mapRoute - just use the existing route
       } else {
         // No good polyline yet - need to calculate one
         // Find the closest point on the existing route polyline to snap to
