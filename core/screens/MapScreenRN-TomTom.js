@@ -1357,7 +1357,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (waypoints.length > 0) {
       console.log("[toggleFollowMe] Prepending current location to waypoints and rebuilding route");
       
-      // Add current location as first waypoint
+      // Set these FIRST so MAP_EFFECT will rebuild (not return early for saved routes)
+      skipNextFollowTickRef.current = true;
+      skipNextRegionChangeRef.current = true;
+      skipRegionChangeUntilRef.current = Date.now() + 2000;
+      setFollowUser(true); // Set this BEFORE adding waypoint so MAP_EFFECT rebuilds
+      
+      // Add current location as first waypoint (this will trigger MAP_EFFECT)
       addWaypointAtStart({
         lat: userLocation.latitude,
         lng: userLocation.longitude,
@@ -1369,12 +1375,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       console.log("[toggleFollowMe] No waypoints available");
       return;
     }
-
-    // Enable Follow Me mode
-    skipNextFollowTickRef.current = true;
-    skipNextRegionChangeRef.current = true;
-    skipRegionChangeUntilRef.current = Date.now() + 2000;
-    setFollowUser(true);
     
     // Recenter + zoom + tilt
     await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
