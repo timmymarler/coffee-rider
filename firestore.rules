@@ -231,8 +231,8 @@ service cloud.firestore {
     /* EVENTS - USER CALENDAR EVENTS */
     match /events/{eventId} {
       allow create: if isAuthed() && (
-        hasRole('admin') ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && request.resource.data.userId == request.auth.uid
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && request.resource.data.userId == request.auth.uid)
       );
       allow read: if isAuthed() && (
         hasRole('admin') ||
@@ -247,11 +247,11 @@ service cloud.firestore {
         (resource.data.visibility == 'public')
       );
       allow update: if isAuthed() && (
-        hasRole('admin') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && (resource.data.userId == request.auth.uid || resource.data.createdBy == request.auth.uid))
       );
       allow delete: if isAuthed() && (
-        hasRole('admin') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && (resource.data.userId == request.auth.uid || resource.data.createdBy == request.auth.uid))
       );
       allow list: if isAuthed();
