@@ -633,6 +633,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const skipNextRegionChangeRef = useRef(false);
   const skipRegionChangeUntilRef = useRef(0);
   const skipNextRebuildRef = useRef(false); // Skip next effect rebuild (used by toggleFollowMe)
+  const skipStartPointRoutingRef = useRef(false); // Skip routing when just adding Start Point (first waypoint)
   const isAnimatingRef = useRef(false); // Track if we're doing a programmatic animation
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
@@ -931,7 +932,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // If this is the first waypoint, prepend current location as origin first
     if (waypoints.length === 0 && userLocation) {
-      console.log("[handleAddWaypoint] *** FIRST WAYPOINT CASE ***");
+      console.log("[handleAddWaypoint] *** FIRST WAYPOINT CASE (Start Point) - skipping auto-routing ***");
       const currentLocation = {
         lat: userLocation.latitude ?? userLocation.lat,
         lng: userLocation.longitude ?? userLocation.lng,
@@ -944,6 +945,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       console.log("[handleAddWaypoint] Calling addWaypoint with:", waypointToAdd);
       addWaypoint(waypointToAdd);
       console.log("[handleAddWaypoint] Called addWaypoint");
+      // Skip the automatic route building when just adding Start Point
+      // User can manually trigger routing by tapping Follow Me or adding another waypoint
+      skipStartPointRoutingRef.current = true;
+      console.log("[handleAddWaypoint] Set skipStartPointRoutingRef to prevent auto-routing");
     } else if (waypoints.length > 0) {
       // We have existing waypoints
       if (routeDestination) {
@@ -2208,6 +2213,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     if (skipNextRebuildRef.current) {
       skipNextRebuildRef.current = false;
+      return;
+    }
+    if (skipStartPointRoutingRef.current) {
+      skipStartPointRoutingRef.current = false;
       return;
     }
     if (routeClearedByUser) {
