@@ -2244,12 +2244,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Skip routing if we just added a start point (2 waypoints, first is current location, no destination)
-    const isJustStartPoint = waypoints.length === 2 && 
-                             waypoints[0].source === "current" && 
-                             !routeDestination;
-    if (isJustStartPoint) {
-      console.log('[MAP_EFFECT] Detected start point only - skipping auto-routing');
+    // Skip routing for single waypoint with no destination (just a start point, before adding more waypoints)
+    // Only route when: multiple waypoints, OR explicit destination, OR Follow Me is active
+    if (waypoints.length === 1 && !routeDestination && !followUser) {
+      console.log('[MAP_EFFECT] Single waypoint with no destination - skipping auto-routing');
       return;
     }
 
