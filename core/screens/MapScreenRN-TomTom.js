@@ -637,6 +637,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
   const previousFollowUserRef = useRef({ isTraveling: false, polyline: [] }); // Track previous Follow Me state and stored polyline
+  const shouldApplyFollowMeZoomRef = useRef(false); // Flag to apply zoom when followUser becomes true
   const {
     waypoints,
     addWaypoint,
@@ -1451,10 +1452,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       
       console.log("[toggleFollowMe] About to set followUser=true");
       
+      // Set flag so our useEffect will apply the zoom once followUser becomes true
+      shouldApplyFollowMeZoomRef.current = true;
+      
       // Set followUser=true FIRST before any state changes that might trigger MAP_EFFECT
       // This ensures buildRoute sees followUser=true when dependencies change
       setFollowUser(true);
-      console.log("[toggleFollowMe] Set followUser to true");
+      console.log("[toggleFollowMe] Set followUser to true and flagged for zoom");
       
       // Now clear the loaded route ID since we're converting to a recalculated Follow Me route
       // MAP_EFFECT will trigger, but followUser is already true now
@@ -1481,18 +1485,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.log("[toggleFollowMe] Current location already at or near first waypoint");
       }
       
-      console.log("[toggleFollowMe] About to recenter with FOLLOW_ZOOM:", FOLLOW_ZOOM);
-      
-      // Recenter + zoom + tilt immediately
-      skipNextFollowTickRef.current = true;
-      skipNextRegionChangeRef.current = true;
-      skipRegionChangeUntilRef.current = Date.now() + 2000;
-      recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
-      console.log("[toggleFollowMe] Called recenterOnUser with zoom and tilt");
-      
       // Start 15-minute inactivity timer
       resetFollowMeInactivityTimeout();
-      console.log("[toggleFollowMe] Follow Me fully activated");
+      console.log("[toggleFollowMe] Follow Me activation prepared (zoom will be applied by effect)");
     } else {
       console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length, "routeDestination:", !!routeDestination);
     }
@@ -1597,6 +1592,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       });
     }
   }
+
+  // Apply Follow Me zoom when followUser changes to true
+  useEffect(() => {
+    if (followUser && shouldApplyFollowMeZoomRef.current) {
+      console.log("[followUserEffect] followUser is now true, applying Follow Me zoom");
+      shouldApplyFollowMeZoomRef.current = false; // Only apply once
+      
+      skipNextFollowTickRef.current = true;
+      skipNextRegionChangeRef.current = true;
+      skipRegionChangeUntilRef.current = Date.now() + 2000;
+      recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
+      console.log("[followUserEffect] Applied Follow Me zoom with FOLLOW_ZOOM:", FOLLOW_ZOOM);
+    }
+  }, [followUser]);
 
   useEffect(() => {
     // Exit early if not in navigation mode (no Follow Me and no active ride)
