@@ -1444,12 +1444,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     console.log("[toggleFollowMe] Destination:", routeDestination ? `${routeDestination.latitude.toFixed(5)}, ${routeDestination.longitude.toFixed(5)}` : "none");
     
     if (waypoints.length > 0 || routeDestination) {
+      // Prepare for Follow Me mode
+      skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
+      skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
+      skipRegionChangeUntilRef.current = Date.now() + 2000;
+      
       // Clear the loaded route ID since we're converting to a recalculated Follow Me route
       setCurrentLoadedRouteId(null);
       
       // Set followUser=true FIRST so that when state updates trigger MAP_EFFECT,
       // buildRoute will use the correct Follow Me logic (current location as origin)
       setFollowUser(true);
+      console.log("[toggleFollowMe] Set followUser to true");
       
       // Check if current location is already the first waypoint
       const distanceToFirst = waypoints[0] ? 
@@ -1474,19 +1480,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // MAP_EFFECT will trigger and buildRoute will handle the routing
       // with followUser=true logic (current location → waypoints → destination)
       
+      // Recenter + zoom + tilt after short delay to ensure state updates are applied
+      setTimeout(async () => {
+        console.log("[toggleFollowMe] Now recentering with Follow Me zoom/tilt");
+        await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
+        
+        // Start 15-minute inactivity timer
+        // (routeSteps will be populated by buildRoute triggered via MAP_EFFECT)
+        resetFollowMeInactivityTimeout();
+      }, 100);
     } else {
       console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length, "routeDestination:", !!routeDestination);
     }
-
-    // Recenter + zoom + tilt
-    skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
-    skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
-    skipRegionChangeUntilRef.current = Date.now() + 2000;
-    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
-
-    // Start 15-minute inactivity timer
-    // (routeSteps will be populated by buildRoute triggered via MAP_EFFECT)
-    resetFollowMeInactivityTimeout();
   }
 
   /* ------------------------------------------------------------ */
