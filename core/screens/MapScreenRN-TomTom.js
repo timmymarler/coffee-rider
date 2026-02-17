@@ -1074,6 +1074,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     const destination = getFinalDestination();
+    
+    console.log("[handleSaveRoute] Saving route:");
+    console.log("  - Current waypoints count:", waypoints.length);
+    console.log("  - Waypoints:", waypoints.map(w => `${w.lat ?? w.latitude}, ${w.lng ?? w.longitude} (${w.title})`));
+    console.log("  - Destination:", destination);
+    console.log("  - User location:", userLocation.latitude, userLocation.longitude);
 
     // If no name provided and a route is currently loaded, update it
     // If name provided or no loaded route, create a new one
@@ -1086,8 +1092,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       name: routeName || undefined,
       routeId: isUpdating ? currentLoadedRouteId : undefined,
       origin: waypoints.length > 0 ? {
-        lat: waypoints[0].lat,
-        lng: waypoints[0].lng,
+        lat: waypoints[0].latitude ?? waypoints[0].lat,
+        lng: waypoints[0].longitude ?? waypoints[0].lng,
       } : {
         lat: userLocation.latitude,
         lng: userLocation.longitude,
@@ -3047,6 +3053,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!mapReadyRef.current) return;
     if (!pendingFitRef.current) return;
     if (followUser) return; // Don't interrupt Follow Me mode
+
+    // If only 1 coordinate, don't fit to it (prevents excessive zoom)
+    // Just clear the pending fit and let the map stay where it is
+    if (pendingFitRef.current.length === 1) {
+      console.log("[attemptRouteFit] Single waypoint - not fitting to prevent excessive zoom");
+      pendingFitRef.current = null;
+      return;
+    }
 
     mapRef.current.fitToCoordinates(pendingFitRef.current, {
       edgePadding: { top: 80, right: 80, bottom: 140, left: 80 },
