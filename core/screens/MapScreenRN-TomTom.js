@@ -2245,9 +2245,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Skip routing for single waypoint with no destination or Follow Me
-    // Route when: multiple waypoints (last = destination), explicit destination, or Follow Me
-    if (waypoints.length === 1 && !routeDestination && !followUser) {
-      console.log('[MAP_EFFECT] Single waypoint with no destination - skipping auto-routing');
+    // For manual routes (no saved route loaded): only route on explicit destination or Follow Me
+    // For saved routes: don't auto-route (only on Follow Me)
+    const isManualRoute = !currentLoadedRouteId;
+    const shouldSkipAutoRoute = isManualRoute && !routeDestination && !followUser;
+    
+    if (shouldSkipAutoRoute) {
+      console.log('[MAP_EFFECT] Manual route without destination/Follow Me - skipping auto-routing');
       return;
     }
 
