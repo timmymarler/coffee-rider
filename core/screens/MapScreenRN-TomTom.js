@@ -906,6 +906,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
     
+    // If we're modifying a saved route, unlink it so it becomes a new route
+    if (currentLoadedRouteId) {
+      console.log("[handleAddWaypoint] Clearing currentLoadedRouteId - saved route is being modified");
+      setCurrentLoadedRouteId(null);
+    }
+    
     if (!pendingMapPoint) {
       console.error("[handleAddWaypoint] *** NO pendingMapPoint set! ***");
       closeAddPointMenu();
@@ -958,6 +964,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const handleSetStart = () => {
     console.log("[handleSetStart] *** HANDLER CALLED ***");
     setSelectedPlaceId(null);
+    
+    // If we're modifying a saved route, unlink it so it becomes a new route
+    if (currentLoadedRouteId) {
+      console.log("[handleSetStart] Clearing currentLoadedRouteId - saved route is being modified");
+      setCurrentLoadedRouteId(null);
+    }
     
     if (!pendingMapPoint) {
       console.error("[handleSetStart] *** NO pendingMapPoint set! ***");
