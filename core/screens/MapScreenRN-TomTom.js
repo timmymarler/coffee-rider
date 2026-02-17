@@ -2244,10 +2244,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Skip routing for single waypoint with no destination (just a start point, before adding more waypoints)
-    // Only route when: multiple waypoints, OR explicit destination, OR Follow Me is active
-    if (waypoints.length === 1 && !routeDestination && !followUser) {
-      console.log('[MAP_EFFECT] Single waypoint with no destination - skipping auto-routing');
+    // Skip routing for multiple waypoints with no explicit destination or Follow Me
+    // Only route when: explicit destination is set, OR Follow Me is active
+    if (!routeDestination && !followUser) {
+      console.log('[MAP_EFFECT] No destination and not in Follow Me - skipping auto-routing');
       return;
     }
 
