@@ -1369,8 +1369,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // buildRoute will use the correct Follow Me logic (current location as origin)
       setFollowUser(true);
       
-      // Add current location as first waypoint (unless it's already there as a start point)
-      const firstIsStartPoint = waypoints[0]?.isStartPoint === true;
+      // Check if current location is already the first waypoint
       const distanceToFirst = waypoints[0] ? 
         Math.sqrt(
           Math.pow(userLocation.latitude - waypoints[0].lat, 2) +
