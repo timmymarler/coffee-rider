@@ -918,7 +918,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
     
-    console.log("[handleAddWaypoint] Starting, current waypoints:", waypoints.length, "userLocation:", !!userLocation);
+    console.log("[handleAddWaypoint] Starting, current waypoints:", waypoints.length, "userLocation:", !!userLocation, "routeDestination:", !!routeDestination);
     
     const waypointToAdd = {
       lat: pendingMapPoint.latitude,
@@ -945,10 +945,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       addWaypoint(waypointToAdd);
       console.log("[handleAddWaypoint] Called addWaypoint");
     } else if (waypoints.length > 0) {
-      console.log("[handleAddWaypoint] *** SUBSEQUENT WAYPOINT CASE ***");
-      console.log("[handleAddWaypoint] Calling insertWaypoint at index", waypoints.length - 1);
-      insertWaypoint(waypointToAdd, waypoints.length - 1);
-      console.log("[handleAddWaypoint] Called insertWaypoint");
+      // We have existing waypoints
+      if (routeDestination) {
+        // Destination is stored separately (saved route case), so just append the waypoint
+        console.log("[handleAddWaypoint] *** SAVED ROUTE CASE (separate destination) ***");
+        console.log("[handleAddWaypoint] Calling addWaypoint to append at end");
+        addWaypoint(waypointToAdd);
+      } else {
+        // No separate destination, so last waypoint IS the destination
+        // Insert before the last item (as penultimate)
+        console.log("[handleAddWaypoint] *** SUBSEQUENT WAYPOINT CASE (destination in array) ***");
+        console.log("[handleAddWaypoint] Calling insertWaypoint at index", waypoints.length - 1);
+        insertWaypoint(waypointToAdd, waypoints.length - 1);
+      }
+      console.log("[handleAddWaypoint] Waypoint addition complete");
     } else {
       console.log("[handleAddWaypoint] *** FALLBACK CASE ***");
       console.log("[handleAddWaypoint] Calling addWaypoint (fallback)");
