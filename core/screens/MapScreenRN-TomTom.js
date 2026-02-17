@@ -3420,7 +3420,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               })}
 
               {/* SPONSORS (ADMIN ONLY) */}
-              {role === "admin" && (
+              {capabilities?.isAdmin && (
                 <TouchableOpacity
                   key="sponsor"
                   style={[

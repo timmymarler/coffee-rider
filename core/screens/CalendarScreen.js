@@ -618,8 +618,8 @@ export default function CalendarScreen() {
             {renderEventsList()}
           </View>
 
-          {/* Create Event Button (for place owners & pro users) */}
-          {profile?.role === "place-owner" || profile?.role === "pro" || profile?.role === "admin" ? (
+          {/* Create Event Button (for users with canCreateEvents capability) */}
+          {capabilities?.canCreateEvents ? (
             <TouchableOpacity
               style={styles.createEventButton}
               onPress={() => router.push({

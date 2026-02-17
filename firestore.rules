@@ -7,13 +7,34 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthed() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     function hasRole(role) {
-      return isAuthed() && request.auth.token.role == role;
+      return isAuthed() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
 
     function isProOrAdmin() {
       return request.auth != null &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','admin'];
+    }
+
+    function canCreateEvents() {
+      return isAuthed() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'pro', 'place-owner'];
+    }
+
+    function canCreateRoutes() {
+      return isAuthed() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'pro'];
+    }
+
+    function canShareRoutes() {
+      return isAuthed() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'pro'];
     }
     
     function isGroupMember(groupId) {
@@ -29,7 +50,7 @@ service cloud.firestore {
     /* VERSIONS */
     match /versions/{docId} {
       allow read: if true;
-      allow write: if hasRole('admin');
+      allow write: if isAdmin();
     }
 
     /* USERS */
@@ -42,7 +63,7 @@ service cloud.firestore {
     /* UPGRADES */
     match /upgradeRequests/{id} {
       allow create: if isAuthed();
-      allow read, update, delete: if hasRole('admin');
+      allow read, update, delete: if isAdmin();
     }
 
     /* PLACES */
@@ -54,7 +75,7 @@ service cloud.firestore {
       // Pro users can update amenities, suitability, and ratings on any place
       // Only admin and creators can update other fields
       allow update: if isAuthed() && (
-        hasRole('admin') ||
+        isAdmin() ||
         (resource.data.createdBy == request.auth.uid) ||
         // Linked user: check if this user has linkedPlaceId matching this place
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
@@ -71,7 +92,7 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
       allow update, delete: if isAuthed() && (
-        request.auth.uid == resource.data.createdBy || hasRole('admin')
+        request.auth.uid == resource.data.createdBy || isAdmin()
       );
     }
 
@@ -104,7 +125,7 @@ service cloud.firestore {
       // - Group participants may update the participants array while a group ride is active
       allow update: if isAuthed() && (
         // Admins can update
-        hasRole('admin') ||
+        isAdmin() ||
 
         // Group participant updates (only participants field)
         (resource.data.visibility == 'group' &&
@@ -229,16 +250,17 @@ service cloud.firestore {
     }
 
     /* EVENTS - USER CALENDAR EVENTS */
+    /* Permission: only users with canCreateEvents capability (admin/pro/place-owner) */
     match /events/{eventId} {
       allow create: if isAuthed() && 
         request.resource.data.userId == request.auth.uid &&
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'pro', 'place-owner']);
+        canCreateEvents();
+      
       allow read: if isAuthed() && (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        isAdmin() ||
         // Pro/place-owner can read their own events
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && resource.data.userId == request.auth.uid) ||
-        // Group events: allow if user is attempting to access a group event (membership validated client-side)
+        // Group events: allow if user is attempting to access a group event
         (resource.data.visibility == 'group' &&
           resource.data.groupIds is list &&
           resource.data.groupIds.size() > 0
@@ -246,14 +268,17 @@ service cloud.firestore {
         // Public events: allow all authed users
         (resource.data.visibility == 'public')
       );
+      
       allow update: if isAuthed() && (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        isAdmin() ||
         (resource.data.userId == request.auth.uid)
       );
+      
       allow delete: if isAuthed() && (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        isAdmin() ||
         (resource.data.userId == request.auth.uid)
       );
+      
       allow list: if isAuthed();
     }
     

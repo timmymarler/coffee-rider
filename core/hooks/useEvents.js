@@ -52,8 +52,10 @@ export function useEvents(filters = {}) {
         // Get user group IDs
         const userGroupIds = (userGroups || []).map(g => g.id);
 
-        // Admins can see all events
-        if (profile?.role === 'admin') {
+        // Users with admin capability can see all events
+        const { getCapabilities } = require('@core/roles/capabilities');
+        const caps = getCapabilities(profile?.role || 'guest');
+        if (caps?.isAdmin) {
           // No filtering for admin
         } else {
           // Filter client-side for visibility and ownership

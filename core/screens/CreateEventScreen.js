@@ -6,6 +6,7 @@ import { useAllUserGroups } from "@core/groups/hooks";
 import { useEventForm } from "@core/hooks/useEventForm";
 import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
+import { getCapabilities } from "@core/roles/capabilities";
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import theme from "@themes";
@@ -227,7 +228,9 @@ export default function CreateEventScreen() {
 
   // Load places for this place owner or show search for Pro users
   useEffect(() => {
-    if (profile?.role === "place-owner" && profile?.linkedPlaceId) {
+    const capabilities = getCapabilities(profile?.role || "guest");
+    // Place owners with canUpdatePlaces capability use their linked place
+    if (capabilities?.canUpdatePlaces && profile?.linkedPlaceId) {
       // For place owners, use their linked place from their profile
       const userPlace = {
         id: profile.linkedPlaceId,

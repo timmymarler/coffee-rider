@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
 import { useEvents } from "./useEvents";
+import { getCapabilities } from "@core/roles/capabilities";
 
 export function useEventForm(initialDate = null, userRole = null) {
   const { createEvent } = useEvents();
@@ -16,7 +17,9 @@ export function useEventForm(initialDate = null, userRole = null) {
   
   // Place owners have public events by default, others are private
   const getDefaultVisibility = () => {
-    return userRole === "place-owner" ? EVENT_VISIBILITY.PUBLIC : EVENT_VISIBILITY.PRIVATE;
+    const caps = getCapabilities(userRole);
+    // Place owners with canShareEvents capability default to public
+    return userRole === "place-owner" && caps?.canShareEvents ? EVENT_VISIBILITY.PUBLIC : EVENT_VISIBILITY.PRIVATE;
   };
   
   const startDate = getInitialDateTime();
