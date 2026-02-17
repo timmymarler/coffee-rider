@@ -2758,10 +2758,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (waypoints.length > 0) {
       if (destination) {
         // Explicit destination: all waypoints are intermediates
+        // Origin is first waypoint, rest are intermediates
+        origin = waypoints[0];
         routeWaypoints = waypoints.slice(1);
       } else if (waypoints.length > 1) {
-        // No explicit destination: first is origin, rest except last are intermediates, last is destination
-        routeWaypoints = waypoints.slice(1, -1);
+        // No explicit destination: route from current location through all waypoints
+        // Origin is current location, all waypoints are intermediates, last is destination
+        origin = userLocation;
+        routeWaypoints = waypoints;
         finalDestination = waypoints[waypoints.length - 1];
       } else {
         // Single waypoint with no destination: route from current location to that waypoint
