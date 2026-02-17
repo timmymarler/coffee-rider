@@ -633,7 +633,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const skipNextRegionChangeRef = useRef(false);
   const skipRegionChangeUntilRef = useRef(0);
   const skipNextRebuildRef = useRef(false); // Skip next effect rebuild (used by toggleFollowMe)
-  const skipStartPointRoutingRef = useRef(false); // Skip routing when just adding Start Point (first waypoint)
   const isAnimatingRef = useRef(false); // Track if we're doing a programmatic animation
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
@@ -932,7 +931,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // If this is the first waypoint, prepend current location as origin first
     if (waypoints.length === 0 && userLocation) {
-      console.log("[handleAddWaypoint] *** FIRST WAYPOINT CASE (Start Point) - skipping auto-routing ***");
+      console.log("[handleAddWaypoint] *** FIRST WAYPOINT CASE ***");
       const currentLocation = {
         lat: userLocation.latitude ?? userLocation.lat,
         lng: userLocation.longitude ?? userLocation.lng,
@@ -945,10 +944,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       console.log("[handleAddWaypoint] Calling addWaypoint with:", waypointToAdd);
       addWaypoint(waypointToAdd);
       console.log("[handleAddWaypoint] Called addWaypoint");
-      // Skip the automatic route building when just adding Start Point
-      // User can manually trigger routing by tapping Follow Me or adding another waypoint
-      skipStartPointRoutingRef.current = true;
-      console.log("[handleAddWaypoint] Set skipStartPointRoutingRef to prevent auto-routing");
     } else if (waypoints.length > 0) {
       // We have existing waypoints
       if (routeDestination) {
@@ -1448,7 +1443,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     });
     console.log("[toggleFollowMe] Destination:", routeDestination ? `${routeDestination.latitude.toFixed(5)}, ${routeDestination.longitude.toFixed(5)}` : "none");
     
-    // Check if we have waypoints or a destination
     if (waypoints.length > 0 || routeDestination) {
       // Clear the loaded route ID since we're converting to a recalculated Follow Me route
       setCurrentLoadedRouteId(null);
@@ -1457,27 +1451,24 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // buildRoute will use the correct Follow Me logic (current location as origin)
       setFollowUser(true);
       
-      // Only prepend current location if we have waypoints
-      if (waypoints.length > 0) {
-        // Check if current location is already the first waypoint
-        const distanceToFirst = waypoints[0] ? 
-          Math.sqrt(
-            Math.pow(userLocation.latitude - waypoints[0].lat, 2) +
-            Math.pow(userLocation.longitude - waypoints[0].lng, 2)
-          ) : Infinity;
-        
-        // Only prepend current location if it's not already the first waypoint
-        if (distanceToFirst > 0.0001) {
-          console.log("[toggleFollowMe] Prepending current location as waypoint");
-          addWaypointAtStart({
-            lat: userLocation.latitude,
-            lng: userLocation.longitude,
-            title: "Current location",
-            source: "followme",
-          });
-        } else {
-          console.log("[toggleFollowMe] Current location already at or near first waypoint");
-        }
+      // Check if current location is already the first waypoint
+      const distanceToFirst = waypoints[0] ? 
+        Math.sqrt(
+          Math.pow(userLocation.latitude - waypoints[0].lat, 2) +
+          Math.pow(userLocation.longitude - waypoints[0].lng, 2)
+        ) : Infinity;
+      
+      // Only prepend current location if it's not already the first waypoint
+      if (waypoints.length === 0 || distanceToFirst > 0.0001) {
+        console.log("[toggleFollowMe] Prepending current location as waypoint");
+        addWaypointAtStart({
+          lat: userLocation.latitude,
+          lng: userLocation.longitude,
+          title: "Current location",
+          source: "followme",
+        });
+      } else {
+        console.log("[toggleFollowMe] Current location already at or near first waypoint");
       }
       
       // MAP_EFFECT will trigger and buildRoute will handle the routing
@@ -2215,10 +2206,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       skipNextRebuildRef.current = false;
       return;
     }
-    if (skipStartPointRoutingRef.current) {
-      skipStartPointRoutingRef.current = false;
-      return;
-    }
     if (routeClearedByUser) {
       return;
     }
@@ -2241,17 +2228,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       if (routeCoords.length > 0) {
         setRouteCoords([]);
       }
-      return;
-    }
-
-    // Skip routing for single waypoint with no destination or Follow Me
-    // For manual routes (no saved route loaded): only route on explicit destination or Follow Me
-    // For saved routes: don't auto-route (only on Follow Me)
-    const isManualRoute = !currentLoadedRouteId;
-    const shouldSkipAutoRoute = isManualRoute && !routeDestination && !followUser;
-    
-    if (shouldSkipAutoRoute) {
-      console.log('[MAP_EFFECT] Manual route without destination/Follow Me - skipping auto-routing');
       return;
     }
 
@@ -2766,8 +2742,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       lastWaypoints.current = waypoints;
     }
 
-    // Determine origin: ALWAYS current location
-    let origin = userLocation;
+    // Determine origin: first waypoint or current location
+    const origin = waypoints.length > 0 ? waypoints[0] : userLocation;
     
     // Build the routing list and destination
     let routeWaypoints = [];
@@ -2777,17 +2753,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     if (waypoints.length > 0) {
       if (destination) {
-        // Explicit destination: ALL waypoints are intermediates
-        // Route: current location → waypoints → destination
-        routeWaypoints = waypoints;
+        // Explicit destination: all waypoints are intermediates
+        routeWaypoints = waypoints.slice(1);
       } else if (waypoints.length > 1) {
-        // No explicit destination: route from current location through all waypoints
-        // Last waypoint is the destination
-        routeWaypoints = waypoints;
+        // No explicit destination: first is origin, rest except last are intermediates, last is destination
+        routeWaypoints = waypoints.slice(1, -1);
         finalDestination = waypoints[waypoints.length - 1];
       } else {
-        // Single waypoint with no destination: route from current location to that waypoint
-        finalDestination = waypoints[0];
+        // Single waypoint with no destination: just a start point, don't route yet
+        setRouteCoords([]);
+        return;
       }
     }
     
