@@ -904,7 +904,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const handleAddWaypoint = () => {
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
-    console.log("[handleAddWaypoint] Adding waypoint");
+    console.log("[handleAddWaypoint] Adding waypoint, current waypoints:", waypoints.length);
+    
+    if (!pendingMapPoint) {
+      console.error("[handleAddWaypoint] No pendingMapPoint set!");
+      closeAddPointMenu();
+      return;
+    }
     
     const waypointToAdd = {
       lat: pendingMapPoint.latitude,
@@ -913,7 +919,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       source: "manual",
     };
     
-    // If this is the first waypoint, prepend current location as origin
+    console.log("[handleAddWaypoint] Waypoint to add:", waypointToAdd);
+    
+    // If this is the first waypoint, prepend current location as origin first
     if (waypoints.length === 0 && userLocation) {
       const currentLocation = {
         lat: userLocation.latitude ?? userLocation.lat,
@@ -921,16 +929,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         title: "Current location",
         source: "current",
       };
+      console.log("[handleAddWaypoint] First waypoint - prepending current location then adding waypoint");
+      // Add current location first, then the waypoint
       addWaypointAtStart(currentLocation);
-      console.log("[handleAddWaypoint] Prepended current location as first waypoint");
-      // Now add the waypoint as second item (before anything that might be a destination)
+      // The hook addWaypoint should add to the end
       addWaypoint(waypointToAdd);
     } else if (waypoints.length > 0) {
       // Insert waypoint before the last item (as penultimate)
+      console.log("[handleAddWaypoint] Subsequent waypoint - inserting at penultimate position", waypoints.length - 1);
       insertWaypoint(waypointToAdd, waypoints.length - 1);
-      console.log("[handleAddWaypoint] Inserted waypoint as penultimate at index", waypoints.length - 1);
     } else {
       // Shouldn't happen, but fallback
+      console.log("[handleAddWaypoint] Fallback: no current location, adding waypoint directly");
       addWaypoint(waypointToAdd);
     }
     
@@ -940,8 +950,24 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const handleSetStart = () => {
     setSelectedPlaceId(null);
     console.log("[handleSetStart] Adding start point - clearing waypoints and adding as first");
+    
+    if (!pendingMapPoint) {
+      console.error("[handleSetStart] No pendingMapPoint set!");
+      closeAddPointMenu();
+      return;
+    }
+    
     clearWaypoints();
-    addFromMapPress(pendingMapPoint);
+    
+    const startPoint = {
+      lat: pendingMapPoint.latitude,
+      lng: pendingMapPoint.longitude,
+      title: pendingMapPoint.geocodeResult || "Start point",
+      source: "manual",
+    };
+    
+    console.log("[handleSetStart] Adding start point:", startPoint);
+    addWaypoint(startPoint);
     closeAddPointMenu();
   };
 
