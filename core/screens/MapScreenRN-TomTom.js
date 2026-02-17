@@ -2375,12 +2375,42 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     routeType,
     requestId,
     skipFitToView = false, // Don't auto-center when in Follow Me mode
+    followMeMode = false,  // Is this a Follow Me route?
   } = {}) {
-    console.log("[mapRoute] Starting with requestId:", requestId, "waypoints:", waypointsList.length);
+    console.log("[mapRoute] Starting with requestId:", requestId, "waypoints:", waypointsList?.length || 0, "followMe:", followMeMode);
     
     if (!origin) {
       console.log("[mapRoute] No origin provided");
       return false;
+    }
+
+    // Normalize origin
+    const startCoord = normalizeCoord(origin);
+    if (!startCoord) {
+      console.error('[mapRoute] Failed to normalize origin:', origin);
+      return false;
+    }
+
+    // For Follow Me: check if first waypoint ≈ current location
+    // If not, prepend current location to the waypoints
+    let finalWaypoints = waypointsList || [];
+    if (followMeMode && finalWaypoints.length > 0 && userLocation) {
+      const firstWaypoint = normalizeCoord(finalWaypoints[0]);
+      const currentLoc = normalizeCoord(userLocation);
+      
+      // Check if first waypoint is approximately current location (within ~5 meters)
+      const distance = Math.sqrt(
+        Math.pow(firstWaypoint.latitude - currentLoc.latitude, 2) + 
+        Math.pow(firstWaypoint.longitude - currentLoc.longitude, 2)
+      ) * 111000; // rough km to meters conversion
+      
+      console.log("[mapRoute] Follow Me check: first waypoint distance from current location:", distance.toFixed(1), 'meters');
+      
+      if (distance > 5) {
+        // First waypoint is NOT current location, prepend current location
+        console.log("[mapRoute] First waypoint is different from current location, prepending current location");
+        finalWaypoints = [currentLoc, ...finalWaypoints];
+      }
     }
 
     // Determine final destination
@@ -2392,8 +2422,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.error('[mapRoute] Failed to normalize destination coordinates:', destination);
         return false;
       }
-    } else if (waypointsList.length > 0) {
-      finalDestination = normalizeCoord(waypointsList[waypointsList.length - 1]);
+    } else if (finalWaypoints.length > 0) {
+      finalDestination = normalizeCoord(finalWaypoints[finalWaypoints.length - 1]);
       if (!finalDestination) {
         console.error('[mapRoute] Failed to normalize last waypoint coordinates');
         return false;
@@ -2408,6 +2438,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Determine intermediates
     let intermediates = [];
     if (destination) {
+      intermediates = finalWaypoints;
       // Only user-added waypoints go in intermediates; destination will be final
       intermediates = waypointsList;
     } else if (waypointsList.length > 0) {
@@ -2607,70 +2638,42 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     const destination = destinationOverride || routeDestination || null;
 
-    // Allow routing if:
-    // - Explicit destination, OR
-    // - 2+ waypoints, OR
-    // - 1 waypoint that's not an explicit start point (route from userLocation to that point)
-    const firstIsStartPoint = waypoints.length > 0 && waypoints[0]?.isStartPoint;
-    const canRoute = destination || waypoints.length > 1 || (waypoints.length === 1 && !firstIsStartPoint);
+    // Simple routing logic: need either explicit destination or 2+ waypoints
+    const canRoute = destination || waypoints.length > 1;
     
-    console.log("[buildRoute] firstIsStartPoint:", firstIsStartPoint, "waypoints.length:", waypoints.length, "destination:", !!destination, "waypoints[0]:", waypoints[0]);
+    console.log("[buildRoute] waypoints.length:", waypoints.length, "destination:", !!destination);
     
     if (!canRoute) {
-      console.log("[buildRoute] ❌ RETURNING EARLY - Blocked - Need destination or waypoints to route. waypoints:", waypoints.length, "firstIsStartPoint:", firstIsStartPoint);
-      console.log("[buildRoute] ❌ Route will NOT be drawn for single start point");
+      console.log("[buildRoute] ❌ RETURNING EARLY - Need destination or 2+ waypoints to route");
       return;
     }
 
     // Track what we're using for comparison
     if (userLocation) {
-      const startCoord = normalizeCoord(waypoints.length > 0 ? waypoints[0] : userLocation);
-      lastRouteBuildLocationRef.current = startCoord;
+      lastRouteBuildLocationRef.current = normalizeCoord(userLocation);
       lastRouteTypeRef.current = userRouteType;
       lastWaypoints.current = waypoints;
     }
 
-    // Call the core mapRoute function
-    // If first waypoint is NOT explicitly a start point, origin is userLocation
-    // Otherwise, waypoints[0] is the origin
-    // EXCEPT: When Follow Me is active, ALWAYS use userLocation as origin
-    let origin;
-    if (followUser) {
-      // Follow Me: always route from current location
-      origin = userLocation;
-      console.log("[buildRoute] Follow Me active - using userLocation as origin");
-    } else {
-      // Normal routing: use explicit start point if set, otherwise user location
-      origin = firstIsStartPoint ? waypoints[0] : userLocation;
-    }
+    // Determine origin: first waypoint or current location
+    const origin = waypoints.length > 0 ? waypoints[0] : userLocation;
     
-    // Build the waypoints array for routing
+    // Build the routing list and destination
     let routeWaypoints = [];
     let finalDestination = destination;
     
-    console.log("[buildRoute] 🚀 About to call mapRoute with firstIsStartPoint:", firstIsStartPoint, "followUser:", followUser);
+    console.log("[buildRoute] 🚀 About to call mapRoute");
     
-    if (followUser) {
-      // Follow Me mode: ALWAYS route from current location through all waypoints
-      // Ignore the firstIsStartPoint flag - treat all waypoints as intermediates
-      routeWaypoints = waypoints;
-      finalDestination = destination || (waypoints.length > 0 ? waypoints[waypoints.length - 1] : null);
-      console.log("[buildRoute] Follow Me active: routing from current location through", waypoints.length, 'waypoints');
-    } else if (firstIsStartPoint && waypoints.length >= 1) {
-      // Start point is explicit: waypoints[0] is origin, rest are intermediates or destination
-      routeWaypoints = waypoints.length > 2 ? waypoints.slice(1, -1) : waypoints.length === 2 ? [] : [];
+    if (waypoints.length > 0) {
+      // We have waypoints: route from first waypoint through the rest
+      routeWaypoints = waypoints.slice(1);
       finalDestination = destination || (waypoints.length > 1 ? waypoints[waypoints.length - 1] : null);
-      console.log("[buildRoute] Case: firstIsStartPoint=true → route from waypoints[0] through intermediates to destination");
-    } else if (!firstIsStartPoint && waypoints.length > 1) {
-      // Regular waypoints from userLocation: all waypoints are intermediates or destination
-      routeWaypoints = waypoints.length > 2 ? waypoints.slice(0, -1) : [];
-      finalDestination = destination || waypoints[waypoints.length - 1];
-      console.log("[buildRoute] Case: firstIsStartPoint=false, 2+ waypoints → route from userLocation");
-    } else if (!firstIsStartPoint && waypoints.length === 1 && !destination) {
-      // Single waypoint without explicit start: just userLocation → waypoint[0]
-      finalDestination = waypoints[0];
-      console.log("[buildRoute] Case: firstIsStartPoint=false, 1 waypoint, no destination → userLocation→waypoints[0]");
+      console.log("[buildRoute] Routing from waypoints[0] through", routeWaypoints.length, 'more waypoints');
     }
+    
+    // For Follow Me: check if first waypoint ≈ current location
+    // If not, we'll prepend current location in mapRoute
+    const skipFitToView = followUser;
     
     await mapRoute({
       origin,
@@ -2679,9 +2682,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       travelMode: userTravelMode,
       routeType: userRouteType,
       requestId: finalRequestId,
-      skipFitToView: false,
+      skipFitToView,
+      followMeMode: followUser,
     });
-    console.log("[buildRoute] ✅ mapRoute called successfully with origin, waypoints, and destination");
+    console.log("[buildRoute] ✅ mapRoute called successfully");
   }
 
   async function loadSavedRouteById(routeId) {
@@ -2742,7 +2746,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
       console.log("[loadSavedRoute] Adding", waypointsToAdd.length, "waypoints from saved route");
       waypointsToAdd.forEach((wp, idx) => {
-        console.log("[loadSavedRoute] Adding waypoint", idx, "without isStartPoint flag");
+        console.log("[loadSavedRoute] Adding waypoint", idx);
         addFromPlace(wp);
       });
     }
@@ -2754,10 +2758,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         lng: actualOrigin.lng ?? actualOrigin.longitude,
         title: "Route start",
         source: "saved",
-        isStartPoint: true,
       };
       
-      console.log("[loadSavedRoute] Adding origin as first waypoint with isStartPoint: true");
+      console.log("[loadSavedRoute] Adding origin as first waypoint");
       // Add as first waypoint using the context function
       addWaypointAtStart(originWaypoint);
     }
