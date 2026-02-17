@@ -2747,7 +2747,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Determine origin: first waypoint or current location
-    const origin = waypoints.length > 0 ? waypoints[0] : userLocation;
+    let origin = waypoints.length > 0 ? waypoints[0] : userLocation;
     
     // Build the routing list and destination
     let routeWaypoints = [];
@@ -2765,6 +2765,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         finalDestination = waypoints[waypoints.length - 1];
       } else {
         // Single waypoint with no destination: route from current location to that waypoint
+        origin = userLocation;
         finalDestination = waypoints[0];
       }
     }
