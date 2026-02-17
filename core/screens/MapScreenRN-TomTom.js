@@ -1449,13 +1449,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
       skipRegionChangeUntilRef.current = Date.now() + 2000;
       
-      // Clear the loaded route ID since we're converting to a recalculated Follow Me route
-      setCurrentLoadedRouteId(null);
-      
-      // Set followUser=true FIRST so that when state updates trigger MAP_EFFECT,
-      // buildRoute will use the correct Follow Me logic (current location as origin)
+      // Set followUser=true FIRST before any state changes that might trigger MAP_EFFECT
+      // This ensures buildRoute sees followUser=true when dependencies change
       setFollowUser(true);
       console.log("[toggleFollowMe] Set followUser to true");
+      
+      // Now clear the loaded route ID since we're converting to a recalculated Follow Me route
+      // MAP_EFFECT will trigger, but followUser is already true now
+      setCurrentLoadedRouteId(null);
       
       // Check if current location is already the first waypoint
       const distanceToFirst = waypoints[0] ? 
