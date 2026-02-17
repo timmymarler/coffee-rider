@@ -902,15 +902,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   };
 
   const handleAddWaypoint = () => {
+    console.log("[handleAddWaypoint] *** HANDLER CALLED ***");
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
-    console.log("[handleAddWaypoint] Adding waypoint, current waypoints:", waypoints.length);
     
     if (!pendingMapPoint) {
-      console.error("[handleAddWaypoint] No pendingMapPoint set!");
+      console.error("[handleAddWaypoint] *** NO pendingMapPoint set! ***");
       closeAddPointMenu();
       return;
     }
+    
+    console.log("[handleAddWaypoint] Starting, current waypoints:", waypoints.length, "userLocation:", !!userLocation);
     
     const waypointToAdd = {
       lat: pendingMapPoint.latitude,
@@ -923,41 +925,49 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // If this is the first waypoint, prepend current location as origin first
     if (waypoints.length === 0 && userLocation) {
+      console.log("[handleAddWaypoint] *** FIRST WAYPOINT CASE ***");
       const currentLocation = {
         lat: userLocation.latitude ?? userLocation.lat,
         lng: userLocation.longitude ?? userLocation.lng,
         title: "Current location",
         source: "current",
       };
-      console.log("[handleAddWaypoint] First waypoint - prepending current location then adding waypoint");
-      // Add current location first, then the waypoint
+      console.log("[handleAddWaypoint] Calling addWaypointAtStart with:", currentLocation);
       addWaypointAtStart(currentLocation);
-      // The hook addWaypoint should add to the end
+      console.log("[handleAddWaypoint] Called addWaypointAtStart");
+      console.log("[handleAddWaypoint] Calling addWaypoint with:", waypointToAdd);
       addWaypoint(waypointToAdd);
+      console.log("[handleAddWaypoint] Called addWaypoint");
     } else if (waypoints.length > 0) {
-      // Insert waypoint before the last item (as penultimate)
-      console.log("[handleAddWaypoint] Subsequent waypoint - inserting at penultimate position", waypoints.length - 1);
+      console.log("[handleAddWaypoint] *** SUBSEQUENT WAYPOINT CASE ***");
+      console.log("[handleAddWaypoint] Calling insertWaypoint at index", waypoints.length - 1);
       insertWaypoint(waypointToAdd, waypoints.length - 1);
+      console.log("[handleAddWaypoint] Called insertWaypoint");
     } else {
-      // Shouldn't happen, but fallback
-      console.log("[handleAddWaypoint] Fallback: no current location, adding waypoint directly");
+      console.log("[handleAddWaypoint] *** FALLBACK CASE ***");
+      console.log("[handleAddWaypoint] Calling addWaypoint (fallback)");
       addWaypoint(waypointToAdd);
+      console.log("[handleAddWaypoint] Called addWaypoint (fallback)");
     }
     
+    console.log("[handleAddWaypoint] Calling closeAddPointMenu");
     closeAddPointMenu();
+    console.log("[handleAddWaypoint] *** HANDLER COMPLETE ***");
   };
 
   const handleSetStart = () => {
+    console.log("[handleSetStart] *** HANDLER CALLED ***");
     setSelectedPlaceId(null);
-    console.log("[handleSetStart] Adding start point - clearing waypoints and adding as first");
     
     if (!pendingMapPoint) {
-      console.error("[handleSetStart] No pendingMapPoint set!");
+      console.error("[handleSetStart] *** NO pendingMapPoint set! ***");
       closeAddPointMenu();
       return;
     }
     
+    console.log("[handleSetStart] Starting, clearing waypoints");
     clearWaypoints();
+    console.log("[handleSetStart] Waypoints cleared");
     
     const startPoint = {
       lat: pendingMapPoint.latitude,
@@ -968,7 +978,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     console.log("[handleSetStart] Adding start point:", startPoint);
     addWaypoint(startPoint);
+    console.log("[handleSetStart] Start point added");
     closeAddPointMenu();
+    console.log("[handleSetStart] *** HANDLER COMPLETE ***");
   };
 
   const handleSetDestination = () => {
