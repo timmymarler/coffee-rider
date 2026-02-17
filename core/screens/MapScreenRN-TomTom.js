@@ -2134,9 +2134,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (currentLoadedRouteId && !followUser) {
       return;
     }
-    if (followUser) {
-      return;
-    }
+    
     if (!userLocation) {
       return;
     }
@@ -2161,6 +2159,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         wp.lat !== lastWaypoints.current[idx].lat || 
         wp.lng !== lastWaypoints.current[idx].lng
       );
+    
+    // For Follow Me: always rebuild when waypoints change (don't check distance)
+    if (followUser && waypointsChanged) {
+      const requestId = ++routeRequestId.current;
+      buildRoute({ requestId }).catch(error => {
+        console.warn('[MAP_EFFECT] buildRoute error during Follow Me:', error);
+      });
+      return;
+    }
+    
+    // For normal mode: skip rebuild if user hasn't moved far enough
+    if (followUser) {
+      return; // Follow Me with no waypoint changes - skip rebuild
+    }
     
     if (waypoints.length === lastWaypoints.current.length) {
       waypoints.forEach((wp, idx) => {
