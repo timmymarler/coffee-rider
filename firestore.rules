@@ -230,12 +230,9 @@ service cloud.firestore {
 
     /* EVENTS - USER CALENDAR EVENTS */
     match /events/{eventId} {
-      allow create: if isAuthed() && (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && request.resource.data.userId == request.auth.uid)
-      );
+      allow create: if isAuthed() && request.resource.data.userId == request.auth.uid;
       allow read: if isAuthed() && (
-        hasRole('admin') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
         // Pro/place-owner can read their own events
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && resource.data.userId == request.auth.uid) ||
         // Group events: allow if user is attempting to access a group event (membership validated client-side)
@@ -248,11 +245,11 @@ service cloud.firestore {
       );
       allow update: if isAuthed() && (
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && (resource.data.userId == request.auth.uid || resource.data.createdBy == request.auth.uid))
+        (resource.data.userId == request.auth.uid)
       );
       allow delete: if isAuthed() && (
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['pro','place-owner'] && (resource.data.userId == request.auth.uid || resource.data.createdBy == request.auth.uid))
+        (resource.data.userId == request.auth.uid)
       );
       allow list: if isAuthed();
     }
