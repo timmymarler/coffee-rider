@@ -1443,7 +1443,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     });
     console.log("[toggleFollowMe] Destination:", routeDestination ? `${routeDestination.latitude.toFixed(5)}, ${routeDestination.longitude.toFixed(5)}` : "none");
     
-    if (waypoints.length > 0) {
+    // Check if we have waypoints or a destination
+    if (waypoints.length > 0 || routeDestination) {
       // Clear the loaded route ID since we're converting to a recalculated Follow Me route
       setCurrentLoadedRouteId(null);
       
@@ -1451,24 +1452,27 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // buildRoute will use the correct Follow Me logic (current location as origin)
       setFollowUser(true);
       
-      // Check if current location is already the first waypoint
-      const distanceToFirst = waypoints[0] ? 
-        Math.sqrt(
-          Math.pow(userLocation.latitude - waypoints[0].lat, 2) +
-          Math.pow(userLocation.longitude - waypoints[0].lng, 2)
-        ) : Infinity;
-      
-      // Only prepend current location if it's not already the first waypoint
-      if (distanceToFirst > 0.0001) {
-        console.log("[toggleFollowMe] Prepending current location as waypoint");
-        addWaypointAtStart({
-          lat: userLocation.latitude,
-          lng: userLocation.longitude,
-          title: "Current location",
-          source: "followme",
-        });
-      } else {
-        console.log("[toggleFollowMe] Current location already at or near first waypoint");
+      // Only prepend current location if we have waypoints
+      if (waypoints.length > 0) {
+        // Check if current location is already the first waypoint
+        const distanceToFirst = waypoints[0] ? 
+          Math.sqrt(
+            Math.pow(userLocation.latitude - waypoints[0].lat, 2) +
+            Math.pow(userLocation.longitude - waypoints[0].lng, 2)
+          ) : Infinity;
+        
+        // Only prepend current location if it's not already the first waypoint
+        if (distanceToFirst > 0.0001) {
+          console.log("[toggleFollowMe] Prepending current location as waypoint");
+          addWaypointAtStart({
+            lat: userLocation.latitude,
+            lng: userLocation.longitude,
+            title: "Current location",
+            source: "followme",
+          });
+        } else {
+          console.log("[toggleFollowMe] Current location already at or near first waypoint");
+        }
       }
       
       // MAP_EFFECT will trigger and buildRoute will handle the routing
