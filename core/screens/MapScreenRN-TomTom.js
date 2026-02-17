@@ -903,15 +903,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const handleAddWaypoint = () => {
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
-    console.log("[handleAddWaypoint] Adding waypoint with isStartPoint=false");
-    addFromMapPress({ ...pendingMapPoint, isStartPoint: false });
+    console.log("[handleAddWaypoint] Adding waypoint");
+    addFromMapPress(pendingMapPoint);
     closeAddPointMenu();
   };
 
   const handleSetStart = () => {
     setSelectedPlaceId(null);
-    console.log("[handleSetStart] Adding start point with isStartPoint=true");
-    addFromMapPress({ ...pendingMapPoint, isStartPoint: true });
+    console.log("[handleSetStart] Adding start point as first waypoint");
+    addFromMapPress(pendingMapPoint);
     closeAddPointMenu();
   };
 
@@ -3711,7 +3711,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   addFromMapPress({
                     latitude: pendingMarker.latitude,
                     longitude: pendingMarker.longitude,
-                    isStartPoint: true,
                   });
                 }
               }}
