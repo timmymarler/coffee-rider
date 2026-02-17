@@ -2448,13 +2448,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const normalizedIntermediates = intermediates
       .map(wp => normalizeCoord(wp))
       .filter(wp => wp !== null);
-    
-    // Validate origin
-    const startCoord = normalizeCoord(origin);
-    if (!startCoord) {
-      console.error('[mapRoute] Failed to normalize origin:', origin);
-      return false;
-    }
 
     console.log("[mapRoute] Building route with:");
     console.log("  - Origin:", startCoord.latitude.toFixed(5), startCoord.longitude.toFixed(5));
