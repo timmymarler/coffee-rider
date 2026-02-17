@@ -1449,6 +1449,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
       skipRegionChangeUntilRef.current = Date.now() + 2000;
       
+      console.log("[toggleFollowMe] About to set followUser=true");
+      
       // Set followUser=true FIRST before any state changes that might trigger MAP_EFFECT
       // This ensures buildRoute sees followUser=true when dependencies change
       setFollowUser(true);
@@ -1457,6 +1459,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Now clear the loaded route ID since we're converting to a recalculated Follow Me route
       // MAP_EFFECT will trigger, but followUser is already true now
       setCurrentLoadedRouteId(null);
+      console.log("[toggleFollowMe] Cleared currentLoadedRouteId");
       
       // Check if current location is already the first waypoint
       const distanceToFirst = waypoints[0] ? 
@@ -1478,18 +1481,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.log("[toggleFollowMe] Current location already at or near first waypoint");
       }
       
-      // MAP_EFFECT will trigger and buildRoute will handle the routing
-      // with followUser=true logic (current location → waypoints → destination)
+      console.log("[toggleFollowMe] About to recenter with FOLLOW_ZOOM:", FOLLOW_ZOOM);
       
-      // Recenter + zoom + tilt after short delay to ensure state updates are applied
-      setTimeout(async () => {
-        console.log("[toggleFollowMe] Now recentering with Follow Me zoom/tilt");
-        await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
-        
-        // Start 15-minute inactivity timer
-        // (routeSteps will be populated by buildRoute triggered via MAP_EFFECT)
-        resetFollowMeInactivityTimeout();
-      }, 100);
+      // Recenter + zoom + tilt immediately
+      skipNextFollowTickRef.current = true;
+      skipNextRegionChangeRef.current = true;
+      skipRegionChangeUntilRef.current = Date.now() + 2000;
+      recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
+      console.log("[toggleFollowMe] Called recenterOnUser with zoom and tilt");
+      
+      // Start 15-minute inactivity timer
+      resetFollowMeInactivityTimeout();
+      console.log("[toggleFollowMe] Follow Me fully activated");
     } else {
       console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length, "routeDestination:", !!routeDestination);
     }
