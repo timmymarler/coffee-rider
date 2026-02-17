@@ -2779,10 +2779,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         finalDestination = waypoints[waypoints.length - 1];
         console.log("[buildRoute] No explicit destination, routing through", routeWaypoints.length, 'intermediates to final waypoint');
       } else {
-        // Single waypoint: it's both origin and destination (user is starting from current location)
-        finalDestination = waypoints[0];
-        routeWaypoints = [];
-        console.log("[buildRoute] Single waypoint case: origin=waypoints[0], destination=waypoints[0]");
+        // Single waypoint with no destination: just a start point, don't route yet
+        console.log("[buildRoute] Single waypoint, no destination - not routing yet, just showing the marker");
+        setRouteCoords([]);
+        return;
       }
     }
     
