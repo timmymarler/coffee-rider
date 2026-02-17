@@ -2746,8 +2746,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       lastWaypoints.current = waypoints;
     }
 
-    // Determine origin: first waypoint or current location
-    let origin = waypoints.length > 0 ? waypoints[0] : userLocation;
+    // Determine origin: ALWAYS current location
+    let origin = userLocation;
     
     // Build the routing list and destination
     let routeWaypoints = [];
@@ -2757,19 +2757,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     if (waypoints.length > 0) {
       if (destination) {
-        // Explicit destination: all waypoints are intermediates
-        // Origin is first waypoint, rest are intermediates
-        origin = waypoints[0];
-        routeWaypoints = waypoints.slice(1);
+        // Explicit destination: ALL waypoints are intermediates
+        // Route: current location → waypoints → destination
+        routeWaypoints = waypoints;
       } else if (waypoints.length > 1) {
         // No explicit destination: route from current location through all waypoints
-        // Origin is current location, all waypoints are intermediates, last is destination
-        origin = userLocation;
+        // Last waypoint is the destination
         routeWaypoints = waypoints;
         finalDestination = waypoints[waypoints.length - 1];
       } else {
         // Single waypoint with no destination: route from current location to that waypoint
-        origin = userLocation;
         finalDestination = waypoints[0];
       }
     }
