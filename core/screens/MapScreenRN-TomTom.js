@@ -2244,6 +2244,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
+    // Skip routing if we just added a start point (2 waypoints, first is current location, no destination)
+    const isJustStartPoint = waypoints.length === 2 && 
+                             waypoints[0].source === "current" && 
+                             !routeDestination;
+    if (isJustStartPoint) {
+      console.log('[MAP_EFFECT] Detected start point only - skipping auto-routing');
+      return;
+    }
+
     // If route type changed, always rebuild (ignore distance threshold)
     const routeTypeChanged = userRouteType !== lastRouteTypeRef.current;
     
