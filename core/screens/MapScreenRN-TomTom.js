@@ -2760,9 +2760,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         routeWaypoints = waypoints.slice(1, -1);
         finalDestination = waypoints[waypoints.length - 1];
       } else {
-        // Single waypoint with no destination: just a start point, don't route yet
-        setRouteCoords([]);
-        return;
+        // Single waypoint with no destination: treat it as destination, route from current location to it
+        finalDestination = waypoints[0];
+        routeWaypoints = [];
       }
     }
     
