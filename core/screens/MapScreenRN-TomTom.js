@@ -2706,12 +2706,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Auto-fit view if not in Follow Me and not already fitted
+    // But skip if only a single point (prevents excessive zoom)
     if (!skipFitToView && !routeFittedRef.current && !followUser) {
-      routeFittedRef.current = true;
-      mapRef.current?.fitToCoordinates(finalRouteCoords, {
-        edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
-        animated: true,
-      });
+      if (finalRouteCoords.length > 1) {
+        console.log("[mapRoute] Fitting to route with", finalRouteCoords.length, 'coordinates');
+        routeFittedRef.current = true;
+        mapRef.current?.fitToCoordinates(finalRouteCoords, {
+          edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
+          animated: true,
+        });
+      } else {
+        console.log("[mapRoute] Single point route - not fitting to prevent excessive zoom");
+      }
     }
     
     setLastEncodedPolyline(result.polyline);
