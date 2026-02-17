@@ -2439,11 +2439,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     let intermediates = [];
     if (destination) {
       intermediates = finalWaypoints;
-      // Only user-added waypoints go in intermediates; destination will be final
-      intermediates = waypointsList;
-    } else if (waypointsList.length > 0) {
+    } else if (finalWaypoints.length > 0) {
       // No explicit destination, so all but the last waypoint are intermediates
-      intermediates = waypointsList.slice(0, -1);
+      intermediates = finalWaypoints.slice(0, -1);
     }
 
     // Normalize intermediates
