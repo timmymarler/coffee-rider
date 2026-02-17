@@ -49,6 +49,7 @@ export default function useWaypoints() {
 
   return {
     waypoints,
+    addWaypoint,
     addFromPlace,
     addFromMapPress,
     formatPoint,

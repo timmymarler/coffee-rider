@@ -639,14 +639,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const previousFollowUserRef = useRef({ isTraveling: false, polyline: [] }); // Track previous Follow Me state and stored polyline
   const {
     waypoints,
+    addWaypoint,
     addFromPlace,
     addFromMapPress,
     formatPoint,
     clearWaypoints,
   } = useWaypoints();
   
-  // Get direct access to context for addWaypointAtStart
-  const { addWaypointAtStart } = useContext(WaypointsContext);
+  // Get direct access to context for addWaypointAtStart and insertWaypoint
+  const { addWaypointAtStart, insertWaypoint } = useContext(WaypointsContext);
   
   const [routingActive, setRoutingActive] = useState(false);
   const [routeDestination, setRouteDestination] = useState(null);
@@ -904,13 +905,42 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
     console.log("[handleAddWaypoint] Adding waypoint");
-    addFromMapPress(pendingMapPoint);
+    
+    const waypointToAdd = {
+      lat: pendingMapPoint.latitude,
+      lng: pendingMapPoint.longitude,
+      title: pendingMapPoint.geocodeResult || "Dropped pin",
+      source: "manual",
+    };
+    
+    // If this is the first waypoint, prepend current location as origin
+    if (waypoints.length === 0 && userLocation) {
+      const currentLocation = {
+        lat: userLocation.latitude ?? userLocation.lat,
+        lng: userLocation.longitude ?? userLocation.lng,
+        title: "Current location",
+        source: "current",
+      };
+      addWaypointAtStart(currentLocation);
+      console.log("[handleAddWaypoint] Prepended current location as first waypoint");
+      // Now add the waypoint as second item (before anything that might be a destination)
+      addWaypoint(waypointToAdd);
+    } else if (waypoints.length > 0) {
+      // Insert waypoint before the last item (as penultimate)
+      insertWaypoint(waypointToAdd, waypoints.length - 1);
+      console.log("[handleAddWaypoint] Inserted waypoint as penultimate at index", waypoints.length - 1);
+    } else {
+      // Shouldn't happen, but fallback
+      addWaypoint(waypointToAdd);
+    }
+    
     closeAddPointMenu();
   };
 
   const handleSetStart = () => {
     setSelectedPlaceId(null);
-    console.log("[handleSetStart] Adding start point as first waypoint");
+    console.log("[handleSetStart] Adding start point - clearing waypoints and adding as first");
+    clearWaypoints();
     addFromMapPress(pendingMapPoint);
     closeAddPointMenu();
   };
@@ -2640,13 +2670,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     const destination = destinationOverride || routeDestination || null;
 
-    // Simple routing logic: need either explicit destination or 2+ waypoints
-    const canRoute = destination || waypoints.length > 1;
+    // Simple routing logic: need either explicit destination or 1+ waypoints
+    const canRoute = destination || waypoints.length > 0;
     
     console.log("[buildRoute] waypoints.length:", waypoints.length, "destination:", !!destination);
     
     if (!canRoute) {
-      console.log("[buildRoute] ❌ RETURNING EARLY - Need destination or 2+ waypoints to route");
+      console.log("[buildRoute] ❌ RETURNING EARLY - Need destination or waypoints to route");
       return;
     }
 
@@ -2667,10 +2697,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     console.log("[buildRoute] 🚀 About to call mapRoute");
     
     if (waypoints.length > 0) {
-      // We have waypoints: route from first waypoint through the rest
-      routeWaypoints = waypoints.slice(1);
-      finalDestination = destination || (waypoints.length > 1 ? waypoints[waypoints.length - 1] : null);
-      console.log("[buildRoute] Routing from waypoints[0] through", routeWaypoints.length, 'more waypoints');
+      if (destination) {
+        // Explicit destination: all waypoints are intermediates
+        routeWaypoints = waypoints.slice(1);
+        console.log("[buildRoute] With explicit destination, routing through", routeWaypoints.length, 'intermediates');
+      } else if (waypoints.length > 1) {
+        // No explicit destination: first is origin, rest except last are intermediates, last is destination
+        routeWaypoints = waypoints.slice(1, -1);
+        finalDestination = waypoints[waypoints.length - 1];
+        console.log("[buildRoute] No explicit destination, routing through", routeWaypoints.length, 'intermediates to final waypoint');
+      } else {
+        // Single waypoint: it's both origin and destination (user is starting from current location)
+        finalDestination = waypoints[0];
+        routeWaypoints = [];
+        console.log("[buildRoute] Single waypoint case: origin=waypoints[0], destination=waypoints[0]");
+      }
     }
     
     // For Follow Me: check if first waypoint ≈ current location
