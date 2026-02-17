@@ -8,40 +8,29 @@ export function WaypointsProvider({ children }) {
   const [enableFollowMeAfterLoad, setEnableFollowMeAfterLoad] = useState(false);
 
   function addWaypoint(waypoint) {
-    console.log("[WaypointsContext] addWaypoint called with:", waypoint);
-    setWaypoints(prev => {
-      const newWaypoints = [...prev, waypoint];
-      console.log("[WaypointsContext] addWaypoint completed. New count:", newWaypoints.length);
-      return newWaypoints;
-    });
+    setWaypoints(prev => [...prev, waypoint]);
   }
 
   function addWaypointAtStart(waypoint) {
-    console.log("[WaypointsContext] addWaypointAtStart called with:", waypoint);
     setWaypoints(prev => {
       const newWaypoints = [waypoint, ...prev];
-      console.log("[WaypointsContext] Waypoints updated. New count:", newWaypoints.length);
       return newWaypoints;
     });
   }
 
   function insertWaypoint(waypoint, index) {
-    console.log("[WaypointsContext] insertWaypoint called at index:", index);
     setWaypoints(prev => {
       const newWaypoints = [...prev];
       newWaypoints.splice(index, 0, waypoint);
-      console.log("[WaypointsContext] Waypoint inserted at index", index, ". New count:", newWaypoints.length);
       return newWaypoints;
     });
   }
 
   function removeWaypoint(index) {
-    console.log("[WaypointsContext] removeWaypoint called at index:", index);
     setWaypoints(prev => prev.filter((_, i) => i !== index));
   }
 
   function reorderWaypoints(fromIndex, toIndex) {
-    console.log("[WaypointsContext] reorderWaypoints called from", fromIndex, "to", toIndex);
     setWaypoints(prev => {
       const copy = [...prev];
       const [moved] = copy.splice(fromIndex, 1);
@@ -51,7 +40,6 @@ export function WaypointsProvider({ children }) {
   }
 
   function clearWaypoints() {
-    console.log("[WaypointsContext] clearWaypoints called");
     setWaypoints([]);
   }
 

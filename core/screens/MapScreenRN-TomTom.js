@@ -972,24 +972,19 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   };
 
   const handleSetStart = () => {
-    console.log("[handleSetStart] *** HANDLER CALLED ***");
     setSelectedPlaceId(null);
     
     // If we're modifying a saved route, unlink it so it becomes a new route
     if (currentLoadedRouteId) {
-      console.log("[handleSetStart] Clearing currentLoadedRouteId - saved route is being modified");
       setCurrentLoadedRouteId(null);
     }
     
     if (!pendingMapPoint) {
-      console.error("[handleSetStart] *** NO pendingMapPoint set! ***");
       closeAddPointMenu();
       return;
     }
     
-    console.log("[handleSetStart] Starting, clearing waypoints");
     clearWaypoints();
-    console.log("[handleSetStart] Waypoints cleared");
     
     const startPoint = {
       lat: pendingMapPoint.latitude,
@@ -998,11 +993,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       source: "manual",
     };
     
-    console.log("[handleSetStart] Adding start point:", startPoint);
     addWaypoint(startPoint);
-    console.log("[handleSetStart] Start point added");
     closeAddPointMenu();
-    console.log("[handleSetStart] *** HANDLER COMPLETE ***");
   };
 
   const handleSetDestination = () => {
@@ -1074,12 +1066,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     const destination = getFinalDestination();
-    
-    console.log("[handleSaveRoute] Saving route:");
-    console.log("  - Current waypoints count:", waypoints.length);
-    console.log("  - Waypoints:", waypoints.map(w => `${w.lat ?? w.latitude}, ${w.lng ?? w.longitude} (${w.title})`));
-    console.log("  - Destination:", destination);
-    console.log("  - User location:", userLocation.latitude, userLocation.longitude);
 
     // If no name provided and a route is currently loaded, update it
     // If name provided or no loaded route, create a new one
@@ -2709,14 +2695,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // But skip if only a single point (prevents excessive zoom)
     if (!skipFitToView && !routeFittedRef.current && !followUser) {
       if (finalRouteCoords.length > 1) {
-        console.log("[mapRoute] Fitting to route with", finalRouteCoords.length, 'coordinates');
         routeFittedRef.current = true;
         mapRef.current?.fitToCoordinates(finalRouteCoords, {
           edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
           animated: true,
         });
-      } else {
-        console.log("[mapRoute] Single point route - not fitting to prevent excessive zoom");
       }
     }
     
@@ -2772,15 +2755,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       if (destination) {
         // Explicit destination: all waypoints are intermediates
         routeWaypoints = waypoints.slice(1);
-        console.log("[buildRoute] With explicit destination, routing through", routeWaypoints.length, 'intermediates');
       } else if (waypoints.length > 1) {
         // No explicit destination: first is origin, rest except last are intermediates, last is destination
         routeWaypoints = waypoints.slice(1, -1);
         finalDestination = waypoints[waypoints.length - 1];
-        console.log("[buildRoute] No explicit destination, routing through", routeWaypoints.length, 'intermediates to final waypoint');
       } else {
         // Single waypoint with no destination: just a start point, don't route yet
-        console.log("[buildRoute] Single waypoint, no destination - not routing yet, just showing the marker");
         setRouteCoords([]);
         return;
       }
@@ -3061,9 +3041,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (followUser) return; // Don't interrupt Follow Me mode
 
     // If only 1 coordinate, don't fit to it (prevents excessive zoom)
-    // Just clear the pending fit and let the map stay where it is
     if (pendingFitRef.current.length === 1) {
-      console.log("[attemptRouteFit] Single waypoint - not fitting to prevent excessive zoom");
       pendingFitRef.current = null;
       return;
     }
