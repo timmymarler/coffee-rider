@@ -11,15 +11,15 @@ import theme from "@themes";
 import { useRouter } from "expo-router";
 import { useCallback, useContext, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  PanResponder,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Modal,
+    PanResponder,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -67,6 +67,7 @@ export default function CalendarScreen() {
   const { user, profile } = useContext(AuthContext);
   const insets = useSafeAreaInsets();
   const { colors, spacing } = theme;
+  const capabilities = getCapabilities(profile?.role || "guest");
 
   // Only month view needed
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -146,7 +147,6 @@ export default function CalendarScreen() {
     if (!selectedEvent) return;
     try {
       setSharing(true);
-      const capabilities = getCapabilities(profile?.role || "guest");
       if (selectedVisibility === EVENT_VISIBILITY.GROUP) {
         if (!selectedGroupIds.length) {
           Alert.alert("Select at least one group");
