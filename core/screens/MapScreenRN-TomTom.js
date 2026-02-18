@@ -1950,6 +1950,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setManualStartPoint(null); 
     routeFittedRef.current = false;
     setCurrentLoadedRouteId(null);
+    
+    // Reset tracking refs so next route build is detected as a change
+    lastWaypoints.current = [];
+    lastManualStartPointRef.current = null;
+    lastRouteBuildLocationRef.current = null;
+    lastRouteTypeRef.current = null;
   }
 
   function clearSearch() {
