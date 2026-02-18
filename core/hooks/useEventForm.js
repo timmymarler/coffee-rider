@@ -1,8 +1,8 @@
 // core/hooks/useEventForm.js
-import { useState } from "react";
 import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
-import { useEvents } from "./useEvents";
 import { getCapabilities } from "@core/roles/capabilities";
+import { useState } from "react";
+import { useEvents } from "./useEvents";
 
 export function useEventForm(initialDate = null, userRole = null) {
   const { createEvent } = useEvents();

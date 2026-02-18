@@ -663,7 +663,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Active ride & location sharing
   const { activeRide, endRide } = useActiveRide(user);
   const { riderLocations } = useActiveRideLocations(activeRide, user?.uid);
-  const lastActiveRideRef = useRef(null); // Track if activeRide changed to force rebuild
   
   // Navigation mode is active when Follow Me is enabled OR user is on an active ride
   const isNavigationMode = followUser || !!activeRide;
@@ -674,9 +673,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     activeRideRef.current = activeRide;
     endRideRef.current = endRide;
     
-    // When an active ride starts, the main routing effect will automatically
-    // rebuild the route because routeDestination and waypoints are dependencies
-  }, [activeRide, endRide, setActiveRide]);
+    // When an active ride starts, rebuild the route with current location as origin
+    if (activeRide && routeDestination && userLocation && !followUser) {
+      const requestId = ++routeRequestId.current;
+      mapRoute({
+        origin: userLocation,
+        waypoints: waypoints,
+        destination: routeDestination,
+        travelMode: userTravelMode,
+        routeType: userRouteType,
+        requestId,
+        skipFitToView: false, // Fit to view for active rides so user sees full route
+      }).catch(error => {
+        console.warn('[MapScreenRN] Error rebuilding route for active ride:', error);
+      });
+    }
+  }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType]);
   
   const canSaveRoute = 
     capabilities.canSaveRoutes &&
@@ -1297,11 +1309,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       } else {
         cameraConfig.zoom = zoom;
       }
-    }
-    
-    if (!mapRef.current) {
-      console.warn('[recenterOnUser] mapRef not available');
-      return;
     }
     
     mapRef.current.animateCamera(cameraConfig, { duration: 350 });
@@ -1934,12 +1941,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setManualStartPoint(null); 
     routeFittedRef.current = false;
     setCurrentLoadedRouteId(null);
-    
-    // Reset tracking refs so next route build is detected as a change
-    lastWaypoints.current = [];
-    lastManualStartPointRef.current = null;
-    lastRouteBuildLocationRef.current = null;
-    lastRouteTypeRef.current = null;
   }
 
   function clearSearch() {
@@ -2176,14 +2177,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // If manual start point was cleared (Follow Me transition), always rebuild
     const manualStartPointCleared = lastManualStartPointRef.current !== null && manualStartPoint === null;
     
-    // If activeRide changed (user joined or left a ride), always rebuild
-    const activeRideChanged = lastActiveRideRef.current !== activeRide;
-    lastActiveRideRef.current = activeRide;
-    
     // Check if user has moved far enough to warrant a route rebuild
     // This prevents excessive API calls from GPS noise (small accuracy variations)
-    // But we skip this check if the route type, waypoints, manual start point, or activeRide have changed
-    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && !activeRideChanged && lastRouteBuildLocationRef.current) {
+    // But we skip this check if the route type, waypoints, or manual start point have changed
+    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && lastRouteBuildLocationRef.current) {
       const distanceMoved = distanceBetween(lastRouteBuildLocationRef.current, userLocation);
       if (distanceMoved < MIN_ROUTE_REBUILD_DISTANCE_METERS) {
         return; // Skip rebuild if movement is less than threshold
@@ -2195,7 +2192,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       console.warn('[MAP_EFFECT] buildRoute error:', error);
       // Error already handled as toast in buildRoute, no need to display again
     });
-  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, manualStartPoint, activeRide]);
+  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, manualStartPoint]);
 
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
@@ -2603,11 +2600,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // During Follow Me, ALWAYS use current location as origin, never the manual start point
-    // Also for active rides, ALWAYS use current location since user is joining mid-ride
-    const origin = (followUser || activeRide) ? userLocation : (manualStartPoint || userLocation);
-
-    // For active rides, always fetch fresh to ensure polyline from current location is included
-    const skipFit = activeRide ? true : false;
+    const origin = followUser ? userLocation : (manualStartPoint || userLocation);
 
     // Call the core mapRoute function
     await mapRoute({
@@ -2617,7 +2610,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       travelMode: userTravelMode,
       routeType: userRouteType,
       requestId: finalRequestId,
-      skipFitToView: skipFit,
+      skipFitToView: false,
     });
   }
 

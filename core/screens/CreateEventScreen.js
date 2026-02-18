@@ -6,31 +6,31 @@ import { useAllUserGroups } from "@core/groups/hooks";
 import { useEventForm } from "@core/hooks/useEventForm";
 import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
+import { useSavedRoutes } from "@core/map/routes/useSavedRoutes";
+import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
 import { getCapabilities } from "@core/roles/capabilities";
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import theme from "@themes";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
-import { useSavedRoutes } from "@core/map/routes/useSavedRoutes";
-import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
-import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function CreateEventScreen() {
       const navigation = useNavigation();
