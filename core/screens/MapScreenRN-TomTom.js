@@ -680,8 +680,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Check if ride starts at a different location than current location
       const firstWaypoint = waypoints && waypoints.length > 0 ? waypoints[0] : null;
       const rideStartsAtDifferentLocation = firstWaypoint && userLocation &&
-        Math.abs(firstWaypoint.latitude - userLocation.latitude) > 0.0001 ||
-        Math.abs(firstWaypoint.longitude - userLocation.longitude) > 0.0001;
+        (Math.abs(firstWaypoint.latitude - userLocation.latitude) > 0.0001 ||
+         Math.abs(firstWaypoint.longitude - userLocation.longitude) > 0.0001);
       
       // If ride starts elsewhere, use skipFitToView: true to fetch fresh from TomTom
       // This ensures proper polyline connection from current location to first waypoint
@@ -1320,6 +1320,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       } else {
         cameraConfig.zoom = zoom;
       }
+    }
+    
+    if (!mapRef.current) {
+      console.warn('[recenterOnUser] mapRef not available');
+      return;
     }
     
     mapRef.current.animateCamera(cameraConfig, { duration: 350 });
