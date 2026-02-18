@@ -677,16 +677,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (activeRide && routeDestination && userLocation && !followUser) {
       const requestId = ++routeRequestId.current;
       
-      // Check if ride starts at a different location than current location
-      const firstWaypoint = waypoints && waypoints.length > 0 ? waypoints[0] : null;
-      const rideStartsAtDifferentLocation = firstWaypoint && userLocation &&
-        (Math.abs(firstWaypoint.latitude - userLocation.latitude) > 0.0001 ||
-         Math.abs(firstWaypoint.longitude - userLocation.longitude) > 0.0001);
-      
-      // If ride starts elsewhere, use skipFitToView: true to fetch fresh from TomTom
-      // This ensures proper polyline connection from current location to first waypoint
-      const skipFit = rideStartsAtDifferentLocation ? true : false;
-      
+      // For active rides, always fetch fresh from TomTom (don't use cache)
+      // Since we're routing from current location, any cached route with a different
+      // origin won't have the proper polyline connection
       mapRoute({
         origin: userLocation,
         waypoints: waypoints,
@@ -694,7 +687,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         travelMode: userTravelMode,
         routeType: userRouteType,
         requestId,
-        skipFitToView: skipFit,
+        skipFitToView: true, // Always bypass cache for active rides
       }).catch(error => {
         console.warn('[MapScreenRN] Error rebuilding route for active ride:', error);
       });
