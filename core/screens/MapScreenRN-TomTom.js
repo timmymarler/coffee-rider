@@ -663,6 +663,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Active ride & location sharing
   const { activeRide, endRide } = useActiveRide(user);
   const { riderLocations } = useActiveRideLocations(activeRide, user?.uid);
+  const lastActiveRideRef = useRef(null); // Track if activeRide changed to force rebuild
   
   // Navigation mode is active when Follow Me is enabled OR user is on an active ride
   const isNavigationMode = followUser || !!activeRide;
@@ -2175,10 +2176,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // If manual start point was cleared (Follow Me transition), always rebuild
     const manualStartPointCleared = lastManualStartPointRef.current !== null && manualStartPoint === null;
     
+    // If activeRide changed (user joined or left a ride), always rebuild
+    const activeRideChanged = lastActiveRideRef.current !== activeRide;
+    lastActiveRideRef.current = activeRide;
+    
     // Check if user has moved far enough to warrant a route rebuild
     // This prevents excessive API calls from GPS noise (small accuracy variations)
-    // But we skip this check if the route type, waypoints, or manual start point have changed
-    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && lastRouteBuildLocationRef.current) {
+    // But we skip this check if the route type, waypoints, manual start point, or activeRide have changed
+    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && !activeRideChanged && lastRouteBuildLocationRef.current) {
       const distanceMoved = distanceBetween(lastRouteBuildLocationRef.current, userLocation);
       if (distanceMoved < MIN_ROUTE_REBUILD_DISTANCE_METERS) {
         return; // Skip rebuild if movement is less than threshold
