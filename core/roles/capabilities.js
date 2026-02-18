@@ -51,9 +51,11 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         // Google photos
         googlePhotoAccess: "full",
         canViewGooglePhotos: true,
+        maxGooglePhotosPerPlace: 50, // Admin can see many photos
 
         // Calendar & Events
         canCreateEvents: true,
+        canAddMediaToCalendarEvents: true,
         canAccessSponsorship: true,
 
         // Admin
@@ -96,9 +98,11 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         googlePhotoAccess: "full",
         canViewGooglePhotos: true,
+        maxGooglePhotosPerPlace: 30, // Pro can see more photos
 
         // Calendar & Events
         canCreateEvents: true,
+        canAddMediaToCalendarEvents: true,
         canAccessSponsorship: false,
       };
 
@@ -141,9 +145,11 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         googlePhotoAccess: "limited",
         canViewGooglePhotos: true,
+        maxGooglePhotosPerPlace: 15, // Place Owner sees reasonable amount
 
         // Calendar & Events
         canCreateEvents: true,
+        canAddMediaToCalendarEvents: true, // Can add media to their calendar events
         canAccessSponsorship: true,
       };
 
@@ -179,9 +185,11 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         googlePhotoAccess: "limited",  // 1–2 photos per place
         canViewGooglePhotos: true,
+        maxGooglePhotosPerPlace: 2, // User sees limited photos
 
         // Calendar & Events
         canCreateEvents: false,
+        canAddMediaToCalendarEvents: false,
         canAccessSponsorship: false,
       };
 
@@ -218,9 +226,11 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         googlePhotoAccess: "none",
         canViewGooglePhotos: false,
+        maxGooglePhotosPerPlace: 0,
 
         // Calendar & Events
         canCreateEvents: false,
+        canAddMediaToCalendarEvents: false,
         canAccessSponsorship: false,
       };
   }
