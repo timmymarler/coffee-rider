@@ -1365,50 +1365,52 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         Math.abs(manualStartPoint.latitude - userLocation.latitude) < 0.0001 &&
         Math.abs(manualStartPoint.longitude - userLocation.longitude) < 0.0001;
       
-      if (startsAtCurrentLocation) {
-        // Route starts here: just navigate the saved route as-is with saved waypoints
-        mapRoute({
-          origin: userLocation,
-          waypoints: waypoints, // Use saved waypoints
-          destination: routeDestination,
-          travelMode: userTravelMode,
-          routeType: userRouteType,
-          requestId,
-          skipFitToView: true,
-        }).catch(error => {
-          console.warn('[toggleFollowMe] mapRoute error:', error);
-        });
-      } else {
-        // Route starts elsewhere: add current location as first waypoint
-        // This creates a new route from current location through saved route to destination
-        const newWaypoints = manualStartPoint ? 
-          [
-            {
-              lat: manualStartPoint.latitude,
-              lng: manualStartPoint.longitude,
-              title: "Original start point",
-              source: "followme",
-            },
-            ...waypoints,
-          ] : waypoints;
-        
-        mapRoute({
-          origin: userLocation,
-          waypoints: newWaypoints,
-          destination: routeDestination,
-          travelMode: userTravelMode,
-          routeType: userRouteType,
-          requestId,
-          skipFitToView: true,
-        }).catch(error => {
-          console.warn('[toggleFollowMe] mapRoute error:', error);
-        });
+      try {
+        if (startsAtCurrentLocation) {
+          // Route starts here: just navigate the saved route as-is with saved waypoints
+          await mapRoute({
+            origin: userLocation,
+            waypoints: waypoints, // Use saved waypoints
+            destination: routeDestination,
+            travelMode: userTravelMode,
+            routeType: userRouteType,
+            requestId,
+            skipFitToView: true,
+          });
+        } else {
+          // Route starts elsewhere: add current location as first waypoint
+          // This creates a new route from current location through saved route to destination
+          const newWaypoints = manualStartPoint ? 
+            [
+              {
+                lat: manualStartPoint.latitude,
+                lng: manualStartPoint.longitude,
+                title: "Original start point",
+                source: "followme",
+              },
+              ...waypoints,
+            ] : waypoints;
+          
+          await mapRoute({
+            origin: userLocation,
+            waypoints: newWaypoints,
+            destination: routeDestination,
+            travelMode: userTravelMode,
+            routeType: userRouteType,
+            requestId,
+            skipFitToView: true,
+          });
+        }
+      } catch (error) {
+        console.warn('[toggleFollowMe] mapRoute error:', error);
+        return; // Don't activate Follow Me if route building failed
       }
     } else {
       console.log("[toggleFollowMe] No destination set");
+      return; // Don't activate Follow Me if no destination
     }
 
-    // Recenter + zoom + tilt
+    // Recenter + zoom + tilt (only after route is ready)
     skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
     skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
     skipRegionChangeUntilRef.current = Date.now() + 2000;
