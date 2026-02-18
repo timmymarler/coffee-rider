@@ -673,26 +673,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     activeRideRef.current = activeRide;
     endRideRef.current = endRide;
     
-    // When an active ride starts, rebuild the route with current location as origin
-    if (activeRide && routeDestination && userLocation && !followUser) {
-      const requestId = ++routeRequestId.current;
-      
-      // For active rides, always fetch fresh from TomTom (don't use cache)
-      // Since we're routing from current location, any cached route with a different
-      // origin won't have the proper polyline connection
-      mapRoute({
-        origin: userLocation,
-        waypoints: waypoints,
-        destination: routeDestination,
-        travelMode: userTravelMode,
-        routeType: userRouteType,
-        requestId,
-        skipFitToView: true, // Always bypass cache for active rides
-      }).catch(error => {
-        console.warn('[MapScreenRN] Error rebuilding route for active ride:', error);
-      });
-    }
-  }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType]);
+    // When an active ride starts, the main routing effect will automatically
+    // rebuild the route because routeDestination and waypoints are dependencies
+  }, [activeRide, endRide, setActiveRide]);
   
   const canSaveRoute = 
     capabilities.canSaveRoutes &&
@@ -2207,7 +2190,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       console.warn('[MAP_EFFECT] buildRoute error:', error);
       // Error already handled as toast in buildRoute, no need to display again
     });
-  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, manualStartPoint]);
+  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, manualStartPoint, activeRide]);
 
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
@@ -2617,6 +2600,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // During Follow Me, ALWAYS use current location as origin, never the manual start point
     const origin = followUser ? userLocation : (manualStartPoint || userLocation);
 
+    // For active rides, always fetch fresh to ensure polyline from current location is included
+    const skipFit = activeRide ? true : false;
+
     // Call the core mapRoute function
     await mapRoute({
       origin,
@@ -2625,7 +2611,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       travelMode: userTravelMode,
       routeType: userRouteType,
       requestId: finalRequestId,
-      skipFitToView: false,
+      skipFitToView: skipFit,
     });
   }
 
