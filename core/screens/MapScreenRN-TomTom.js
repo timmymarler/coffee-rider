@@ -676,6 +676,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // When an active ride starts, rebuild the route with current location as origin
     if (activeRide && routeDestination && userLocation && !followUser) {
       const requestId = ++routeRequestId.current;
+      
+      // Check if ride starts at a different location than current location
+      const firstWaypoint = waypoints && waypoints.length > 0 ? waypoints[0] : null;
+      const rideStartsAtDifferentLocation = firstWaypoint && userLocation &&
+        Math.abs(firstWaypoint.latitude - userLocation.latitude) > 0.0001 ||
+        Math.abs(firstWaypoint.longitude - userLocation.longitude) > 0.0001;
+      
+      // If ride starts elsewhere, use skipFitToView: true to fetch fresh from TomTom
+      // This ensures proper polyline connection from current location to first waypoint
+      const skipFit = rideStartsAtDifferentLocation ? true : false;
+      
       mapRoute({
         origin: userLocation,
         waypoints: waypoints,
@@ -683,7 +694,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         travelMode: userTravelMode,
         routeType: userRouteType,
         requestId,
-        skipFitToView: false, // Fit to view for active rides so user sees full route
+        skipFitToView: skipFit,
       }).catch(error => {
         console.warn('[MapScreenRN] Error rebuilding route for active ride:', error);
       });
@@ -1365,8 +1376,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         Math.abs(manualStartPoint.latitude - userLocation.latitude) < 0.0001 &&
         Math.abs(manualStartPoint.longitude - userLocation.longitude) < 0.0001;
       
-      let needsZoomDelay = false;
-      
       if (startsAtCurrentLocation) {
         // Route starts here: just navigate the saved route as-is with saved waypoints
         mapRoute({
@@ -1383,7 +1392,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       } else {
         // Route starts elsewhere: add current location as first waypoint
         // This creates a new route from current location through saved route to destination
-        needsZoomDelay = true;
         const newWaypoints = manualStartPoint ? 
           [
             {
@@ -1407,24 +1415,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           console.warn('[toggleFollowMe] mapRoute error:', error);
         });
       }
-
-      // Recenter + zoom + tilt
-      // When route starts elsewhere, delay zoom to let polyline render first
-      skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
-      skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
-      skipRegionChangeUntilRef.current = Date.now() + 2000;
-      
-      if (needsZoomDelay) {
-        // Small delay to let React render the polyline before zooming
-        setTimeout(async () => {
-          await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
-        }, 50);
-      } else {
-        await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
-      }
     } else {
       console.log("[toggleFollowMe] No destination set");
     }
+
+    // Recenter + zoom + tilt
+    skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
+    skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
+    skipRegionChangeUntilRef.current = Date.now() + 2000;
+    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
 
     // Now enable follow mode and start 15-minute inactivity timer
     setFollowUser(true);
