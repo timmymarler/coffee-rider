@@ -636,19 +636,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const isAnimatingRef = useRef(false); // Track if we're doing a programmatic animation
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
-  const previousFollowUserRef = useRef({ isTraveling: false, polyline: [] }); // Track previous Follow Me state and stored polyline
-  const shouldApplyFollowMeZoomRef = useRef(false); // Flag to apply zoom when followUser becomes true
+  const previousFollowUserRef = useRef(false); // Track previous Follow Me state to detect when it turn off
   const {
     waypoints,
-    addWaypoint,
     addFromPlace,
     addFromMapPress,
     formatPoint,
     clearWaypoints,
   } = useWaypoints();
   
-  // Get direct access to context for addWaypointAtStart and insertWaypoint
-  const { addWaypointAtStart, insertWaypoint } = useContext(WaypointsContext);
+  // Get direct access to context for addWaypointAtStart
+  const { addWaypointAtStart } = useContext(WaypointsContext);
   
   const [routingActive, setRoutingActive] = useState(false);
   const [routeDestination, setRouteDestination] = useState(null);
@@ -728,6 +726,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastRouteBuildLocationRef = useRef(null); // Track location used for last route build to avoid excessive rebuilds
   const lastRouteTypeRef = useRef(null); // Track the route type used for last route build to rebuild when it changes
   const lastWaypoints = useRef([]); // Track waypoints from last route build to rebuild when they change
+  const lastManualStartPointRef = useRef(null); // Track manual start point to detect Follow Me transitions
   const MIN_ROUTE_REBUILD_DISTANCE_METERS = 10; // Only rebuild routes if user moves more than 10 meters
   const displayWaypoints = useMemo(() => {
     if (!routeDestination) return waypoints;
@@ -766,6 +765,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [showAddPointMenu, setShowAddPointMenu] = useState(false);
   const [showMarkerMenu, setShowMarkerMenu] = useState(false);
   const [pendingMarker, setPendingMarker] = useState(null);
+  const [manualStartPoint, setManualStartPoint] = useState(null);
   const [showRefreshRouteMenu, setShowRefreshRouteMenu] = useState(false);
   const [showRouteTypeSelector, setShowRouteTypeSelector] = useState(false);
   const hasRouteIntent = routeDestination || waypoints.length > 0;
@@ -903,98 +903,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   };
 
   const handleAddWaypoint = () => {
-    console.log("[handleAddWaypoint] *** HANDLER CALLED ***");
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
-    
-    // If we're modifying a saved route, unlink it so it becomes a new route
-    if (currentLoadedRouteId) {
-      console.log("[handleAddWaypoint] Clearing currentLoadedRouteId - saved route is being modified");
-      setCurrentLoadedRouteId(null);
-    }
-    
-    if (!pendingMapPoint) {
-      console.error("[handleAddWaypoint] *** NO pendingMapPoint set! ***");
-      closeAddPointMenu();
-      return;
-    }
-    
-    console.log("[handleAddWaypoint] Starting, current waypoints:", waypoints.length, "userLocation:", !!userLocation, "routeDestination:", !!routeDestination);
-    
-    const waypointToAdd = {
-      lat: pendingMapPoint.latitude,
-      lng: pendingMapPoint.longitude,
-      title: pendingMapPoint.geocodeResult || "Dropped pin",
-      source: "manual",
-    };
-    
-    console.log("[handleAddWaypoint] Waypoint to add:", waypointToAdd);
-    
-    // If this is the first waypoint, prepend current location as origin first
-    if (waypoints.length === 0 && userLocation) {
-      console.log("[handleAddWaypoint] *** FIRST WAYPOINT CASE ***");
-      const currentLocation = {
-        lat: userLocation.latitude ?? userLocation.lat,
-        lng: userLocation.longitude ?? userLocation.lng,
-        title: "Current location",
-        source: "current",
-      };
-      console.log("[handleAddWaypoint] Calling addWaypointAtStart with:", currentLocation);
-      addWaypointAtStart(currentLocation);
-      console.log("[handleAddWaypoint] Called addWaypointAtStart");
-      console.log("[handleAddWaypoint] Calling addWaypoint with:", waypointToAdd);
-      addWaypoint(waypointToAdd);
-      console.log("[handleAddWaypoint] Called addWaypoint");
-    } else if (waypoints.length > 0) {
-      // We have existing waypoints
-      if (routeDestination) {
-        // Destination is stored separately (saved route case), so just append the waypoint
-        console.log("[handleAddWaypoint] *** SAVED ROUTE CASE (separate destination) ***");
-        console.log("[handleAddWaypoint] Calling addWaypoint to append at end");
-        addWaypoint(waypointToAdd);
-      } else {
-        // No separate destination, so last waypoint IS the destination
-        // Insert before the last item (as penultimate)
-        console.log("[handleAddWaypoint] *** SUBSEQUENT WAYPOINT CASE (destination in array) ***");
-        console.log("[handleAddWaypoint] Calling insertWaypoint at index", waypoints.length - 1);
-        insertWaypoint(waypointToAdd, waypoints.length - 1);
-      }
-      console.log("[handleAddWaypoint] Waypoint addition complete");
-    } else {
-      console.log("[handleAddWaypoint] *** FALLBACK CASE ***");
-      console.log("[handleAddWaypoint] Calling addWaypoint (fallback)");
-      addWaypoint(waypointToAdd);
-      console.log("[handleAddWaypoint] Called addWaypoint (fallback)");
-    }
-    
-    console.log("[handleAddWaypoint] Calling closeAddPointMenu");
+    addFromMapPress(pendingMapPoint);
     closeAddPointMenu();
-    console.log("[handleAddWaypoint] *** HANDLER COMPLETE ***");
   };
 
   const handleSetStart = () => {
     setSelectedPlaceId(null);
-    
-    // If we're modifying a saved route, unlink it so it becomes a new route
-    if (currentLoadedRouteId) {
-      setCurrentLoadedRouteId(null);
-    }
-    
-    if (!pendingMapPoint) {
-      closeAddPointMenu();
-      return;
-    }
-    
-    clearWaypoints();
-    
-    const startPoint = {
-      lat: pendingMapPoint.latitude,
-      lng: pendingMapPoint.longitude,
-      title: pendingMapPoint.geocodeResult || "Start point",
-      source: "manual",
-    };
-    
-    addWaypoint(startPoint);
+    setManualStartPoint({
+      latitude: pendingMapPoint.latitude,
+      longitude: pendingMapPoint.longitude,
+    });
     closeAddPointMenu();
   };
 
@@ -1078,9 +998,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       visibility: "private", // change later via UI
       name: routeName || undefined,
       routeId: isUpdating ? currentLoadedRouteId : undefined,
-      origin: waypoints.length > 0 ? {
-        lat: waypoints[0].latitude ?? waypoints[0].lat,
-        lng: waypoints[0].longitude ?? waypoints[0].lng,
+      origin: manualStartPoint ? {
+        lat: manualStartPoint.latitude,
+        lng: manualStartPoint.longitude,
       } : {
         lat: userLocation.latitude,
         lng: userLocation.longitude,
@@ -1436,61 +1356,37 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Turning ON: Route from current location through waypoints to destination
-    console.log("[toggleFollowMe] Attempting to start Follow Me");
-    console.log("[toggleFollowMe] Current waypoints:", waypoints.length, "waypoints");
-    waypoints.forEach((wp, idx) => {
-      console.log(`  [${idx}] ${wp.lat.toFixed(5)}, ${wp.lng.toFixed(5)} - isStartPoint: ${wp.isStartPoint}, title: ${wp.title}`);
-    });
-    console.log("[toggleFollowMe] Destination:", routeDestination ? `${routeDestination.latitude.toFixed(5)}, ${routeDestination.longitude.toFixed(5)}` : "none");
-    
-    if (waypoints.length > 0 || routeDestination) {
-      // Prepare for Follow Me mode
-      skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
-      skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
-      skipRegionChangeUntilRef.current = Date.now() + 2000;
+    // Turning ON: For Follow Me, route from current location to destination directly
+    // Don't use saved route waypoints - just go from here to there
+    if (userLocation && routeDestination) {
+      const requestId = ++routeRequestId.current;
       
-      console.log("[toggleFollowMe] About to set followUser=true");
-      
-      // Set flag so our useEffect will apply the zoom once followUser becomes true
-      shouldApplyFollowMeZoomRef.current = true;
-      
-      // Set followUser=true FIRST before any state changes that might trigger MAP_EFFECT
-      // This ensures buildRoute sees followUser=true when dependencies change
-      setFollowUser(true);
-      console.log("[toggleFollowMe] Set followUser to true and flagged for zoom");
-      
-      // Now clear the loaded route ID since we're converting to a recalculated Follow Me route
-      // MAP_EFFECT will trigger, but followUser is already true now
-      setCurrentLoadedRouteId(null);
-      console.log("[toggleFollowMe] Cleared currentLoadedRouteId");
-      
-      // Check if current location is already the first waypoint
-      const distanceToFirst = waypoints[0] ? 
-        Math.sqrt(
-          Math.pow(userLocation.latitude - waypoints[0].lat, 2) +
-          Math.pow(userLocation.longitude - waypoints[0].lng, 2)
-        ) : Infinity;
-      
-      // Only prepend current location if it's not already the first waypoint
-      if (waypoints.length === 0 || distanceToFirst > 0.0001) {
-        console.log("[toggleFollowMe] Prepending current location as waypoint");
-        addWaypointAtStart({
-          lat: userLocation.latitude,
-          lng: userLocation.longitude,
-          title: "Current location",
-          source: "followme",
-        });
-      } else {
-        console.log("[toggleFollowMe] Current location already at or near first waypoint");
-      }
-      
-      // Start 15-minute inactivity timer
-      resetFollowMeInactivityTimeout();
-      console.log("[toggleFollowMe] Follow Me activation prepared (zoom will be applied by effect)");
+      // For Follow Me on a saved/loaded route: route directly from current location to destination
+      // Ignore saved waypoints and the original start point
+      mapRoute({
+        origin: userLocation,
+        waypoints: [], // Empty - don't use saved route waypoints
+        destination: routeDestination,
+        travelMode: userTravelMode,
+        routeType: userRouteType,
+        requestId,
+        skipFitToView: true,
+      }).catch(error => {
+        console.warn('[toggleFollowMe] mapRoute error:', error);
+      });
     } else {
-      console.log("[toggleFollowMe] Conditions not met. waypoints:", waypoints.length, "routeDestination:", !!routeDestination);
+      console.log("[toggleFollowMe] Conditions not met. userLocation:", !!userLocation, "routeDestination:", !!routeDestination);
     }
+
+    // Recenter + zoom + tilt
+    skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
+    skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
+    skipRegionChangeUntilRef.current = Date.now() + 2000;
+    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
+
+    // Now enable follow mode and start 15-minute inactivity timer
+    setFollowUser(true);
+    resetFollowMeInactivityTimeout();
   }
 
   /* ------------------------------------------------------------ */
@@ -1593,20 +1489,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }
 
-  // Apply Follow Me zoom when followUser changes to true
-  useEffect(() => {
-    if (followUser && shouldApplyFollowMeZoomRef.current) {
-      console.log("[followUserEffect] followUser is now true, applying Follow Me zoom");
-      shouldApplyFollowMeZoomRef.current = false; // Only apply once
-      
-      skipNextFollowTickRef.current = true;
-      skipNextRegionChangeRef.current = true;
-      skipRegionChangeUntilRef.current = Date.now() + 2000;
-      recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
-      console.log("[followUserEffect] Applied Follow Me zoom with FOLLOW_ZOOM:", FOLLOW_ZOOM);
-    }
-  }, [followUser]);
-
   useEffect(() => {
     // Exit early if not in navigation mode (no Follow Me and no active ride)
     if (!isNavigationMode) return;
@@ -1677,13 +1559,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     };
   }, [followUser, routeCoords, userLocation]);
 
-  // Store the traveled polyline when Follow Me is active
-  useEffect(() => {
-    if (followUser && traveledPolyline.length > 0) {
-      previousFollowUserRef.current = { isTraveling: true, polyline: traveledPolyline };
-    }
-  }, [followUser, traveledPolyline]);
-
   // Calculate remaining distance and time during Follow Me
   const { remainingDistanceMeters, remainingDurationSeconds } = useMemo(() => {
     if (!followUser || !remainingPolyline || remainingPolyline.length === 0 || !routeDistanceMeters || !routeMeta?.durationSeconds) {
@@ -1717,21 +1592,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // 3. The traveled polyline has meaningful distance (more than just starting point)
     
     // Check if we just turned OFF Follow Me
-    if (previousFollowUserRef.current?.isTraveling === true && !followUser) {
-      const savedPolyline = previousFollowUserRef.current.polyline;
-      if (savedPolyline && savedPolyline.length > 1) {
+    if (previousFollowUserRef.current === true && followUser === false) {
+      if (traveledPolyline && traveledPolyline.length > 1) {
         // Save the traveled polyline and show the modal
-        setPendingRidePolyline(savedPolyline);
+        setPendingRidePolyline(traveledPolyline);
         setShowSaveRideModal(true);
         setSaveRideName("");
       }
     }
     
     // Update the ref for next time
-    if (!followUser) {
-      previousFollowUserRef.current = { isTraveling: false, polyline: [] };
-    }
-  }, [followUser]);
+    previousFollowUserRef.current = followUser;
+  }, [followUser, traveledPolyline]);
 
   // Keep screen awake during Follow Me or active ride
   useEffect(() => {
@@ -2036,6 +1908,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     clearWaypoints();
     setRouteCoords([]);            // ✅ clear polyline HERE
     setRouteDistanceMeters(null);
+    setManualStartPoint(null); 
     routeFittedRef.current = false;
     setCurrentLoadedRouteId(null);
   }
@@ -2230,11 +2103,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (isLoadingSavedRouteRef.current) {
       return;
     }
-    // Don't auto-rebuild saved routes - they should only update on Follow Me or manual edits
-    if (currentLoadedRouteId && !followUser) {
+    if (followUser) {
       return;
     }
-    
     if (!userLocation) {
       return;
     }
@@ -2260,20 +2131,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         wp.lng !== lastWaypoints.current[idx].lng
       );
     
-    // For Follow Me: always rebuild when waypoints change (don't check distance)
-    if (followUser && waypointsChanged) {
-      const requestId = ++routeRequestId.current;
-      buildRoute({ requestId }).catch(error => {
-        console.warn('[MAP_EFFECT] buildRoute error during Follow Me:', error);
-      });
-      return;
-    }
-    
-    // For normal mode: skip rebuild if user hasn't moved far enough
-    if (followUser) {
-      return; // Follow Me with no waypoint changes - skip rebuild
-    }
-    
     if (waypoints.length === lastWaypoints.current.length) {
       waypoints.forEach((wp, idx) => {
         const lastWp = lastWaypoints.current[idx];
@@ -2287,10 +2144,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       });
     }
     
+    // If manual start point was cleared (Follow Me transition), always rebuild
+    const manualStartPointCleared = lastManualStartPointRef.current !== null && manualStartPoint === null;
+    
     // Check if user has moved far enough to warrant a route rebuild
     // This prevents excessive API calls from GPS noise (small accuracy variations)
-    // But we skip this check if the route type or waypoints have changed
-    if (!routeTypeChanged && !waypointsChanged && lastRouteBuildLocationRef.current) {
+    // But we skip this check if the route type, waypoints, or manual start point have changed
+    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && lastRouteBuildLocationRef.current) {
       const distanceMoved = distanceBetween(lastRouteBuildLocationRef.current, userLocation);
       if (distanceMoved < MIN_ROUTE_REBUILD_DISTANCE_METERS) {
         return; // Skip rebuild if movement is less than threshold
@@ -2302,7 +2162,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       console.warn('[MAP_EFFECT] buildRoute error:', error);
       // Error already handled as toast in buildRoute, no need to display again
     });
-  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, currentLoadedRouteId, followUser]);
+  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, manualStartPoint]);
 
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
@@ -2486,42 +2346,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     routeType,
     requestId,
     skipFitToView = false, // Don't auto-center when in Follow Me mode
-    followMeMode = false,  // Is this a Follow Me route?
   } = {}) {
-    console.log("[mapRoute] Starting with requestId:", requestId, "waypoints:", waypointsList?.length || 0, "followMe:", followMeMode);
+    console.log("[mapRoute] Starting with requestId:", requestId, "waypoints:", waypointsList.length);
     
     if (!origin) {
       console.log("[mapRoute] No origin provided");
       return false;
-    }
-
-    // Normalize origin
-    const startCoord = normalizeCoord(origin);
-    if (!startCoord) {
-      console.error('[mapRoute] Failed to normalize origin:', origin);
-      return false;
-    }
-
-    // For Follow Me: check if first waypoint ≈ current location
-    // If not, prepend current location to the waypoints
-    let finalWaypoints = waypointsList || [];
-    if (followMeMode && finalWaypoints.length > 0 && userLocation) {
-      const firstWaypoint = normalizeCoord(finalWaypoints[0]);
-      const currentLoc = normalizeCoord(userLocation);
-      
-      // Check if first waypoint is approximately current location (within ~5 meters)
-      const distance = Math.sqrt(
-        Math.pow(firstWaypoint.latitude - currentLoc.latitude, 2) + 
-        Math.pow(firstWaypoint.longitude - currentLoc.longitude, 2)
-      ) * 111000; // rough km to meters conversion
-      
-      console.log("[mapRoute] Follow Me check: first waypoint distance from current location:", distance.toFixed(1), 'meters');
-      
-      if (distance > 5) {
-        // First waypoint is NOT current location, prepend current location
-        console.log("[mapRoute] First waypoint is different from current location, prepending current location");
-        finalWaypoints = [currentLoc, ...finalWaypoints];
-      }
     }
 
     // Determine final destination
@@ -2533,8 +2363,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.error('[mapRoute] Failed to normalize destination coordinates:', destination);
         return false;
       }
-    } else if (finalWaypoints.length > 0) {
-      finalDestination = normalizeCoord(finalWaypoints[finalWaypoints.length - 1]);
+    } else if (waypointsList.length > 0) {
+      finalDestination = normalizeCoord(waypointsList[waypointsList.length - 1]);
       if (!finalDestination) {
         console.error('[mapRoute] Failed to normalize last waypoint coordinates');
         return false;
@@ -2549,16 +2379,24 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Determine intermediates
     let intermediates = [];
     if (destination) {
-      intermediates = finalWaypoints;
-    } else if (finalWaypoints.length > 0) {
+      // Only user-added waypoints go in intermediates; destination will be final
+      intermediates = waypointsList;
+    } else if (waypointsList.length > 0) {
       // No explicit destination, so all but the last waypoint are intermediates
-      intermediates = finalWaypoints.slice(0, -1);
+      intermediates = waypointsList.slice(0, -1);
     }
 
     // Normalize intermediates
     const normalizedIntermediates = intermediates
       .map(wp => normalizeCoord(wp))
       .filter(wp => wp !== null);
+    
+    // Validate origin
+    const startCoord = normalizeCoord(origin);
+    if (!startCoord) {
+      console.error('[mapRoute] Failed to normalize origin:', origin);
+      return false;
+    }
 
     console.log("[mapRoute] Building route with:");
     console.log("  - Origin:", startCoord.latitude.toFixed(5), startCoord.longitude.toFixed(5));
@@ -2669,31 +2507,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const simplified = simplifyPolyline(decoded, 0.00005); // ~5m tolerance
     console.log("[mapRoute] Decoded", decoded.length, "points, simplified to", simplified.length, "points");
     
-    // For Follow Me mode with saved routes, prepend current user location to ensure we have the full path
-    let finalRouteCoords = simplified;
-    if (skipFitToView && origin && userLocation && simplified.length > 0) {
-      console.log('[mapRoute] Follow Me mode detected (skipFitToView=true)');
-      const originCoord = normalizeCoord(origin);
-      if (originCoord) {
-        const firstCoordLat = simplified[0].latitude;
-        const firstCoordLng = simplified[0].longitude;
-        
-        // If first coord is different from current user location, prepend it
-        const distance = Math.sqrt(
-          Math.pow(originCoord.latitude - firstCoordLat, 2) + 
-          Math.pow(originCoord.longitude - firstCoordLng, 2)
-        );
-        
-        console.log('[mapRoute] Distance from origin to first route coord:', distance.toFixed(6), 'degrees');
-        if (distance > 0.00001) {
-          finalRouteCoords = [originCoord, ...simplified];
-          console.log('[mapRoute] Prepended current location to Follow Me route');
-        }
-      }
-    }
-    
     // Update state with route data
-    setRouteCoords(finalRouteCoords);
+    setRouteCoords(simplified);
     setRouteMeta({
       distanceMeters: result.distanceMeters ?? result.distance,
       durationSeconds: result.durationSeconds ?? result.duration,
@@ -2710,15 +2525,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Auto-fit view if not in Follow Me and not already fitted
-    // But skip if only a single point (prevents excessive zoom)
     if (!skipFitToView && !routeFittedRef.current && !followUser) {
-      if (finalRouteCoords.length > 1) {
-        routeFittedRef.current = true;
-        mapRef.current?.fitToCoordinates(finalRouteCoords, {
-          edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
-          animated: true,
-        });
-      }
+      routeFittedRef.current = true;
+      mapRef.current?.fitToCoordinates(simplified, {
+        edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
+        animated: true,
+      });
     }
     
     setLastEncodedPolyline(result.polyline);
@@ -2743,62 +2555,33 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     const destination = destinationOverride || routeDestination || null;
 
-    // Simple routing logic: need either explicit destination or 1+ waypoints
-    const canRoute = destination || waypoints.length > 0;
-    
-    console.log("[buildRoute] waypoints.length:", waypoints.length, "destination:", !!destination);
-    
-    if (!canRoute) {
-      console.log("[buildRoute] ❌ RETURNING EARLY - Need destination or waypoints to route");
+    if (!destination && waypoints.length === 0) {
+      console.log("[buildRoute] No destination and no waypoints, returning");
       return;
     }
 
     // Track what we're using for comparison
     if (userLocation) {
-      lastRouteBuildLocationRef.current = normalizeCoord(userLocation);
+      const startCoord = normalizeCoord(manualStartPoint || userLocation);
+      lastRouteBuildLocationRef.current = startCoord;
       lastRouteTypeRef.current = userRouteType;
       lastWaypoints.current = waypoints;
+      lastManualStartPointRef.current = manualStartPoint;
     }
 
-    // Determine origin: first waypoint or current location
-    const origin = waypoints.length > 0 ? waypoints[0] : userLocation;
-    
-    // Build the routing list and destination
-    let routeWaypoints = [];
-    let finalDestination = destination;
-    
-    console.log("[buildRoute] 🚀 About to call mapRoute");
-    
-    if (waypoints.length > 0) {
-      if (destination) {
-        // Explicit destination: all waypoints are intermediates
-        routeWaypoints = waypoints.slice(1);
-      } else if (waypoints.length > 1) {
-        // No explicit destination: first is origin, rest except last are intermediates, last is destination
-        routeWaypoints = waypoints.slice(1, -1);
-        finalDestination = waypoints[waypoints.length - 1];
-      } else {
-        // Single waypoint with no destination: treat it as destination, route from current location to it
-        finalDestination = waypoints[0];
-        routeWaypoints = [];
-      }
-    }
-    
-    // For Follow Me: check if first waypoint ≈ current location
-    // If not, we'll prepend current location in mapRoute
-    const skipFitToView = followUser;
-    
+    // During Follow Me, ALWAYS use current location as origin, never the manual start point
+    const origin = followUser ? userLocation : (manualStartPoint || userLocation);
+
+    // Call the core mapRoute function
     await mapRoute({
       origin,
-      waypoints: routeWaypoints,
-      destination: finalDestination,
+      waypoints,
+      destination,
       travelMode: userTravelMode,
       routeType: userRouteType,
       requestId: finalRequestId,
-      skipFitToView,
-      followMeMode: followUser,
+      skipFitToView: false,
     });
-    console.log("[buildRoute] ✅ mapRoute called successfully");
   }
 
   async function loadSavedRouteById(routeId) {
@@ -2821,9 +2604,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     clearWaypoints();
     isLoadingSavedRouteRef.current = true;
 
-    console.log("[loadSavedRoute] Starting to load route:", route.title);
-    console.log("[loadSavedRoute] Route has", route.waypoints?.length || 0, "waypoints, origin:", !!route.origin, "destination:", !!route.destination);
-
     // Waypoints (normalise + rebuild)
     let actualOrigin = route.origin;
     let originWasCorrected = false;
@@ -2840,42 +2620,40 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         return normalized;
       });
 
-      // Filter out waypoints that are at the same location as the origin
-      // This handles routes that were saved with duplicate start point
-      let waypointsToAdd = normalisedWaypoints;
-      if (actualOrigin) {
-        const originLat = actualOrigin.lat ?? actualOrigin.latitude;
-        const originLng = actualOrigin.lng ?? actualOrigin.longitude;
+      // CHECK: If origin looks wrong, use first waypoint as origin
+      if (actualOrigin && route.waypoints.length > 0 && userLocation) {
+        const origLat = actualOrigin.lat ?? actualOrigin.latitude;
+        const origLng = actualOrigin.lng ?? actualOrigin.longitude;
+        const firstWpLat = normalisedWaypoints[0].latitude;
+        const firstWpLng = normalisedWaypoints[0].longitude;
+        const userLat = userLocation.latitude;
+        const userLng = userLocation.longitude;
         
-        waypointsToAdd = normalisedWaypoints.filter((wp, idx) => {
-          const isDuplicate = Math.abs(wp.latitude - originLat) < 0.00001 && 
-                             Math.abs(wp.longitude - originLng) < 0.00001;
-          if (isDuplicate) {
-            console.log(`  [${idx}] Skipping duplicate waypoint at origin location`);
-          }
-          return !isDuplicate;
-        });
+        // Calculate rough distances
+        const distOriginToUser = Math.abs(origLat - userLat) + Math.abs(origLng - userLng);
+        const distOriginToFirstWp = Math.abs(origLat - firstWpLat) + Math.abs(origLng - firstWpLng);
+        
+        // If origin is very close to user but far from first waypoint, it's wrong
+        if (distOriginToUser < 0.001 && distOriginToFirstWp > 0.01) {
+          actualOrigin = {
+            lat: firstWpLat,
+            lng: firstWpLng,
+          };
+          originWasCorrected = true;
+        }
       }
 
-      console.log("[loadSavedRoute] Adding", waypointsToAdd.length, "waypoints from saved route");
-      waypointsToAdd.forEach((wp, idx) => {
-        console.log("[loadSavedRoute] Adding waypoint", idx);
+      normalisedWaypoints.forEach((wp) => {
         addFromPlace(wp);
       });
     }
     
-    // Add the origin as the first waypoint
+    // Set the origin (using actualOrigin which may have been corrected)
     if (actualOrigin) {
-      const originWaypoint = {
-        lat: actualOrigin.lat ?? actualOrigin.latitude,
-        lng: actualOrigin.lng ?? actualOrigin.longitude,
-        title: "Route start",
-        source: "saved",
-      };
-      
-      console.log("[loadSavedRoute] Adding origin as first waypoint");
-      // Add as first waypoint using the context function
-      addWaypointAtStart(originWaypoint);
+      setManualStartPoint({
+        latitude: actualOrigin.lat ?? actualOrigin.latitude,
+        longitude: actualOrigin.lng ?? actualOrigin.longitude,
+      });
     }
     
     // If origin was corrected, update the route in Firestore
@@ -2991,8 +2769,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const destination = placeOverride || routeDestination;
     if (!userLocation) return;
 
-    // Build navigation waypoints starting with waypoints if present
-    const navWaypoints = waypoints && waypoints.length > 0 ? waypoints : [];
+    // Build navigation waypoints starting with saved origin if present
+    const navWaypoints = [];
+
+    if (manualStartPoint) {
+      navWaypoints.push({
+        lat: manualStartPoint.latitude,
+        lng: manualStartPoint.longitude,
+        title: "Route start",
+      });
+    }
 
     // ─────────────────────────────
     // Case 1: Destination exists
@@ -3057,12 +2843,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!mapReadyRef.current) return;
     if (!pendingFitRef.current) return;
     if (followUser) return; // Don't interrupt Follow Me mode
-
-    // If only 1 coordinate, don't fit to it (prevents excessive zoom)
-    if (pendingFitRef.current.length === 1) {
-      pendingFitRef.current = null;
-      return;
-    }
 
     mapRef.current.fitToCoordinates(pendingFitRef.current, {
       edgePadding: { top: 80, right: 80, bottom: 140, left: 80 },
@@ -3323,6 +3103,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           }}
         >
           {activeQuery ? searchMarkers.map(renderMarker) : crMarkers.map(renderMarker)}
+          {manualStartPoint && (
+            <Marker
+              coordinate={manualStartPoint}
+              anchor={{ x: 0.5, y: 1 }}
+              zIndex={950}
+            >
+              <SvgPin
+                icon="flag-checkered"
+                fill={theme.colors.accent}
+                circle={theme.colors.primaryMid}
+                stroke={theme.colors.primaryDark}
+              />
+            </Marker>
+          )}
 
           {routeDestination && (
             <Marker
@@ -3346,18 +3140,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           {capabilities.canCreateRoutes && waypoints.length > 0 && (
             (() => {
               return waypoints.map((wp, index) => (
-                  <Marker
-                    key={`wp-${index}`}
-                    coordinate={{ latitude: wp.lat, longitude: wp.lng }}
-                    anchor={{ x: 0.5, y: 0.5 }}
-                    zIndex={950}
-                    tracksViewChanges={false}
-                  >
-                    <View style={styles.waypointPin}>
-                      <Text style={styles.waypointIndex}>{index + 1}</Text>
-                    </View>
-                  </Marker>
-                ));
+                <Marker
+                  key={`wp-${index}`}
+                  coordinate={{ latitude: wp.lat, longitude: wp.lng }}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  zIndex={950}
+                  tracksViewChanges={false}
+                >
+                  <View style={styles.waypointPin}>
+                    <Text style={styles.waypointIndex}>{index + 1}</Text>
+                  </View>
+                </Marker>
+              ));
             })()
           )}
 
@@ -3384,7 +3178,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             {/* Remaining route */}
               <Polyline
                 key={`active-${routeVersion}`}
-                coordinates={followUser && remainingPolyline.length > 0 ? remainingPolyline : routeCoords}
+                coordinates={routeCoords}
                 strokeWidth={isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)}
                 strokeColor={theme.colors.primary}
                 zIndex={1000}
@@ -3542,7 +3336,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               })}
 
               {/* SPONSORS (ADMIN ONLY) */}
-              {capabilities?.isAdmin && (
+              {role === "admin" && (
                 <TouchableOpacity
                   key="sponsor"
                   style={[
@@ -3708,7 +3502,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         <WaypointsList
           waypoints={displayWaypoints}
           onClearAll={clearNavigationIntent}
-          routeOrigin={waypoints.length > 0 ? waypoints[0] : userLocation}
+          routeOrigin={manualStartPoint || userLocation}
           // Always pass routedTotalMeters from state, fallback to routeMeta if needed
           routedTotalMeters={
             typeof routeDistanceMeters === 'number' && routeDistanceMeters > 0
@@ -3827,7 +3621,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               onPress={() => {
                 closeMarkerMenu();
                 if (pendingMarker) {
-                  addFromMapPress({
+                  setManualStartPoint({
                     latitude: pendingMarker.latitude,
                     longitude: pendingMarker.longitude,
                   });
@@ -3839,12 +3633,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               ]}
             >
               <MaterialCommunityIcons
-                name="flag"
+                name="flag-triangle"
                 size={26}
                 color={theme.colors.accent}
                 style={{ marginRight: 12 }}
               />
-              <Text style={styles.pointMenuText}>Add start point</Text>
+              <Text style={styles.pointMenuText}>Add as start point</Text>
             </Pressable>
 
             <Pressable
@@ -4149,16 +3943,15 @@ const styles = StyleSheet.create({
   miniMapContainer: {
     position: "absolute",
     bottom: 125,
-    right: 12,
+    right: 16,
     width: 110,
-    height: 130,
+    height: 110,
     borderRadius: 12,
     overflow: "hidden",
     backgroundColor: theme.colors.surface,
     borderWidth: 2,
     borderColor: theme.colors.primary,
-    elevation: 12,
-    zIndex: 5000,
+    elevation: 8,
     shadowColor: "#000",
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -4218,8 +4011,8 @@ const styles = StyleSheet.create({
 
   junctionPanel: {
     position: "absolute",
-    bottom: 125,
-    left: 12,
+    bottom: 100,
+    left: 20,
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 16,
