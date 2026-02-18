@@ -1365,56 +1365,66 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         Math.abs(manualStartPoint.latitude - userLocation.latitude) < 0.0001 &&
         Math.abs(manualStartPoint.longitude - userLocation.longitude) < 0.0001;
       
-      try {
-        if (startsAtCurrentLocation) {
-          // Route starts here: just navigate the saved route as-is with saved waypoints
-          await mapRoute({
-            origin: userLocation,
-            waypoints: waypoints, // Use saved waypoints
-            destination: routeDestination,
-            travelMode: userTravelMode,
-            routeType: userRouteType,
-            requestId,
-            skipFitToView: true,
-          });
-        } else {
-          // Route starts elsewhere: add current location as first waypoint
-          // This creates a new route from current location through saved route to destination
-          const newWaypoints = manualStartPoint ? 
-            [
-              {
-                lat: manualStartPoint.latitude,
-                lng: manualStartPoint.longitude,
-                title: "Original start point",
-                source: "followme",
-              },
-              ...waypoints,
-            ] : waypoints;
-          
-          await mapRoute({
-            origin: userLocation,
-            waypoints: newWaypoints,
-            destination: routeDestination,
-            travelMode: userTravelMode,
-            routeType: userRouteType,
-            requestId,
-            skipFitToView: true,
-          });
-        }
-      } catch (error) {
-        console.warn('[toggleFollowMe] mapRoute error:', error);
-        return; // Don't activate Follow Me if route building failed
+      let needsZoomDelay = false;
+      
+      if (startsAtCurrentLocation) {
+        // Route starts here: just navigate the saved route as-is with saved waypoints
+        mapRoute({
+          origin: userLocation,
+          waypoints: waypoints, // Use saved waypoints
+          destination: routeDestination,
+          travelMode: userTravelMode,
+          routeType: userRouteType,
+          requestId,
+          skipFitToView: true,
+        }).catch(error => {
+          console.warn('[toggleFollowMe] mapRoute error:', error);
+        });
+      } else {
+        // Route starts elsewhere: add current location as first waypoint
+        // This creates a new route from current location through saved route to destination
+        needsZoomDelay = true;
+        const newWaypoints = manualStartPoint ? 
+          [
+            {
+              lat: manualStartPoint.latitude,
+              lng: manualStartPoint.longitude,
+              title: "Original start point",
+              source: "followme",
+            },
+            ...waypoints,
+          ] : waypoints;
+        
+        mapRoute({
+          origin: userLocation,
+          waypoints: newWaypoints,
+          destination: routeDestination,
+          travelMode: userTravelMode,
+          routeType: userRouteType,
+          requestId,
+          skipFitToView: true,
+        }).catch(error => {
+          console.warn('[toggleFollowMe] mapRoute error:', error);
+        });
+      }
+
+      // Recenter + zoom + tilt
+      // When route starts elsewhere, delay zoom to let polyline render first
+      skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
+      skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
+      skipRegionChangeUntilRef.current = Date.now() + 2000;
+      
+      if (needsZoomDelay) {
+        // Small delay to let React render the polyline before zooming
+        setTimeout(async () => {
+          await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
+        }, 50);
+      } else {
+        await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
       }
     } else {
       console.log("[toggleFollowMe] No destination set");
-      return; // Don't activate Follow Me if no destination
     }
-
-    // Recenter + zoom + tilt (only after route is ready)
-    skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
-    skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
-    skipRegionChangeUntilRef.current = Date.now() + 2000;
-    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
 
     // Now enable follow mode and start 15-minute inactivity timer
     setFollowUser(true);
