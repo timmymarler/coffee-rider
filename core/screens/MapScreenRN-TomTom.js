@@ -1356,26 +1356,56 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Turning ON: For Follow Me, route from current location to destination directly
-    // Don't use saved route waypoints - just go from here to there
-    if (userLocation && routeDestination) {
+    // Turning ON: Route from current location through saved waypoints to destination
+    if (routeDestination) {
       const requestId = ++routeRequestId.current;
       
-      // For Follow Me on a saved/loaded route: route directly from current location to destination
-      // Ignore saved waypoints and the original start point
-      mapRoute({
-        origin: userLocation,
-        waypoints: [], // Empty - don't use saved route waypoints
-        destination: routeDestination,
-        travelMode: userTravelMode,
-        routeType: userRouteType,
-        requestId,
-        skipFitToView: true,
-      }).catch(error => {
-        console.warn('[toggleFollowMe] mapRoute error:', error);
-      });
+      // Check if saved route starts at current location
+      const startsAtCurrentLocation = manualStartPoint && userLocation && 
+        Math.abs(manualStartPoint.latitude - userLocation.latitude) < 0.0001 &&
+        Math.abs(manualStartPoint.longitude - userLocation.longitude) < 0.0001;
+      
+      if (startsAtCurrentLocation) {
+        // Route starts here: just navigate the saved route as-is with saved waypoints
+        mapRoute({
+          origin: userLocation,
+          waypoints: waypoints, // Use saved waypoints
+          destination: routeDestination,
+          travelMode: userTravelMode,
+          routeType: userRouteType,
+          requestId,
+          skipFitToView: true,
+        }).catch(error => {
+          console.warn('[toggleFollowMe] mapRoute error:', error);
+        });
+      } else {
+        // Route starts elsewhere: add current location as first waypoint
+        // This creates a new route from current location through saved route to destination
+        const newWaypoints = manualStartPoint ? 
+          [
+            {
+              lat: manualStartPoint.latitude,
+              lng: manualStartPoint.longitude,
+              title: "Original start point",
+              source: "followme",
+            },
+            ...waypoints,
+          ] : waypoints;
+        
+        mapRoute({
+          origin: userLocation,
+          waypoints: newWaypoints,
+          destination: routeDestination,
+          travelMode: userTravelMode,
+          routeType: userRouteType,
+          requestId,
+          skipFitToView: true,
+        }).catch(error => {
+          console.warn('[toggleFollowMe] mapRoute error:', error);
+        });
+      }
     } else {
-      console.log("[toggleFollowMe] Conditions not met. userLocation:", !!userLocation, "routeDestination:", !!routeDestination);
+      console.log("[toggleFollowMe] No destination set");
     }
 
     // Recenter + zoom + tilt
