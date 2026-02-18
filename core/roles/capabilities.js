@@ -145,7 +145,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         googlePhotoAccess: "limited",
         canViewGooglePhotos: true,
-        maxGooglePhotosPerPlace: 15, // Place Owner sees reasonable amount
+        maxGooglePhotosPerPlace: 5, // Default for other places (10 for own place, handled in PlaceCard)
 
         // Calendar & Events
         canCreateEvents: true,

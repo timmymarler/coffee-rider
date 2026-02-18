@@ -451,23 +451,23 @@ export default function PlaceCard({
       : [];
 
     let googlePhotos = [];
+    let maxGooglePhotos = capabilities.maxGooglePhotosPerPlace || 0;
 
-    switch (capabilities.googlePhotoAccess) {
-      case "full":
-        googlePhotos = rawGooglePhotos;
-        break;
+    // For Place Owners, check if they own this place
+    if (capabilities.googlePhotoAccess === "limited" && safePlace.createdBy === user?.uid) {
+      // Owner viewing their own place - show 10 photos
+      maxGooglePhotos = 10;
+    } else if (capabilities.googlePhotoAccess === "limited") {
+      // Owner viewing someone else's place - show 5 photos
+      maxGooglePhotos = 5;
+    }
 
-      case "limited":
-        googlePhotos = rawGooglePhotos.slice(0, 2);
-        break;
-
-      case "none":
-      default:
-        googlePhotos = [];
+    if (maxGooglePhotos > 0) {
+      googlePhotos = rawGooglePhotos.slice(0, maxGooglePhotos);
     }
 
     return [...crPhotos, ...googlePhotos];
-  }, [safePlace.photos, rawGooglePhotos, capabilities.googlePhotoAccess]);
+  }, [safePlace.photos, safePlace.createdBy, rawGooglePhotos, capabilities.googlePhotoAccess, capabilities.maxGooglePhotosPerPlace, user?.uid]);
 
   const heroGooglePhoto =
     googlePhotos.length > 0
