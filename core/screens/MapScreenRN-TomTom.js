@@ -2598,7 +2598,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // During Follow Me, ALWAYS use current location as origin, never the manual start point
-    const origin = followUser ? userLocation : (manualStartPoint || userLocation);
+    // Also for active rides, ALWAYS use current location since user is joining mid-ride
+    const origin = (followUser || activeRide) ? userLocation : (manualStartPoint || userLocation);
 
     // For active rides, always fetch fresh to ensure polyline from current location is included
     const skipFit = activeRide ? true : false;
