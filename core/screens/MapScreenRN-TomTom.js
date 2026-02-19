@@ -1616,12 +1616,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   useEffect(() => {
     if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation || !routeDestination) return;
 
-    // Find closest point on route
+    // Find closest point on route to user
     let closestDist = Infinity;
+    let userPolylineIdx = 0;
     for (let i = 0; i < routeCoords.length; i++) {
       const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
       if (dist < closestDist) {
         closestDist = dist;
+        userPolylineIdx = i;
       }
     }
 
@@ -1633,11 +1635,27 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route, triggering reroute...`);
       lastRerouteAttemptRef.current = now;
       
+      // Filter to only remaining waypoints (ahead of user on polyline)
+      const remainingWaypoints = waypoints.filter(wp => {
+        // Find this waypoint's position on the polyline
+        let waypointPolylineIdx = routeCoords.length - 1;
+        let minDist = Infinity;
+        for (let i = 0; i < routeCoords.length; i++) {
+          const dist = distanceBetweenMeters(wp, routeCoords[i]);
+          if (dist < minDist) {
+            minDist = dist;
+            waypointPolylineIdx = i;
+          }
+        }
+        // Only include if waypoint is ahead of user's current position
+        return waypointPolylineIdx > userPolylineIdx;
+      });
+      
       // Rebuild route from current location to destination
       const requestId = ++routeRequestId.current;
       mapRoute({
         origin: userLocation,
-        waypoints: waypoints, // Include waypoints in the new route
+        waypoints: remainingWaypoints, // Only waypoints still ahead
         destination: routeDestination,
         travelMode: userTravelMode,
         routeType: userRouteType,
