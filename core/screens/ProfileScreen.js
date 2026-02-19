@@ -620,12 +620,17 @@ export default function ProfileScreen() {
             onValueChange={(itemValue) => handleThemeChange(itemValue)}
             style={{
               color: theme.colors.text,
-              height: 50,
+              height: 60,
+            }}
+            itemStyle={{
+              color: theme.colors.text,
+              fontSize: 16,
+              height: 60,
             }}
           >
-            <Picker.Item label="Rider" value="rider" />
-            <Picker.Item label="Driver" value="driver" />
-            <Picker.Item label="Strider" value="strider" />
+            <Picker.Item label="Rider" value="rider" color={theme.colors.text} />
+            <Picker.Item label="Driver" value="driver" color={theme.colors.text} />
+            <Picker.Item label="Strider" value="strider" color={theme.colors.text} />
           </Picker>
         </View>
 
