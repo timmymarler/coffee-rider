@@ -1,6 +1,5 @@
 // core/screens/CalendarScreen.js
 import { AuthContext } from "@context/AuthContext";
-import { useTheme } from "@context/ThemeContext";
 import { useAllUserGroups } from "@core/groups/hooks";
 import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY, shareEvent } from "@core/map/events/sharedEvents";
@@ -67,9 +66,6 @@ export default function CalendarScreen() {
   const router = useRouter();
   const { user, profile } = useContext(AuthContext);
   const insets = useSafeAreaInsets();
-  // Use dynamic theme from context
-  const dynamicTheme = useTheme();
-  const theme = dynamicTheme;
   const { colors, spacing } = theme;
   const capabilities = getCapabilities(profile?.role || "guest");
 
@@ -240,15 +236,15 @@ export default function CalendarScreen() {
 
     // Day headers
     const dayHeaders = dayNames.map((day) => (
-      <View key={day} style={[dynamicStyles.calendarCell, dynamicStyles.dayHeader]}>
-        <Text style={dynamicStyles.dayHeaderText}>{day}</Text>
+      <View key={day} style={[styles.calendarCell, styles.dayHeader]}>
+        <Text style={styles.dayHeaderText}>{day}</Text>
       </View>
     ));
 
     // Empty cells before first day
     for (let i = 0; i < firstDayOfMonth; i++) {
       days.push(
-        <View key={`empty-${i}`} style={dynamicStyles.calendarCell}>
+        <View key={`empty-${i}`} style={styles.calendarCell}>
           <Text></Text>
         </View>
       );
@@ -267,25 +263,25 @@ export default function CalendarScreen() {
         <TouchableOpacity
           key={i}
           style={[
-            dynamicStyles.calendarCell,
-            isSelected && dynamicStyles.calendarCellSelected,
-            isToday && !isSelected && dynamicStyles.calendarCellToday,
+            styles.calendarCell,
+            isSelected && styles.calendarCellSelected,
+            isToday && !isSelected && styles.calendarCellToday,
           ]}
           onPress={() => setSelectedDate(date)}
         >
-          <View style={dynamicStyles.calendarCellContent}>
+          <View style={styles.calendarCellContent}>
             <Text
               style={[
-                dynamicStyles.calendarDay,
-                isSelected && dynamicStyles.calendarDaySelected,
-                isToday && !isSelected && dynamicStyles.calendarDayToday,
+                styles.calendarDay,
+                isSelected && styles.calendarDaySelected,
+                isToday && !isSelected && styles.calendarDayToday,
               ]}
             >
               {i}
             </Text>
             {dayEvents.length > 0 && (
-              <View style={[dynamicStyles.eventDot, isSelected && dynamicStyles.eventDotSelected]}>
-                <Text style={[dynamicStyles.eventDotText, isSelected && dynamicStyles.eventDotTextSelected]}>{dayEvents.length}</Text>
+              <View style={[styles.eventDot, isSelected && styles.eventDotSelected]}>
+                <Text style={[styles.eventDotText, isSelected && styles.eventDotTextSelected]}>{dayEvents.length}</Text>
               </View>
             )}
           </View>
@@ -306,8 +302,8 @@ export default function CalendarScreen() {
 
     // Day headers
     const dayHeaders = dayNames.map((day) => (
-      <View key={day} style={[dynamicStyles.weekCell, dynamicStyles.dayHeader]}>
-        <Text style={dynamicStyles.dayHeaderText}>{day}</Text>
+      <View key={day} style={[styles.weekCell, styles.dayHeader]}>
+        <Text style={styles.dayHeaderText}>{day}</Text>
       </View>
     ));
 
@@ -323,24 +319,24 @@ export default function CalendarScreen() {
         <TouchableOpacity
           key={i}
           style={[
-            dynamicStyles.weekCell,
-            isSelected && dynamicStyles.calendarCellSelected,
-            isToday && !isSelected && dynamicStyles.calendarCellToday,
+            styles.weekCell,
+            isSelected && styles.calendarCellSelected,
+            isToday && !isSelected && styles.calendarCellToday,
           ]}
           onPress={() => setSelectedDate(date)}
         >
           <Text
             style={[
-              dynamicStyles.weekDayNum,
-              isSelected && dynamicStyles.calendarDaySelected,
-              isToday && !isSelected && dynamicStyles.calendarDayToday,
+              styles.weekDayNum,
+              isSelected && styles.calendarDaySelected,
+              isToday && !isSelected && styles.calendarDayToday,
             ]}
           >
             {date.getDate()}
           </Text>
           {dayEvents.length > 0 && (
-            <View style={dynamicStyles.weekEventDot}>
-              <Text style={dynamicStyles.eventDotText}>{dayEvents.length}</Text>
+            <View style={styles.weekEventDot}>
+              <Text style={styles.eventDotText}>{dayEvents.length}</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -359,8 +355,8 @@ export default function CalendarScreen() {
 
     if (dayEvents.length === 0) {
       return (
-        <View style={dynamicStyles.noEventsContainer}>
-          <Text style={dynamicStyles.noEventsText}>No events on this day</Text>
+        <View style={styles.noEventsContainer}>
+          <Text style={styles.noEventsText}>No events on this day</Text>
         </View>
       );
     }
@@ -370,7 +366,7 @@ export default function CalendarScreen() {
         {dayEvents.map((item) => (
           <TouchableOpacity
             key={item.id}
-            style={dynamicStyles.eventCard}
+            style={styles.eventCard}
             onPress={() => {
               // Only the creator can edit the event
               const isCreator = item.createdBy === user?.uid || item.userId === user?.uid;
@@ -385,8 +381,8 @@ export default function CalendarScreen() {
               }
             }}
           >
-            <View style={dynamicStyles.eventTime}>
-              <Text style={dynamicStyles.eventTimeText}>
+            <View style={styles.eventTime}>
+              <Text style={styles.eventTimeText}>
                 {(() => {
                   let eventDate;
                   if (item.startDateTime.toDate && typeof item.startDateTime.toDate === 'function') {
@@ -404,17 +400,17 @@ export default function CalendarScreen() {
                 })()}
               </Text>
             </View>
-            <View style={dynamicStyles.eventDetails}>
-              <Text style={dynamicStyles.eventTitle}>{item.title}</Text>
-              <Text style={dynamicStyles.eventPlace}>{item.placeName}</Text>
-              <View style={dynamicStyles.eventMeta}>
+            <View style={styles.eventDetails}>
+              <Text style={styles.eventTitle}>{item.title}</Text>
+              <Text style={styles.eventPlace}>{item.placeName}</Text>
+              <View style={styles.eventMeta}>
                 {item.suitability && item.suitability.length > 0 && (
-                  <Text style={dynamicStyles.eventSuitability}>
+                  <Text style={styles.eventSuitability}>
                     {item.suitability.join(", ")}
                   </Text>
                 )}
                 {item.attendees && (
-                  <Text style={dynamicStyles.eventAttendees}>
+                  <Text style={styles.eventAttendees}>
                     {item.attendees.length} attending
                   </Text>
                 )}
@@ -453,409 +449,13 @@ export default function CalendarScreen() {
     }));
   };
 
-  // Helper to convert hex color to rgba
-  const hexToRgba = (hex, alpha) => {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  };
-
-  // Create theme-aware styles inside component so they update when theme changes
-  const dynamicStyles = StyleSheet.create({
-    headerNavButtonLarge: {
-      width: 52,
-      height: 52,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.primaryDark,
-      marginHorizontal: 2,
-      shadowColor: theme.colors.accentMid,
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 4,
-    },
-    headerNavButtonTextLarge: {
-      fontSize: 32,
-      fontWeight: '700',
-      color: theme.colors.accentMid,
-    },
-    container: {
-      flex: 1,
-    },
-    headerControls: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.md,
-      backgroundColor: theme.colors.primaryMid,
-    },
-    headerTodayButton: {
-      minWidth: 80,
-      height: 52,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.primaryDark,
-      marginHorizontal: 2,
-      paddingHorizontal: 12,
-      shadowColor: theme.colors.accentMid,
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 4,
-    },
-    filterButton: {
-      width: 52,
-      height: 52,
-      borderRadius: 12,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: theme.colors.primaryDark,
-      shadowColor: theme.colors.accentMid,
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 4,
-    },
-    filtersPanel: {
-      maxHeight: "70%",
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.md,
-      borderTopWidth: 1,
-      borderTopColor: theme.colors.border,
-      backgroundColor: theme.colors.primaryDark,
-    },
-    monthHeaderTitleBar: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 8,
-      backgroundColor: theme.colors.primaryDark,
-      borderRadius: 12,
-      marginTop: 8,
-      marginBottom: 4,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      overflow: 'hidden',
-      width: '100%',
-    },
-    calendarWrapper: {
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: 16,
-    },
-    calendarGrid: {
-      borderRadius: 12,
-      overflow: 'hidden',
-    },
-    dayHeader: {
-      backgroundColor: theme.colors.primaryDark,
-    },
-    dayHeaderText: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.colors.textMuted,
-      textTransform: 'uppercase',
-    },
-    calendarCell: {
-      flex: 1,
-      aspectRatio: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-    },
-    weekCell: {
-      flex: 1,
-      aspectRatio: 1.5,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-    },
-    calendarCellContent: {
-      alignItems: 'center',
-    },
-    calendarDay: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: theme.colors.text,
-    },
-    calendarDaySelected: {
-      color: theme.colors.primaryDark,
-      fontWeight: '700',
-    },
-    calendarDayToday: {
-      color: theme.colors.accentMid,
-      fontWeight: '700',
-    },
-    calendarCellSelected: {
-      backgroundColor: theme.colors.accentMid,
-    },
-    calendarCellToday: {
-      borderWidth: 2,
-      borderColor: theme.colors.accentMid,
-    },
-    eventDot: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      backgroundColor: hexToRgba(theme.colors.accentMid, 0.3),
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    eventDotSelected: {
-      backgroundColor: theme.colors.primaryDark,
-    },
-    eventDotText: {
-      fontSize: 8,
-      fontWeight: '700',
-      color: theme.colors.accentMid,
-    },
-    eventDotTextSelected: {
-      color: theme.colors.accentMid,
-    },
-    filtersPanelContent: {
-      paddingBottom: theme.spacing.xl,
-    },
-    filterGroup: {
-      marginBottom: theme.spacing.md,
-    },
-    filterGroupTitle: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.colors.textMuted,
-      textTransform: 'uppercase',
-      marginBottom: theme.spacing.sm,
-      letterSpacing: 0.5,
-    },
-    filterOptions: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: theme.spacing.xs,
-    },
-    filterPill: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 16,
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: 'transparent',
-    },
-    filterPillActive: {
-      backgroundColor: theme.colors.accentMid,
-      borderColor: theme.colors.accentMid,
-    },
-    filterPillText: {
-      fontSize: 12,
-      fontWeight: '500',
-      color: theme.colors.textMuted,
-    },
-    filterPillTextActive: {
-      color: theme.colors.primaryDark,
-      fontWeight: '700',
-    },
-    filterButtonText: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: theme.colors.accentMid,
-    },
-    eventRow: {
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-    },
-    eventTitle: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: theme.colors.accentMid,
-      marginBottom: 4,
-    },
-    eventMeta: {
-      flexDirection: 'row',
-      gap: 12,
-      alignItems: 'center',
-    },
-    eventSuitability: {
-      fontSize: 12,
-      fontWeight: '500',
-      color: theme.colors.textMuted,
-    },
-    eventAttendees: {
-      fontSize: 12,
-      fontWeight: '500',
-      color: theme.colors.textMuted,
-    },
-    noEventsContainer: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: theme.spacing.xl * 2,
-      backgroundColor: theme.colors.primaryDark,
-    },
-    createEventButton: {
-      paddingHorizontal: theme.spacing.lg,
-      paddingVertical: theme.spacing.md,
-      backgroundColor: theme.colors.accentMid,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    createEventButtonText: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: theme.colors.primaryDark,
-    },
-    modalButton: {
-      paddingVertical: theme.spacing.md,
-      paddingHorizontal: theme.spacing.lg,
-      backgroundColor: theme.colors.accentMid,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    modalButtonText: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: theme.colors.primaryDark,
-    },
-    deleteEventButton: {
-      paddingVertical: theme.spacing.md,
-      paddingHorizontal: theme.spacing.lg,
-      backgroundColor: theme.colors.error,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    deleteEventButtonText: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: '#ffffff',
-      marginLeft: 8,
-    },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.6)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    modalContent: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 20,
-      paddingTop: 24,
-      paddingBottom: 32,
-      maxHeight: '75%',
-      width: '85%',
-    },
-    modalTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: theme.colors.text,
-      paddingHorizontal: 20,
-      marginBottom: 4,
-    },
-    modalSubtitle: {
-      fontSize: 14,
-      color: theme.colors.textMuted,
-      paddingHorizontal: 20,
-      marginBottom: 16,
-    },
-    optionsContainer: {
-      paddingHorizontal: 20,
-      marginBottom: 16,
-      maxHeight: 400,
-    },
-    visibilityOption: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 12,
-      paddingHorizontal: 12,
-      marginBottom: 8,
-      borderRadius: 10,
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      borderWidth: 1,
-      borderColor: 'transparent',
-    },
-    visibilityOptionSelected: {
-      backgroundColor: hexToRgba(theme.colors.accentMid, 0.1),
-      borderColor: theme.colors.accentMid,
-    },
-    optionTextContainer: {
-      flex: 1,
-      marginLeft: 12,
-    },
-    optionTitle: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: theme.colors.text,
-    },
-    optionDesc: {
-      fontSize: 12,
-      color: theme.colors.textMuted,
-      marginTop: 2,
-    },
-    groupSelector: {
-      marginLeft: 32,
-      marginTop: 8,
-      marginBottom: 12,
-      gap: 6,
-    },
-    groupOption: {
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderRadius: 8,
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    groupOptionSelected: {
-      backgroundColor: hexToRgba(theme.colors.accentMid, 0.15),
-      borderColor: theme.colors.accentMid,
-    },
-    groupOptionText: {
-      fontSize: 13,
-      fontWeight: '500',
-      color: theme.colors.text,
-    },
-    groupOptionTextSelected: {
-      color: theme.colors.accentMid,
-      fontWeight: '600',
-    },
-    noGroupsText: {
-      fontSize: 13,
-      color: theme.colors.textMuted,
-      fontStyle: 'italic',
-      marginLeft: 32,
-      marginBottom: 12,
-    },
-    buttonRow: {
-      flexDirection: 'row',
-      gap: 12,
-      paddingHorizontal: 20,
-    },
-    cancelButton: {
-      backgroundColor: theme.colors.primaryDark,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    cancelButtonText: {
-      color: theme.colors.text,
-    },
-  });
-
   return (
-    <View style={[dynamicStyles.container, { backgroundColor: colors.background }]}>
-      <View style={[dynamicStyles.headerControls, { paddingTop: 12, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingRight: insets.top + 12 }]}> 
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.headerControls, { paddingTop: 12, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingRight: insets.top + 12 }]}> 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity 
-              style={dynamicStyles.headerNavButtonLarge} 
+              style={styles.headerNavButtonLarge} 
               onPress={() => {
                 const prev = new Date(selectedDate);
                 prev.setMonth(prev.getMonth() - 1);
@@ -863,17 +463,17 @@ export default function CalendarScreen() {
               }}
               activeOpacity={0.8}
             >
-              <Text style={dynamicStyles.headerNavButtonTextLarge}>{'<'}</Text>
+              <Text style={styles.headerNavButtonTextLarge}>{'<'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={dynamicStyles.headerTodayButton}
+              style={styles.headerTodayButton}
               onPress={() => setSelectedDate(new Date())}
               activeOpacity={0.8}
             >
               <Text style={{ fontSize: 20, fontWeight: '700', color: colors.accentMid }}>Today</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={dynamicStyles.headerNavButtonLarge}
+              style={styles.headerNavButtonLarge}
               onPress={() => {
                 const next = new Date(selectedDate);
                 next.setMonth(next.getMonth() + 1);
@@ -881,11 +481,11 @@ export default function CalendarScreen() {
               }}
               activeOpacity={0.8}
             >
-              <Text style={dynamicStyles.headerNavButtonTextLarge}>{'>'}</Text>
+              <Text style={styles.headerNavButtonTextLarge}>{'>'}</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity 
-            style={dynamicStyles.filterButton} 
+            style={styles.filterButton} 
             onPress={() => setShowFilters(!showFilters)} 
             activeOpacity={0.8} 
           > 
@@ -900,12 +500,12 @@ export default function CalendarScreen() {
 
       {showFilters && (
         <ScrollView
-          style={dynamicStyles.filtersPanel}
-          contentContainerStyle={dynamicStyles.filtersPanelContent}
+          style={styles.filtersPanel}
+          contentContainerStyle={styles.filtersPanelContent}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={dynamicStyles.filterTitle}>Sharing</Text>
-          <View style={dynamicStyles.iconGrid}>
+          <Text style={styles.filterTitle}>Sharing</Text>
+          <View style={styles.iconGrid}>
             {["private", "group", "public"].map((sharingType) => {
               const active = filters.sharing.includes(sharingType);
               const displayName = sharingType.charAt(0).toUpperCase() + sharingType.slice(1);
@@ -913,15 +513,15 @@ export default function CalendarScreen() {
                 <TouchableOpacity
                   key={sharingType}
                   style={[
-                    dynamicStyles.iconButton,
-                    active && dynamicStyles.iconButtonActive,
+                    styles.iconButton,
+                    active && styles.iconButtonActive,
                   ]}
                   onPress={() => handleSharingToggle(sharingType)}
                 >
                   <Text
                     style={[
-                      dynamicStyles.iconLabel,
-                      active && dynamicStyles.iconLabelActive,
+                      styles.iconLabel,
+                      active && styles.iconLabelActive,
                     ]}
                   >
                     {displayName}
@@ -931,23 +531,23 @@ export default function CalendarScreen() {
             })}
           </View>
 
-          <Text style={[dynamicStyles.filterTitle, { marginTop: spacing.md }]}>Regions</Text>
-          <View style={dynamicStyles.iconGrid}>
+          <Text style={[styles.filterTitle, { marginTop: spacing.md }]}>Regions</Text>
+          <View style={styles.iconGrid}>
             {REGIONS.map((region) => {
               const active = filters.regions.includes(region);
               return (
                 <TouchableOpacity
                   key={region}
                   style={[
-                    dynamicStyles.iconButton,
-                    active && dynamicStyles.iconButtonActive,
+                    styles.iconButton,
+                    active && styles.iconButtonActive,
                   ]}
                   onPress={() => handleRegionToggle(region)}
                 >
                   <Text
                     style={[
-                      dynamicStyles.iconLabel,
-                      active && dynamicStyles.iconLabelActive,
+                      styles.iconLabel,
+                      active && styles.iconLabelActive,
                     ]}
                   >
                     {region}
@@ -957,23 +557,23 @@ export default function CalendarScreen() {
             })}
           </View>
 
-          <Text style={[dynamicStyles.filterTitle, { marginTop: spacing.md }]}>Suitability</Text>
-          <View style={dynamicStyles.iconGrid}>
+          <Text style={[styles.filterTitle, { marginTop: spacing.md }]}>Suitability</Text>
+          <View style={styles.iconGrid}>
             {["Bikes", "Scooters", "Cars"].map((suitability) => {
               const active = filters.suitability.includes(suitability);
               return (
                 <TouchableOpacity
                   key={suitability}
                   style={[
-                    dynamicStyles.iconButton,
-                    active && dynamicStyles.iconButtonActive,
+                    styles.iconButton,
+                    active && styles.iconButtonActive,
                   ]}
                   onPress={() => handleSuitabilityToggle(suitability)}
                 >
                   <Text
                     style={[
-                      dynamicStyles.iconLabel,
-                      active && dynamicStyles.iconLabelActive,
+                      styles.iconLabel,
+                      active && styles.iconLabelActive,
                     ]}
                   >
                     {suitability}
@@ -987,13 +587,13 @@ export default function CalendarScreen() {
 
       <View style={{ flex: 1 }}>
         <ScrollView
-          style={dynamicStyles.content}
+          style={styles.content}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: theme.spacing.xl * 5 }}
         >
           {/* Month Title in place of old header */}
-          <View style={dynamicStyles.monthHeaderTitleBar}>
-            <Text style={dynamicStyles.monthHeaderTitle}>
+          <View style={styles.monthHeaderTitleBar}>
+            <Text style={styles.monthHeaderTitle}>
               {selectedDate.toLocaleDateString("en-US", {
                 month: "long",
                 year: "numeric",
@@ -1002,13 +602,13 @@ export default function CalendarScreen() {
           </View>
 
           {/* Calendar Grid (always month view) */}
-          <View style={dynamicStyles.calendarGrid} pointerEvents="box-none" {...panResponder.panHandlers}>
+          <View style={styles.calendarGrid} pointerEvents="box-none" {...panResponder.panHandlers}>
             {renderCalendarGrid()}
           </View>
 
           {/* Selected Date Events */}
-          <View style={dynamicStyles.eventsSection}>
-            <Text style={dynamicStyles.selectedDateTitle}>
+          <View style={styles.eventsSection}>
+            <Text style={styles.selectedDateTitle}>
               {selectedDate.toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "short",
@@ -1021,13 +621,13 @@ export default function CalendarScreen() {
           {/* Create Event Button (for users with canCreateEvents capability) */}
           {capabilities?.canCreateEvents ? (
             <TouchableOpacity
-              style={dynamicStyles.createEventButton}
+              style={styles.createEventButton}
               onPress={() => router.push({
                 pathname: "/create-event",
                 params: { selectedDate: selectedDate.toISOString() }
               })}
             >
-              <Text style={dynamicStyles.createEventButtonText}>+ Create Event</Text>
+              <Text style={styles.createEventButtonText}>+ Create Event</Text>
             </TouchableOpacity>
           ) : null}
         </ScrollView>
@@ -1040,13 +640,13 @@ export default function CalendarScreen() {
         animationType="slide"
         onRequestClose={() => setShowEventModal(false)}
       >
-        <View style={dynamicStyles.eventModalOverlay}>
-          <View style={dynamicStyles.eventModalContent}>
+        <View style={styles.eventModalOverlay}>
+          <View style={styles.eventModalContent}>
             {selectedEvent && (
               <ScrollView showsVerticalScrollIndicator={false}>
                 {/* Header with close button */}
-                <View style={dynamicStyles.eventModalHeader}>
-                  <Text style={dynamicStyles.eventModalTitle}>{selectedEvent.title}</Text>
+                <View style={styles.eventModalHeader}>
+                  <Text style={styles.eventModalTitle}>{selectedEvent.title}</Text>
                   <TouchableOpacity onPress={() => setShowEventModal(false)}>
                     <Ionicons name="close" size={28} color={theme.colors.accentMid} />
                   </TouchableOpacity>
@@ -1072,15 +672,15 @@ export default function CalendarScreen() {
                 </TouchableOpacity>
 
                 {/* Event details */}
-                <View style={dynamicStyles.eventModalSection}>
-                  <Text style={dynamicStyles.eventModalLabel}>Place</Text>
-                  <Text style={dynamicStyles.eventModalValue}>{selectedEvent.placeName}</Text>
+                <View style={styles.eventModalSection}>
+                  <Text style={styles.eventModalLabel}>Place</Text>
+                  <Text style={styles.eventModalValue}>{selectedEvent.placeName}</Text>
                 </View>
 
                 {selectedEvent.startDateTime && (
-                  <View style={dynamicStyles.eventModalSection}>
-                    <Text style={dynamicStyles.eventModalLabel}>Date & Time</Text>
-                    <Text style={dynamicStyles.eventModalValue}>
+                  <View style={styles.eventModalSection}>
+                    <Text style={styles.eventModalLabel}>Date & Time</Text>
+                    <Text style={styles.eventModalValue}>
                       {(() => {
                         let eventDate;
                         if (selectedEvent.startDateTime.toDate && typeof selectedEvent.startDateTime.toDate === 'function') {
@@ -1104,48 +704,48 @@ export default function CalendarScreen() {
                 )}
 
                 {selectedEvent.region && (
-                  <View style={dynamicStyles.eventModalSection}>
-                    <Text style={dynamicStyles.eventModalLabel}>Region</Text>
-                    <Text style={dynamicStyles.eventModalValue}>{selectedEvent.region}</Text>
+                  <View style={styles.eventModalSection}>
+                    <Text style={styles.eventModalLabel}>Region</Text>
+                    <Text style={styles.eventModalValue}>{selectedEvent.region}</Text>
                   </View>
                 )}
 
                 {selectedEvent.suitability && selectedEvent.suitability.length > 0 && (
-                  <View style={dynamicStyles.eventModalSection}>
-                    <Text style={dynamicStyles.eventModalLabel}>Suitability</Text>
-                    <Text style={dynamicStyles.eventModalValue}>{selectedEvent.suitability.join(", ")}</Text>
+                  <View style={styles.eventModalSection}>
+                    <Text style={styles.eventModalLabel}>Suitability</Text>
+                    <Text style={styles.eventModalValue}>{selectedEvent.suitability.join(", ")}</Text>
                   </View>
                 )}
 
                 {selectedEvent.attendees && (
-                  <View style={dynamicStyles.eventModalSection}>
-                    <Text style={dynamicStyles.eventModalLabel}>Attendees</Text>
-                    <Text style={dynamicStyles.eventModalValue}>{selectedEvent.attendees.length} people</Text>
+                  <View style={styles.eventModalSection}>
+                    <Text style={styles.eventModalLabel}>Attendees</Text>
+                    <Text style={styles.eventModalValue}>{selectedEvent.attendees.length} people</Text>
                   </View>
                 )}
 
                 {selectedEvent.description && (
-                  <View style={dynamicStyles.eventModalSection}>
-                    <Text style={dynamicStyles.eventModalLabel}>Description</Text>
-                    <Text style={dynamicStyles.eventModalValue}>{selectedEvent.description}</Text>
+                  <View style={styles.eventModalSection}>
+                    <Text style={styles.eventModalLabel}>Description</Text>
+                    <Text style={styles.eventModalValue}>{selectedEvent.description}</Text>
                   </View>
                 )}
 
                 {/* Share button - only for event creator */}
                 {selectedEvent.createdBy === user?.uid && (
                   <TouchableOpacity
-                    style={dynamicStyles.shareEventButton}
+                    style={styles.shareEventButton}
                     onPress={openShareModal}
                   >
                     <Ionicons name="share-social" size={20} color={theme.colors.accentMid} />
-                    <Text style={dynamicStyles.shareEventButtonText}>Share Event</Text>
+                    <Text style={styles.shareEventButtonText}>Share Event</Text>
                   </TouchableOpacity>
                 )}
 
                 {/* Delete button - only for event creator */}
                 {selectedEvent.createdBy === user?.uid && (
                   <TouchableOpacity
-                    style={dynamicStyles.deleteEventButton}
+                    style={styles.deleteEventButton}
                     onPress={() => {
                       // Check if this is part of a series
                       const isSeriesEvent = selectedEvent.seriesId && selectedEvent.recurrence && selectedEvent.recurrence !== "one-off";
@@ -1211,7 +811,7 @@ export default function CalendarScreen() {
                     }}
                   >
                     <MaterialCommunityIcons name="trash-can" size={20} color={colors.danger} />
-                    <Text style={dynamicStyles.deleteEventButtonText}>Delete Event</Text>
+                    <Text style={styles.deleteEventButtonText}>Delete Event</Text>
                   </TouchableOpacity>
                 )}
 
@@ -1229,20 +829,20 @@ export default function CalendarScreen() {
         animationType="fade"
         onRequestClose={() => setShareModalVisible(false)}
       >
-        <View style={dynamicStyles.modalOverlay}>
-          <View style={dynamicStyles.modalContent}>
-            <Text style={dynamicStyles.modalTitle}>Share Event</Text>
-            <Text style={dynamicStyles.modalSubtitle}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Share Event</Text>
+            <Text style={styles.modalSubtitle}>
               {selectedEvent?.title || "Untitled event"}
             </Text>
 
-            <ScrollView style={dynamicStyles.optionsContainer}>
+            <ScrollView style={styles.optionsContainer}>
               {/* Private Option */}
               <TouchableOpacity
                 style={[
-                  dynamicStyles.visibilityOption,
+                  styles.visibilityOption,
                   selectedVisibility === EVENT_VISIBILITY.PRIVATE &&
-                    dynamicStyles.visibilityOptionSelected,
+                    styles.visibilityOptionSelected,
                 ]}
                 onPress={() => setSelectedVisibility(EVENT_VISIBILITY.PRIVATE)}
               >
@@ -1255,9 +855,9 @@ export default function CalendarScreen() {
                       : theme.colors.text
                   }
                 />
-                <View style={dynamicStyles.optionTextContainer}>
-                  <Text style={dynamicStyles.optionTitle}>Private</Text>
-                  <Text style={dynamicStyles.optionDesc}>Only you can see this</Text>
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Private</Text>
+                  <Text style={styles.optionDesc}>Only you can see this</Text>
                 </View>
                 <Ionicons
                   name={
@@ -1273,9 +873,9 @@ export default function CalendarScreen() {
               {/* Group Option */}
               <TouchableOpacity
                 style={[
-                  dynamicStyles.visibilityOption,
+                  styles.visibilityOption,
                   selectedVisibility === EVENT_VISIBILITY.GROUP &&
-                    dynamicStyles.visibilityOptionSelected,
+                    styles.visibilityOptionSelected,
                 ]}
                 onPress={() => setSelectedVisibility(EVENT_VISIBILITY.GROUP)}
               >
@@ -1288,9 +888,9 @@ export default function CalendarScreen() {
                       : theme.colors.text
                   }
                 />
-                <View style={dynamicStyles.optionTextContainer}>
-                  <Text style={dynamicStyles.optionTitle}>Group</Text>
-                  <Text style={dynamicStyles.optionDesc}>Share with a group</Text>
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Group</Text>
+                  <Text style={styles.optionDesc}>Share with a group</Text>
                 </View>
                 <Ionicons
                   name={
@@ -1359,7 +959,7 @@ export default function CalendarScreen() {
               )}
 
               {selectedVisibility === EVENT_VISIBILITY.GROUP && (!groups || groups.length === 0) && (
-                <Text style={dynamicStyles.noGroupsText}>
+                <Text style={styles.noGroupsText}>
                   No groups available. Create a group first.
                 </Text>
               )}
@@ -1367,9 +967,9 @@ export default function CalendarScreen() {
               {/* Public Option */}
               <TouchableOpacity
                 style={[
-                  dynamicStyles.visibilityOption,
+                  styles.visibilityOption,
                   selectedVisibility === EVENT_VISIBILITY.PUBLIC &&
-                    dynamicStyles.visibilityOptionSelected,
+                    styles.visibilityOptionSelected,
                 ]}
                 onPress={() => setSelectedVisibility(EVENT_VISIBILITY.PUBLIC)}
               >
@@ -1382,9 +982,9 @@ export default function CalendarScreen() {
                       : theme.colors.text
                   }
                 />
-                <View style={dynamicStyles.optionTextContainer}>
-                  <Text style={dynamicStyles.optionTitle}>Public</Text>
-                  <Text style={dynamicStyles.optionDesc}>Anyone can see this</Text>
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Public</Text>
+                  <Text style={styles.optionDesc}>Anyone can see this</Text>
                 </View>
                 <Ionicons
                   name={
@@ -1398,19 +998,19 @@ export default function CalendarScreen() {
               </TouchableOpacity>
             </ScrollView>
 
-            <View style={dynamicStyles.buttonRow}>
+            <View style={styles.buttonRow}>
               <TouchableOpacity
-                style={[dynamicStyles.modalButton, { backgroundColor: theme.colors.accentMid }]}
+                style={[styles.modalButton, { backgroundColor: theme.colors.accentMid }]}
                 onPress={handleShareEvent}
                 disabled={sharing}
               >
-                <Text style={dynamicStyles.modalButtonText}>Share</Text>
+                <Text style={styles.modalButtonText}>Share</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[dynamicStyles.modalButton, dynamicStyles.cancelButton]}
+                style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setShareModalVisible(false)}
               >
-                <Text style={[dynamicStyles.modalButtonText, dynamicStyles.cancelButtonText]}>Cancel</Text>
+                <Text style={[styles.modalButtonText, styles.cancelButtonText]}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1420,3 +1020,667 @@ export default function CalendarScreen() {
   );
 }
 
+const styles = StyleSheet.create({
+  headerNavButtonLarge: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryDark,
+    marginHorizontal: 2,
+    shadowColor: theme.colors.accentMid,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  headerNavButtonTextLarge: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: theme.colors.accentMid,
+  },
+  headerTodayButton: {
+    minWidth: 80,
+    height: 52,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryDark,
+    marginHorizontal: 2,
+    paddingHorizontal: 12,
+    shadowColor: theme.colors.accentMid,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  monthHeaderTitleBar: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    backgroundColor: theme.colors.primaryMid,
+    borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.primaryMid,
+    borderBottomWidth: 0,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
+  headerControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.primaryMid,
+  },
+  filterButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.primaryDark,
+    shadowColor: theme.colors.accentMid,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  filterButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: theme.colors.primaryDark,
+  },
+  filtersPanel: {
+    maxHeight: "70%",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.primaryDark,
+  },
+  filtersPanelContent: {
+    paddingBottom: theme.spacing.xl,
+  },
+  filterTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: theme.colors.accentMid,
+    marginBottom: 12,
+  },
+  iconGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginBottom: theme.spacing.md,
+  },
+  iconButton: {
+    width: "48%",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    borderRadius: 12,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  iconButtonActive: {
+    backgroundColor: theme.colors.surfaceHighlight,
+  },
+  iconLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: theme.colors.accentDark,
+    textAlign: "center",
+  },
+  iconLabelActive: {
+    color: theme.colors.accentMid,
+    fontWeight: "600",
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.background,
+  },
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  calendarCell: {
+    width: "14.285714%",
+    aspectRatio: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 0.5,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  calendarCellSelected: {
+    backgroundColor: theme.colors.accentMid + "30",
+  },
+  calendarCellToday: {
+    backgroundColor: theme.colors.primaryLight,
+  },
+  dayHeader: {
+    backgroundColor: theme.colors.primaryMid,
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  dayHeaderText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: theme.colors.accentMid,
+  },
+  calendarCellContent: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  calendarDay: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  calendarDaySelected: {
+    color: theme.colors.accentMid,
+    fontWeight: "700",
+  },
+  calendarDayToday: {
+    color: theme.colors.accentMid,
+    fontWeight: "700",
+  },
+  eventDot: {
+    marginTop: 2,
+    backgroundColor: theme.colors.accentMid,
+    borderRadius: 6,
+    minWidth: 16,
+    height: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  eventDotText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: theme.colors.primaryDark,
+  },
+  viewToggle: {
+    flexDirection: "row",
+    gap: 6,
+    flex: 1,
+  },
+  viewButton: {
+    width: 52,
+    height: 52,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.primaryDark,
+  },
+  viewButtonActive: {
+    backgroundColor: theme.colors.accentMid,
+    borderColor: theme.colors.accentMid,
+  },
+  viewButtonText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: theme.colors.textMuted,
+  },
+  viewButtonTextActive: {
+    color: theme.colors.primaryDark,
+  },
+  monthHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+  },
+  monthHeaderButton: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: theme.colors.accentMid,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  monthHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  calendarCell: {
+    width: "14.285714%",
+    aspectRatio: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 0.5,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  calendarCellContent: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  dayHeader: {
+    backgroundColor: theme.colors.primaryMid,
+    borderColor: theme.colors.border,
+  },
+  dayHeaderText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.accentMid,
+  },
+  calendarCellToday: {
+    backgroundColor: theme.colors.accentDark,
+  },
+  calendarCellSelected: {
+    backgroundColor: theme.colors.accentMid,
+  },
+  calendarDay: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  calendarDayToday: {
+    color: theme.colors.primaryDark,
+    fontWeight: "700",
+  },
+  calendarDaySelected: {
+    color: theme.colors.primaryDark,
+    fontWeight: "700",
+  },
+  eventDot: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    backgroundColor: theme.colors.accentMid,
+    borderRadius: 3,
+    minWidth: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  eventDotText: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: theme.colors.primaryMid,
+  },
+  eventDotSelected: {
+    backgroundColor: theme.colors.primaryMid,
+  },
+  eventDotTextSelected: {
+    color: theme.colors.accentMid,
+  },
+  eventsSection: {
+    marginBottom: theme.spacing.lg,
+  },
+  selectedDateTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+  },
+  noEventsContainer: {
+    paddingVertical: theme.spacing.lg,
+    alignItems: "center",
+    backgroundColor: theme.colors.background,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  noEventsText: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+  },
+  eventCard: {
+    flexDirection: "row",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    backgroundColor: theme.colors.primaryDark,
+    borderRadius: theme.radius.md,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.accentMid,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  eventTime: {
+    marginRight: 12,
+    justifyContent: "center",
+    minWidth: 55,
+  },
+  eventTimeText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.colors.accentMid,
+  },
+  eventDetails: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  eventTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
+    marginBottom: 4,
+  },
+  eventPlace: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginBottom: 6,
+  },
+  eventMeta: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  eventSuitability: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: theme.colors.accentMid,
+  },
+  eventAttendees: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: theme.colors.textMuted,
+  },
+  createEventButton: {
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+    paddingVertical: 14,
+    backgroundColor: theme.colors.accentMid,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createEventButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme.colors.primaryDark,
+  },
+  weekGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  weekCell: {
+    width: "14.285714%",
+    aspectRatio: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "transparent",
+    paddingVertical: 8,
+  },
+  weekDayNum: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  weekEventDot: {
+    marginTop: 4,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    backgroundColor: theme.colors.accentMid,
+    borderRadius: 2,
+    minWidth: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  eventModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.md,
+  },
+  eventModalContent: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: 20,
+    paddingTop: 24,
+    paddingBottom: 32,
+    maxHeight: "85%",
+    width: "85%",
+    maxWidth: 400,
+  },
+  eventModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: 20,
+  },
+  eventModalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.accentMid,
+    flex: 1,
+  },
+  eventModalSubtitle: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  eventModalSection: {
+    marginBottom: theme.spacing.lg,
+    paddingHorizontal: 20,
+  },
+  eventModalLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.accentDark,
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  eventModalValue: {
+    fontSize: 16,
+    color: theme.colors.text,
+    fontWeight: "500",
+    lineHeight: 24,
+  },
+  shareEventButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.accentMid,
+    borderRadius: 8,
+    marginTop: theme.spacing.lg,
+    marginHorizontal: 20,
+  },
+  shareEventButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: theme.colors.primaryDark,
+    marginLeft: 8,
+  },
+  deleteEventButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.danger,
+    borderRadius: 8,
+    marginTop: theme.spacing.lg,
+    marginHorizontal: 20,
+  },
+  deleteEventButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#ffffff",
+    marginLeft: 8,
+  },
+  
+  // Share modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: 20,
+    paddingTop: 24,
+    paddingBottom: 32,
+    maxHeight: "75%",
+    width: "85%",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.text,
+    paddingHorizontal: 20,
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  optionsContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    maxHeight: 400,
+  },
+  visibilityOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  visibilityOptionSelected: {
+    backgroundColor: "rgba(255, 216, 92, 0.1)",
+    borderColor: theme.colors.accentMid,
+  },
+  optionTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  optionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  optionDesc: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginTop: 2,
+  },
+  groupSelector: {
+    marginLeft: 32,
+    marginTop: 8,
+    marginBottom: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: theme.colors.accentMid,
+    paddingLeft: 12,
+  },
+  groupOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+    borderRadius: 8,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  groupOptionSelected: {
+    backgroundColor: "rgba(255, 216, 92, 0.15)",
+    borderColor: theme.colors.accentMid,
+  },
+  groupOptionText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: theme.colors.text,
+  },
+  groupOptionTextSelected: {
+    color: theme.colors.accentMid,
+    fontWeight: "600",
+  },
+  noGroupsText: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+    fontStyle: "italic",
+    marginTop: 8,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 20,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  cancelButton: {
+    backgroundColor: theme.colors.border,
+  },
+  cancelButtonText: {
+    color: theme.colors.text,
+  },
+});
