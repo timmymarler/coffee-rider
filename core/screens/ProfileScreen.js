@@ -21,7 +21,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { addDoc, collection, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Clipboard, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Clipboard, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Picker } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LoginScreen from "../auth/login";
 import RegisterScreen from "../auth/register";
@@ -320,6 +320,25 @@ export default function ProfileScreen() {
   };
 
   // -----------------------------------
+  // Handle Theme Change
+  // -----------------------------------
+  const handleThemeChange = async (newTheme) => {
+    if (!user) return;
+
+    try {
+      setBrand(newTheme);
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, {
+        selectedTheme: newTheme,
+        updatedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error("Error saving theme preference:", error);
+      Alert.alert("Error", "Failed to save theme preference");
+    }
+  };
+
+  // -----------------------------------
   // Check if there are unsaved changes
   // -----------------------------------
   const hasChanges = () => {
@@ -587,43 +606,26 @@ export default function ProfileScreen() {
 
         {/* Theme Selector */}
         <CRLabel style={{ marginTop: theme.spacing.md }}>App Theme</CRLabel>
-        <View style={{ flexDirection: "row", gap: theme.spacing.sm, marginVertical: theme.spacing.sm }}>
-          {["rider", "driver", "strider"].map((themeName) => (
-            <TouchableOpacity
-              key={themeName}
-              onPress={() => setBrand(themeName)}
-              style={{
-                flex: 1,
-                paddingVertical: theme.spacing.md,
-                paddingHorizontal: theme.spacing.sm,
-                borderRadius: theme.radius.md,
-                backgroundColor:
-                  currentBrand === themeName
-                    ? theme.colors.accentMid
-                    : theme.colors.inputBg,
-                borderWidth: currentBrand === themeName ? 2 : 1,
-                borderColor:
-                  currentBrand === themeName
-                    ? theme.colors.accentMid
-                    : theme.colors.inputBorder,
-                alignItems: "center",
-              }}
-            >
-              <Text
-                style={{
-                  color:
-                    currentBrand === themeName
-                      ? theme.colors.primaryDark
-                      : theme.colors.text,
-                  fontWeight: currentBrand === themeName ? "600" : "500",
-                  fontSize: 13,
-                  textTransform: "capitalize",
-                }}
-              >
-                {themeName}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <View style={{
+          backgroundColor: theme.colors.inputBg,
+          borderWidth: 1,
+          borderColor: theme.colors.inputBorder,
+          borderRadius: theme.radius.md,
+          overflow: 'hidden',
+          marginVertical: theme.spacing.sm,
+        }}>
+          <Picker
+            selectedValue={currentBrand}
+            onValueChange={(itemValue) => handleThemeChange(itemValue)}
+            style={{
+              color: theme.colors.text,
+              height: 50,
+            }}
+          >
+            <Picker.Item label="Rider" value="rider" />
+            <Picker.Item label="Driver" value="driver" />
+            <Picker.Item label="Strider" value="strider" />
+          </Picker>
         </View>
 
         {role === "place-owner" ? (

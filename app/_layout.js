@@ -250,6 +250,23 @@ function FloatingTabBar({ state }) {
 
 
 
+function ThemeAwareLayoutContent() {
+  const { user, profile } = useContext(AuthContext);
+
+  return (
+    <ThemeProvider userProfile={profile} userId={user?.uid}>
+      <RoutingPreferencesProvider brand="rider">
+        <TabBarProvider>
+          <WaypointsProvider>
+            <AppHeader />
+            <LayoutContent />
+          </WaypointsProvider>
+        </TabBarProvider>
+      </RoutingPreferencesProvider>
+    </ThemeProvider>
+  );
+}
+
 function LayoutContent() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [versionModalDismissed, setVersionModalDismissed] = useState(false);
@@ -372,16 +389,7 @@ export default function Layout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <ThemeProvider>
-          <RoutingPreferencesProvider brand="rider">
-            <TabBarProvider>
-              <WaypointsProvider>
-                <AppHeader />
-                <LayoutContent />
-              </WaypointsProvider>
-            </TabBarProvider>
-          </RoutingPreferencesProvider>
-        </ThemeProvider>
+        <ThemeAwareLayoutContent />
       </AuthProvider>
     </GestureHandlerRootView>
   );

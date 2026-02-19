@@ -1,6 +1,7 @@
 // core/context/ThemeContext.js
 import { createContext, useContext, useState, useEffect } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/config/firebase";
 import driver from "@themes/driver";
 import rider from "@themes/rider";
 import strider from "@themes/strider";
@@ -19,44 +20,41 @@ const ThemeContextInternal = createContext({
   setBrand: () => {},
 });
 
-export function ThemeProvider({ children }) {
-  const [brand, setBrandState] = useState(defaultBrand);
-  const [theme, setThemeState] = useState(rider);
-  const [isLoading, setIsLoading] = useState(true);
+export function ThemeProvider({ children, userProfile, userId }) {
+  const [brand, setBrandState] = useState(userProfile?.selectedTheme || defaultBrand);
+  const [theme, setThemeState] = useState(brands[userProfile?.selectedTheme] || rider);
 
-  // Load theme preference from AsyncStorage on mount
+  // Update theme when user profile changes
   useEffect(() => {
-    loadTheme();
-  }, []);
-
-  const loadTheme = async () => {
-    try {
-      const savedBrand = await AsyncStorage.getItem("selectedTheme");
-      if (savedBrand && brands[savedBrand]) {
-        setBrandState(savedBrand);
-        setThemeState(brands[savedBrand]);
-      }
-    } catch (error) {
-      console.error("Error loading theme:", error);
-    } finally {
-      setIsLoading(false);
+    if (userProfile?.selectedTheme && brands[userProfile.selectedTheme]) {
+      setBrandState(userProfile.selectedTheme);
+      setThemeState(brands[userProfile.selectedTheme]);
     }
-  };
+  }, [userProfile?.selectedTheme]);
 
   const setBrand = async (newBrand) => {
-    if (brands[newBrand]) {
-      setBrandState(newBrand);
-      setThemeState(brands[newBrand]);
+    if (!brands[newBrand]) return;
+
+    // Update local state immediately
+    setBrandState(newBrand);
+    setThemeState(brands[newBrand]);
+
+    // Save to user profile in Firestore
+    if (userId) {
       try {
-        await AsyncStorage.setItem("selectedTheme", newBrand);
+        const userRef = doc(db, "users", userId);
+        await updateDoc(userRef, {
+          selectedTheme: newBrand,
+          updatedAt: Date.now(),
+        });
       } catch (error) {
-        console.error("Error saving theme:", error);
+        console.error("Error saving theme preference:", error);
       }
     }
   };
 
   return (
-    <ThemeContextInternal.Provider value={{ brand, theme, setBrand, isLoading }}>
+    <ThemeContextInternal.Provider value={{ brand, theme, setBrand }}>
       {children}
     </ThemeContextInternal.Provider>
   );
