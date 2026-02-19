@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
   },
 
   toggleButtonActive: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: "#42A5F5",
   },
 
   toggleButtonText: {
@@ -668,7 +668,7 @@ const styles = StyleSheet.create({
   },
 
   toggleButtonTextActive: {
-    color: theme.colors.onPrimary,
+    color: "#ffffff",
     fontWeight: "700",
   },
 
@@ -685,7 +685,7 @@ const styles = StyleSheet.create({
   },
 
   sortPillActive: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: "#42A5F5",
   },
 
   sortPillText: {
@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
   },
 
   sortPillTextActive: {
-    color: theme.colors.onPrimary,
+    color: "#ffffff",
     fontWeight: "600",
   },
 
