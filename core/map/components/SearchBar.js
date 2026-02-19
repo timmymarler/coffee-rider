@@ -100,7 +100,7 @@ export function SearchBar({
             <MaterialCommunityIcons
               name="shuffle-variant"
               size={28}
-              color={routeTypeActive ? theme.colors.accent : theme.colors.primaryLight}
+              color={routeTypeActive ? theme.colors.accentMid : theme.colors.primaryLight}
             />
           </TouchableOpacity>
         )}
