@@ -63,6 +63,7 @@ export default function ProfileScreen() {
   const [placeAmenities, setPlaceAmenities] = useState([]);
   const [placeSuitability, setPlaceSuitability] = useState([]);
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
+  const [themeToast, setThemeToast] = useState(null);
 
   // Track changes for Save button
   const [initialValues, setInitialValues] = useState({});
@@ -164,6 +165,16 @@ export default function ProfileScreen() {
     };
     loadSponsorshipStatus();
   }, [profile, role, user?.uid, isGuest]);
+
+  // Auto-hide theme toast after 2 seconds
+  useEffect(() => {
+    if (themeToast) {
+      const timer = setTimeout(() => {
+        setThemeToast(null);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [themeToast]);
 
   const email = user?.email || "";
   const role = profile?.role || "user";
@@ -333,6 +344,9 @@ export default function ProfileScreen() {
         selectedTheme: newTheme,
         updatedAt: Date.now(),
       });
+      // Show brief toast notification
+      const themeName = newTheme.charAt(0).toUpperCase() + newTheme.slice(1);
+      setThemeToast(`${themeName} theme applied`);
     } catch (error) {
       console.error("Error saving theme preference:", error);
       Alert.alert("Error", "Failed to save theme preference");
@@ -1054,6 +1068,28 @@ export default function ProfileScreen() {
           )}
         </CRCard>
       </View>
+
+      {/* Theme Toast Notification */}
+      {themeToast && (
+        <View
+          style={{
+            position: 'absolute',
+            top: insets.top + 12,
+            left: 12,
+            right: 12,
+            backgroundColor: theme.colors.accentMid,
+            paddingHorizontal: theme.spacing.md,
+            paddingVertical: theme.spacing.sm,
+            borderRadius: theme.radius.md,
+            alignItems: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <Text style={{ color: 'white', fontSize: 14, fontWeight: '600' }}>
+            ✓ {themeToast}
+          </Text>
+        </View>
+      )}
     </CRScreen>
   );
 }
