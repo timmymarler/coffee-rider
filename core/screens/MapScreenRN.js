@@ -2411,7 +2411,7 @@ export default function MapScreenRN() {
                 key={`base-${routeVersion}`}
                 coordinates={routeCoords}
                 strokeWidth={6}
-                strokeColor={theme.colors.primaryMuted}
+                strokeColor={theme.colors.primaryBackground}
                 zIndex={900}
               />
 

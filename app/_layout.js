@@ -166,7 +166,7 @@ function FloatingTabBar({ state }) {
             <MaterialCommunityIcons
               name="crosshairs-gps"
               size={28}
-              color={activeRide ? theme.colors.danger : theme.colors.primary}
+              color={activeRide ? theme.colors.danger : theme.colors.primaryMid}
             />
           </TouchableOpacity>
 
@@ -198,7 +198,7 @@ function FloatingTabBar({ state }) {
                 color={
                   mapActions?.isFollowing()
                     ? theme.colors.danger
-                    : theme.colors.primary
+                    : theme.colors.primaryMid
                 }
               />
             </TouchableOpacity>
