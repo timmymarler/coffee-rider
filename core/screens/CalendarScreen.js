@@ -1059,7 +1059,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8,
-    backgroundColor: theme.colors.primaryMid,
+    backgroundColor: theme.colors.primaryDark,
     borderRadius: 12,
     marginTop: 8,
     marginBottom: 4,
@@ -1109,7 +1109,7 @@ const styles = StyleSheet.create({
   filterButtonText: {
     fontSize: 13,
     fontWeight: "600",
-    color: theme.colors.primaryDark,
+    color: theme.colors.accentMid,
   },
   filtersPanel: {
     maxHeight: "70%",
@@ -1166,7 +1166,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     marginBottom: theme.spacing.lg,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primaryDark,
     borderRadius: 12,
     overflow: "hidden",
     borderWidth: 1,
@@ -1179,7 +1179,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 0.5,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primaryDark,
   },
   calendarCellSelected: {
     backgroundColor: theme.colors.accentMid + "30",
@@ -1281,7 +1281,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     marginBottom: theme.spacing.lg,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primaryDark,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 12,
@@ -1294,7 +1294,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 0.5,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primaryDark,
   },
   calendarCellContent: {
     flex: 1,
@@ -1363,7 +1363,7 @@ const styles = StyleSheet.create({
   noEventsContainer: {
     paddingVertical: theme.spacing.lg,
     alignItems: "center",
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.primaryDark,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: theme.colors.border,
