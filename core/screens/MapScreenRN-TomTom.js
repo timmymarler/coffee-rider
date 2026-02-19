@@ -4047,7 +4047,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.9)",
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: "#2196F3",
+    borderColor: theme.colors.primary,
   },
 
   recenterButton: {
@@ -4129,7 +4129,7 @@ const styles = StyleSheet.create({
   },
 
   postboxInfo: {
-    backgroundColor: theme.colors.accentMid, // blue
+    backgroundColor: theme.colors.primary,
   },
 
   junctionPanel: {
@@ -4354,7 +4354,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "#2563eb", // map blue
+    backgroundColor: theme.colors.primary,
     justifyContent: "center",
     alignItems: "center",
   },

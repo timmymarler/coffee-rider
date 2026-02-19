@@ -2314,7 +2314,7 @@ export default function MapScreenRN() {
                 <MaterialCommunityIcons
                   name="navigation"
                   size={32}
-                  color="#2196F3"
+                  color={theme.colors.primary}
                 />
               </View>
             </Marker>
@@ -3245,7 +3245,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "#2563eb", // map blue
+    backgroundColor: theme.colors.primary,
     justifyContent: "center",
     alignItems: "center",
   },

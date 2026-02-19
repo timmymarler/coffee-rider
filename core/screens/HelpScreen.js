@@ -698,7 +698,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "#2563eb", // map blue
+    backgroundColor: theme.colors.primary,
     justifyContent: "center",
     alignItems: "center",
   },
