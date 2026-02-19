@@ -199,31 +199,31 @@ export default function ProfileScreen() {
     return (
       <CRScreen>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
-          <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+          <View style={[dynamicStyles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
             <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-              <Text style={styles.heading}>Welcome to Coffee Rider</Text>
-              <Text style={[styles.subText, { marginBottom: theme.spacing.lg }]}>
+              <Text style={dynamicStyles.heading}>Welcome to Coffee Rider</Text>
+              <Text style={[dynamicStyles.subText, { marginBottom: theme.spacing.lg }]}>
                 Sign in to save your favorite routes and manage your profile
               </Text>
               
               <TouchableOpacity
-                style={styles.loginButton}
+                style={dynamicStyles.loginButton}
                 onPress={() => {
                   exitGuestMode();
                   // By exiting guest mode and having no user, the app will show LoginScreen
                 }}
               >
-                <Text style={styles.loginButtonText}>Log In</Text>
+                <Text style={dynamicStyles.loginButtonText}>Log In</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.registerButton]}
+                style={[dynamicStyles.registerButton]}
                 onPress={() => {
                   // Show RegisterScreen directly in guest mode
                   setShowRegisterScreen(true);
                 }}
               >
-                <Text style={[styles.registerButtonText]}>Create Account</Text>
+                <Text style={[dynamicStyles.registerButtonText]}>Create Account</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -529,6 +529,65 @@ export default function ProfileScreen() {
   // MAIN PROFILE LAYOUT
   // -----------------------------------
 
+  // Create theme-aware styles inside component so they update when theme changes
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      paddingHorizontal: theme.spacing.lg,
+    },
+    heading: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: theme.colors.text,
+      marginBottom: theme.spacing.sm,
+      textAlign: "center",
+    },
+    subText: {
+      fontSize: 14,
+      color: theme.colors.textMuted,
+      textAlign: "center",
+    },
+    loginButton: {
+      backgroundColor: theme.colors.accentMid,
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      borderRadius: 999,
+      alignItems: "center",
+      width: "100%",
+      marginBottom: theme.spacing.md,
+    },
+    loginButtonText: {
+      color: theme.colors.primaryDark,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    registerButton: {
+      borderWidth: 2,
+      borderColor: theme.colors.accentMid,
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      borderRadius: 999,
+      alignItems: "center",
+      width: "100%",
+    },
+    registerButtonText: {
+      color: theme.colors.accentMid,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    cardWrap: {
+      marginHorizontal: 16,
+      marginBottom: theme.spacing.sm, 
+   },
+    actionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    actionButtonGrow: {
+      flex: 1,
+    },
+  });
+
   return (
     <CRScreen
       scroll
@@ -537,7 +596,7 @@ export default function ProfileScreen() {
     >
 
       {/* ---------------- HEADER CARD ---------------- */}
-      <View style={styles.cardWrap}>
+      <View style={dynamicStyles.cardWrap}>
       <CRCard
         style={{
           flexDirection: "row",
@@ -611,7 +670,7 @@ export default function ProfileScreen() {
       </View>
 
       {/* ---------------- PROFILE DETAILS CARD ---------------- */}
-      <View style={styles.cardWrap}>
+      <View style={dynamicStyles.cardWrap}>
       <CRCard>
 
         <CRLabel>Display Name</CRLabel>
@@ -912,7 +971,7 @@ export default function ProfileScreen() {
 
       {/* Sponsorship Section for Place Owners */}
       {role === "place-owner" && (
-        <View style={styles.cardWrap}>
+        <View style={dynamicStyles.cardWrap}>
           <CRCard>
             <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '600', marginBottom: theme.spacing.md }}>
               Sponsorship Status
@@ -974,29 +1033,29 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      <View style={styles.cardWrap}>
+      <View style={dynamicStyles.cardWrap}>
       <CRCard>
-        <View style={styles.actionRow}>
+        <View style={dynamicStyles.actionRow}>
           <CRButton
             title={saving ? "Saving…" : "Save"}
             variant="accentMid"
             loading={saving}
             onPress={handleSaveProfile}
             disabled={saving || !hasChanges()}
-            style={[styles.actionButtonGrow, { marginRight: theme.spacing.sm }]}
+            style={[dynamicStyles.actionButtonGrow, { marginRight: theme.spacing.sm }]}
           />
           <CRButton
             title="Log Out"
             variant="danger"
             onPress={logout}
-            style={styles.actionButtonGrow}
+            style={dynamicStyles.actionButtonGrow}
           />
         </View>
       </CRCard>
       </View>
 
       {/* Debug Logs Section */}
-      <View style={styles.cardWrap}>
+      <View style={dynamicStyles.cardWrap}>
         <CRCard>
           <TouchableOpacity onPress={() => setShowDebugPanel(!showDebugPanel)} style={{ paddingVertical: 8 }}>
             <Text style={{ color: theme.colors.primary, fontSize: 14, fontWeight: '600' }}>
