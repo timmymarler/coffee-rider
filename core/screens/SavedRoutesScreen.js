@@ -200,7 +200,7 @@ export default function SavedRoutesScreen() {
             onPress={() => setViewMode("routes")}
             style={[
               dynamicStyles.toggleButton,
-              viewMode === "routes" && styles.toggleButtonActive,
+              viewMode === "routes" && dynamicStyles.toggleButtonActive,
             ]}
           >
             <Text
@@ -216,7 +216,7 @@ export default function SavedRoutesScreen() {
             onPress={() => setViewMode("rides")}
             style={[
               dynamicStyles.toggleButton,
-              viewMode === "rides" && styles.toggleButtonActive,
+              viewMode === "rides" && dynamicStyles.toggleButtonActive,
             ]}
           >
             <Text
@@ -240,14 +240,14 @@ export default function SavedRoutesScreen() {
                   key={opt.key}
                   onPress={() => setSortBy(opt.key)}
                   style={[
-                    styles.sortPill,
-                    sortBy === opt.key && styles.sortPillActive,
+                    dynamicStyles.sortPill,
+                    sortBy === opt.key && dynamicStyles.sortPillActive,
                   ]}
                 >
                   <Text
                     style={[
-                      styles.sortPillText,
-                      sortBy === opt.key && styles.sortPillTextActive,
+                      dynamicStyles.sortPillText,
+                      sortBy === opt.key && dynamicStyles.sortPillTextActive,
                     ]}
                   >
                     {opt.label}
@@ -263,14 +263,14 @@ export default function SavedRoutesScreen() {
                   key={opt.key}
                   onPress={() => setFilterBy(opt.key)}
                   style={[
-                    styles.sortPill,
-                    filterBy === opt.key && styles.sortPillActive,
+                    dynamicStyles.sortPill,
+                    filterBy === opt.key && dynamicStyles.sortPillActive,
                   ]}
                 >
                   <Text
                     style={[
-                      styles.sortPillText,
-                      filterBy === opt.key && styles.sortPillTextActive,
+                      dynamicStyles.sortPillText,
+                      filterBy === opt.key && dynamicStyles.sortPillTextActive,
                     ]}
                   >
                     {opt.label}
@@ -462,6 +462,34 @@ export default function SavedRoutesScreen() {
       fontSize: 14,
       fontWeight: "500",
       color: theme.colors.textMuted,
+    },
+    toggleButtonActive: {
+      backgroundColor: theme.colors.accentMid,
+    },
+    toggleButtonTextActive: {
+      color: "#ffffff",
+      fontWeight: "700",
+    },
+    sortRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    sortPill: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      backgroundColor: theme.colors.surface,
+    },
+    sortPillActive: {
+      backgroundColor: theme.colors.accentMid,
+    },
+    sortPillText: {
+      fontSize: 13,
+      color: theme.colors.textMuted,
+    },
+    sortPillTextActive: {
+      color: "#ffffff",
+      fontWeight: "600",
     },
   });
 
@@ -699,7 +727,7 @@ const styles = StyleSheet.create({
   },
 
   toggleButtonActive: {
-    backgroundColor: "#42A5F5",
+    backgroundColor: theme.colors.accentMid,
   },
 
   toggleButtonText: {
@@ -726,7 +754,7 @@ const styles = StyleSheet.create({
   },
 
   sortPillActive: {
-    backgroundColor: "#42A5F5",
+    backgroundColor: theme.colors.accentMid,
   },
 
   sortPillText: {

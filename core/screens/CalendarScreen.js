@@ -474,11 +474,58 @@ export default function CalendarScreen() {
       fontWeight: '700',
       color: theme.colors.accentMid,
     },
+    container: {
+      flex: 1,
+    },
+    headerControls: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      backgroundColor: theme.colors.primaryMid,
+    },
+    headerTodayButton: {
+      minWidth: 80,
+      height: 52,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primaryDark,
+      marginHorizontal: 2,
+      paddingHorizontal: 12,
+      shadowColor: theme.colors.accentMid,
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 4,
+    },
+    filterButton: {
+      width: 52,
+      height: 52,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.colors.primaryDark,
+      shadowColor: theme.colors.accentMid,
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 4,
+    },
+    filtersPanel: {
+      maxHeight: "70%",
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+      backgroundColor: theme.colors.primaryDark,
+    },
   });
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.headerControls, { paddingTop: 12, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingRight: insets.top + 12 }]}> 
+    <View style={[dynamicStyles.container, { backgroundColor: colors.background }]}>
+      <View style={[dynamicStyles.headerControls, { paddingTop: 12, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingRight: insets.top + 12 }]}> 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity 
@@ -493,7 +540,7 @@ export default function CalendarScreen() {
               <Text style={dynamicStyles.headerNavButtonTextLarge}>{'<'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.headerTodayButton}
+              style={dynamicStyles.headerTodayButton}
               onPress={() => setSelectedDate(new Date())}
               activeOpacity={0.8}
             >
@@ -512,7 +559,7 @@ export default function CalendarScreen() {
             </TouchableOpacity>
           </View>
           <TouchableOpacity 
-            style={styles.filterButton} 
+            style={dynamicStyles.filterButton} 
             onPress={() => setShowFilters(!showFilters)} 
             activeOpacity={0.8} 
           > 
@@ -527,7 +574,7 @@ export default function CalendarScreen() {
 
       {showFilters && (
         <ScrollView
-          style={styles.filtersPanel}
+          style={dynamicStyles.filtersPanel}
           contentContainerStyle={styles.filtersPanelContent}
           showsVerticalScrollIndicator={false}
         >
