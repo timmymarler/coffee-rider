@@ -1,6 +1,7 @@
 import { db } from "@config/firebase";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
+import { useTheme } from "@context/ThemeContext";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
@@ -565,6 +566,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const mapRef = useRef();
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
+  // Use dynamic theme from context
+  const dynamicTheme = useTheme();
+  const theme = dynamicTheme;
 
   const TAB_BAR_HEIGHT = 56; // matches FloatingTabBar height
   const FLOATING_MARGIN = 1; // sit almost flush with the tab bar
