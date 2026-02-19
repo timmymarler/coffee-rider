@@ -3,6 +3,7 @@ import { useContext, useRef } from "react";
 import { Dimensions, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AuthContext } from "@context/AuthContext";
+import { useTheme } from "@context/ThemeContext";
 import { getCapabilities } from "@core/roles/capabilities";
 import theme from "@themes";
 import { useLocalSearchParams } from "expo-router";
@@ -17,6 +18,9 @@ export default function HelpScreen() {
   const capabilities = getCapabilities(role);
   const scrollRef = useRef(null);
   const sharedSectionY = useRef(null);
+  // Use dynamic theme from context
+  const dynamicTheme = useTheme();
+  const theme = dynamicTheme;
   const markerStyles = {
     destination: {
       fill: theme.colors.primary,

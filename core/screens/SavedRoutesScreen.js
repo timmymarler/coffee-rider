@@ -2,6 +2,7 @@ import { CRButton } from "@core/components/ui/CRButton";
 import { CRLabel } from "@core/components/ui/CRLabel";
 import { CRScreen } from "@core/components/ui/CRScreen";
 import { AuthContext } from "@core/context/AuthContext";
+import { useTheme } from "@core/context/ThemeContext";
 import { useAllUserGroups } from "@core/groups/hooks";
 import { RIDE_VISIBILITY, shareRoute } from "@core/map/routes/sharedRides";
 import { useSavedRides } from "@core/map/routes/useSavedRides";
@@ -56,6 +57,9 @@ export default function SavedRoutesScreen() {
   const { setPendingSavedRouteId } = useWaypointsContext();
   const { user, capabilities } = useContext(AuthContext);
   const { groups } = useAllUserGroups(user?.uid);
+  // Use dynamic theme from context
+  const dynamicTheme = useTheme();
+  const theme = dynamicTheme;
 
   const [viewMode, setViewMode] = useState("routes"); // 'routes' or 'rides'
   const [sortBy, setSortBy] = useState("created");

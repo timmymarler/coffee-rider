@@ -1,5 +1,6 @@
 // core/screens/CalendarScreen.js
 import { AuthContext } from "@context/AuthContext";
+import { useTheme } from "@context/ThemeContext";
 import { useAllUserGroups } from "@core/groups/hooks";
 import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY, shareEvent } from "@core/map/events/sharedEvents";

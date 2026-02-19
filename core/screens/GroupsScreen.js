@@ -4,6 +4,7 @@ import { CRInput } from "@components-ui/CRInput";
 import { CRLabel } from "@components-ui/CRLabel";
 import { AuthContext } from "@context/AuthContext";
 import { TabBarContext } from "@context/TabBarContext";
+import { useTheme } from "@context/ThemeContext";
 import { useAllUserGroups, useGroupEvents, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
 import { acceptInvite, createGroup, declineInvite, leaveGroup, removeGroupMember, revokeInvite, sendInvite } from "@core/groups/service";
 import useActiveRide from "@core/map/routes/useActiveRide";
@@ -70,6 +71,9 @@ export default function GroupsScreen() {
   const router = useRouter();
   const { capabilities, user, profile } = useContext(AuthContext) || {};
   const { mapActions } = useContext(TabBarContext);
+  // Use dynamic theme from context
+  const dynamicTheme = useTheme();
+  const theme = dynamicTheme;
   const canAccessGroups = capabilities?.canAccessGroups === true;
 
 
