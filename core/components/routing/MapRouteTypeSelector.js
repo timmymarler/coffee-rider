@@ -209,8 +209,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.inputBorder,
   },
   optionButtonActive: {
-    backgroundColor: theme.colors.accentLight || theme.colors.accent,
-    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentLight || theme.colors.accentMid,
+    borderColor: theme.colors.accentMid,
   },
   optionLabel: {
     fontSize: 16,
@@ -219,14 +219,14 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xs,
   },
   optionLabelActive: {
-    color: theme.colors.accent,
+    color: theme.colors.accentMid,
   },
   optionDescription: {
     fontSize: 13,
     color: theme.colors.textMuted,
   },
   optionDescriptionActive: {
-    color: theme.colors.accentDark || theme.colors.accent,
+    color: theme.colors.accentDark || theme.colors.accentMid,
   },
   configuratorLabel: {
     fontSize: 14,
@@ -249,8 +249,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   levelButtonActive: {
-    backgroundColor: theme.colors.accentLight || theme.colors.accent,
-    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentLight || theme.colors.accentMid,
+    borderColor: theme.colors.accentMid,
   },
   levelButtonText: {
     fontSize: 13,
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   levelButtonTextActive: {
-    color: theme.colors.accent,
+    color: theme.colors.accentMid,
   },
   previewBox: {
     marginTop: theme.spacing.lg,
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.surfaceMuted,
     borderLeftWidth: 4,
-    borderLeftColor: theme.colors.accent,
+    borderLeftColor: theme.colors.accentMid,
   },
   previewTitle: {
     fontSize: 12,
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   previewText: {
     fontSize: 14,
     fontWeight: "600",
-    color: theme.colors.accent,
+    color: theme.colors.accentMid,
   },
   buttonRow: {
     flexDirection: "row",
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: theme.spacing.md,
     borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentMid,
     alignItems: "center",
   },
   closeButtonText: {
