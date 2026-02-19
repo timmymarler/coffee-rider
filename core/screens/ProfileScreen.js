@@ -16,7 +16,6 @@ import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { addDoc, collection, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
@@ -33,7 +32,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile, loading, logout, refreshProfile, isGuest, exitGuestMode } = useContext(AuthContext);
   const [showRegisterScreen, setShowRegisterScreen] = useState(false);
-  const { brand: currentBrand, setBrand } = useThemeControls();
+  const { brand: currentBrand, setBrand, theme } = useThemeControls();
 
   // -----------------------------------
   // Initial Values
@@ -338,12 +337,8 @@ export default function ProfileScreen() {
     if (!user) return;
 
     try {
-      setBrand(newTheme);
-      const userRef = doc(db, "users", user.uid);
-      await updateDoc(userRef, {
-        selectedTheme: newTheme,
-        updatedAt: Date.now(),
-      });
+      // setBrand handles both state update and Firestore save
+      await setBrand(newTheme);
       // Show brief toast notification
       const themeName = newTheme.charAt(0).toUpperCase() + newTheme.slice(1);
       setThemeToast(`${themeName} theme applied`);
