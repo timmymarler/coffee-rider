@@ -1550,17 +1550,63 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!isNavigationMode) return;
     if (!userLocation) return;
     if (!routeSteps || routeSteps.length === 0) return;
-    const idx = Math.min(currentStepIndex, routeSteps.length - 1);
+    if (!routeCoords || routeCoords.length === 0) return;
+
+    // Find closest polyline coordinate to user location
+    let closestPolylineIdx = 0;
+    let closestPolylineDist = Infinity;
+    for (let i = 0; i < routeCoords.length; i++) {
+      const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
+      if (dist < closestPolylineDist) {
+        closestPolylineDist = dist;
+        closestPolylineIdx = i;
+      }
+    }
+
+    // Find which step the user is actually on by finding closest step endpoint
+    let correctStepIdx = 0;
+    let closestStepDist = Infinity;
+    
+    for (let i = 0; i < routeSteps.length; i++) {
+      const step = routeSteps[i];
+      if (!step?.end?.latitude) continue;
+      
+      // Find this step's end point in the polyline
+      let stepPolylineIdx = routeCoords.length - 1;
+      for (let j = 0; j < routeCoords.length; j++) {
+        const dist = distanceBetweenMeters(step.end, routeCoords[j]);
+        if (dist < 200) { // Within 200m
+          stepPolylineIdx = j;
+          break;
+        }
+      }
+      
+      // Find the closest step whose endpoint is before or at current position
+      if (stepPolylineIdx <= closestPolylineIdx) {
+        const distFromStep = closestPolylineIdx - stepPolylineIdx;
+        if (distFromStep < closestStepDist) {
+          closestStepDist = distFromStep;
+          correctStepIdx = i;
+        }
+      }
+    }
+
+    const idx = Math.min(correctStepIdx, routeSteps.length - 1);
     const step = routeSteps[idx];
     if (!step?.end?.latitude || !step?.end?.longitude) return;
 
     const d = distanceBetweenMeters(userLocation, step.end);
     setNextJunctionDistance(d);
-    // Advance to next step only after current step is passed
+    
+    // Update step if current position suggests a different step
+    if (correctStepIdx !== currentStepIndex) {
+      setCurrentStepIndex(correctStepIdx);
+    }
+    // Also advance if you pass the current step
     if (d !== null && d <= 0 && idx < routeSteps.length - 1) {
       setCurrentStepIndex(idx + 1);
     }
-  }, [userLocation, isNavigationMode, routeSteps, currentStepIndex]);
+  }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex]);
 
   // Compute traveled and remaining polyline portions for Follow Me mode
   const { traveledPolyline, remainingPolyline } = useMemo(() => {
