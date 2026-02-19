@@ -1660,13 +1660,14 @@ function createStyles(theme) {
     },
     primaryButton: {
       marginTop: 16,
-      backgroundColor: theme.colors.accentDark,
+      backgroundColor: theme.colors.accentMid,
       paddingVertical: 10,
       borderRadius: 20,
       alignItems: "center",
+      alignSelf: "flex-end",
     },
     primaryButtonText: {
-      color: theme.colors.primaryDark,
+      color: theme.colors.primaryMid,
       fontWeight: "600",
     },
     addPhotoButton: {
