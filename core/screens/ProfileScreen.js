@@ -21,7 +21,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { addDoc, collection, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Clipboard, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal } from "react-native";
+import { ActivityIndicator, Alert, Clipboard, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LoginScreen from "../auth/login";
 import RegisterScreen from "../auth/register";
@@ -33,7 +33,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile, loading, logout, refreshProfile, isGuest, exitGuestMode } = useContext(AuthContext);
   const [showRegisterScreen, setShowRegisterScreen] = useState(false);
-  const { brand: currentBrand, setBrand, theme: dynamicTheme } = useThemeControls();
+  const { theme: dynamicTheme } = useThemeControls();
   // Use dynamic theme for all rendering (colors, spacing) while keeping static import for StyleSheet
   const theme = dynamicTheme;
 
@@ -1022,28 +1022,6 @@ export default function ProfileScreen() {
           )}
         </CRCard>
       </View>
-
-      {/* Theme Toast Notification */}
-      {themeToast && (
-        <View
-          style={{
-            position: 'absolute',
-            top: insets.top + 12,
-            left: 12,
-            right: 12,
-            backgroundColor: theme.colors.accentMid,
-            paddingHorizontal: theme.spacing.md,
-            paddingVertical: theme.spacing.sm,
-            borderRadius: theme.radius.md,
-            alignItems: 'center',
-            zIndex: 1000,
-          }}
-        >
-          <Text style={{ color: 'white', fontSize: 14, fontWeight: '600' }}>
-            ✓ {themeToast}
-          </Text>
-        </View>
-      )}
     </CRScreen>
   );
 }
