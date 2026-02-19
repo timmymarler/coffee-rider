@@ -20,7 +20,7 @@ export function getOpeningStatus(openingHours) {
   if (!todayPeriods.length) {
     return {
       label: "Closed today",
-      color: "#c0392b",
+      color: "#DC2626",
       isOpen: false,
       closingSoon: false,
       todayText: null,
@@ -46,7 +46,7 @@ export function getOpeningStatus(openingHours) {
 
       return {
         label: `Open now · Closes ${closeLabel}`,
-        color: closingSoon ? "#f39c12" : "#27ae60",
+        color: closingSoon ? "#FACC15" : "#22c55e",
         isOpen: true,
         closingSoon,
         todayText: null,
@@ -56,7 +56,7 @@ export function getOpeningStatus(openingHours) {
 
   return {
     label: "Closed",
-    color: "#c0392b",
+    color: "#DC2626",
     isOpen: false,
     closingSoon: false,
     todayText: null,

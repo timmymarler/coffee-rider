@@ -3001,19 +3001,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Category → outline color map for markers
   function getCategoryStrokeColor(category) {
-    const categoryColorMap = {
-      cafe: "#8B4513",           // brown
-      restaurant: "#D4641D",     // orange-brown
-      pub: "#8B0000",            // dark red
-      bikes: "#DC143C",          // crimson
-      fuel: "#006994",           // petrol blue
-      parking: "#556B2F",        // dark olive
-      scenic: "#228B22",         // forest green
-      camping: "#228B22",        // forest green
-      accommodation: "#663399",  // purple
-      unknown: "#696969",        // dim gray
-    };
-    return categoryColorMap[category] || categoryColorMap.unknown;
+    return theme.poi?.[category] || theme.poi?.unknown || "#696969";
   }
 
   /* ------------------------------------------------------------ */

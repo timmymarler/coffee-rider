@@ -1,35 +1,26 @@
 export default {
   brandName: {
-    name: "Rider"
+    name: "Rider",
   },
-  
-  colors: {
-    background: "#000",
-    primary: "#1e90ff",
-    accent: "#ffc107",
-    cardBackground: "#111",
-    border: "#333",
-    danger: "#cd3434ff",
 
-    // Core Rider blues (you can tweak exact hexes later)
-    primaryDark:  "#0F2A38", // deep blue-teal, strong not muddy
-    primaryMid:   "#163B4F", // saturated slate-blue
-    primaryLight: "#1F566F", // confident blue for borders/highlights
-    primaryBackground: "#2a3e48ff",
+  colors: {
+    // Core Rider blues
+    primaryDark: "#0F2A38",
+    primaryMid: "#163B4F",
+    primaryLight: "#1F566F",
+    primaryBackground: "#2a3e48",
 
     // Gold accents – original Coffee Rider feel
     accentDark: "#C5A041",
     accentMid: "#FFD85C",
     accentLight: "#FFF2C7",
 
-    // Use Strider as accents
+    // Use Strider green as secondary
     secondaryDark: "#2F622D",
     secondaryMid: "#699955",
     secondaryLight: "#A4BF8F",
 
-
     // App surfaces
-    // You said main screen background should be “the blue”, we’ll use primaryMid here.
     background: "#587587",
     surface: "#1E3B57",
 
@@ -47,20 +38,36 @@ export default {
     tabBarActive: "#FFD85C",
     tabBarInactive: "#8CAAB3",
 
-    // Semantic feedback colours – used by brand themes
+    // Semantic feedback (standardized across all themes)
     success: "#22c55e",
-    error: "#cd3434ff",
+    error: "#DC2626",
     warning: "#FACC15",
-  
+    danger: "#DC2626",
   },
-  // spacing scale
+
+  // POI marker colors
+  poi: {
+    cafe: "#8B4513",
+    restaurant: "#D4641D",
+    pub: "#8B0000",
+    bikes: "#DC143C",
+    fuel: "#006994",
+    parking: "#556B2F",
+    scenic: "#228B22",
+    camping: "#228B22",
+    accommodation: "#663399",
+    unknown: "#696969",
+  },
+
+  // Spacing scale
   spacing: {
     xs: 4,
     sm: 8,
     md: 16,
     lg: 24,
-    xl: 32
+    xl: 32,
   },
+
   // Border radius scale
   radius: {
     sm: 6,
@@ -69,6 +76,7 @@ export default {
     xl: 24,
     full: 999,
   },
+
   // Typography scale
   typography: {
     h1: { fontSize: 22, fontWeight: "700" },
@@ -77,32 +85,31 @@ export default {
     body: { fontSize: 14, fontWeight: "400" },
     small: { fontSize: 12, fontWeight: "400" },
   },
-    pinBase: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,          // ✅ critical
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 1.5,
-      shadowColor: "#000",
-      shadowOpacity: 0.45,
-      shadowRadius: 2,
-      elevation: 3,
-    },
 
-    pinTail: {
-      position: "absolute",
-      bottom: -6,
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      borderWidth: 1.5,
-    },
+  // Pin styles for markers
+  pinBase: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    shadowColor: "#000",
+    shadowOpacity: 0.45,
+    shadowRadius: 2,
+    elevation: 3,
+  },
 
-    pinSelected: {
-        transform: [
-            { scale: 1.15 },
-        ],
-    },
+  pinTail: {
+    position: "absolute",
+    bottom: -6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1.5,
+  },
 
-}
+  pinSelected: {
+    transform: [{ scale: 1.15 }],
+  },
+};
