@@ -1662,6 +1662,7 @@ function createStyles(theme) {
       marginTop: 16,
       backgroundColor: theme.colors.accentMid,
       paddingVertical: 10,
+      paddingHorizontal: 32,
       borderRadius: 20,
       alignItems: "center",
       alignSelf: "flex-end",
