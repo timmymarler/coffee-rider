@@ -5,15 +5,15 @@ export default {
 
   colors: {
     // Greens for independent strikers (self-reliant, active)
-    primaryDark: "#2F622D",
-    primaryMid: "#699955",
-    primaryLight: "#A4BF8F",
-    primaryBackground: "#FBFBFA",
+    primaryDark: "#0F2A38",
+    primaryMid: "#2A5A2A",
+    primaryLight: "#4A8A3A",
+    primaryBackground: "#2a3e48",
 
-    // Use Driver browns as accents
-    accentDark: "#6A4326",
-    accentMid: "#9A714F",
-    accentLight: "#CEA57D",
+    // Use Rider gold accents
+    accentDark: "#C5A041",
+    accentMid: "#FFD85C",
+    accentLight: "#FFF2C7",
 
     // Use Rider blues as secondary
     secondaryDark: "#0F2A38",
@@ -21,8 +21,8 @@ export default {
     secondaryLight: "#1F566F",
 
     // App surfaces
-    background: "#699955",
-    surface: "#2F622D",
+    background: "#2D4A2A",
+    surface: "#1F3A1A",
 
     // Text
     text: "#FFFFFF",

@@ -5,15 +5,15 @@ export default {
 
   colors: {
     // Coffee/brown palette for drivers (delivery, professional)
-    primaryDark: "#6A4326",
-    primaryMid: "#9A714F",
-    primaryLight: "#CEA57D",
-    primaryBackground: "#F8F8F7",
+    primaryDark: "#0F2A38",
+    primaryMid: "#4A3D35",
+    primaryLight: "#7A6B63",
+    primaryBackground: "#2a3e48",
 
-    // Use Rider blues as accents
-    accentDark: "#1E3B57",
-    accentMid: "#4A6A89",
-    accentLight: "#8CAAB3",
+    // Use Rider gold accents
+    accentDark: "#C5A041",
+    accentMid: "#FFD85C",
+    accentLight: "#FFF2C7",
 
     // Use Strider green as secondary
     secondaryDark: "#2F622D",
@@ -21,8 +21,8 @@ export default {
     secondaryLight: "#A4BF8F",
 
     // App surfaces
-    background: "#9A714F",
-    surface: "#6A4326",
+    background: "#3D2F27",
+    surface: "#2A1F17",
 
     // Text
     text: "#FFFFFF",
