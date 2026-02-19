@@ -3283,7 +3283,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 key={`base-${routeVersion}`}
                 coordinates={routeCoords}
                 strokeWidth={isNavigationMode ? 10 : 6}
-                strokeColor={theme.colors.primaryBackground}
+                strokeColor="#2196F3"
                 zIndex={900}
               />
 

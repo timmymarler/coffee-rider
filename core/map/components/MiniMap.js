@@ -81,7 +81,7 @@ export default function MiniMap({
           <Polyline
             coordinates={routeCoords}
             strokeWidth={2}
-            strokeColor={theme.colors.primaryBackground}
+            strokeColor="#2196F3"
             zIndex={100}
           />
         )}
