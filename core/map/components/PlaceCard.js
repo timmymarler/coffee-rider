@@ -1796,7 +1796,7 @@ function createStyles(theme) {
       paddingHorizontal: 14,
       paddingVertical: 10,
       borderRadius: 8,
-      backgroundColor: theme.colors.accentDark,
+      backgroundColor: theme.colors.accentMid,
       alignSelf: "flex-end",
     },
 
@@ -1805,7 +1805,7 @@ function createStyles(theme) {
     },
 
     commentButtonText: {
-      color: theme.colors.primaryDark,
+      color: theme.colors.primaryMid,
       fontWeight: "700",
     },
 
