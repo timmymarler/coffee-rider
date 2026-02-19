@@ -6,7 +6,7 @@ import { ActivityIndicator, Text, TouchableOpacity } from "react-native";
 export function CRButton({
   title,
   onPress,
-  variant = "accent", // "primary" | "accent" | "danger"
+  variant = "accentMid", // "primary" | "accentMid" | "accentDark" | "danger"
   loading = false,
   disabled = false,
   fullWidth = true,
@@ -14,7 +14,24 @@ export function CRButton({
   textStyle,
 }) {
 
-  const buttonColor = theme.colors[variant];
+  // Determine colors based on variant
+  let buttonColor, textColor;
+  
+  if (variant === "danger") {
+    buttonColor = theme.colors.danger;
+    textColor = "#ffffff";
+  } else if (variant === "accentDark") {
+    buttonColor = theme.colors.accentDark;
+    textColor = theme.colors.primaryDark;
+  } else if (variant === "accentMid") {
+    buttonColor = theme.colors.accentMid;
+    textColor = theme.colors.primaryMid;
+  } else {
+    // Fallback for "primary" or any other variant
+    buttonColor = theme.colors[variant] || theme.colors.accentMid;
+    textColor = theme.colors.primaryDark;
+  }
+
   const isDisabled = disabled || loading;
 
   return (
@@ -24,7 +41,7 @@ export function CRButton({
       style={[
         {
           width: fullWidth ? "100%" : undefined,
-          backgroundColor: isDisabled ? `${buttonColor}66` : buttonColor,
+          backgroundColor: isDisabled ? theme.colors.accentDark : buttonColor,
           paddingVertical: theme.spacing.md,
           paddingHorizontal: theme.spacing.lg,
           borderRadius: theme.radius.lg,
@@ -41,7 +58,7 @@ export function CRButton({
         <Text
           style={[
             {
-              color: variant === "danger" ? "#ffffff" : theme.colors.primaryDark,
+              color: isDisabled ? theme.colors.primaryDark : textColor,
               fontSize: theme.typography.md,
               fontWeight: "600",
             },

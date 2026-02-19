@@ -10,7 +10,6 @@ import { useSavedRoutes } from "@core/map/routes/useSavedRoutes";
 import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
 import { getCapabilities } from "@core/roles/capabilities";
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import theme from "@themes";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -180,9 +179,11 @@ export default function CreateEventScreen() {
 
   const [userPlaces, setUserPlaces] = useState([]);
   const [loadingPlaces, setLoadingPlaces] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [datePickerField, setDatePickerField] = useState(null); // "Start Date" or "End Date"
-  const [datePickerValue, setDatePickerValue] = useState(new Date());
+  
+  // Date picker state for month/day/year selection
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedDay, setSelectedDay] = useState(new Date().getDate());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   
   // Place search state for Pro users
   const [placeName, setPlaceName] = useState("");
@@ -508,29 +509,6 @@ function getRegionFromAddressOrLocation(address, location) {
   const [tempHour, setTempHour] = useState("00");
   const [tempMinute, setTempMinute] = useState("00");
 
-  const handleDatePicker = (field) => {
-    // Open the date picker for the given field
-    setDatePickerField(field);
-    setDatePickerValue(field === "Start Date" ? formData.startDateTime : formData.endDateTime);
-    setShowDatePicker(true);
-  };
-
-  const onDateChange = (event, selectedDate) => {
-    setShowDatePicker(false);
-    if (event.type === 'set' && selectedDate) {
-      // Keep the time from the previous value
-      const prev = datePickerField === "Start Date" ? formData.startDateTime : formData.endDateTime;
-      const newDate = new Date(selectedDate);
-      newDate.setHours(prev.getHours(), prev.getMinutes());
-      if (datePickerField === "Start Date") {
-        updateForm("startDateTime", newDate);
-      } else {
-        updateForm("endDateTime", newDate);
-      }
-    }
-    setDatePickerField(null);
-  };
-
   const openTimeEditor = (field) => {
     const currentDate = field === "Start Date" ? formData.startDateTime : formData.endDateTime;
     setTempHour(String(currentDate.getHours()).padStart(2, "0"));
@@ -604,6 +582,102 @@ function getRegionFromAddressOrLocation(address, location) {
             />
           </View>
 
+          {/* Visibility & Group Sharing - Updated UI */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Event Visibility</Text>
+            <View style={{ gap: 8 }}>
+              {/* Private Option */}
+              <TouchableOpacity
+                style={[
+                  styles.visibilityOption,
+                  visibility === EVENT_VISIBILITY.PRIVATE && styles.visibilityOptionSelected,
+                ]}
+                onPress={() => setVisibility(EVENT_VISIBILITY.PRIVATE)}
+              >
+                <View style={styles.visibilityIconWrap}>
+                  <Ionicons name="lock-closed" size={20} color={visibility === EVENT_VISIBILITY.PRIVATE ? colors.accentMid : colors.text} />
+                </View>
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Private</Text>
+                  <Text style={styles.optionDesc}>Only you can see this</Text>
+                </View>
+                <Ionicons name={visibility === EVENT_VISIBILITY.PRIVATE ? "radio-button-on" : "radio-button-off"} size={20} color={colors.accentMid} />
+              </TouchableOpacity>
+
+              {/* Group Option */}
+              <TouchableOpacity
+                style={[
+                  styles.visibilityOption,
+                  visibility === EVENT_VISIBILITY.GROUP && styles.visibilityOptionSelected,
+                ]}
+                onPress={() => setVisibility(EVENT_VISIBILITY.GROUP)}
+              >
+                <View style={styles.visibilityIconWrap}>
+                  <MaterialCommunityIcons name="account-multiple" size={20} color={visibility === EVENT_VISIBILITY.GROUP ? colors.accentMid : colors.text} />
+                </View>
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Group</Text>
+                  <Text style={styles.optionDesc}>Share with selected groups</Text>
+                </View>
+                <Ionicons name={visibility === EVENT_VISIBILITY.GROUP ? "radio-button-on" : "radio-button-off"} size={20} color={colors.accentMid} />
+              </TouchableOpacity>
+
+              {visibility === EVENT_VISIBILITY.GROUP && (
+                <View style={styles.groupSelector}>
+                  {groups && groups.length > 0 ? (
+                    groups.map((group) => (
+                      <TouchableOpacity
+                        key={group.id}
+                        style={[
+                          styles.groupOption,
+                          selectedGroupIds.includes(group.id) && styles.groupOptionSelected,
+                        ]}
+                        onPress={() => {
+                          setSelectedGroupIds((selected) =>
+                            selected.includes(group.id)
+                              ? selected.filter((id) => id !== group.id)
+                              : [...selected, group.id]
+                          );
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.groupOptionText,
+                            selectedGroupIds.includes(group.id) && styles.groupOptionTextSelected,
+                          ]}
+                        >
+                          {group.name}
+                        </Text>
+                        {selectedGroupIds.includes(group.id) && (
+                          <Ionicons name="checkmark-circle" size={18} color={colors.accentMid} style={{ marginLeft: 8 }} />
+                        )}
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <Text style={styles.noGroupsText}>No groups available. Create a group first.</Text>
+                  )}
+                </View>
+              )}
+
+              {/* Public Option */}
+              <TouchableOpacity
+                style={[
+                  styles.visibilityOption,
+                  visibility === EVENT_VISIBILITY.PUBLIC && styles.visibilityOptionSelected,
+                ]}
+                onPress={() => setVisibility(EVENT_VISIBILITY.PUBLIC)}
+              >
+                <View style={styles.visibilityIconWrap}>
+                  <Ionicons name="globe" size={20} color={visibility === EVENT_VISIBILITY.PUBLIC ? colors.accentMid : colors.text} />
+                </View>
+                <View style={styles.optionTextContainer}>
+                  <Text style={styles.optionTitle}>Public</Text>
+                  <Text style={styles.optionDesc}>Anyone can see this</Text>
+                </View>
+                <Ionicons name={visibility === EVENT_VISIBILITY.PUBLIC ? "radio-button-on" : "radio-button-off"} size={20} color={colors.accentMid} />
+              </TouchableOpacity>
+            </View>
+          </View>
 
           {/* Place Selection - All except Place Owner */}
           {profile?.role !== "place-owner" && (
@@ -685,7 +759,12 @@ function getRegionFromAddressOrLocation(address, location) {
             <View style={styles.dateTimeRow}>
               <TouchableOpacity
                 style={[styles.dateButton, { flex: 1, marginRight: 8 }]}
-                onPress={() => handleDatePicker("Start Date")}
+                onPress={() => {
+                  setSelectedMonth(formData.startDateTime.getMonth());
+                  setSelectedDay(formData.startDateTime.getDate());
+                  setSelectedYear(formData.startDateTime.getFullYear());
+                  setEditingTimeField("Start Date (text)");
+                }}
               >
                 <Text style={styles.dateButtonText}>
                   {formData.startDateTime.toLocaleDateString()}
@@ -709,7 +788,12 @@ function getRegionFromAddressOrLocation(address, location) {
             <View style={styles.dateTimeRow}>
               <TouchableOpacity
                 style={[styles.dateButton, { flex: 1, marginRight: 8 }]}
-                onPress={() => handleDatePicker("End Date")}
+                onPress={() => {
+                  setSelectedMonth(formData.endDateTime.getMonth());
+                  setSelectedDay(formData.endDateTime.getDate());
+                  setSelectedYear(formData.endDateTime.getFullYear());
+                  setEditingTimeField("End Date (text)");
+                }}
               >
                 <Text style={styles.dateButtonText}>
                   {formData.endDateTime.toLocaleDateString()}
@@ -727,16 +811,180 @@ function getRegionFromAddressOrLocation(address, location) {
             </View>
           </View>
 
-          {/* Date Picker Modal (cross-platform) */}
-          {showDatePicker && (
-            <DateTimePicker
-              value={datePickerValue}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={onDateChange}
-              minimumDate={new Date(2000, 0, 1)}
-              maximumDate={new Date(2100, 11, 31)}
-            />
+          {/* Date Editor Modal - Picker */}
+          {editingTimeField && (editingTimeField === "Start Date (text)" || editingTimeField === "End Date (text)") && (
+            <Modal
+              transparent={true}
+              animationType="slide"
+              visible={true}
+              onRequestClose={() => setEditingTimeField(null)}
+            >
+              <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' }}>
+                <View style={{ 
+                  backgroundColor: colors.background, 
+                  borderTopLeftRadius: 16,
+                  borderTopRightRadius: 16,
+                  paddingHorizontal: 16,
+                  paddingTop: 16,
+                  paddingBottom: 32
+                }}>
+                  {/* Header */}
+                  <View style={{ 
+                    flexDirection: 'row', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    marginBottom: 24,
+                    paddingBottom: 12,
+                    borderBottomWidth: 1, 
+                    borderBottomColor: colors.border || colors.textMuted 
+                  }}>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>Select Date</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        // Apply the selected date
+                        const newDate = new Date(selectedYear, selectedMonth, selectedDay);
+                        if (editingTimeField === "Start Date (text)") {
+                          const current = formData.startDateTime;
+                          newDate.setHours(current.getHours(), current.getMinutes());
+                          updateForm("startDateTime", newDate);
+                        } else {
+                          const current = formData.endDateTime;
+                          newDate.setHours(current.getHours(), current.getMinutes());
+                          updateForm("endDateTime", newDate);
+                        }
+                        setEditingTimeField(null);
+                      }}
+                    >
+                      <Text style={{ fontSize: 14, color: colors.accentMid, fontWeight: '600' }}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {/* Date Input Fields */}
+                  <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
+                    {/* Day */}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: 6, fontWeight: '500' }}>DAY</Text>
+                      <TextInput
+                        value={String(selectedDay).padStart(2, '0')}
+                        onChangeText={(text) => {
+                          const num = parseInt(text);
+                          if (!isNaN(num) && num >= 1 && num <= 31) {
+                            setSelectedDay(num);
+                          }
+                        }}
+                        placeholder="DD"
+                        maxLength={2}
+                        keyboardType="number-pad"
+                        style={{
+                          borderWidth: 2,
+                          borderColor: colors.accentMid,
+                          padding: 14,
+                          borderRadius: 10,
+                          color: colors.text,
+                          fontSize: 18,
+                          textAlign: 'center',
+                          fontWeight: '700'
+                        }}
+                      />
+                    </View>
+                    
+                    {/* Month */}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: 6, fontWeight: '500' }}>MONTH</Text>
+                      <TextInput
+                        value={String(selectedMonth + 1).padStart(2, '0')}
+                        onChangeText={(text) => {
+                          const num = parseInt(text);
+                          if (!isNaN(num) && num >= 1 && num <= 12) {
+                            setSelectedMonth(num - 1);
+                          }
+                        }}
+                        placeholder="MM"
+                        maxLength={2}
+                        keyboardType="number-pad"
+                        style={{
+                          borderWidth: 2,
+                          borderColor: colors.accentMid,
+                          padding: 14,
+                          borderRadius: 10,
+                          color: colors.text,
+                          fontSize: 18,
+                          textAlign: 'center',
+                          fontWeight: '700'
+                        }}
+                      />
+                    </View>
+                    
+                    {/* Year */}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: 6, fontWeight: '500' }}>YEAR</Text>
+                      <TextInput
+                        value={String(selectedYear)}
+                        onChangeText={(text) => {
+                          const num = parseInt(text);
+                          if (!isNaN(num) && num >= 2000 && num <= 2100) {
+                            setSelectedYear(num);
+                          }
+                        }}
+                        placeholder="YYYY"
+                        maxLength={4}
+                        keyboardType="number-pad"
+                        style={{
+                          borderWidth: 2,
+                          borderColor: colors.accentMid,
+                          padding: 14,
+                          borderRadius: 10,
+                          color: colors.text,
+                          fontSize: 18,
+                          textAlign: 'center',
+                          fontWeight: '700'
+                        }}
+                      />
+                    </View>
+                  </View>
+                  
+                  {/* Quick Select Buttons */}
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const today = new Date();
+                        setSelectedMonth(today.getMonth());
+                        setSelectedDay(today.getDate());
+                        setSelectedYear(today.getFullYear());
+                      }}
+                      style={{ 
+                        flex: 1,
+                        paddingVertical: 12,
+                        backgroundColor: colors.accentMid,
+                        borderRadius: 10,
+                        alignItems: 'center'
+                      }}
+                    >
+                      <Text style={{ color: colors.primaryMid, fontSize: 14, fontWeight: '600' }}>Today</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      onPress={() => {
+                        const tomorrow = new Date();
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        setSelectedMonth(tomorrow.getMonth());
+                        setSelectedDay(tomorrow.getDate());
+                        setSelectedYear(tomorrow.getFullYear());
+                      }}
+                      style={{ 
+                        flex: 1,
+                        paddingVertical: 12,
+                        backgroundColor: colors.accentMid,
+                        borderRadius: 10,
+                        alignItems: 'center'
+                      }}
+                    >
+                      <Text style={{ color: colors.primaryMid, fontSize: 14, fontWeight: '600' }}>Tomorrow</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </Modal>
           )}
 
           {/* Max Attendees */}
@@ -859,103 +1107,6 @@ function getRegionFromAddressOrLocation(address, location) {
                   </Text>
                 </TouchableOpacity>
               ))}
-            </View>
-          </View>
-
-          {/* Visibility & Group Sharing - Updated UI */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Event Visibility</Text>
-            <View style={{ gap: 8 }}>
-              {/* Private Option */}
-              <TouchableOpacity
-                style={[
-                  styles.visibilityOption,
-                  visibility === EVENT_VISIBILITY.PRIVATE && styles.visibilityOptionSelected,
-                ]}
-                onPress={() => setVisibility(EVENT_VISIBILITY.PRIVATE)}
-              >
-                <View style={styles.visibilityIconWrap}>
-                  <Ionicons name="lock-closed" size={20} color={visibility === EVENT_VISIBILITY.PRIVATE ? colors.accentMid : colors.text} />
-                </View>
-                <View style={styles.optionTextContainer}>
-                  <Text style={styles.optionTitle}>Private</Text>
-                  <Text style={styles.optionDesc}>Only you can see this</Text>
-                </View>
-                <Ionicons name={visibility === EVENT_VISIBILITY.PRIVATE ? "radio-button-on" : "radio-button-off"} size={20} color={colors.accentMid} />
-              </TouchableOpacity>
-
-              {/* Group Option */}
-              <TouchableOpacity
-                style={[
-                  styles.visibilityOption,
-                  visibility === EVENT_VISIBILITY.GROUP && styles.visibilityOptionSelected,
-                ]}
-                onPress={() => setVisibility(EVENT_VISIBILITY.GROUP)}
-              >
-                <View style={styles.visibilityIconWrap}>
-                  <MaterialCommunityIcons name="account-multiple" size={20} color={visibility === EVENT_VISIBILITY.GROUP ? colors.accentMid : colors.text} />
-                </View>
-                <View style={styles.optionTextContainer}>
-                  <Text style={styles.optionTitle}>Group</Text>
-                  <Text style={styles.optionDesc}>Share with selected groups</Text>
-                </View>
-                <Ionicons name={visibility === EVENT_VISIBILITY.GROUP ? "radio-button-on" : "radio-button-off"} size={20} color={colors.accentMid} />
-              </TouchableOpacity>
-
-              {visibility === EVENT_VISIBILITY.GROUP && (
-                <View style={styles.groupSelector}>
-                  {groups && groups.length > 0 ? (
-                    groups.map((group) => (
-                      <TouchableOpacity
-                        key={group.id}
-                        style={[
-                          styles.groupOption,
-                          selectedGroupIds.includes(group.id) && styles.groupOptionSelected,
-                        ]}
-                        onPress={() => {
-                          setSelectedGroupIds((selected) =>
-                            selected.includes(group.id)
-                              ? selected.filter((id) => id !== group.id)
-                              : [...selected, group.id]
-                          );
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.groupOptionText,
-                            selectedGroupIds.includes(group.id) && styles.groupOptionTextSelected,
-                          ]}
-                        >
-                          {group.name}
-                        </Text>
-                        {selectedGroupIds.includes(group.id) && (
-                          <Ionicons name="checkmark-circle" size={18} color={colors.accentMid} style={{ marginLeft: 8 }} />
-                        )}
-                      </TouchableOpacity>
-                    ))
-                  ) : (
-                    <Text style={styles.noGroupsText}>No groups available. Create a group first.</Text>
-                  )}
-                </View>
-              )}
-
-              {/* Public Option */}
-              <TouchableOpacity
-                style={[
-                  styles.visibilityOption,
-                  visibility === EVENT_VISIBILITY.PUBLIC && styles.visibilityOptionSelected,
-                ]}
-                onPress={() => setVisibility(EVENT_VISIBILITY.PUBLIC)}
-              >
-                <View style={styles.visibilityIconWrap}>
-                  <Ionicons name="globe" size={20} color={visibility === EVENT_VISIBILITY.PUBLIC ? colors.accentMid : colors.text} />
-                </View>
-                <View style={styles.optionTextContainer}>
-                  <Text style={styles.optionTitle}>Public</Text>
-                  <Text style={styles.optionDesc}>Anyone can see this</Text>
-                </View>
-                <Ionicons name={visibility === EVENT_VISIBILITY.PUBLIC ? "radio-button-on" : "radio-button-off"} size={20} color={colors.accentMid} />
-              </TouchableOpacity>
             </View>
           </View>
 
