@@ -16,6 +16,7 @@ import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { addDoc, collection, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
@@ -32,7 +33,9 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile, loading, logout, refreshProfile, isGuest, exitGuestMode } = useContext(AuthContext);
   const [showRegisterScreen, setShowRegisterScreen] = useState(false);
-  const { brand: currentBrand, setBrand, theme } = useThemeControls();
+  const { brand: currentBrand, setBrand, theme: dynamicTheme } = useThemeControls();
+  // Use dynamic theme for all rendering (colors, spacing) while keeping static import for StyleSheet
+  const theme = dynamicTheme;
 
   // -----------------------------------
   // Initial Values
