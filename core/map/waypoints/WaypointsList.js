@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   title: {
-    color: theme.colors.accent,
+    color: theme.colors.accentMid,
     fontWeight: "600",
     fontSize: 14,
   },

@@ -3234,7 +3234,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             >
               <SvgPin
                 icon="flag-checkered"
-                fill={theme.colors.accent}
+                fill={theme.colors.accentMid}
                 circle={theme.colors.primaryMid}
                 stroke={theme.colors.primaryDark}
               />
@@ -3364,7 +3364,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   <MaterialCommunityIcons
                       name={a.icon || "check"}
                       size={22}
-                      color={active ? theme.colors.accent : theme.colors.background}
+                      color={active ? theme.colors.accentMid : theme.colors.background}
                     />
                     <Text
                       style={[
@@ -3403,8 +3403,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                     <SvgPin
                       icon={c.icon}
                       size={32}
-                      fill={active ? theme.colors.accent : theme.colors.primaryLight}
-                      circle={active ? theme.colors.accent : theme.colors.accentDark}
+                      fill={active ? theme.colors.accentMid : theme.colors.primaryLight}
+                      circle={active ? theme.colors.accentMid : theme.colors.accentDark}
                       stroke={active ? theme.colors.primaryDark : theme.colors.primaryDark}
                     />
 
@@ -3444,7 +3444,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                     <MaterialCommunityIcons
                       name={AMENITY_ICON_MAP[a.key] || "check"}
                       size={22}
-                      color={active ? theme.colors.accent : theme.colors.background}
+                      color={active ? theme.colors.accentMid : theme.colors.background}
                     />
                     <Text
                       style={[
@@ -3476,7 +3476,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   <MaterialCommunityIcons
                     name="star"
                     size={32}
-                    color={draftFilters.sponsor ? theme.colors.accent : theme.colors.primaryLight}
+                    color={draftFilters.sponsor ? theme.colors.accentMid : theme.colors.primaryLight}
                   />
                   <Text
                     style={[
@@ -3734,7 +3734,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               <MaterialCommunityIcons
                 name="map-marker-plus"
                 size={26}
-                color={theme.colors.accent}
+                color={theme.colors.accentMid}
                 style={{ marginRight: 12 }}
               />
               <Text style={styles.pointMenuText}>Add waypoint</Text>
@@ -3758,7 +3758,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               <MaterialCommunityIcons
                 name="flag-triangle"
                 size={26}
-                color={theme.colors.accent}
+                color={theme.colors.accentMid}
                 style={{ marginRight: 12 }}
               />
               <Text style={styles.pointMenuText}>Add as start point</Text>
@@ -3779,7 +3779,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               <MaterialCommunityIcons
                 name="flag-checkered"
                 size={26}
-                color={theme.colors.accent}
+                color={theme.colors.accentMid}
                 style={{ marginRight: 12 }}
               />
               <Text style={styles.pointMenuText}>Add as destination</Text>
@@ -3826,7 +3826,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 <MaterialCommunityIcons
                   name="plus-circle"
                   size={26}
-                  color={theme.colors.accent}
+                  color={theme.colors.accentMid}
                   style={{ marginRight: 12 }}
                 />
                 <Text style={styles.pointMenuText}>Add new place here</Text>
@@ -3843,7 +3843,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               <MaterialCommunityIcons
                 name="map-marker-plus"
                 size={26}
-                color={theme.colors.accent}
+                color={theme.colors.accentMid}
                 style={{ marginRight: 12 }}
               />
               <Text style={styles.pointMenuText}>Add waypoint</Text>
@@ -3859,7 +3859,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               <MaterialCommunityIcons
                 name="flag-triangle"
                 size={26}
-                color={theme.colors.accent}
+                color={theme.colors.accentMid}
                 style={{ marginRight: 12 }}
               />
               <Text style={styles.pointMenuText}>Add as start point</Text>
@@ -3875,7 +3875,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               <MaterialCommunityIcons
                 name="flag-checkered"
                 size={26}
-                color={theme.colors.accent}
+                color={theme.colors.accentMid}
                 style={{ marginRight: 12 }}
               />
               <Text style={styles.pointMenuText}>Add as destination</Text>
@@ -3907,7 +3907,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               <MaterialCommunityIcons
                 name="refresh"
                 size={28}
-                color={theme.colors.accent}
+                color={theme.colors.accentMid}
                 style={{ marginRight: 12 }}
               />
               <Text style={styles.refreshMenuText}>Refresh route from current location</Text>
@@ -4338,7 +4338,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 24,
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentMid,
     elevation: 6,
     zIndex: 2500,
   },
@@ -4556,7 +4556,7 @@ const styles = StyleSheet.create({
   },
 
   riderLabel: {
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentMid,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,

@@ -51,11 +51,9 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         // Google photos
         googlePhotoAccess: "full",
         canViewGooglePhotos: true,
-        maxGooglePhotosPerPlace: 10, // Admin can see 10 Google photos per place
 
         // Calendar & Events
         canCreateEvents: true,
-        canAddMediaToCalendarEvents: true,
         canAccessSponsorship: true,
 
         // Admin
@@ -98,11 +96,9 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         googlePhotoAccess: "full",
         canViewGooglePhotos: true,
-        maxGooglePhotosPerPlace: 5, // Pro can see 5 Google photos per place
 
         // Calendar & Events
         canCreateEvents: true,
-        canAddMediaToCalendarEvents: true,
         canAccessSponsorship: false,
       };
 
@@ -145,11 +141,9 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         googlePhotoAccess: "limited",
         canViewGooglePhotos: true,
-        maxGooglePhotosPerPlace: 5, // Default for other places (10 for own place, handled in PlaceCard)
 
         // Calendar & Events
         canCreateEvents: true,
-        canAddMediaToCalendarEvents: true, // Can add media to their calendar events
         canAccessSponsorship: true,
       };
 
@@ -183,13 +177,11 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canSearchCR: true,
         canSearchGoogle: false,
 
-        googlePhotoAccess: "limited",  // 1 photo per place
+        googlePhotoAccess: "limited",  // 1–2 photos per place
         canViewGooglePhotos: true,
-        maxGooglePhotosPerPlace: 1, // User sees 1 Google photo per place
 
         // Calendar & Events
         canCreateEvents: false,
-        canAddMediaToCalendarEvents: false,
         canAccessSponsorship: false,
       };
 
@@ -226,11 +218,9 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         googlePhotoAccess: "none",
         canViewGooglePhotos: false,
-        maxGooglePhotosPerPlace: 0,
 
         // Calendar & Events
         canCreateEvents: false,
-        canAddMediaToCalendarEvents: false,
         canAccessSponsorship: false,
       };
   }

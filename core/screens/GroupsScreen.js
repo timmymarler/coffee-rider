@@ -137,7 +137,7 @@ export default function GroupsScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md }}>
               <TouchableOpacity
                 style={{
-                  backgroundColor: theme.colors.accent,
+                  backgroundColor: theme.colors.accentMid,
                   paddingVertical: 8,
                   paddingHorizontal: 18,
                   borderRadius: 8,
@@ -251,7 +251,7 @@ export default function GroupsScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md }}>
               <TouchableOpacity
                 style={{
-                  backgroundColor: theme.colors.accent,
+                  backgroundColor: theme.colors.accentMid,
                   paddingVertical: 8,
                   paddingHorizontal: 18,
                   borderRadius: 8,
@@ -520,7 +520,7 @@ export default function GroupsScreen() {
                                 <View style={{ flex: 1, alignItems: 'flex-end', justifyContent: 'center' }}>
                                   <TouchableOpacity
                                     style={{
-                                      backgroundColor: theme.colors.accent,
+                                      backgroundColor: theme.colors.accentMid,
                                       paddingVertical: 8,
                                       paddingHorizontal: 18,
                                       borderRadius: 8,

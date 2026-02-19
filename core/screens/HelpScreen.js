@@ -132,7 +132,7 @@ export default function HelpScreen() {
           <MaterialCommunityIcons
             name="refresh"
             size={22}
-            color={theme.colors.accent}
+            color={theme.colors.accentMid}
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>

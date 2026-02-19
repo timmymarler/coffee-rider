@@ -145,7 +145,7 @@ export default function MiniMap({
 
       {/* Rider count badge */}
       {riderLocations.length > 0 && (
-        <View style={[styles.badge, { backgroundColor: theme.colors.accent }]}>
+        <View style={[styles.badge, { backgroundColor: theme.colors.accentMid }]}>
           <MaterialCommunityIcons
             name="account-multiple"
             size={16}

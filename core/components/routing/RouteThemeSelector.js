@@ -86,8 +86,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.inputBorder,
   },
   themeButtonActive: {
-    backgroundColor: theme.colors.accentLight || theme.colors.accent,
-    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentLight || theme.colors.accentMid,
+    borderColor: theme.colors.accentMid,
   },
   themeLabel: {
     fontSize: 14,
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xs,
   },
   themeLabelActive: {
-    color: theme.colors.accent,
+    color: theme.colors.accentMid,
   },
   themeDescription: {
     fontSize: 12,
@@ -104,6 +104,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   themeDescriptionActive: {
-    color: theme.colors.accentDark || theme.colors.accent,
+    color: theme.colors.accentDark || theme.colors.accentMid,
   },
 });

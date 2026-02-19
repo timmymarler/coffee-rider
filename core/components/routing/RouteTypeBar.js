@@ -62,8 +62,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   optionActive: {
-    backgroundColor: theme.colors.accent,
-    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentMid,
+    borderColor: theme.colors.accentMid,
   },
   optionLabel: {
     fontSize: 13,

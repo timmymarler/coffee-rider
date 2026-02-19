@@ -34,7 +34,7 @@ export function CafeCard({ cafe, onPress, onNavigatePress }) {
           </Text>
           {typeof rating === "number" && (
             <View style={styles.ratingRow}>
-              <Ionicons name="star" size={14} color={theme.colors.accent || "#ffd700"} />
+              <Ionicons name="star" size={14} color={theme.colors.accentMid || "#ffd700"} />
               <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
             </View>
           )}
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: theme.colors.accent || "#C99A3D",
+    backgroundColor: theme.colors.accentMid || "#C99A3D",
   },
   navigateText: {
     marginLeft: 5,

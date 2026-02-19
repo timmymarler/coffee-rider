@@ -217,7 +217,7 @@ export default function ProfileScreen() {
                   router.back();
                 }}
               >
-                <Text style={[styles.subText, { color: theme.colors.accent }]}>
+                <Text style={[styles.subText, { color: theme.colors.accentMid }]}>
                   Continue Browsing
                 </Text>
               </TouchableOpacity>
@@ -606,12 +606,12 @@ export default function ProfileScreen() {
                       borderRadius: theme.radius.md,
                       backgroundColor:
                         placeCategory === cat.key
-                          ? theme.colors.accent
+                          ? theme.colors.accentMid
                           : theme.colors.inputBg,
                       borderWidth: placeCategory === cat.key ? 2 : 1,
                       borderColor:
                         placeCategory === cat.key
-                          ? theme.colors.accent
+                          ? theme.colors.accentMid
                           : theme.colors.inputBorder,
                     }}
                   >
@@ -664,11 +664,11 @@ export default function ProfileScreen() {
                       paddingVertical: theme.spacing.sm,
                       borderRadius: theme.radius.md,
                       backgroundColor: isSelected
-                        ? theme.colors.accent
+                        ? theme.colors.accentMid
                         : theme.colors.inputBg,
                       borderWidth: 1,
                       borderColor: isSelected
-                        ? theme.colors.accent
+                        ? theme.colors.accentMid
                         : theme.colors.inputBorder,
                       gap: theme.spacing.xs,
                     }}
@@ -723,11 +723,11 @@ export default function ProfileScreen() {
                       paddingVertical: theme.spacing.sm,
                       borderRadius: theme.radius.md,
                       backgroundColor: isSelected
-                        ? theme.colors.accent
+                        ? theme.colors.accentMid
                         : theme.colors.inputBg,
                       borderWidth: 1,
                       borderColor: isSelected
-                        ? theme.colors.accent
+                        ? theme.colors.accentMid
                         : theme.colors.inputBorder,
                       gap: theme.spacing.xs,
                     }}
