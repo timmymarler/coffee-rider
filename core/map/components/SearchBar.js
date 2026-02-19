@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useTheme } from "@context/ThemeContext";
 import theme from "@themes";
 import {
     ActivityIndicator,
@@ -19,6 +20,9 @@ export function SearchBar({
   onRouteTypePress,
   routeTypeActive = false,
 }) {
+  // Use dynamic theme from context
+  const dynamicTheme = useTheme();
+  const theme = dynamicTheme;
   const styles = createStyles(theme);
 
   return (

@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useTheme } from "@context/ThemeContext";
 import theme from "@themes";
 import { View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
@@ -12,13 +13,20 @@ const STROKE_WIDTH = 1.2;
 
 export default function SvgPin({
   size = PIN_SIZE,
-  fill = theme.colors.primaryLight,
-  stroke = theme.colors.primaryLight,
-  circle = theme.colors.accentDark,
+  fill,
+  stroke,
+  circle,
   icon = "map-marker",
   iconColor = "#000",
   strokeWidth = STROKE_WIDTH,
 }) {
+  // Use dynamic theme from context
+  const dynamicTheme = useTheme();
+  const theme = dynamicTheme;
+  // Set defaults after theme is available
+  if (fill === undefined) fill = theme.colors.primaryLight;
+  if (stroke === undefined) stroke = theme.colors.primaryLight;
+  if (circle === undefined) circle = theme.colors.accentDark;
   const iconSize = size * 0.45;
 
   return (

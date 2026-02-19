@@ -4,6 +4,7 @@ import { getGoogleDetails } from "@/core/map/utils/getGoogleDetails";
 import { formatWeekdayText, getOpeningStatus } from "@/core/map/utils/openingHours";
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
+import { useTheme } from "@context/ThemeContext";
 import { getCapabilities } from "@core/roles/capabilities";
 import { incMetric } from "@core/utils/devMetrics";
 import { uploadImage } from "@core/utils/uploadImage";
@@ -147,6 +148,9 @@ export default function PlaceCard({
       null,
   };
 
+  // Use dynamic theme from context
+  const dynamicTheme = useTheme();
+  const theme = dynamicTheme;
   const styles = createStyles(theme);
   const auth = useContext(AuthContext);
   const user = auth?.user || null;
