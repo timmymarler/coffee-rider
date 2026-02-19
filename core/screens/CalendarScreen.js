@@ -453,13 +453,36 @@ export default function CalendarScreen() {
     }));
   };
 
+  // Create theme-aware styles inside component so they update when theme changes
+  const dynamicStyles = StyleSheet.create({
+    headerNavButtonLarge: {
+      width: 52,
+      height: 52,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primaryDark,
+      marginHorizontal: 2,
+      shadowColor: theme.colors.accentMid,
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 4,
+    },
+    headerNavButtonTextLarge: {
+      fontSize: 32,
+      fontWeight: '700',
+      color: theme.colors.accentMid,
+    },
+  });
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.headerControls, { paddingTop: 12, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingRight: insets.top + 12 }]}> 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity 
-              style={styles.headerNavButtonLarge} 
+              style={dynamicStyles.headerNavButtonLarge} 
               onPress={() => {
                 const prev = new Date(selectedDate);
                 prev.setMonth(prev.getMonth() - 1);
@@ -467,7 +490,7 @@ export default function CalendarScreen() {
               }}
               activeOpacity={0.8}
             >
-              <Text style={styles.headerNavButtonTextLarge}>{'<'}</Text>
+              <Text style={dynamicStyles.headerNavButtonTextLarge}>{'<'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.headerTodayButton}
@@ -477,7 +500,7 @@ export default function CalendarScreen() {
               <Text style={{ fontSize: 20, fontWeight: '700', color: colors.accentMid }}>Today</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.headerNavButtonLarge}
+              style={dynamicStyles.headerNavButtonLarge}
               onPress={() => {
                 const next = new Date(selectedDate);
                 next.setMonth(next.getMonth() + 1);
@@ -485,7 +508,7 @@ export default function CalendarScreen() {
               }}
               activeOpacity={0.8}
             >
-              <Text style={styles.headerNavButtonTextLarge}>{'>'}</Text>
+              <Text style={dynamicStyles.headerNavButtonTextLarge}>{'>'}</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity 

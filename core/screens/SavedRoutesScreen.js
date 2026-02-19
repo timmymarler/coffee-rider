@@ -193,19 +193,19 @@ export default function SavedRoutesScreen() {
 
   function renderHeader() {
     return (
-      <View style={styles.header}>
+      <View style={dynamicStyles.header}>
         {/* Routes/Rides Toggle */}
         <View style={styles.toggleRow}>
           <TouchableOpacity
             onPress={() => setViewMode("routes")}
             style={[
-              styles.toggleButton,
+              dynamicStyles.toggleButton,
               viewMode === "routes" && styles.toggleButtonActive,
             ]}
           >
             <Text
               style={[
-                styles.toggleButtonText,
+                dynamicStyles.toggleButtonText,
                 viewMode === "routes" && styles.toggleButtonTextActive,
               ]}
             >
@@ -215,13 +215,13 @@ export default function SavedRoutesScreen() {
           <TouchableOpacity
             onPress={() => setViewMode("rides")}
             style={[
-              styles.toggleButton,
+              dynamicStyles.toggleButton,
               viewMode === "rides" && styles.toggleButtonActive,
             ]}
           >
             <Text
               style={[
-                styles.toggleButtonText,
+                dynamicStyles.toggleButtonText,
                 viewMode === "rides" && styles.toggleButtonTextActive,
               ]}
             >
@@ -233,7 +233,7 @@ export default function SavedRoutesScreen() {
         {/* Only show sort/filter for routes view */}
         {viewMode === "routes" && (
           <>
-            <Text style={styles.headerLabel}>Sort by:</Text>
+            <Text style={dynamicStyles.headerLabel}>Sort by:</Text>
             <View style={styles.sortRow}>
               {SORT_OPTIONS.map((opt) => (
                 <TouchableOpacity
@@ -256,7 +256,7 @@ export default function SavedRoutesScreen() {
               ))}
             </View>
 
-            <Text style={styles.headerLabel}>Filter:</Text>
+            <Text style={dynamicStyles.headerLabel}>Filter:</Text>
             <View style={styles.sortRow}>
               {FILTER_OPTIONS.map((opt) => (
                 <TouchableOpacity
@@ -427,6 +427,43 @@ export default function SavedRoutesScreen() {
       : filterBy === "private"
       ? "No private routes"
       : "No saved routes yet";
+
+  // Create theme-aware styles inside component so they update when theme changes
+  const dynamicStyles = StyleSheet.create({
+    header: {
+      backgroundColor: theme.colors.background,
+      paddingHorizontal: 16,
+      paddingBottom: 8,
+      paddingTop: 8,
+    },
+    headerLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.textMuted,
+      marginBottom: 4,
+      marginTop: 8,
+    },
+    headerTitle: {
+      fontSize: 22,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    toggleButton: {
+      flex: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: theme.colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    toggleButtonText: {
+      fontSize: 14,
+      fontWeight: "500",
+      color: theme.colors.textMuted,
+    },
+  });
 
   return (
     <CRScreen padded={false}>
