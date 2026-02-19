@@ -566,7 +566,7 @@ export default function CalendarScreen() {
       alignItems: 'center',
       borderWidth: 1,
       borderColor: theme.colors.border,
-      backgroundColor: theme.colors.primaryDark,
+      backgroundColor: theme.colors.surface,
     },
     weekCell: {
       flex: 1,
@@ -575,7 +575,7 @@ export default function CalendarScreen() {
       alignItems: 'center',
       borderWidth: 1,
       borderColor: theme.colors.border,
-      backgroundColor: theme.colors.primaryDark,
+      backgroundColor: theme.colors.surface,
     },
     calendarCellContent: {
       alignItems: 'center',
