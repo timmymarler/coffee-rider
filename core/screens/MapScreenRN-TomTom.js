@@ -1608,6 +1608,47 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex]);
 
+  // Auto-rerouting when significantly off-route during Follow Me
+  const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
+  const OFF_ROUTE_THRESHOLD_METERS = 200; // Reroute if >200m off the route
+  const REROUTE_COOLDOWN_SECONDS = 30; // Only attempt reroute every 30 seconds max
+  
+  useEffect(() => {
+    if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation || !routeDestination) return;
+
+    // Find closest point on route
+    let closestDist = Infinity;
+    for (let i = 0; i < routeCoords.length; i++) {
+      const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
+      if (dist < closestDist) {
+        closestDist = dist;
+      }
+    }
+
+    // Check if off-route and enough time since last reroute attempt
+    const now = Date.now();
+    const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
+    
+    if (closestDist > OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
+      console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route, triggering reroute...`);
+      lastRerouteAttemptRef.current = now;
+      
+      // Rebuild route from current location to destination
+      const requestId = ++routeRequestId.current;
+      mapRoute({
+        origin: userLocation,
+        waypoints: waypoints, // Include waypoints in the new route
+        destination: routeDestination,
+        travelMode: userTravelMode,
+        routeType: userRouteType,
+        requestId,
+        skipFitToView: true, // Don't zoom out, stay in Follow Me view
+      }).catch(error => {
+        console.warn('[AutoReroute] mapRoute error:', error);
+      });
+    }
+  }, [userLocation, followUser, routeCoords, routeDestination, waypoints, userTravelMode, userRouteType]);
+
   // Compute traveled and remaining polyline portions for Follow Me mode
   const { traveledPolyline, remainingPolyline } = useMemo(() => {
     if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation) {
