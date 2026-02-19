@@ -8,6 +8,7 @@ import { CRInput } from "@components-ui/CRInput";
 import { CRLabel } from "@components-ui/CRLabel";
 import { CRScreen } from "@components-ui/CRScreen";
 import { AuthContext } from "@context/AuthContext";
+import { useThemeControls } from "@context/ThemeContext";
 import { RIDER_AMENITIES } from "@core/config/amenities/rider";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
 import { RIDER_SUITABILITY } from "@core/config/suitability/rider";
@@ -32,6 +33,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile, loading, logout, refreshProfile, isGuest, exitGuestMode } = useContext(AuthContext);
   const [showRegisterScreen, setShowRegisterScreen] = useState(false);
+  const { brand: currentBrand, setBrand } = useThemeControls();
 
   // -----------------------------------
   // Initial Values
@@ -583,6 +585,47 @@ export default function ProfileScreen() {
         <CRLabel>Display Name</CRLabel>
         <CRInput value={displayName} onChangeText={setDisplayName} />
 
+        {/* Theme Selector */}
+        <CRLabel style={{ marginTop: theme.spacing.md }}>App Theme</CRLabel>
+        <View style={{ flexDirection: "row", gap: theme.spacing.sm, marginVertical: theme.spacing.sm }}>
+          {["rider", "driver", "strider"].map((themeName) => (
+            <TouchableOpacity
+              key={themeName}
+              onPress={() => setBrand(themeName)}
+              style={{
+                flex: 1,
+                paddingVertical: theme.spacing.md,
+                paddingHorizontal: theme.spacing.sm,
+                borderRadius: theme.radius.md,
+                backgroundColor:
+                  currentBrand === themeName
+                    ? theme.colors.accentMid
+                    : theme.colors.inputBg,
+                borderWidth: currentBrand === themeName ? 2 : 1,
+                borderColor:
+                  currentBrand === themeName
+                    ? theme.colors.accentMid
+                    : theme.colors.inputBorder,
+                alignItems: "center",
+              }}
+            >
+              <Text
+                style={{
+                  color:
+                    currentBrand === themeName
+                      ? theme.colors.primaryDark
+                      : theme.colors.text,
+                  fontWeight: currentBrand === themeName ? "600" : "500",
+                  fontSize: 13,
+                  textTransform: "capitalize",
+                }}
+              >
+                {themeName}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {role === "place-owner" ? (
           <>
             {/* Place Owner Fields */}
@@ -870,6 +913,7 @@ export default function ProfileScreen() {
         <View style={styles.actionRow}>
           <CRButton
             title={saving ? "Saving…" : "Save"}
+            variant="accentMid"
             loading={saving}
             onPress={handleSaveProfile}
             disabled={saving || !hasChanges()}

@@ -1,6 +1,7 @@
 // app/_layout.js
 
 import AuthProvider, { AuthContext } from "@context/AuthContext";
+import { ThemeProvider } from "@context/ThemeContext";
 import { RoutingPreferencesProvider } from "@context/RoutingPreferencesContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import AppHeader from "@core/components/layout/AppHeader";
@@ -371,14 +372,16 @@ export default function Layout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <RoutingPreferencesProvider brand="rider">
-          <TabBarProvider>
-            <WaypointsProvider>
-              <AppHeader />
-              <LayoutContent />
-            </WaypointsProvider>
-          </TabBarProvider>
-        </RoutingPreferencesProvider>
+        <ThemeProvider>
+          <RoutingPreferencesProvider brand="rider">
+            <TabBarProvider>
+              <WaypointsProvider>
+                <AppHeader />
+                <LayoutContent />
+              </WaypointsProvider>
+            </TabBarProvider>
+          </RoutingPreferencesProvider>
+        </ThemeProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

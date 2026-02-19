@@ -5,7 +5,7 @@ import strider from "./strider";
 
 // You decide which brand is active at build time
 // For Coffee Rider:
-const currentBrand = "rider";
+const currentBrand = "strider";
 
 const brands = {
   rider,
