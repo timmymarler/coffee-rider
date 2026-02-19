@@ -1663,7 +1663,7 @@ function createStyles(theme) {
       backgroundColor: theme.colors.accentMid,
       paddingVertical: 10,
       paddingHorizontal: 32,
-      borderRadius: 20,
+      borderRadius: 8,
       alignItems: "center",
       alignSelf: "flex-end",
     },
