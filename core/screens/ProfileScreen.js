@@ -21,8 +21,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { addDoc, collection, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Clipboard, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Picker } from "@react-native-picker/picker";
+import { ActivityIndicator, Alert, Clipboard, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LoginScreen from "../auth/login";
 import RegisterScreen from "../auth/register";
@@ -63,6 +62,7 @@ export default function ProfileScreen() {
   const [placeAddress, setPlaceAddress] = useState("");
   const [placeAmenities, setPlaceAmenities] = useState([]);
   const [placeSuitability, setPlaceSuitability] = useState([]);
+  const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
 
   // Track changes for Save button
   const [initialValues, setInitialValues] = useState({});
@@ -607,32 +607,78 @@ export default function ProfileScreen() {
 
         {/* Theme Selector */}
         <CRLabel style={{ marginTop: theme.spacing.md }}>App Theme</CRLabel>
-        <View style={{
-          backgroundColor: theme.colors.inputBg,
-          borderWidth: 1,
-          borderColor: theme.colors.inputBorder,
-          borderRadius: theme.radius.md,
-          overflow: 'hidden',
-          marginVertical: theme.spacing.sm,
-        }}>
-          <Picker
-            selectedValue={currentBrand}
-            onValueChange={(itemValue) => handleThemeChange(itemValue)}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => setThemeDropdownOpen(true)}
+          style={{
+            backgroundColor: theme.colors.inputBg,
+            borderWidth: 1,
+            borderColor: theme.colors.inputBorder,
+            borderRadius: theme.radius.md,
+            paddingHorizontal: theme.spacing.md,
+            paddingVertical: theme.spacing.md,
+            marginVertical: theme.spacing.sm,
+          }}
+        >
+          <Text style={{ color: theme.colors.text, fontSize: 16 }}>
+            {currentBrand.charAt(0).toUpperCase() + currentBrand.slice(1)}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Theme Dropdown Modal */}
+        <Modal
+          visible={themeDropdownOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setThemeDropdownOpen(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setThemeDropdownOpen(false)}
             style={{
-              color: theme.colors.text,
-              height: 60,
-            }}
-            itemStyle={{
-              color: theme.colors.text,
-              fontSize: 16,
-              height: 60,
+              flex: 1,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              justifyContent: 'center',
+              alignItems: 'center',
             }}
           >
-            <Picker.Item label="Rider" value="rider" color={theme.colors.text} />
-            <Picker.Item label="Driver" value="driver" color={theme.colors.text} />
-            <Picker.Item label="Strider" value="strider" color={theme.colors.text} />
-          </Picker>
-        </View>
+            <View
+              style={{
+                backgroundColor: theme.colors.surface,
+                borderRadius: theme.radius.lg,
+                overflow: 'hidden',
+                minWidth: 200,
+              }}
+            >
+              {['rider', 'driver', 'strider'].map((themeOption) => (
+                <TouchableOpacity
+                  key={themeOption}
+                  onPress={() => {
+                    handleThemeChange(themeOption);
+                    setThemeDropdownOpen(false);
+                  }}
+                  style={{
+                    paddingHorizontal: theme.spacing.md,
+                    paddingVertical: theme.spacing.md,
+                    backgroundColor: currentBrand === themeOption ? theme.colors.accentMid : theme.colors.surface,
+                    borderBottomWidth: themeOption !== 'strider' ? 1 : 0,
+                    borderBottomColor: theme.colors.inputBorder,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: currentBrand === themeOption ? 'white' : theme.colors.text,
+                      fontSize: 16,
+                      fontWeight: currentBrand === themeOption ? '600' : '400',
+                    }}
+                  >
+                    {themeOption.charAt(0).toUpperCase() + themeOption.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
         {role === "place-owner" ? (
           <>
