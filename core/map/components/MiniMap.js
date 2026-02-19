@@ -76,14 +76,23 @@ export default function MiniMap({
         showsMyLocationButton={false}
         showsUserLocation={false}
       >
-        {/* Route polyline */}
+        {/* Route polyline - background */}
         {routeCoords.length > 1 && (
-          <Polyline
-            coordinates={routeCoords}
-            strokeWidth={2}
-            strokeColor="#2196F3"
-            zIndex={100}
-          />
+          <>
+            <Polyline
+              coordinates={routeCoords}
+              strokeWidth={2}
+              strokeColor="#1565C0"
+              zIndex={100}
+            />
+            {/* Route polyline - bright overlay */}
+            <Polyline
+              coordinates={routeCoords}
+              strokeWidth={1.5}
+              strokeColor="#42A5F5"
+              zIndex={101}
+            />
+          </>
         )}
 
         {/* User location */}

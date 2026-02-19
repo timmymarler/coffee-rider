@@ -2411,7 +2411,7 @@ export default function MapScreenRN() {
                 key={`base-${routeVersion}`}
                 coordinates={routeCoords}
                 strokeWidth={6}
-                strokeColor="#2196F3"
+                strokeColor="#1565C0"
                 zIndex={900}
               />
 
@@ -2420,7 +2420,7 @@ export default function MapScreenRN() {
                 key={`active-${routeVersion}`}
                 coordinates={routeCoords}
                 strokeWidth={3}
-                strokeColor={theme.colors.primary}
+                strokeColor="#42A5F5"
                 zIndex={1000}
               />
         </MapView>
