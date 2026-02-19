@@ -57,7 +57,7 @@ export default function SavedRoutesScreen() {
   const { setPendingSavedRouteId } = useWaypointsContext();
   const { user, capabilities } = useContext(AuthContext);
   const { groups } = useAllUserGroups(user?.uid);
-  // Use dynamic theme from context
+  // Use dynamic theme from context for immediate updates
   const dynamicTheme = useTheme();
   const theme = dynamicTheme;
 

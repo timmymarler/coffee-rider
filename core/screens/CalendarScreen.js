@@ -67,6 +67,9 @@ export default function CalendarScreen() {
   const router = useRouter();
   const { user, profile } = useContext(AuthContext);
   const insets = useSafeAreaInsets();
+  // Use dynamic theme from context
+  const dynamicTheme = useTheme();
+  const theme = dynamicTheme;
   const { colors, spacing } = theme;
   const capabilities = getCapabilities(profile?.role || "guest");
 
