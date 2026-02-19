@@ -762,7 +762,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
-    backgroundColor: "rgba(0,0,0,0.2)",
+    backgroundColor: theme.colors.surface,
   },
 
   actionButton: {
