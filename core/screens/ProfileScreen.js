@@ -64,8 +64,6 @@ export default function ProfileScreen() {
   const [placeAddress, setPlaceAddress] = useState("");
   const [placeAmenities, setPlaceAmenities] = useState([]);
   const [placeSuitability, setPlaceSuitability] = useState([]);
-  const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
-  const [themeToast, setThemeToast] = useState(null);
 
   // Track changes for Save button
   const [initialValues, setInitialValues] = useState({});
@@ -167,16 +165,6 @@ export default function ProfileScreen() {
     };
     loadSponsorshipStatus();
   }, [profile, role, user?.uid, isGuest]);
-
-  // Auto-hide theme toast after 2 seconds
-  useEffect(() => {
-    if (themeToast) {
-      const timer = setTimeout(() => {
-        setThemeToast(null);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [themeToast]);
 
   const email = user?.email || "";
   const role = profile?.role || "user";
@@ -333,23 +321,7 @@ export default function ProfileScreen() {
     }
   };
 
-  // -----------------------------------
-  // Handle Theme Change
-  // -----------------------------------
-  const handleThemeChange = async (newTheme) => {
-    if (!user) return;
 
-    try {
-      // setBrand handles both state update and Firestore save
-      await setBrand(newTheme);
-      // Show brief toast notification
-      const themeName = newTheme.charAt(0).toUpperCase() + newTheme.slice(1);
-      setThemeToast(`${themeName} theme applied`);
-    } catch (error) {
-      console.error("Error saving theme preference:", error);
-      Alert.alert("Error", "Failed to save theme preference");
-    }
-  };
 
   // -----------------------------------
   // Check if there are unsaved changes
@@ -670,86 +642,11 @@ export default function ProfileScreen() {
       </View>
 
       {/* ---------------- PROFILE DETAILS CARD ---------------- */}
-      <View style={dynamicStyles.cardWrap}>
+      <View style={styles.cardWrap}>
       <CRCard>
 
         <CRLabel>Display Name</CRLabel>
         <CRInput value={displayName} onChangeText={setDisplayName} />
-
-        {/* Theme Selector */}
-        <CRLabel style={{ marginTop: theme.spacing.md }}>App Theme</CRLabel>
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => setThemeDropdownOpen(true)}
-          style={{
-            backgroundColor: theme.colors.inputBg,
-            borderWidth: 1,
-            borderColor: theme.colors.inputBorder,
-            borderRadius: theme.radius.md,
-            paddingHorizontal: theme.spacing.md,
-            paddingVertical: theme.spacing.md,
-            marginVertical: theme.spacing.sm,
-          }}
-        >
-          <Text style={{ color: theme.colors.text, fontSize: 16 }}>
-            {currentBrand.charAt(0).toUpperCase() + currentBrand.slice(1)}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Theme Dropdown Modal */}
-        <Modal
-          visible={themeDropdownOpen}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setThemeDropdownOpen(false)}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => setThemeDropdownOpen(false)}
-            style={{
-              flex: 1,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            <View
-              style={{
-                backgroundColor: theme.colors.surface,
-                borderRadius: theme.radius.lg,
-                overflow: 'hidden',
-                minWidth: 200,
-              }}
-            >
-              {['rider', 'driver', 'strider'].map((themeOption) => (
-                <TouchableOpacity
-                  key={themeOption}
-                  onPress={() => {
-                    handleThemeChange(themeOption);
-                    setThemeDropdownOpen(false);
-                  }}
-                  style={{
-                    paddingHorizontal: theme.spacing.md,
-                    paddingVertical: theme.spacing.md,
-                    backgroundColor: currentBrand === themeOption ? theme.colors.accentMid : theme.colors.surface,
-                    borderBottomWidth: themeOption !== 'strider' ? 1 : 0,
-                    borderBottomColor: theme.colors.inputBorder,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: currentBrand === themeOption ? 'white' : theme.colors.text,
-                      fontSize: 16,
-                      fontWeight: currentBrand === themeOption ? '600' : '400',
-                    }}
-                  >
-                    {themeOption.charAt(0).toUpperCase() + themeOption.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </TouchableOpacity>
-        </Modal>
 
         {role === "place-owner" ? (
           <>
@@ -971,7 +868,7 @@ export default function ProfileScreen() {
 
       {/* Sponsorship Section for Place Owners */}
       {role === "place-owner" && (
-        <View style={dynamicStyles.cardWrap}>
+        <View style={styles.cardWrap}>
           <CRCard>
             <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '600', marginBottom: theme.spacing.md }}>
               Sponsorship Status
@@ -1033,29 +930,29 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      <View style={dynamicStyles.cardWrap}>
+      <View style={styles.cardWrap}>
       <CRCard>
-        <View style={dynamicStyles.actionRow}>
+        <View style={styles.actionRow}>
           <CRButton
             title={saving ? "Saving…" : "Save"}
             variant="accentMid"
             loading={saving}
             onPress={handleSaveProfile}
             disabled={saving || !hasChanges()}
-            style={[dynamicStyles.actionButtonGrow, { marginRight: theme.spacing.sm }]}
+            style={[styles.actionButtonGrow, { marginRight: theme.spacing.sm }]}
           />
           <CRButton
             title="Log Out"
             variant="danger"
             onPress={logout}
-            style={dynamicStyles.actionButtonGrow}
+            style={styles.actionButtonGrow}
           />
         </View>
       </CRCard>
       </View>
 
       {/* Debug Logs Section */}
-      <View style={dynamicStyles.cardWrap}>
+      <View style={styles.cardWrap}>
         <CRCard>
           <TouchableOpacity onPress={() => setShowDebugPanel(!showDebugPanel)} style={{ paddingVertical: 8 }}>
             <Text style={{ color: theme.colors.primary, fontSize: 14, fontWeight: '600' }}>
