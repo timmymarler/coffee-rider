@@ -47,6 +47,23 @@ const THEME_CONFIGS = {
       { id: "scenic", label: "🎢 Scenic", description: "Interesting pedestrian routes" },
     ],
   },
+  cyclist: {
+    travelMode: "bike",
+    defaultRouteType: "curvy",
+    routeTypes: [
+      { id: "fastest", label: "⚡ Fastest", description: "Minimize travel time" },
+      { id: "shortest", label: "📏 Shortest", description: "Minimize distance" },
+      { id: "curvy", label: "🎢 Scenic", description: "Scenic cycling routes with bike paths" },
+    ],
+  },
+};
+
+// Map vehicle IDs to theme names for UI
+const VEHICLE_TO_THEME = {
+  motorcycle: "rider",
+  car: "driver",
+  bike: "cyclist",
+  pedestrian: "strider",
 };
 
 // Map route type IDs to TomTom parameters
@@ -114,11 +131,23 @@ export function RoutingPreferencesProvider({ children, brand = "rider" }) {
     loadPreferences();
   }, []);
 
-  // Set theme (vehicle type) - currently locked to "rider" only
+  // Set theme (vehicle type)
   const handleSetTheme = useCallback((newTheme) => {
-    // Theme is locked to "rider" for now, ignoring changes
-    console.log("[RoutingPreferences] Theme is locked to 'rider'");
-  }, []);
+    if (THEME_CONFIGS[newTheme]) {
+      setThemeState(newTheme);
+      const defaults = getDefaultsForBrand(newTheme);
+      setTravelModeState(defaults.travelMode);
+      setRouteTypeState(defaults.routeType);
+      // Save to storage
+      AsyncStorage.setItem(
+        "routingPreferences",
+        JSON.stringify({
+          theme: newTheme,
+          routeType: defaults.routeType,
+        })
+      ).catch((err) => console.error("[RoutingPreferences] Error saving theme:", err));
+    }
+  }, [getDefaultsForBrand]);
 
   // Set route type (optimization strategy)
   const handleSetRouteType = useCallback((newRouteType) => {

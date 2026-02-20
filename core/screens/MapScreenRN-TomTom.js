@@ -594,6 +594,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Routing
   const router = useRouter();
   const [routeCoords, setRouteCoords] = useState([]);
+  const [isPedestrianRoute, setIsPedestrianRoute] = useState(false);
+  const [isCyclingRoute, setIsCyclingRoute] = useState(false);
+  const [isCarRoute, setIsCarRoute] = useState(false);
+  const [isMotorcycleRoute, setIsMotorcycleRoute] = useState(false);
 
   // Newly created place (shown until it's fetched into crPlaces)
   const [newlyCreatedPlace, setNewlyCreatedPlace] = useState(null);
@@ -670,6 +674,35 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   
   // Navigation mode is active when Follow Me is enabled OR user is on an active ride
   const isNavigationMode = followUser || !!activeRide;
+  
+  // When vehicle type changes, clear only the polyline to force rebuild
+  // Keep the color flags to be updated by the new route build
+  const previousTravelModeRef = useRef(userTravelMode);
+  useEffect(() => {
+    if (previousTravelModeRef.current !== userTravelMode && routeCoords.length > 0) {
+      // Vehicle type changed with an active route - clear the polyline to force visual rebuild
+      // Don't clear the flags here - let the new route build set them correctly
+      setRouteCoords([]);
+    }
+    previousTravelModeRef.current = userTravelMode;
+  }, [userTravelMode, routeCoords.length]);
+
+  // Rebuild route when route type changes while a route is active
+  const previousRouteTypeRef = useRef(userRouteType);
+  useEffect(() => {
+    if (previousRouteTypeRef.current !== userRouteType) {
+      previousRouteTypeRef.current = userRouteType;
+      
+      // If there's an active route displayed, rebuild it with the new route type
+      if (routeCoords.length > 0 && (routeDestination || waypoints.length > 0) && !followUser && userLocation) {
+        console.log('[MAP_ROUTE_TYPE_EFFECT] Route type changed, rebuilding...');
+        const requestId = ++routeRequestId.current;
+        buildRoute({ requestId }).catch(error => {
+          console.warn('[MAP_ROUTE_TYPE_EFFECT] buildRoute error:', error);
+        });
+      }
+    }
+  }, [userRouteType]);
   
   // Sync activeRide to TabBarContext so floating tab bar can access it
   useEffect(() => {
@@ -893,6 +926,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       const decoded = result.polyline;
 
       setRouteCoords(decoded);
+      setIsPedestrianRoute(userTravelMode === "pedestrian");
+      setIsCyclingRoute(userTravelMode === "bike");
+      setIsCarRoute(userTravelMode === "car");
+      setIsMotorcycleRoute(userTravelMode === "motorcycle");
       setRouteDistanceMeters(result.distanceMeters ?? result.distance);
       setRouteMeta({
         distanceMeters: result.distanceMeters ?? result.distance,
@@ -1472,6 +1509,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Clear existing waypoints and route
       clearWaypoints();
       setRouteCoords([]);
+      setIsPedestrianRoute(false);
+      setIsCyclingRoute(false);
+      setIsCarRoute(false);
+      setIsMotorcycleRoute(false);
+      setIsCarRoute(false);
+      setIsMotorcycleRoute(false);
       routeFittedRef.current = false;
       setRouteClearedByUser(false); // Ensure route building is not blocked
 
@@ -2046,6 +2089,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setIsHomeDestination(false);
     clearWaypoints();
     setRouteCoords([]);            // ✅ clear polyline HERE
+    setIsPedestrianRoute(false);
+    setIsCyclingRoute(false);
+    setIsCarRoute(false);
+    setIsMotorcycleRoute(false);
     setRouteDistanceMeters(null);
     setManualStartPoint(null); 
     routeFittedRef.current = false;
@@ -2638,6 +2685,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     if (!result?.polyline) {
       console.log("[mapRoute] No polyline in result");
+      setIsPedestrianRoute(false);
       return false;
     }
 
@@ -2648,6 +2696,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // Update state with route data
     setRouteCoords(simplified);
+    setIsPedestrianRoute(travelMode === "pedestrian");
+    setIsCyclingRoute(travelMode === "bike");
+    setIsCarRoute(travelMode === "car");
+    setIsMotorcycleRoute(travelMode === "motorcycle");
     setRouteMeta({
       distanceMeters: result.distanceMeters ?? result.distance,
       durationSeconds: result.durationSeconds ?? result.duration,
@@ -3286,34 +3338,112 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             })()
           )}
 
-            {/* Base route */}
+            {/* Base route - outline layer for pedestrians and cyclists */}
+              {(isPedestrianRoute || isCyclingRoute) && (
+                <Polyline
+                  key={`base-outline-${routeVersion}`}
+                  coordinates={routeCoords}
+                  strokeWidth={isNavigationMode ? 12 : 8}
+                  strokeColor={isCyclingRoute ? "#7B1FA2" : "#2E7D32"}
+                  zIndex={899}
+                />
+              )}
+              {/* Base route */}
               <Polyline
                 key={`base-${routeVersion}`}
                 coordinates={routeCoords}
                 strokeWidth={isNavigationMode ? 10 : 6}
-                strokeColor="#1565C0"
+                strokeColor={
+                  isPedestrianRoute ? "#4CAF50" :
+                  isCyclingRoute ? "#CE93D8" :
+                  isCarRoute ? "#CFD8DC" :
+                  isMotorcycleRoute ? "#1565C0" :
+                  "#1565C0"
+                }
                 zIndex={900}
               />
+              {/* Car route - dark grey outline */}
+              {isCarRoute && (
+                <Polyline
+                  key={`base-car-outline-${routeVersion}`}
+                  coordinates={routeCoords}
+                  strokeWidth={isNavigationMode ? 12 : 8}
+                  strokeColor="#37474F"
+                  zIndex={899}
+                />
+              )}
 
-            {/* Traveled route (during Follow Me) */}
+            {/* Traveled route (during Follow Me) - outline layer for pedestrians and cyclists */}
+              {(isPedestrianRoute || isCyclingRoute) && followUser && traveledPolyline.length > 1 && (
+                <Polyline
+                  key={`traveled-outline-${routeVersion}`}
+                  coordinates={traveledPolyline}
+                  strokeWidth={isNavigationMode && followUser ? 9 : 7}
+                  strokeColor={isCyclingRoute ? "#7B1FA2" : "#2E7D32"}
+                  zIndex={1000}
+                />
+              )}
+              {/* Traveled route (during Follow Me) */}
               {followUser && traveledPolyline.length > 1 && (
                 <Polyline
                   key={`traveled-${routeVersion}`}
                   coordinates={traveledPolyline}
                   strokeWidth={isNavigationMode && followUser ? 7 : 5}
-                  strokeColor={theme.colors.accentDark}
+                  strokeColor={
+                    isPedestrianRoute ? "#4CAF50" :
+                    isCyclingRoute ? "#CE93D8" :
+                    isCarRoute ? "#CFD8DC" :
+                    isMotorcycleRoute ? "#1565C0" :
+                    theme.colors.accentDark
+                  }
                   zIndex={1001}
                 />
               )}
+              {/* Car traveled route - dark grey outline */}
+              {isCarRoute && followUser && traveledPolyline.length > 1 && (
+                <Polyline
+                  key={`traveled-car-outline-${routeVersion}`}
+                  coordinates={traveledPolyline}
+                  strokeWidth={isNavigationMode && followUser ? 9 : 7}
+                  strokeColor="#37474F"
+                  zIndex={1000}
+                />
+              )}
 
-            {/* Remaining route */}
+            {/* Remaining route - outline layer for pedestrians and cyclists */}
+              {(isPedestrianRoute || isCyclingRoute) && (
+                <Polyline
+                  key={`active-outline-${routeVersion}`}
+                  coordinates={routeCoords}
+                  strokeWidth={isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)}
+                  strokeColor={isCyclingRoute ? "#7B1FA2" : "#2E7D32"}
+                  zIndex={999}
+                />
+              )}
+              {/* Remaining route */}
               <Polyline
                 key={`active-${routeVersion}`}
                 coordinates={routeCoords}
                 strokeWidth={isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)}
-                strokeColor="#42A5F5"
+                strokeColor={
+                  isPedestrianRoute ? "#4CAF50" :
+                  isCyclingRoute ? "#CE93D8" :
+                  isCarRoute ? "#CFD8DC" :
+                  isMotorcycleRoute ? "#42A5F5" :
+                  "#42A5F5"
+                }
                 zIndex={1000}
               />
+              {/* Car route active - dark grey outline */}
+              {isCarRoute && (
+                <Polyline
+                  key={`active-car-outline-${routeVersion}`}
+                  coordinates={routeCoords}
+                  strokeWidth={isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)}
+                  strokeColor="#37474F"
+                  zIndex={999}
+                />
+              )}
         </MapView>
       ) : (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.primaryDark }}>

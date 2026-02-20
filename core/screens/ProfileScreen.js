@@ -8,6 +8,7 @@ import { CRInput } from "@components-ui/CRInput";
 import { CRLabel } from "@components-ui/CRLabel";
 import { CRScreen } from "@components-ui/CRScreen";
 import { AuthContext } from "@context/AuthContext";
+import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { useThemeControls } from "@context/ThemeContext";
 import { RIDER_AMENITIES } from "@core/config/amenities/rider";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
@@ -32,6 +33,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, profile, loading, logout, refreshProfile, isGuest, exitGuestMode } = useContext(AuthContext);
+  const { theme: userTheme, setTheme: setUserTheme } = useContext(RoutingPreferencesContext);
   const [showRegisterScreen, setShowRegisterScreen] = useState(false);
   const { theme: dynamicTheme } = useThemeControls();
   // Use dynamic theme for all rendering (colors, spacing) while keeping static import for StyleSheet
@@ -834,13 +836,29 @@ export default function ProfileScreen() {
               placeholder="123 Main St, City, Postcode"
             />
 
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Default Vehicle Type</CRLabel>
+            <View style={{ flexDirection: "row", gap: theme.spacing.lg, marginVertical: theme.spacing.sm, paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.md, backgroundColor: theme.colors.primaryDark, borderRadius: theme.radius.md }}>
+              {[
+                { id: "motorcycle", icon: "motorbike", theme: "rider" },
+                { id: "car", icon: "car", theme: "driver" },
+                { id: "bike", icon: "bike", theme: "cyclist" },
+                { id: "pedestrian", icon: "walk", theme: "strider" },
+              ].map((vehicle) => (
+                <TouchableOpacity
+                  key={vehicle.id}
+                  onPress={() => setUserTheme(vehicle.theme)}
+                >
+                  <MaterialCommunityIcons
+                    name={vehicle.icon}
+                    size={24}
+                    color={userTheme === vehicle.theme ? theme.colors.accentMid : theme.colors.primaryMid}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <CRLabel style={{ marginTop: theme.spacing.md }}>Rider Bio</CRLabel>
             <CRInput value={bio} onChangeText={setBio} multiline />
-
-            {/* Route Theme Selector - Hidden for now */}
-            {/* <View style={{ marginTop: theme.spacing.lg }}>
-              <RouteThemeSelector />
-            </View> */}
           </>
         )}
 

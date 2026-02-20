@@ -1,5 +1,190 @@
 import Constants from "expo-constants";
+import polyline from "@mapbox/polyline";
 
+/**
+ * Fetch route from Google Directions API (best for pedestrian and cycling routing)
+ * @param {Object} origin - {latitude, longitude}
+ * @param {Object} destination - {latitude, longitude}
+ * @param {Array} waypoints - [{latitude, longitude}, ...] (optional)
+ * @param {string} mode - 'walking' or 'bicycling' (default: 'walking')
+ * @returns {Promise<Object>} Route data with polyline, distance, duration
+ */
+export async function fetchGoogleRoute(origin, destination, waypoints = [], mode = 'walking') {
+  const googleMapsApiKey = Constants.expoConfig?.extra?.googleMapsApiKey;
+
+  if (!googleMapsApiKey) {
+    throw new Error("Google Maps API key not configured");
+  }
+
+  try {
+    // Format: origin=lat,lng&destination=lat,lng&waypoints=lat,lng|lat,lng
+    const originStr = `${origin.latitude},${origin.longitude}`;
+    const destStr = `${destination.latitude},${destination.longitude}`;
+    
+    let waypointsStr = "";
+    if (waypoints && waypoints.length > 0) {
+      waypointsStr = `&waypoints=${waypoints
+        .map((wp) => `${wp.latitude},${wp.longitude}`)
+        .join("|")}`;
+    }
+
+    // For pedestrians, avoid highways to prioritize footpaths and local roads
+    const avoidParam = mode === 'walking' ? '&avoid=highways&region=GB' : '';
+    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${destStr}${waypointsStr}&mode=${mode}${avoidParam}&alternatives=true&key=${googleMapsApiKey}`;
+
+    const modeLabel = mode === 'walking' ? 'pedestrian' : 'cycling';
+    console.log(`[googleRouting] Fetching ${modeLabel} route from Google`);
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[googleRouting] API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+      });
+      throw new Error(`Google Directions API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.status !== "OK" || !data.routes || data.routes.length === 0) {
+      throw new Error(`Google Directions API: ${data.status}`);
+    }
+
+    // For pedestrian routes, pick the best alternative that avoids major roads
+    let selectedRouteIndex = 0;
+    if (mode === 'walking' && data.routes.length > 1) {
+      // Score routes by checking for major road keywords in instructions
+      let bestScore = Infinity;
+      data.routes.forEach((route, idx) => {
+        let score = route.legs.reduce((sum, leg) => {
+          return sum + (leg.steps || []).reduce((stepSum, step) => {
+            const instruction = (step.html_instructions || '').toLowerCase();
+            // Penalize routes mentioning A-roads, motorways, highways
+            let penalty = 0;
+            if (instruction.includes('a ') || instruction.match(/\ba\d/)) penalty += 100;
+            if (instruction.includes('motorway') || instruction.includes('m ')) penalty += 200;
+            if (instruction.includes('highway')) penalty += 50;
+            return stepSum + penalty;
+          }, 0);
+        }, 0);
+        console.log(`[googleRouting] Route ${idx}: major road score ${score}`);
+        if (score < bestScore) {
+          bestScore = score;
+          selectedRouteIndex = idx;
+        }
+      });
+      console.log(`[googleRouting] Selected route ${selectedRouteIndex} (score: ${bestScore})`);
+    }
+
+    const route = data.routes[selectedRouteIndex];
+    const legs = route.legs || [];
+
+    console.log('[googleRouting] Got route with', legs.length, 'legs');
+
+    // Decode Google's encoded polyline
+    let allPoints = [];
+    if (route.overview_polyline && route.overview_polyline.points) {
+      try {
+        const decoded = polyline.decode(route.overview_polyline.points);
+        allPoints = decoded.map((p) => ({
+          latitude: p[0],
+          longitude: p[1],
+        }));
+      } catch (decodeError) {
+        console.error('[googleRouting] Error decoding polyline:', decodeError);
+        // Fallback: use leg points
+        legs.forEach((leg) => {
+          if (leg.steps) {
+            leg.steps.forEach((step) => {
+              if (step.polyline && step.polyline.points) {
+                try {
+                  const decoded = polyline.decode(step.polyline.points);
+                  decoded.forEach((p) => {
+                    allPoints.push({ latitude: p[0], longitude: p[1] });
+                  });
+                } catch (e) {
+                  // Skip problematic polylines
+                }
+              }
+            });
+          }
+        });
+      }
+    }
+
+    // Fallback to leg start/end points if no polyline
+    if (allPoints.length === 0) {
+      allPoints = [origin];
+      legs.forEach((leg) => {
+        if (leg.end_location) {
+          allPoints.push({
+            latitude: leg.end_location.lat,
+            longitude: leg.end_location.lng,
+          });
+        }
+      });
+    }
+
+    // Convert Google steps to consistent step format
+    const steps = [];
+    legs.forEach((leg) => {
+      if (leg.steps && Array.isArray(leg.steps)) {
+        leg.steps.forEach((step, idx) => {
+          steps.push({
+            maneuver: step.maneuver || "STRAIGHT",
+            instruction: step.html_instructions
+              ?.replace(/<[^>]*>/g, "") // Strip HTML tags
+              .replace(/&nbsp;/g, " ")
+              .replace(/&amp;/g, "&")
+              .replace(/&quot;/g, '"')
+              .replace(/&#39;/g, "'") || "Continue",
+            distance: step.distance?.value || 0,
+            position: {
+              latitude: step.start_location.lat,
+              longitude: step.start_location.lng,
+            },
+            end: {
+              latitude: step.end_location.lat,
+              longitude: step.end_location.lng,
+            },
+          });
+        });
+      }
+    });
+
+    // Calculate total distance and duration
+    let totalDistance = 0;
+    let totalDuration = 0;
+    legs.forEach((leg) => {
+      if (leg.distance) totalDistance += leg.distance.value;
+      if (leg.duration) totalDuration += leg.duration.value;
+    });
+
+    console.log('[googleRouting] Route summary:', {
+      distance: totalDistance,
+      duration: totalDuration,
+      polylinePoints: allPoints.length,
+      stepsCount: steps.length,
+    });
+
+    return {
+      polyline: allPoints,
+      distance: totalDistance, // in meters
+      duration: totalDuration, // in seconds
+      durationInTraffic: totalDuration, // Google walking doesn't have traffic
+      legs: legs,
+      guidance: steps, // Use steps as guidance for walking
+      steps: steps,
+      rawRoute: route,
+    };
+  } catch (error) {
+    console.error("[googleRouting] Error fetching route:", error);
+    throw error;
+  }
+}
 
 /**
  * Fetch route from TomTom Routing API
@@ -14,9 +199,22 @@ import Constants from "expo-constants";
  * @returns {Promise<Object>} Route data with polyline, distance, duration
  */
 export async function fetchTomTomRoute(origin, destination, waypoints = [], vehicleType = "car", routeTypeId = null, routeTypeMap = null, customHilliness = null, customWindingness = null) {
+  // Use Google Maps API for pedestrian routing (better depth of routing)
+  if (vehicleType === "pedestrian") {
+    console.log('[tomtomRouting] Delegating pedestrian routing to Google Maps API');
+    return fetchGoogleRoute(origin, destination, waypoints, 'walking');
+  }
+  
+  // Use Google Maps for scenic cycling routes (better at finding dedicated cycle paths)
+  if (vehicleType === "bike" && (routeTypeId === "curvy" || routeTypeId === "scenic")) {
+    console.log('[tomtomRouting] Using Google Maps for scenic cycling route');
+    return fetchGoogleRoute(origin, destination, waypoints, 'bicycling');
+  }
+
   // Map vehicle types to appropriate TomTom travelMode and avoid preferences
   // Note: avoid parameter accepts single values only. Valid values:
   // tollRoads, motorways, ferries, unpavedRoads, carpools, alreadyUsedRoads, borderCrossings, tunnels, carTrains, lowEmissionZones
+  // Note: bike and pedestrian are handled by Google Maps API above
   const vehicleConfigMap = {
     car: {
       travelMode: "car",
@@ -29,8 +227,8 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
       defaultAvoid: "motorways",
     },
     bike: {
-      travelMode: "bike",
-      defaultRouteType: "thrilling",
+      travelMode: "car",
+      defaultRouteType: "shortest",
       defaultAvoid: "motorways",
     },
     pedestrian: {
@@ -360,9 +558,10 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
  * Useful for checking distances to multiple places
  * @param {Object} origin - {latitude, longitude}
  * @param {Array} destinations - [{latitude, longitude}, ...]
+ * @param {string} vehicleType - 'car', 'pedestrian', 'bike', 'motorcycle' (optional, default 'motorcycle')
  * @returns {Promise<Array>} Array of {distance, duration} for each destination
  */
-export async function fetchTomTomMatrix(origin, destinations) {
+export async function fetchTomTomMatrix(origin, destinations, vehicleType = "motorcycle") {
   const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
 
   if (!tomtomApiKey) {
@@ -388,7 +587,7 @@ export async function fetchTomTomMatrix(origin, destinations) {
       destinations: destinations.map((d) => ({
         point: { latitude: d.latitude, longitude: d.longitude },
       })),
-      vehicleType: "car",
+      vehicleType: vehicleType,
     };
 
     const response = await fetch(url, {
