@@ -283,6 +283,18 @@ function getBearingDifference(bearing1, bearing2) {
   return diff > 180 ? 360 - diff : diff;
 }
 
+// Calculate distance between two coordinates in meters
+// Uses fast approximation: 111320m per degree latitude, adjusted longitude by latitude
+function distanceBetweenMeters(a, b) {
+  if (!a || !b) return null;
+  const dx = (a.latitude - b.latitude) * 111320;
+  const dy =
+    (a.longitude - b.longitude) *
+    (40075000 * Math.cos((a.latitude * Math.PI) / 180)) /
+    360;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
 // Ramer-Douglas-Peucker polyline simplification algorithm
 // Reduces points while maintaining visual accuracy
 function simplifyPolyline(points, tolerance = 0.00005) {
