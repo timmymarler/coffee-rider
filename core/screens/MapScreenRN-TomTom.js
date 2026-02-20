@@ -1718,15 +1718,31 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   useEffect(() => {
     if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation || !routeDestination) return;
 
+    // Defensive check: ensure routeCoords is actually an array with valid coordinate objects
+    if (!Array.isArray(routeCoords)) {
+      console.warn('[AutoReroute] routeCoords is not an array, skipping auto-reroute');
+      return;
+    }
+
     // Find closest point on route to user
     let closestDist = Infinity;
     let userPolylineIdx = 0;
-    for (let i = 0; i < routeCoords.length; i++) {
-      const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
-      if (dist < closestDist) {
-        closestDist = dist;
-        userPolylineIdx = i;
+    try {
+      for (let i = 0; i < routeCoords.length; i++) {
+        const coord = routeCoords[i];
+        if (!coord || coord.latitude === undefined || coord.longitude === undefined) {
+          console.warn(`[AutoReroute] Invalid coordinate at index ${i}:`, coord);
+          continue;
+        }
+        const dist = distanceBetweenMeters(userLocation, coord);
+        if (dist < closestDist) {
+          closestDist = dist;
+          userPolylineIdx = i;
+        }
       }
+    } catch (error) {
+      console.error('[AutoReroute] Error finding closest point on route:', error);
+      return;
     }
 
     // Check if off-route and enough time since last reroute attempt
@@ -1743,20 +1759,35 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       
       if (userLocation.heading !== undefined && userLocation.heading !== -1) {
         // Get bearing of route ahead from closest point
+        // Defensive check: ensure we have at least 2 different points
         let routeAheadIdx = Math.min(userPolylineIdx + 10, routeCoords.length - 1);
-        const routeBearing = calculateBearing(routeCoords[userPolylineIdx], routeCoords[routeAheadIdx]);
-        const userHeading = userLocation.heading;
-        const headingDiff = getBearingDifference(routeBearing, userHeading);
         
-        // Only reroute if heading is significantly wrong (>90° off)
-        if (headingDiff > MAX_HEADING_TOLERANCE) {
-          shouldReroute = true;
-          rerouteReason = `heading backwards (${headingDiff.toFixed(0)}° off route)`;
-        } else {
-          // User is heading generally right direction but off the road
-          // This is normal on parallel roads or roundabout approaches - don't reroute yet
-          console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route but heading in correct direction (${headingDiff.toFixed(0)}° offset) - no reroute needed`);
-          shouldReroute = false;
+        // If points are the same, try to go further ahead
+        if (routeAheadIdx === userPolylineIdx && routeCoords.length > userPolylineIdx + 1) {
+          routeAheadIdx = Math.min(userPolylineIdx + 1, routeCoords.length - 1);
+        }
+        
+        // Only calculate bearing if we have 2 different valid points
+        if (routeAheadIdx !== userPolylineIdx && routeCoords[userPolylineIdx] && routeCoords[routeAheadIdx]) {
+          try {
+            const routeBearing = calculateBearing(routeCoords[userPolylineIdx], routeCoords[routeAheadIdx]);
+            const userHeading = userLocation.heading;
+            const headingDiff = getBearingDifference(routeBearing, userHeading);
+            
+            // Only reroute if heading is significantly wrong (>90° off)
+            if (headingDiff > MAX_HEADING_TOLERANCE) {
+              shouldReroute = true;
+              rerouteReason = `heading backwards (${headingDiff.toFixed(0)}° off route)`;
+            } else {
+              // User is heading generally right direction but off the road
+              // This is normal on parallel roads or roundabout approaches - don't reroute yet
+              console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route but heading in correct direction (${headingDiff.toFixed(0)}° offset) - no reroute needed`);
+              shouldReroute = false;
+            }
+          } catch (error) {
+            console.error('[AutoReroute] Error calculating bearing for large off-route:', error);
+            shouldReroute = false;
+          }
         }
       } else {
         // No heading data available - use conservative approach
@@ -1767,14 +1798,24 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // User is moderately off-route (80-200m) - check heading more aggressively
       if (userLocation.heading !== undefined && userLocation.heading !== -1) {
         let routeAheadIdx = Math.min(userPolylineIdx + 5, routeCoords.length - 1);
-        const routeBearing = calculateBearing(routeCoords[Math.max(0, userPolylineIdx - 5)], routeCoords[routeAheadIdx]);
-        const userHeading = userLocation.heading;
-        const headingDiff = getBearingDifference(routeBearing, userHeading);
+        let routeBackIdx = Math.max(0, userPolylineIdx - 5);
         
-        // At moderate distance, be more aggressive about backwards detection
-        if (headingDiff > 120) {
-          shouldReroute = true;
-          rerouteReason = `heading wrong way (${headingDiff.toFixed(0)}° off) + moderate distance`;
+        // Ensure we have valid points
+        if (routeBackIdx !== routeAheadIdx && routeCoords[routeBackIdx] && routeCoords[routeAheadIdx]) {
+          try {
+            const routeBearing = calculateBearing(routeCoords[routeBackIdx], routeCoords[routeAheadIdx]);
+            const userHeading = userLocation.heading;
+            const headingDiff = getBearingDifference(routeBearing, userHeading);
+            
+            // At moderate distance, be more aggressive about backwards detection
+            if (headingDiff > 120) {
+              shouldReroute = true;
+              rerouteReason = `heading wrong way (${headingDiff.toFixed(0)}° off) + moderate distance`;
+            }
+          } catch (error) {
+            console.error('[AutoReroute] Error calculating bearing for moderate off-route:', error);
+            shouldReroute = false;
+          }
         }
       }
     }
@@ -1784,20 +1825,30 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       lastRerouteAttemptRef.current = now;
       
       // Filter to only remaining waypoints (ahead of user on polyline)
-      const remainingWaypoints = waypoints.filter(wp => {
-        // Find this waypoint's position on the polyline
-        let waypointPolylineIdx = routeCoords.length - 1;
-        let minDist = Infinity;
-        for (let i = 0; i < routeCoords.length; i++) {
-          const dist = distanceBetweenMeters(wp, routeCoords[i]);
-          if (dist < minDist) {
-            minDist = dist;
-            waypointPolylineIdx = i;
+      let remainingWaypoints = [];
+      try {
+        remainingWaypoints = waypoints.filter(wp => {
+          // Find this waypoint's position on the polyline
+          let waypointPolylineIdx = routeCoords.length - 1;
+          let minDist = Infinity;
+          for (let i = 0; i < routeCoords.length; i++) {
+            const coord = routeCoords[i];
+            if (!coord || coord.latitude === undefined || coord.longitude === undefined) {
+              continue;
+            }
+            const dist = distanceBetweenMeters(wp, coord);
+            if (dist < minDist) {
+              minDist = dist;
+              waypointPolylineIdx = i;
+            }
           }
-        }
-        // Only include if waypoint is ahead of user's current position
-        return waypointPolylineIdx > userPolylineIdx;
-      });
+          // Only include if waypoint is ahead of user's current position
+          return waypointPolylineIdx > userPolylineIdx;
+        });
+      } catch (error) {
+        console.error('[AutoReroute] Error filtering waypoints:', error);
+        remainingWaypoints = waypoints; // Fall back to all waypoints if filtering fails
+      }
       
       // Rebuild route from current location to destination
       const requestId = ++routeRequestId.current;
