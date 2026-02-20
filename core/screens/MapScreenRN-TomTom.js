@@ -3440,7 +3440,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           )}
 
             {/* Base route - outline layer for pedestrians and cyclists */}
-              {(isPedestrianRoute || isCyclingRoute) && (
+              {(isPedestrianRoute || isCyclingRoute) && routeCoords.length > 0 && (
                 <Polyline
                   key={`base-outline-${routeVersion}`}
                   coordinates={routeCoords}
@@ -3450,21 +3450,23 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 />
               )}
               {/* Base route */}
-              <Polyline
-                key={`base-${routeVersion}`}
-                coordinates={routeCoords}
-                strokeWidth={isNavigationMode ? 10 : 6}
-                strokeColor={
-                  isPedestrianRoute ? "#4CAF50" :
-                  isCyclingRoute ? "#CE93D8" :
-                  isCarRoute ? "#DC2626" :
-                  isMotorcycleRoute ? "#1565C0" :
-                  "#1565C0"
-                }
-                zIndex={900}
-              />
+              {routeCoords.length > 0 && (
+                <Polyline
+                  key={`base-${routeVersion}`}
+                  coordinates={routeCoords}
+                  strokeWidth={isNavigationMode ? 10 : 6}
+                  strokeColor={
+                    isPedestrianRoute ? "#4CAF50" :
+                    isCyclingRoute ? "#CE93D8" :
+                    isCarRoute ? "#DC2626" :
+                    isMotorcycleRoute ? "#1565C0" :
+                    "#1565C0"
+                  }
+                  zIndex={900}
+                />
+              )}
               {/* Car route - dark red outline */}
-              {isCarRoute && (
+              {isCarRoute && routeCoords.length > 0 && (
                 <Polyline
                   key={`base-car-outline-${routeVersion}`}
                   coordinates={routeCoords}
@@ -3496,7 +3498,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               )}
 
             {/* Remaining route - outline layer for pedestrians and cyclists */}
-              {(isPedestrianRoute || isCyclingRoute) && (
+              {(isPedestrianRoute || isCyclingRoute) && routeCoords.length > 0 && (
                 <Polyline
                   key={`active-outline-${routeVersion}`}
                   coordinates={routeCoords}
@@ -3506,21 +3508,23 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 />
               )}
               {/* Remaining route */}
-              <Polyline
-                key={`active-${routeVersion}`}
-                coordinates={routeCoords}
-                strokeWidth={isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)}
-                strokeColor={
-                  isPedestrianRoute ? "#4CAF50" :
-                  isCyclingRoute ? "#CE93D8" :
-                  isCarRoute ? "#DC2626" :
-                  isMotorcycleRoute ? "#42A5F5" :
-                  "#42A5F5"
-                }
-                zIndex={1000}
-              />
+              {routeCoords.length > 0 && (
+                <Polyline
+                  key={`active-${routeVersion}`}
+                  coordinates={routeCoords}
+                  strokeWidth={isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)}
+                  strokeColor={
+                    isPedestrianRoute ? "#4CAF50" :
+                    isCyclingRoute ? "#CE93D8" :
+                    isCarRoute ? "#DC2626" :
+                    isMotorcycleRoute ? "#42A5F5" :
+                    "#42A5F5"
+                  }
+                  zIndex={1000}
+                />
+              )}
               {/* Car route remaining - dark red outline */}
-              {isCarRoute && (
+              {isCarRoute && routeCoords.length > 0 && (
                 <Polyline
                   key={`active-car-outline-${routeVersion}`}
                   coordinates={routeCoords}
