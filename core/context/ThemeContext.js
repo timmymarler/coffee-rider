@@ -1,10 +1,10 @@
 // core/context/ThemeContext.js
-import { createContext, useContext, useState, useEffect } from "react";
-import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/config/firebase";
 import driver from "@themes/driver";
 import rider from "@themes/rider";
 import strider from "@themes/strider";
+import { doc, updateDoc } from "firebase/firestore";
+import { createContext, useContext, useEffect, useState } from "react";
 
 const brands = {
   rider,

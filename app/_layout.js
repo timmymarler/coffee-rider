@@ -1,9 +1,9 @@
 // app/_layout.js
 
 import AuthProvider, { AuthContext } from "@context/AuthContext";
-import { ThemeProvider } from "@context/ThemeContext";
 import { RoutingPreferencesProvider } from "@context/RoutingPreferencesContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
+import { ThemeProvider } from "@context/ThemeContext";
 import AppHeader from "@core/components/layout/AppHeader";
 import SplashScreen from "@core/components/ui/SplashScreen";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";

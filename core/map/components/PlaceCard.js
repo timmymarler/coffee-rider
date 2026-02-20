@@ -9,45 +9,44 @@ import { getCapabilities } from "@core/roles/capabilities";
 import { incMetric } from "@core/utils/devMetrics";
 import { uploadImage } from "@core/utils/uploadImage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import theme from "@themes";
 import Constants from 'expo-constants';
 import * as ImagePicker from "expo-image-picker";
 import {
-  addDoc,
-  arrayUnion,
-  collection,
-  deleteDoc,
-  doc,
-  limit as fbLimit,
-  getDoc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  Timestamp,
-  updateDoc,
+    addDoc,
+    arrayUnion,
+    collection,
+    deleteDoc,
+    doc,
+    limit as fbLimit,
+    getDoc,
+    onSnapshot,
+    orderBy,
+    query,
+    serverTimestamp,
+    setDoc,
+    Timestamp,
+    updateDoc,
 } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
-  Dimensions,
-  FlatList,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
+import { RIDER_CATEGORIES } from "../../config/categories/rider";
 
 const PLACE_CARD_MAX_HEIGHT = 0.7 * Dimensions.get("window").height;
 const PLACE_CARD_EXTRA_SCROLL = Math.round(PLACE_CARD_MAX_HEIGHT * 0.5);
-import { RIDER_CATEGORIES } from "../../config/categories/rider";
 
 
 const PLACE_CATEGORIES = RIDER_CATEGORIES;

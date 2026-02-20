@@ -1,6 +1,5 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "@context/ThemeContext";
-import theme from "@themes";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import {
     ActivityIndicator,
     StyleSheet,

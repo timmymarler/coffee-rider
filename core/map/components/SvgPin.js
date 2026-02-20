@@ -1,6 +1,5 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useTheme } from "@context/ThemeContext";
-import theme from "@themes";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 

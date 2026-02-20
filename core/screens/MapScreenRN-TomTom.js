@@ -265,15 +265,22 @@ function formatDistanceImperial(meters) {
   return `${Math.round(yards)} yd`;
 }
 
-// Approximate distance between two lat/lng points in meters
-function distanceBetweenMeters(a, b) {
-  if (!a || !b) return null;
-  const dx = (a.latitude - b.latitude) * 111320;
-  const dy =
-    (a.longitude - b.longitude) *
-    (40075000 * Math.cos((a.latitude * Math.PI) / 180)) /
-    360;
-  return Math.sqrt(dx * dx + dy * dy);
+// Calculate bearing (compass direction) between two points
+// Returns degrees 0-360 (0=N, 90=E, 180=S, 270=W)
+function calculateBearing(from, to) {
+  const dLat = (to.latitude - from.latitude) * Math.PI / 180;
+  const dLon = (to.longitude - from.longitude) * Math.PI / 180;
+  const y = Math.sin(dLon) * Math.cos(to.latitude * Math.PI / 180);
+  const x = Math.cos(from.latitude * Math.PI / 180) * Math.sin(to.latitude * Math.PI / 180)
+    - Math.sin(from.latitude * Math.PI / 180) * Math.cos(to.latitude * Math.PI / 180) * Math.cos(dLon);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+// Calculate the angular difference between two bearings
+// Returns 0-180 (0 = same direction, 180 = opposite)
+function getBearingDifference(bearing1, bearing2) {
+  let diff = Math.abs(bearing1 - bearing2);
+  return diff > 180 ? 360 - diff : diff;
 }
 
 // Ramer-Douglas-Peucker polyline simplification algorithm
@@ -681,7 +688,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   useEffect(() => {
     if (previousTravelModeRef.current !== userTravelMode && routeCoords.length > 0) {
       // Vehicle type changed with an active route - clear the polyline to force visual rebuild
-      // Don't clear the flags here - let the new route build set them correctly
+      // Reset all color flags immediately, new ones will be set when route rebuilds
+      setIsPedestrianRoute(false);
+      setIsCyclingRoute(false);
+      setIsCarRoute(false);
+      setIsMotorcycleRoute(false);
       setRouteCoords([]);
     }
     previousTravelModeRef.current = userTravelMode;
@@ -1592,16 +1603,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [userLocation, isNavigationMode]);
 
-  // Compute distance to next junction (current step end). Advance step when close.
+  // Smart step detection: track which step you're on and automatically advance when past it
+  // This fixes the "getting further away" issue by detecting step transitions more intelligently
   useEffect(() => {
     if (!isNavigationMode) return;
     if (!userLocation) return;
     if (!routeSteps || routeSteps.length === 0) return;
     if (!routeCoords || routeCoords.length === 0) return;
 
-    // Find closest polyline coordinate to user location
+    const STEP_ADVANCE_THRESHOLD_METERS = 15; // Advance when <15m from step end and moving forward
+    const MAX_BACKTRACK_TOLERANCE_METERS = 30; // Allow 30m backward before considering off-track
+
+    // Step 1: Find user's closest point on the polyline
     let closestPolylineIdx = 0;
     let closestPolylineDist = Infinity;
+    
     for (let i = 0; i < routeCoords.length; i++) {
       const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
       if (dist < closestPolylineDist) {
@@ -1610,55 +1626,94 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
     }
 
-    // Find which step the user is actually on by finding closest step endpoint
-    let correctStepIdx = 0;
-    let closestStepDist = Infinity;
+    // Step 2: Find which step the user is ON by matching polyline position
+    // Build a map of where each step ends on the polyline
+    let stepEndPolylineIndices = [];
     
     for (let i = 0; i < routeSteps.length; i++) {
       const step = routeSteps[i];
-      if (!step?.end?.latitude) continue;
+      if (!step?.end?.latitude) {
+        stepEndPolylineIndices[i] = routeCoords.length - 1;
+        continue;
+      }
       
-      // Find this step's end point in the polyline
-      let stepPolylineIdx = routeCoords.length - 1;
-      for (let j = 0; j < routeCoords.length; j++) {
+      // Find the closest polyline point to this step's end (within 250m)
+      let bestIdx = routeCoords.length - 1;
+      let bestDist = Infinity;
+      
+      for (let j = Math.max(0, closestPolylineIdx - 50); j < Math.min(routeCoords.length, closestPolylineIdx + 100); j++) {
         const dist = distanceBetweenMeters(step.end, routeCoords[j]);
-        if (dist < 200) { // Within 200m
-          stepPolylineIdx = j;
-          break;
+        if (dist < bestDist && dist < 250) {
+          bestDist = dist;
+          bestIdx = j;
         }
       }
       
-      // Find the closest step whose endpoint is before or at current position
-      if (stepPolylineIdx <= closestPolylineIdx) {
-        const distFromStep = closestPolylineIdx - stepPolylineIdx;
-        if (distFromStep < closestStepDist) {
-          closestStepDist = distFromStep;
-          correctStepIdx = i;
-        }
+      stepEndPolylineIndices[i] = bestIdx;
+    }
+
+    // Step 3: Determine current step - find the step whose endpoint is closest AHEAD of user
+    let detectedStepIdx = currentStepIndex;
+    
+    for (let i = currentStepIndex; i < routeSteps.length; i++) {
+      const stepEndIdx = stepEndPolylineIndices[i];
+      
+      // User is still before this step's end
+      if (closestPolylineIdx < stepEndIdx) {
+        detectedStepIdx = i;
+        break;
       }
     }
 
-    const idx = Math.min(correctStepIdx, routeSteps.length - 1);
-    const step = routeSteps[idx];
-    if (!step?.end?.latitude || !step?.end?.longitude) return;
+    // If we've reached the end, stay on the last step
+    detectedStepIdx = Math.min(detectedStepIdx, routeSteps.length - 1);
 
-    const d = distanceBetweenMeters(userLocation, step.end);
-    setNextJunctionDistance(d);
-    
-    // Update step if current position suggests a different step
-    if (correctStepIdx !== currentStepIndex) {
-      setCurrentStepIndex(correctStepIdx);
+    // Step 4: Calculate distance to next junction (end of CURRENT step)
+    const currentStep = routeSteps[detectedStepIdx];
+    if (!currentStep?.end?.latitude) {
+      setNextJunctionDistance(null);
+      return;
     }
-    // Also advance if you pass the current step
-    if (d !== null && d <= 0 && idx < routeSteps.length - 1) {
-      setCurrentStepIndex(idx + 1);
+
+    const distToNextJunction = distanceBetweenMeters(userLocation, currentStep.end);
+    setNextJunctionDistance(distToNextJunction);
+
+    // Step 5: Auto-advance to next step if:
+    // - We're close to the current step's end (<15m)
+    // - AND we're not moving backward (distance is decreasing or stable)
+    if (
+      detectedStepIdx !== currentStepIndex &&
+      detectedStepIdx < routeSteps.length
+    ) {
+      console.log('[Navigation] Step transition detected:', {
+        from: currentStepIndex,
+        to: detectedStepIdx,
+        userPolylinePos: closestPolylineIdx,
+        stepEndPos: stepEndPolylineIndices[detectedStepIdx],
+        distanceToJunction: Math.round(distToNextJunction),
+      });
+      setCurrentStepIndex(detectedStepIdx);
+    } else if (
+      distToNextJunction !== null &&
+      distToNextJunction < STEP_ADVANCE_THRESHOLD_METERS &&
+      detectedStepIdx < routeSteps.length - 1
+    ) {
+      // Also advance if we're very close to the junction
+      console.log('[Navigation] Near junction advance:', {
+        from: detectedStepIdx,
+        to: detectedStepIdx + 1,
+        distanceToJunction: Math.round(distToNextJunction),
+      });
+      setCurrentStepIndex(detectedStepIdx + 1);
     }
-  }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex]);
+  }, [userLocation, isNavigationMode, routeSteps, routeCoords]);
 
   // Auto-rerouting when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
   const OFF_ROUTE_THRESHOLD_METERS = 200; // Reroute if >200m off the route
+  const BACKWARDS_THRESHOLD_METERS = 80;  // Reroute immediately if <80m off-route AND heading backwards
   const REROUTE_COOLDOWN_SECONDS = 30; // Only attempt reroute every 30 seconds max
+  const MAX_HEADING_TOLERANCE = 90; // Allow ±90° from route direction before rerouting
   
   useEffect(() => {
     if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation || !routeDestination) return;
@@ -1678,8 +1733,54 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const now = Date.now();
     const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
     
+    // Determine if we should reroute based on distance AND heading
+    let shouldReroute = false;
+    let rerouteReason = '';
+    
     if (closestDist > OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
-      console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route, triggering reroute...`);
+      // User is significantly off-route (>200m)
+      // Check heading to see if they're at least heading in the right general direction
+      
+      if (userLocation.heading !== undefined && userLocation.heading !== -1) {
+        // Get bearing of route ahead from closest point
+        let routeAheadIdx = Math.min(userPolylineIdx + 10, routeCoords.length - 1);
+        const routeBearing = calculateBearing(routeCoords[userPolylineIdx], routeCoords[routeAheadIdx]);
+        const userHeading = userLocation.heading;
+        const headingDiff = getBearingDifference(routeBearing, userHeading);
+        
+        // Only reroute if heading is significantly wrong (>90° off)
+        if (headingDiff > MAX_HEADING_TOLERANCE) {
+          shouldReroute = true;
+          rerouteReason = `heading backwards (${headingDiff.toFixed(0)}° off route)`;
+        } else {
+          // User is heading generally right direction but off the road
+          // This is normal on parallel roads or roundabout approaches - don't reroute yet
+          console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route but heading in correct direction (${headingDiff.toFixed(0)}° offset) - no reroute needed`);
+          shouldReroute = false;
+        }
+      } else {
+        // No heading data available - use conservative approach
+        console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route but heading unavailable - waiting for navigation clarity`);
+        shouldReroute = false;
+      }
+    } else if (closestDist > BACKWARDS_THRESHOLD_METERS && closestDist <= OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
+      // User is moderately off-route (80-200m) - check heading more aggressively
+      if (userLocation.heading !== undefined && userLocation.heading !== -1) {
+        let routeAheadIdx = Math.min(userPolylineIdx + 5, routeCoords.length - 1);
+        const routeBearing = calculateBearing(routeCoords[Math.max(0, userPolylineIdx - 5)], routeCoords[routeAheadIdx]);
+        const userHeading = userLocation.heading;
+        const headingDiff = getBearingDifference(routeBearing, userHeading);
+        
+        // At moderate distance, be more aggressive about backwards detection
+        if (headingDiff > 120) {
+          shouldReroute = true;
+          rerouteReason = `heading wrong way (${headingDiff.toFixed(0)}° off) + moderate distance`;
+        }
+      }
+    }
+    
+    if (shouldReroute) {
+      console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route and ${rerouteReason}, triggering reroute...`);
       lastRerouteAttemptRef.current = now;
       
       // Filter to only remaining waypoints (ahead of user on polyline)
@@ -3356,57 +3457,41 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 strokeColor={
                   isPedestrianRoute ? "#4CAF50" :
                   isCyclingRoute ? "#CE93D8" :
-                  isCarRoute ? "#CFD8DC" :
+                  isCarRoute ? "#DC2626" :
                   isMotorcycleRoute ? "#1565C0" :
                   "#1565C0"
                 }
                 zIndex={900}
               />
-              {/* Car route - dark grey outline */}
+              {/* Car route - dark red outline */}
               {isCarRoute && (
                 <Polyline
                   key={`base-car-outline-${routeVersion}`}
                   coordinates={routeCoords}
                   strokeWidth={isNavigationMode ? 12 : 8}
-                  strokeColor="#37474F"
+                  strokeColor="#7F1D1D"
                   zIndex={899}
                 />
               )}
 
-            {/* Traveled route (during Follow Me) - outline layer for pedestrians and cyclists */}
-              {(isPedestrianRoute || isCyclingRoute) && followUser && traveledPolyline.length > 1 && (
+            {/* Traveled route (during Follow Me) - outline layer */}
+              {followUser && traveledPolyline.length > 1 && (
                 <Polyline
                   key={`traveled-outline-${routeVersion}`}
                   coordinates={traveledPolyline}
                   strokeWidth={isNavigationMode && followUser ? 9 : 7}
-                  strokeColor={isCyclingRoute ? "#7B1FA2" : "#2E7D32"}
+                  strokeColor={theme.colors.accentDark}
                   zIndex={1000}
                 />
               )}
-              {/* Traveled route (during Follow Me) */}
+              {/* Traveled route (during Follow Me) - always accentMid regardless of vehicle type */}
               {followUser && traveledPolyline.length > 1 && (
                 <Polyline
                   key={`traveled-${routeVersion}`}
                   coordinates={traveledPolyline}
                   strokeWidth={isNavigationMode && followUser ? 7 : 5}
-                  strokeColor={
-                    isPedestrianRoute ? "#4CAF50" :
-                    isCyclingRoute ? "#CE93D8" :
-                    isCarRoute ? "#CFD8DC" :
-                    isMotorcycleRoute ? "#1565C0" :
-                    theme.colors.accentDark
-                  }
+                  strokeColor={theme.colors.accentMid}
                   zIndex={1001}
-                />
-              )}
-              {/* Car traveled route - dark grey outline */}
-              {isCarRoute && followUser && traveledPolyline.length > 1 && (
-                <Polyline
-                  key={`traveled-car-outline-${routeVersion}`}
-                  coordinates={traveledPolyline}
-                  strokeWidth={isNavigationMode && followUser ? 9 : 7}
-                  strokeColor="#37474F"
-                  zIndex={1000}
                 />
               )}
 
@@ -3428,19 +3513,19 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 strokeColor={
                   isPedestrianRoute ? "#4CAF50" :
                   isCyclingRoute ? "#CE93D8" :
-                  isCarRoute ? "#CFD8DC" :
+                  isCarRoute ? "#DC2626" :
                   isMotorcycleRoute ? "#42A5F5" :
                   "#42A5F5"
                 }
                 zIndex={1000}
               />
-              {/* Car route active - dark grey outline */}
+              {/* Car route remaining - dark red outline */}
               {isCarRoute && (
                 <Polyline
                   key={`active-car-outline-${routeVersion}`}
                   coordinates={routeCoords}
                   strokeWidth={isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)}
-                  strokeColor="#37474F"
+                  strokeColor="#7F1D1D"
                   zIndex={999}
                 />
               )}
@@ -3662,65 +3747,54 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       {/* Junction panel (top-left) during navigation - helmet visible */}
       {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
         (() => {
-          // Debug: log all steps and current step index
-          console.log('[JunctionPanel] routeSteps:', routeSteps);
-          console.log('[JunctionPanel] currentStepIndex:', currentStepIndex, 'nextStepIndex:', Math.min(currentStepIndex + 2, routeSteps.length - 1));
-          // Show the NEXT step's maneuver (what's coming), not the current step
+          // Show the NEXT step's maneuver (what's coming)
           const nextStepIndex = Math.min(currentStepIndex + 1, routeSteps.length - 1);
           const step = routeSteps[nextStepIndex];
-          let m = step?.maneuver || "STRAIGHT";
-          // Normalize maneuver type for lookup
-          if (typeof m === "string") m = m.trim().toUpperCase();
+          
+          // Normalize maneuver type
+          let m = (step?.maneuver || "STRAIGHT").trim().toUpperCase();
           let meta = MANEUVER_ICON_MAP[m];
+          
+          // Fallback for unrecognized maneuvers
           if (!meta) {
-            // Try fallback for common roundabout variants
-            if (m.includes("ROUNDABOUT")) {
-              meta = MANEUVER_ICON_MAP.ROUNDABOUT_ENTER;
-            } else {
-              meta = MANEUVER_ICON_MAP.STRAIGHT;
-            }
+            meta = m.includes("ROUNDABOUT") 
+              ? MANEUVER_ICON_MAP.ROUNDABOUT_ENTER 
+              : MANEUVER_ICON_MAP.STRAIGHT;
           }
-          const dist = nextJunctionDistance;
-          const distText = dist != null ? formatDistanceImperial(dist) : "";
-          // Prefer TomTom's instruction for roundabouts, else use label
+
+          const distText = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : "";
+          
+          // Determine instruction label - handle roundabouts specially
           let label = meta.label;
-          let roundaboutExit = null;
+          
           if (m.includes("ROUNDABOUT")) {
-            // Trace roundabout exit extraction
-            console.log('[JunctionPanel] step:', step);
-            console.log('[JunctionPanel] FULL STEP OBJECT:', JSON.stringify(step));
-            // Check for roundaboutExitNumber (primary field from TomTom)
-            if (typeof step.roundaboutExitNumber === "number" && step.roundaboutExitNumber > 0) {
-              roundaboutExit = step.roundaboutExitNumber;
-              console.log('[JunctionPanel] Found step.roundaboutExitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
-            }
-            // Also check for exitNumber as fallback
-            if (!roundaboutExit && typeof step.exitNumber === "number" && step.exitNumber > 0) {
-              roundaboutExit = step.exitNumber;
-              console.log('[JunctionPanel] Found step.exitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
-            }
-            // If not found, try parsing from instruction text
-            if (!roundaboutExit && step?.instruction) {
-              const match = step.instruction.match(/exit\s*(\d+)/i);
-              if (match) {
-                roundaboutExit = parseInt(match[1], 10);
-                console.log('[JunctionPanel] Parsed exit from instruction:', roundaboutExit, 'step:', JSON.stringify(step));
+            // Try to extract roundabout exit number from multiple sources
+            const exitNum = 
+              step?.roundaboutExitNumber ||  // TomTom primary field
+              step?.exitNumber ||             // Alternative field
+              (step?.instruction?.match(/exit\s*(\d+)/i)?.[1]); // Parse from text
+            
+            if (exitNum && parseInt(exitNum) > 0) {
+              label = `Take exit ${exitNum}`;
+            } else {
+              // Fallback roundabout instructions based on maneuver subtype
+              if (step?.instruction && step.instruction !== "Continue") {
+                label = step.instruction;
+              } else if (m.includes("STRAIGHT")) {
+                label = "Go straight through roundabout";
+              } else if (m.includes("LEFT")) {
+                label = "Exit left from roundabout";
+              } else if (m.includes("RIGHT")) {
+                label = "Exit right from roundabout";
+              } else {
+                label = "Proceed through roundabout";
               }
             }
-            if (roundaboutExit) {
-              label = `Take exit no. ${roundaboutExit}`;
-              console.log('[JunctionPanel] Set label:', label, 'exitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
-            } else if (step?.instruction && step.instruction !== "Continue") {
-              label = step.instruction;
-              console.log('[JunctionPanel] Fallback to step.instruction:', label, 'exitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
-            } else if (meta.label) {
-              label = meta.label;
-              console.log('[JunctionPanel] Fallback to meta.label:', label, 'exitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
-            } else {
-              label = "Proceed through roundabout";
-              console.log('[JunctionPanel] Fallback to default label:', label, 'exitNumber:', roundaboutExit, 'step:', JSON.stringify(step));
-            }
+          } else if (step?.instruction && step.instruction !== "Continue") {
+            // Use custom instruction if available
+            label = step.instruction;
           }
+
           return (
             <View style={styles.junctionPanel}>
               {/* Large direction icon */}

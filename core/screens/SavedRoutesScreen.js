@@ -9,7 +9,6 @@ import { useSavedRides } from "@core/map/routes/useSavedRides";
 import { useSavedRoutes } from "@core/map/routes/useSavedRoutes";
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import theme from "@themes";
 import { useRouter } from "expo-router";
 import { useContext, useMemo, useState } from "react";
 import {

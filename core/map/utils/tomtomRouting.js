@@ -1,5 +1,5 @@
-import Constants from "expo-constants";
 import polyline from "@mapbox/polyline";
+import Constants from "expo-constants";
 
 /**
  * Fetch route from Google Directions API (best for pedestrian and cycling routing)
