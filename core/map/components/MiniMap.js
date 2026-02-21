@@ -50,8 +50,8 @@ export default function MiniMap({
     return {
       latitude: (minLat + maxLat) / 2,
       longitude: (minLng + maxLng) / 2,
-      latitudeDelta: Math.max(latDelta, 0.01),
-      longitudeDelta: Math.max(lngDelta, 0.01),
+      latitudeDelta: Math.max(latDelta, 0.003),
+      longitudeDelta: Math.max(lngDelta, 0.003),
     };
   }, [userLocation, riderLocations]);
 
@@ -102,7 +102,7 @@ export default function MiniMap({
               latitude: userLocation.latitude,
               longitude: userLocation.longitude,
             }}
-            radius={25}
+            radius={35}
             fillColor="rgba(33, 150, 243, 0.4)"
             strokeColor="#2196F3"
             strokeWidth={2.5}
@@ -118,7 +118,7 @@ export default function MiniMap({
               latitude: rider.latitude,
               longitude: rider.longitude,
             }}
-            radius={15}
+            radius={22}
             fillColor="rgba(255, 152, 0, 0.5)"
             strokeColor="#FF9800"
             strokeWidth={2}
