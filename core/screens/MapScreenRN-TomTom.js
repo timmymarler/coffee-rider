@@ -706,9 +706,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setIsCarRoute(false);
       setIsMotorcycleRoute(false);
       setRouteCoords([]);
+      
+      // Trigger rebuild with new vehicle type
+      if ((routeDestination || waypoints.length > 0) && userLocation) {
+        console.log('[VEHICLE_TYPE_CHANGE] Vehicle type changed, rebuilding route with new travel mode...');
+        const requestId = ++routeRequestId.current;
+        buildRoute({ requestId }).catch(error => {
+          console.warn('[VEHICLE_TYPE_CHANGE] buildRoute error:', error);
+        });
+      }
     }
     previousTravelModeRef.current = userTravelMode;
-  }, [userTravelMode, routeCoords.length]);
+  }, [userTravelMode, routeCoords.length, routeDestination, waypoints, userLocation]);
 
   // Rebuild route when route type changes while a route is active
   const previousRouteTypeRef = useRef(userRouteType);
