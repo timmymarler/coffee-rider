@@ -131,18 +131,18 @@ export default function useActiveRide(user) {
         const profileData = profileSnapshot.exists() ? profileSnapshot.data() : {};
         const userName = profileData.displayName?.trim() || user.displayName || user.email || 'Rider';
 
-        // Watch location with 10-second interval
+        // Watch location with 12-second interval
         locationSubscriptionRef.current = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.Balanced,
-            timeInterval: 10000, // Update every 10 seconds
+            timeInterval: 12000, // Update every 12 seconds for battery optimization
             distanceInterval: 50, // Or when moved 50 meters
           },
           async (location) => {
             const now = Date.now();
             
-            // Throttle updates to max once per 5 seconds
-            if (now - lastUpdateRef.current < 5000) {
+            // Throttle updates to max once per 12 seconds for Firestore
+            if (now - lastUpdateRef.current < 12000) {
               return;
             }
             
