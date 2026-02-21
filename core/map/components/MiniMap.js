@@ -44,8 +44,8 @@ export default function MiniMap({
     const minLng = Math.min(...lngs);
     const maxLng = Math.max(...lngs);
 
-    const latDelta = (maxLat - minLat) * 1.3; // 30% padding
-    const lngDelta = (maxLng - minLng) * 1.3;
+    const latDelta = (maxLat - minLat) * 1.15; // 15% padding for closer zoom
+    const lngDelta = (maxLng - minLng) * 1.15;
 
     return {
       latitude: (minLat + maxLat) / 2,
@@ -102,10 +102,10 @@ export default function MiniMap({
               latitude: userLocation.latitude,
               longitude: userLocation.longitude,
             }}
-            radius={15}
-            fillColor="rgba(33, 150, 243, 0.3)"
+            radius={25}
+            fillColor="rgba(33, 150, 243, 0.4)"
             strokeColor="#2196F3"
-            strokeWidth={2}
+            strokeWidth={2.5}
             zIndex={102}
           />
         )}
