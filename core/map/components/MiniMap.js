@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
 import { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Polyline, Circle } from 'react-native-maps';
+import MapView, { Circle, Polyline } from 'react-native-maps';
 
 /**
  * Mini map component to show group member locations
@@ -56,10 +56,10 @@ export default function MiniMap({
     };
   }, [userLocation, riderLocations]);
 
-  // Zoom to fit when riders change - throttled to 15 seconds for battery optimization
+  // Zoom to fit when riders change - throttled to 10 seconds for balance between responsiveness and battery
   useEffect(() => {
     const now = Date.now();
-    if (miniMapRef.current && (riderLocations.length > 0 || userLocation) && now - lastUpdateRef.current > 15000) {
+    if (miniMapRef.current && (riderLocations.length > 0 || userLocation) && now - lastUpdateRef.current > 10000) {
       miniMapRef.current.animateToRegion(initialRegion, 500);
       lastUpdateRef.current = now;
     }
