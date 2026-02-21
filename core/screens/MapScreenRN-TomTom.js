@@ -664,6 +664,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
   const previousFollowUserRef = useRef(false); // Track previous Follow Me state to detect when it turn off
+  const lastHeadingRef = useRef(null); // Track last heading to throttle camera animations
+  const lastStepDetectionRef = useRef(0); // Throttle step detection effect to avoid continuous recalculation
   const {
     waypoints,
     addFromPlace,
@@ -1616,8 +1618,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     // Update camera during navigation (Follow Me or active ride)
     // If we have heading, use it for orientation; otherwise just center on location
+    // Throttle animations based on heading change to reduce GPU power consumption
     if (userLocation.heading !== undefined && userLocation.heading !== -1) {
-      recenterOnUser({ heading: userLocation.heading, pitch: 35, zoom: FOLLOW_ZOOM });
+      // Only animate if heading has changed by more than 5° (avoid constant GPU updates)
+      const headingDelta = lastHeadingRef.current !== null 
+        ? Math.abs(userLocation.heading - lastHeadingRef.current)
+        : 10; // First update, apply animation
+      
+      if (headingDelta > 5) {
+        lastHeadingRef.current = userLocation.heading;
+        recenterOnUser({ heading: userLocation.heading, pitch: 35, zoom: FOLLOW_ZOOM });
+      }
     } else {
       // Fallback: center on location without heading (for active rides or when heading unavailable)
       recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 0 });
@@ -1631,6 +1642,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!userLocation) return;
     if (!routeSteps || routeSteps.length === 0) return;
     if (!routeCoords || routeCoords.length === 0) return;
+
+    // Throttle effect to run at most every 500ms to reduce CPU load during navigation
+    const now = Date.now();
+    if (now - lastStepDetectionRef.current < 500) return;
+    lastStepDetectionRef.current = now;
 
     const STEP_ADVANCE_THRESHOLD_METERS = 15; // Advance when <15m from step end and moving forward
     const MAX_BACKTRACK_TOLERANCE_METERS = 30; // Allow 30m backward before considering off-track
@@ -1745,6 +1761,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
+    // Early exit if we're still in the reroute cooldown period (avoid unnecessary calculations)
+    const now = Date.now();
+    const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
+    if (timeSinceLastReroute < REROUTE_COOLDOWN_SECONDS) return;
+
     // Find closest point on route to user
     let closestDist = Infinity;
     let userPolylineIdx = 0;
@@ -1766,15 +1787,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Check if off-route and enough time since last reroute attempt
-    const now = Date.now();
-    const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
-    
     // Determine if we should reroute based on distance AND heading
     let shouldReroute = false;
     let rerouteReason = '';
     
-    if (closestDist > OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
+    // Note: We already returned early if still in reroute cooldown, so don't check timeSinceLastReroute again
+    if (closestDist > OFF_ROUTE_THRESHOLD_METERS) {
       // User is significantly off-route (>200m)
       // Check heading to see if they're at least heading in the right general direction
       
@@ -1815,7 +1833,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route but heading unavailable - waiting for navigation clarity`);
         shouldReroute = false;
       }
-    } else if (closestDist > BACKWARDS_THRESHOLD_METERS && closestDist <= OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
+    } else if (closestDist > BACKWARDS_THRESHOLD_METERS && closestDist <= OFF_ROUTE_THRESHOLD_METERS) {
       // User is moderately off-route (80-200m) - check heading more aggressively
       if (userLocation.heading !== undefined && userLocation.heading !== -1) {
         let routeAheadIdx = Math.min(userPolylineIdx + 5, routeCoords.length - 1);
@@ -2035,7 +2053,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.Balanced,
-          timeInterval: 1000,
+          timeInterval: 1500,
           distanceInterval: 5,
         },
         (location) => {
