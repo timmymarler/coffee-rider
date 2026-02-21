@@ -19,6 +19,7 @@ export default function MiniMap({
 }) {
   const theme = useTheme();
   const miniMapRef = useRef(null);
+  const lastUpdateRef = useRef(0);
 
   // Calculate bounds to fit all riders and user
   const initialRegion = useMemo(() => {
@@ -55,10 +56,12 @@ export default function MiniMap({
     };
   }, [userLocation, riderLocations]);
 
-  // Zoom to fit when riders change
+  // Zoom to fit when riders change - throttled to 15 seconds for battery optimization
   useEffect(() => {
-    if (miniMapRef.current && (riderLocations.length > 0 || userLocation)) {
+    const now = Date.now();
+    if (miniMapRef.current && (riderLocations.length > 0 || userLocation) && now - lastUpdateRef.current > 15000) {
       miniMapRef.current.animateToRegion(initialRegion, 500);
+      lastUpdateRef.current = now;
     }
   }, [riderLocations.length, userLocation?.latitude, userLocation?.longitude]);
 
