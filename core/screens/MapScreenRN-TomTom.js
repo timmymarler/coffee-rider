@@ -960,6 +960,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       const decoded = result.polyline;
 
       setRouteCoords(decoded);
+      setRouteVersion(v => v + 1);   // Force re-render of polylines with new key
       setIsPedestrianRoute(userTravelMode === "pedestrian");
       setIsCyclingRoute(userTravelMode === "bike");
       setIsCarRoute(userTravelMode === "car");
@@ -2280,6 +2281,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setIsHomeDestination(false);
     clearWaypoints();
     setRouteCoords([]);            // ✅ clear polyline HERE
+    setRouteVersion(v => v + 1);   // Force re-render of polylines by changing key
     setIsPedestrianRoute(false);
     setIsCyclingRoute(false);
     setIsCarRoute(false);
@@ -2887,6 +2889,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // Update state with route data
     setRouteCoords(simplified);
+    setRouteVersion(v => v + 1);   // Force re-render of polylines with new key
     setIsPedestrianRoute(travelMode === "pedestrian");
     setIsCyclingRoute(travelMode === "bike");
     setIsCarRoute(travelMode === "car");
@@ -3088,6 +3091,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
 
       setRouteCoords(decoded);
+      setRouteVersion(v => v + 1);   // Force re-render of polylines with new key
       setLastEncodedPolyline(typeof route.routePolyline === 'string' ? route.routePolyline : null);
 
       // Set routed total distance from saved route (if present)
