@@ -109,7 +109,7 @@ export default function MiniMap({
               <View style={styles.userLocationInner}>
                 <MaterialCommunityIcons
                   name="navigation"
-                  size={20}
+                  size={12}
                   color={theme.colors.primary}
                 />
               </View>
@@ -137,7 +137,7 @@ export default function MiniMap({
               ) : (
                 <MaterialCommunityIcons
                   name="account-circle"
-                  size={40}
+                  size={22}
                   color={theme.colors.accentLight}
                 />
               )}
@@ -181,9 +181,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userLocationMarker: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: 'rgba(33, 150, 243, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -191,35 +191,35 @@ const styles = StyleSheet.create({
     borderColor: '#2196F3',
   },
   userLocationInner: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: '#2196F3',
     justifyContent: 'center',
     alignItems: 'center',
   },
   riderMarker: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#fff',
     backgroundColor: '#fff',
   },
   riderAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   riderStatusDot: {
     position: 'absolute',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    borderWidth: 1.5,
     borderColor: '#fff',
     bottom: 0,
     right: 0,

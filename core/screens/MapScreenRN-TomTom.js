@@ -4373,7 +4373,7 @@ const styles = StyleSheet.create({
 
   miniMapContainer: {
     position: "absolute",
-    bottom: 125,
+    bottom: 240,
     right: 16,
     width: 110,
     height: 110,
