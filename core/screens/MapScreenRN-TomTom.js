@@ -3531,8 +3531,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                     isPedestrianRoute ? "#4CAF50" :
                     isCyclingRoute ? "#CE93D8" :
                     isCarRoute ? "#DC2626" :
-                    isMotorcycleRoute ? "#1565C0" :
-                    "#1565C0"
+                    isMotorcycleRoute ? "#42A5F5" :
+                    "#42A5F5"
                   }
                   zIndex={900}
                 />
@@ -3544,6 +3544,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   coordinates={routeCoords}
                   strokeWidth={isNavigationMode ? 12 : 8}
                   strokeColor="#7F1D1D"
+                  zIndex={899}
+                />
+              )}
+              {/* Motorcycle route - dark blue outline */}
+              {isMotorcycleRoute && routeCoords.length > 0 && (
+                <Polyline
+                  key={`base-motorcycle-outline-${routeVersion}`}
+                  coordinates={routeCoords}
+                  strokeWidth={isNavigationMode ? 12 : 8}
+                  strokeColor="#0D47A1"
                   zIndex={899}
                 />
               )}
@@ -3602,6 +3612,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   coordinates={routeCoords}
                   strokeWidth={isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)}
                   strokeColor="#7F1D1D"
+                  zIndex={999}
+                />
+              )}
+              {/* Motorcycle route remaining - dark blue outline */}
+              {isMotorcycleRoute && routeCoords.length > 0 && (
+                <Polyline
+                  key={`active-motorcycle-outline-${routeVersion}`}
+                  coordinates={routeCoords}
+                  strokeWidth={isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)}
+                  strokeColor="#0D47A1"
                   zIndex={999}
                 />
               )}
