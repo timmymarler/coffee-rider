@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
 import { useEffect, useMemo, useRef } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polyline, Circle } from 'react-native-maps';
 
 /**
  * Mini map component to show group member locations
@@ -93,6 +93,21 @@ export default function MiniMap({
               zIndex={101}
             />
           </>
+        )}
+
+        {/* User current location - blue dot */}
+        {userLocation && (
+          <Circle
+            center={{
+              latitude: userLocation.latitude,
+              longitude: userLocation.longitude,
+            }}
+            radius={15}
+            fillColor="rgba(33, 150, 243, 0.3)"
+            strokeColor="#2196F3"
+            strokeWidth={2}
+            zIndex={102}
+          />
         )}
 
         {/* User location */}

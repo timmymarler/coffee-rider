@@ -3912,7 +3912,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           return (
             <View style={styles.junctionPanel}>
               {/* Large direction icon */}
-              <MaterialCommunityIcons name={meta.icon} size={64} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
+              <MaterialCommunityIcons name={meta.icon} size={52} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
               {/* Distance and label section */}
               <View style={styles.junctionContent}>
                 {distText ? (
@@ -4391,7 +4391,7 @@ const styles = StyleSheet.create({
 
   miniMapContainer: {
     position: "absolute",
-    bottom: 240,
+    bottom: 125,
     right: 16,
     width: 110,
     height: 110,
@@ -4464,15 +4464,15 @@ const styles = StyleSheet.create({
     left: 20,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderRadius: 16,
     backgroundColor: "#2196F3",
     borderWidth: 3,
     borderColor: "rgba(245, 245, 240, 0.95)",
     zIndex: 2000,
     elevation: 8,
-    gap: 16,
+    gap: 12,
   },
   junctionIcon: {
     marginRight: 4,
@@ -4481,10 +4481,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   junctionDistance: {
-    fontSize: 48,
+    fontSize: 40,
     fontWeight: "700",
     color: "rgba(245, 245, 240, 0.95)",
-    lineHeight: 56,
+    lineHeight: 48,
   },
   junctionRemaining: {
     fontSize: 12,
@@ -4493,7 +4493,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   junctionLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
     color: "rgba(245, 245, 240, 0.95)",
     marginTop: 4,
