@@ -127,7 +127,7 @@ export default function MiniMap({
             strokeWidth={2}
             zIndex={300}
           />
-        ))}}
+        ))}
       </MapView>
 
       {/* Rider count badge */}
