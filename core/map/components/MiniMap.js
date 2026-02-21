@@ -50,8 +50,8 @@ export default function MiniMap({
     return {
       latitude: (minLat + maxLat) / 2,
       longitude: (minLng + maxLng) / 2,
-      latitudeDelta: Math.max(latDelta, 0.05),
-      longitudeDelta: Math.max(lngDelta, 0.05),
+      latitudeDelta: Math.max(latDelta, 0.01),
+      longitudeDelta: Math.max(lngDelta, 0.01),
     };
   }, [userLocation, riderLocations]);
 
