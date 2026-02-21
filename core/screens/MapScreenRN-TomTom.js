@@ -2053,8 +2053,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.Balanced,
-          timeInterval: 12000, // 12 seconds for battery optimization during active ride
-          distanceInterval: 10, // 10 meters minimum between updates
+          timeInterval: 1500, // 1.5 seconds for smooth navigation tracking
+          distanceInterval: 5, // 5 meters minimum between updates
         },
         (location) => {
           try {
