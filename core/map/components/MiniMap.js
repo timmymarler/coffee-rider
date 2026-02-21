@@ -102,7 +102,7 @@ export default function MiniMap({
               latitude: userLocation.latitude,
               longitude: userLocation.longitude,
             }}
-            radius={35}
+            radius={20}
             fillColor="rgba(33, 150, 243, 0.4)"
             strokeColor="#2196F3"
             strokeWidth={2.5}
