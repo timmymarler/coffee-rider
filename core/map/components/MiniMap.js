@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
 import { useEffect, useMemo, useRef } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline, Circle } from 'react-native-maps';
 
 /**
@@ -110,61 +110,21 @@ export default function MiniMap({
           />
         )}
 
-        {/* User location */}
-        {userLocation && (
-          <Marker
-            coordinate={{
-              latitude: userLocation.latitude,
-              longitude: userLocation.longitude,
-            }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            zIndex={200}
-          >
-            <View style={styles.userLocationMarker}>
-              <View style={styles.userLocationInner}>
-                <MaterialCommunityIcons
-                  name="navigation"
-                  size={12}
-                  color={theme.colors.primary}
-                />
-              </View>
-            </View>
-          </Marker>
-        )}
-
-        {/* Other riders */}
+        {/* Other riders - simple colored dots */}
         {riderLocations.map((rider) => (
-          <Marker
+          <Circle
             key={`rider-${rider.id}`}
-            coordinate={{
+            center={{
               latitude: rider.latitude,
               longitude: rider.longitude,
             }}
-            anchor={{ x: 0.5, y: 0.5 }}
+            radius={15}
+            fillColor="rgba(255, 152, 0, 0.5)"
+            strokeColor="#FF9800"
+            strokeWidth={2}
             zIndex={300}
-          >
-            <View style={styles.riderMarker}>
-              {rider.userAvatar ? (
-                <Image
-                  source={{ uri: rider.userAvatar }}
-                  style={styles.riderAvatar}
-                />
-              ) : (
-                <MaterialCommunityIcons
-                  name="account-circle"
-                  size={22}
-                  color={theme.colors.accentLight}
-                />
-              )}
-              <View
-                style={[
-                  styles.riderStatusDot,
-                  { backgroundColor: theme.colors.success },
-                ]}
-              />
-            </View>
-          </Marker>
-        ))}
+          />
+        ))}}
       </MapView>
 
       {/* Rider count badge */}
@@ -194,50 +154,6 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
-  },
-  userLocationMarker: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(33, 150, 243, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#2196F3',
-  },
-  userLocationInner: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#2196F3',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  riderMarker: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#fff',
-    backgroundColor: '#fff',
-  },
-  riderAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-  },
-  riderStatusDot: {
-    position: 'absolute',
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    borderWidth: 1.5,
-    borderColor: '#fff',
-    bottom: 0,
-    right: 0,
   },
   badge: {
     position: 'absolute',
