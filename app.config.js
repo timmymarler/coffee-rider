@@ -87,7 +87,7 @@ export default {
 
     ios: {
       bundleIdentifier: IOS_BUNDLE[APP_NAME],
-      buildNumber: "7",
+      buildNumber: "8",
       googleServicesFile: "./GoogleService-Info.plist",
       infoPlist: {
         NSLocationWhenInUseUsageDescription: "Coffee Rider needs your location to show nearby places and help with group rides.",
