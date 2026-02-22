@@ -11,9 +11,10 @@ const CACHE_EXPIRY_DAYS = 7; // Routes expire after 7 days
  * @param {Object} endPoint - {latitude, longitude}
  * @param {Array} waypoints - Array of waypoint objects
  * @param {String} routeType - Route type (fastest, shortest, etc)
+ * @param {String} travelMode - Travel mode (car, bike, pedestrian, motorcycle)
  * @returns {String} Cache key
  */
-function generateCacheKey(startPoint, endPoint, waypoints, routeType) {
+function generateCacheKey(startPoint, endPoint, waypoints, routeType, travelMode) {
   // Round coordinates to 5 decimal places (~1m precision) to handle variations while distinguishing different routes
   const roundCoord = (coord) => {
     if (!coord) return '0,0';
@@ -28,7 +29,8 @@ function generateCacheKey(startPoint, endPoint, waypoints, routeType) {
 
   // Create key without Buffer (not available in React Native)
   // Use a simple hash-like key combining all parameters
-  const key = `${roundCoord(startPoint)}_${roundCoord(endPoint)}_wp${waypoints?.length || 0}_${waypointStr}_${routeType || 'default'}`;
+  // Include travelMode to ensure different vehicle types don't share cached routes
+  const key = `${roundCoord(startPoint)}_${roundCoord(endPoint)}_wp${waypoints?.length || 0}_${waypointStr}_${routeType || 'default'}_${travelMode || 'car'}`;
   return CACHE_KEY_PREFIX + key.replace(/[.,\-;:]/g, '_').substring(0, 150);
 }
 
@@ -38,16 +40,17 @@ function generateCacheKey(startPoint, endPoint, waypoints, routeType) {
  * @param {Object} endPoint - {latitude, longitude}
  * @param {Array} waypoints - Array of waypoint objects
  * @param {String} routeType - Route type identifier
+ * @param {String} travelMode - Travel mode (car, bike, pedestrian, motorcycle)
  * @param {Object} routeData - The complete route response from TomTom
  */
-export async function cacheRoute(startPoint, endPoint, waypoints, routeType, routeData) {
+export async function cacheRoute(startPoint, endPoint, waypoints, routeType, travelMode, routeData) {
   try {
     if (!routeData || !routeData.polyline) {
       console.warn('[RouteCache] Refusing to cache - no polyline in route data');
       return false;
     }
 
-    const cacheKey = generateCacheKey(startPoint, endPoint, waypoints, routeType);
+    const cacheKey = generateCacheKey(startPoint, endPoint, waypoints, routeType, travelMode);
     const timestamp = Date.now();
 
     // Only cache essential route metadata, not the full polyline
@@ -59,6 +62,7 @@ export async function cacheRoute(startPoint, endPoint, waypoints, routeType, rou
       endPoint,
       waypoints: waypoints || [],
       routeType,
+      travelMode,
       distanceMeters: routeData.distanceMeters,
       durationSeconds: routeData.durationSeconds,
       expiresAt: timestamp + CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
@@ -116,11 +120,12 @@ export async function cacheRoute(startPoint, endPoint, waypoints, routeType, rou
  * @param {Object} endPoint - {latitude, longitude}
  * @param {Array} waypoints - Array of waypoint objects
  * @param {String} routeType - Route type identifier
+ * @param {String} travelMode - Travel mode (car, bike, pedestrian, motorcycle)
  * @returns {Object|null} Cached route data or null if not found/expired
  */
-export async function getCachedRoute(startPoint, endPoint, waypoints, routeType) {
+export async function getCachedRoute(startPoint, endPoint, waypoints, routeType, travelMode) {
   try {
-    const cacheKey = generateCacheKey(startPoint, endPoint, waypoints, routeType);
+    const cacheKey = generateCacheKey(startPoint, endPoint, waypoints, routeType, travelMode);
     const cached = await AsyncStorage.getItem(cacheKey);
 
     if (!cached) {

@@ -2769,12 +2769,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           console.log('[mapRoute] Cache query - intermediates:', normalizedIntermediates.map(w => `${w.latitude.toFixed(5)},${w.longitude.toFixed(5)}`));
         }
         console.log('[mapRoute] Cache query - routeType:', routeType);
+        console.log('[mapRoute] Cache query - travelMode:', travelMode);
         
         const cachedResult = await getCachedRoute(
           startCoord,
           finalDestination,
           normalizedIntermediates,
-          routeType
+          routeType,
+          travelMode
         );
 
         if (cachedResult) {
@@ -2827,6 +2829,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             finalDestination,
             normalizedIntermediates,
             routeType,
+            travelMode,
             result
           );
         } catch (error) {
