@@ -23,20 +23,6 @@ import { applyFilters } from "../map/filters/applyFilters";
 import MapRouteTypeSelector from "@core/components/routing/MapRouteTypeSelector";
 import { decode } from "@mapbox/polyline";
 import { SearchBar } from "../map/components/SearchBar";
-import { fetchTomTomRoute } from "../map/utils/tomtomRouting";
-
-import { saveRide } from "@/core/map/routes/saveRide";
-import { saveRoute } from "@/core/map/routes/saveRoute";
-import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
-import { AuthContext } from "@context/AuthContext";
-import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
-import { useNetworkStatus } from "@core/hooks/useNetworkStatus";
-import useActiveRide from "@core/map/routes/useActiveRide";
-import useActiveRideLocations from "@core/map/routes/useActiveRideLocations";
-import useWaypoints from "@core/map/waypoints/useWaypoints";
-import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
-import WaypointsList from "@core/map/waypoints/WaypointsList";
-import { getCapabilities } from "@core/roles/capabilities";
 import { cacheRoute, getCachedRoute } from "@core/utils/routeCache";
 import { getRouteStyle, shouldRenderOutline, fetchRoute } from "@core/map/routingEngine";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -930,16 +916,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
 
       // Route from current location through waypoints (including snap point if exists) to final destination
-      const result = await fetchTomTomRoute(
-        userLocation,
-        finalDestination,
-        routeWaypoints,
-        userTravelMode,  // Use user's vehicle type
-        userRouteType,   // Use user's route type preference
-        routeTypeMap,    // Map of route type IDs to TomTom parameters
-        customHilliness, // Custom hilliness for custom routes
-        customWindingness // Custom windingness for custom routes
-      );
+      const result = await fetchRoute({
+        origin: userLocation,
+        destination: finalDestination,
+        waypoints: routeWaypoints,
+        travelMode: userTravelMode,
+        routeType: userRouteType,
+        routeTypeMap,
+        useCache: false, // Always fresh for refresh
+        customHilliness,
+        customWindingness,
+      });
 
       if (!result?.polyline) {
         console.warn("[REFRESH] No polyline in result");
@@ -2617,6 +2604,37 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     return null;
   }
+
+  /* ================================================================ */
+  /* ROUTING ARCHITECTURE (Unified Flow - Nov 2024)                 */
+  /* ================================================================ */
+  /* 
+   * ALL routing now flows through a single path to eliminate bugs:
+   * 
+   *  User Action
+   *      ↓
+   *  buildRoute() ← convenience wrapper, handles state setup
+   *      ↓
+   *  mapRoute() ← core routing, validates params + state updates
+   *      ↓
+   *  fetchRoute() ← single source of truth
+   *      ├─ Check cache (if enabled via useCache param)
+   *      ├─ Call TomTom/Google API (based on vehicle type)
+   *      └─ Cache result (if enabled)
+   *
+   * Key Benefits:
+   * - Bug fixes only need to happen once (in fetchRoute)
+   * - Parameter changes (like travelMode in cache key) only happen once
+   * - No divergent routing logic = no conflicting state
+   * - Colors derived from userTravelMode, not separate flags
+   * - Tests can mock one point (fetchRoute) instead of multiple
+   *
+   * Cache Control:
+   * - Normal routes: useCache=true (optimization)
+   * - Follow Me: useCache=false (via skipFitToView=true in mapRoute)
+   * - AutoReroute: useCache=false (via skipFitToView=true in mapRoute)
+   * - Refresh: useCache=false (explicit in handleRefreshRouteToNextWaypoint)
+   */
 
   /**
    * Core routing function that takes explicit parameters
