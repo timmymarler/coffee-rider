@@ -1429,58 +1429,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Turning ON: Route from current location through saved waypoints to destination
-    if (routeDestination) {
-      const requestId = ++routeRequestId.current;
-      
-      // Check if saved route starts at current location
-      const startsAtCurrentLocation = manualStartPoint && userLocation && 
-        Math.abs(manualStartPoint.latitude - userLocation.latitude) < 0.0001 &&
-        Math.abs(manualStartPoint.longitude - userLocation.longitude) < 0.0001;
-      
-      if (startsAtCurrentLocation) {
-        // Route starts here: just navigate the saved route as-is with saved waypoints
-        mapRoute({
-          origin: userLocation,
-          waypoints: waypoints, // Use saved waypoints
-          destination: routeDestination,
-          travelMode: userTravelMode,
-          routeType: userRouteType,
-          requestId,
-          skipFitToView: true,
-        }).catch(error => {
-          console.warn('[toggleFollowMe] mapRoute error:', error);
-        });
-      } else {
-        // Route starts elsewhere: add current location as first waypoint
-        // This creates a new route from current location through saved route to destination
-        const newWaypoints = manualStartPoint ? 
-          [
-            {
-              lat: manualStartPoint.latitude,
-              lng: manualStartPoint.longitude,
-              title: "Original start point",
-              source: "followme",
-            },
-            ...waypoints,
-          ] : waypoints;
-        
-        mapRoute({
-          origin: userLocation,
-          waypoints: newWaypoints,
-          destination: routeDestination,
-          travelMode: userTravelMode,
-          routeType: userRouteType,
-          requestId,
-          skipFitToView: true,
-        }).catch(error => {
-          console.warn('[toggleFollowMe] mapRoute error:', error);
-        });
-      }
-    } else {
-      console.log("[toggleFollowMe] No destination set");
-    }
-
+    // Let AutoReroute effect handle routing when Follow Me is enabled
+    // It will detect the transition and rebuild the route with the correct travel mode
+    
     // Recenter + zoom + tilt
     skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
     skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
@@ -1488,6 +1439,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
 
     // Now enable follow mode and start 15-minute inactivity timer
+    // This triggers the AutoReroute effect to rebuild the route from current location
     setFollowUser(true);
     resetFollowMeInactivityTimeout();
   }
