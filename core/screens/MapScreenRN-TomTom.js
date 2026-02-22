@@ -706,6 +706,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setIsCarRoute(false);
       setIsMotorcycleRoute(false);
       setRouteCoords([]);
+      setRouteVersion(v => v + 1);
       
       // Trigger rebuild with new vehicle type
       if ((routeDestination || waypoints.length > 0) && userLocation) {
@@ -958,6 +959,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       const decoded = result.polyline;
 
       setRouteCoords(decoded);
+      setRouteVersion(v => v + 1);
       setIsPedestrianRoute(userTravelMode === "pedestrian");
       setIsCyclingRoute(userTravelMode === "bike");
       setIsCarRoute(userTravelMode === "car");
@@ -1541,6 +1543,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Clear existing waypoints and route
       clearWaypoints();
       setRouteCoords([]);
+      setRouteVersion(v => v + 1);
       setIsPedestrianRoute(false);
       setIsCyclingRoute(false);
       setIsCarRoute(false);
@@ -2262,6 +2265,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setIsHomeDestination(false);
     clearWaypoints();
     setRouteCoords([]);            // ✅ clear polyline HERE
+    setRouteVersion(v => v + 1);
     setIsPedestrianRoute(false);
     setIsCyclingRoute(false);
     setIsCarRoute(false);
@@ -2475,6 +2479,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!hasInputs) {
       if (routeCoords.length > 0) {
         setRouteCoords([]);
+        setRouteVersion(v => v + 1);
       }
       return;
     }
@@ -2869,6 +2874,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // Update state with route data
     setRouteCoords(simplified);
+    setRouteVersion(v => v + 1);
     setIsPedestrianRoute(travelMode === "pedestrian");
     setIsCyclingRoute(travelMode === "bike");
     setIsCarRoute(travelMode === "car");
@@ -3070,6 +3076,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
 
       setRouteCoords(decoded);
+      setRouteVersion(v => v + 1);
       setLastEncodedPolyline(typeof route.routePolyline === 'string' ? route.routePolyline : null);
 
       // Set routed total distance from saved route (if present)
