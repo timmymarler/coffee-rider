@@ -38,7 +38,7 @@ import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
 import { cacheRoute, getCachedRoute } from "@core/utils/routeCache";
-import { getRouteStyle, shouldRenderOutline } from "@core/map/routingEngine";
+import { getRouteStyle, shouldRenderOutline, fetchRoute } from "@core/map/routingEngine";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
@@ -2691,87 +2691,29 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Try cache first if offline or as optimization
     // BUT: Always skip cache for Follow Me or AutoReroute (skipFitToView=true)
     // to ensure we get a fresh route with the correct travel mode and current location
-    let result = null;
+    const useCache = !skipFitToView && !followUser;
     
+    // Use unified routing engine
+    let result;
     try {
-      // Skip cache if this is a Follow Me request - always fetch fresh with current travel mode
-      // Use both followUser flag AND skipFitToView check for safety
-      if (!skipFitToView && !followUser) {
-        console.log('[mapRoute] Checking cache...');
-        console.log('[mapRoute] Cache query - origin:', startCoord.latitude.toFixed(5), startCoord.longitude.toFixed(5));
-        console.log('[mapRoute] Cache query - destination:', finalDestination.latitude.toFixed(5), finalDestination.longitude.toFixed(5));
-        console.log('[mapRoute] Cache query - intermediates count:', normalizedIntermediates.length);
-        if (normalizedIntermediates.length > 0) {
-          console.log('[mapRoute] Cache query - intermediates:', normalizedIntermediates.map(w => `${w.latitude.toFixed(5)},${w.longitude.toFixed(5)}`));
-        }
-        console.log('[mapRoute] Cache query - routeType:', routeType);
-        console.log('[mapRoute] Cache query - travelMode:', travelMode);
-        
-        const cachedResult = await getCachedRoute(
-          startCoord,
-          finalDestination,
-          normalizedIntermediates,
-          routeType,
-          travelMode
-        );
-
-        if (cachedResult) {
-          console.log('[mapRoute] Using cached route - polyline points:', cachedResult.polyline?.length || 0);
-          result = cachedResult;
-        } else if (!networkStatus.isOnline) {
-          console.warn('[mapRoute] Offline and no cached route available');
-          ToastAndroid.show(
-            'Route not in cache. Unable to fetch new route without internet.',
-            ToastAndroid.LONG
-          );
-          return false;
-        }
-      } else {
-        console.log('[mapRoute] Skipping cache - Follow Me or AutoReroute (skipping fresh route)');
-      }
+      result = await fetchRoute({
+        origin: startCoord,
+        destination: finalDestination,
+        waypoints: normalizedIntermediates,
+        travelMode,
+        routeType,
+        routeTypeMap,
+        useCache,
+        customHilliness,
+        customWindingness,
+      });
     } catch (error) {
-      console.warn('[mapRoute] Error checking cache:', error);
-      // Continue to fetch fresh route if cache check fails
-    }
-
-    // Fetch fresh route if not cached and online
-    if (!result) {
-      console.log('[mapRoute] Fetching fresh route from TomTom...');
-      try {
-        result = await fetchTomTomRoute(
-          startCoord,
-          finalDestination,
-          normalizedIntermediates,
-          travelMode,
-          routeType,
-          routeTypeMap,
-          customHilliness,
-          customWindingness
-        );
-      } catch (error) {
-        console.warn('[mapRoute] Error fetching route from TomTom:', error.message);
-        ToastAndroid.show(
-          `Unable to fetch route: ${error.message}`,
-          ToastAndroid.LONG
-        );
-        return false;
-      }
-
-      // Cache the fresh result
-      if (result?.polyline) {
-        try {
-          await cacheRoute(
-            startCoord,
-            finalDestination,
-            normalizedIntermediates,
-            routeType,
-            travelMode,
-            result
-          );
-        } catch (error) {
-          console.warn('[mapRoute] Error caching route:', error);
-        }
-      }
+      console.warn('[mapRoute] Error fetching route:', error.message);
+      ToastAndroid.show(
+        `Unable to fetch route: ${error.message}`,
+        ToastAndroid.LONG
+      );
+      return false;
     }
 
     console.log("[mapRoute] Result received. Has polyline:", !!result?.polyline);
