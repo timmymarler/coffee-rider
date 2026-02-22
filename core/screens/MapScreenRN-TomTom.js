@@ -664,8 +664,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
   const previousFollowUserRef = useRef(false); // Track previous Follow Me state to detect when it turn off
-  const lastHeadingRef = useRef(null); // Track last heading to throttle camera animations
-  const lastStepDetectionRef = useRef(0); // Throttle step detection effect to avoid continuous recalculation
   const {
     waypoints,
     addFromPlace,
@@ -960,7 +958,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       const decoded = result.polyline;
 
       setRouteCoords(decoded);
-      setRouteVersion(v => v + 1);   // Force re-render of polylines with new key
       setIsPedestrianRoute(userTravelMode === "pedestrian");
       setIsCyclingRoute(userTravelMode === "bike");
       setIsCarRoute(userTravelMode === "car");
@@ -1619,17 +1616,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     // Update camera during navigation (Follow Me or active ride)
     // If we have heading, use it for orientation; otherwise just center on location
-    // Throttle animations based on heading change to reduce GPU power consumption
     if (userLocation.heading !== undefined && userLocation.heading !== -1) {
-      // Only animate if heading has changed by more than 5° (avoid constant GPU updates)
-      const headingDelta = lastHeadingRef.current !== null 
-        ? Math.abs(userLocation.heading - lastHeadingRef.current)
-        : 10; // First update, apply animation
-      
-      if (headingDelta > 5) {
-        lastHeadingRef.current = userLocation.heading;
-        recenterOnUser({ heading: userLocation.heading, pitch: 35, zoom: FOLLOW_ZOOM });
-      }
+      recenterOnUser({ heading: userLocation.heading, pitch: 35, zoom: FOLLOW_ZOOM });
     } else {
       // Fallback: center on location without heading (for active rides or when heading unavailable)
       recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 0 });
@@ -1643,11 +1631,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!userLocation) return;
     if (!routeSteps || routeSteps.length === 0) return;
     if (!routeCoords || routeCoords.length === 0) return;
-
-    // Throttle effect to run at most every 500ms to reduce CPU load during navigation
-    const now = Date.now();
-    if (now - lastStepDetectionRef.current < 500) return;
-    lastStepDetectionRef.current = now;
 
     const STEP_ADVANCE_THRESHOLD_METERS = 15; // Advance when <15m from step end and moving forward
     const MAX_BACKTRACK_TOLERANCE_METERS = 30; // Allow 30m backward before considering off-track
@@ -1762,11 +1745,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    // Early exit if we're still in the reroute cooldown period (avoid unnecessary calculations)
-    const now = Date.now();
-    const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
-    if (timeSinceLastReroute < REROUTE_COOLDOWN_SECONDS) return;
-
     // Find closest point on route to user
     let closestDist = Infinity;
     let userPolylineIdx = 0;
@@ -1788,12 +1766,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
+    // Check if off-route and enough time since last reroute attempt
+    const now = Date.now();
+    const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
+    
     // Determine if we should reroute based on distance AND heading
     let shouldReroute = false;
     let rerouteReason = '';
     
-    // Note: We already returned early if still in reroute cooldown, so don't check timeSinceLastReroute again
-    if (closestDist > OFF_ROUTE_THRESHOLD_METERS) {
+    if (closestDist > OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
       // User is significantly off-route (>200m)
       // Check heading to see if they're at least heading in the right general direction
       
@@ -1834,7 +1815,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route but heading unavailable - waiting for navigation clarity`);
         shouldReroute = false;
       }
-    } else if (closestDist > BACKWARDS_THRESHOLD_METERS && closestDist <= OFF_ROUTE_THRESHOLD_METERS) {
+    } else if (closestDist > BACKWARDS_THRESHOLD_METERS && closestDist <= OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
       // User is moderately off-route (80-200m) - check heading more aggressively
       if (userLocation.heading !== undefined && userLocation.heading !== -1) {
         let routeAheadIdx = Math.min(userPolylineIdx + 5, routeCoords.length - 1);
@@ -2054,8 +2035,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.Balanced,
-          timeInterval: 1500, // 1.5 seconds for smooth navigation tracking
-          distanceInterval: 5, // 5 meters minimum between updates
+          timeInterval: 1000,
+          distanceInterval: 5,
         },
         (location) => {
           try {
@@ -2281,7 +2262,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setIsHomeDestination(false);
     clearWaypoints();
     setRouteCoords([]);            // ✅ clear polyline HERE
-    setRouteVersion(v => v + 1);   // Force re-render of polylines by changing key
     setIsPedestrianRoute(false);
     setIsCyclingRoute(false);
     setIsCarRoute(false);
@@ -2889,7 +2869,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // Update state with route data
     setRouteCoords(simplified);
-    setRouteVersion(v => v + 1);   // Force re-render of polylines with new key
     setIsPedestrianRoute(travelMode === "pedestrian");
     setIsCyclingRoute(travelMode === "bike");
     setIsCarRoute(travelMode === "car");
@@ -3091,7 +3070,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
 
       setRouteCoords(decoded);
-      setRouteVersion(v => v + 1);   // Force re-render of polylines with new key
       setLastEncodedPolyline(typeof route.routePolyline === 'string' ? route.routePolyline : null);
 
       // Set routed total distance from saved route (if present)
@@ -3553,8 +3531,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                     isPedestrianRoute ? "#4CAF50" :
                     isCyclingRoute ? "#CE93D8" :
                     isCarRoute ? "#DC2626" :
-                    isMotorcycleRoute ? "#42A5F5" :
-                    "#42A5F5"
+                    isMotorcycleRoute ? "#1565C0" :
+                    "#1565C0"
                   }
                   zIndex={900}
                 />
@@ -3566,16 +3544,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   coordinates={routeCoords}
                   strokeWidth={isNavigationMode ? 12 : 8}
                   strokeColor="#7F1D1D"
-                  zIndex={899}
-                />
-              )}
-              {/* Motorcycle route - dark blue outline */}
-              {isMotorcycleRoute && routeCoords.length > 0 && (
-                <Polyline
-                  key={`base-motorcycle-outline-${routeVersion}`}
-                  coordinates={routeCoords}
-                  strokeWidth={isNavigationMode ? 12 : 8}
-                  strokeColor="#0D47A1"
                   zIndex={899}
                 />
               )}
@@ -3634,16 +3602,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   coordinates={routeCoords}
                   strokeWidth={isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)}
                   strokeColor="#7F1D1D"
-                  zIndex={999}
-                />
-              )}
-              {/* Motorcycle route remaining - dark blue outline */}
-              {isMotorcycleRoute && routeCoords.length > 0 && (
-                <Polyline
-                  key={`active-motorcycle-outline-${routeVersion}`}
-                  coordinates={routeCoords}
-                  strokeWidth={isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)}
-                  strokeColor="#0D47A1"
                   zIndex={999}
                 />
               )}
@@ -3916,7 +3874,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           return (
             <View style={styles.junctionPanel}>
               {/* Large direction icon */}
-              <MaterialCommunityIcons name={meta.icon} size={52} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
+              <MaterialCommunityIcons name={meta.icon} size={64} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
               {/* Distance and label section */}
               <View style={styles.junctionContent}>
                 {distText ? (
@@ -4395,7 +4353,7 @@ const styles = StyleSheet.create({
 
   miniMapContainer: {
     position: "absolute",
-    bottom: 95,
+    bottom: 125,
     right: 16,
     width: 110,
     height: 110,
@@ -4468,15 +4426,15 @@ const styles = StyleSheet.create({
     left: 20,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderRadius: 16,
     backgroundColor: "#2196F3",
     borderWidth: 3,
     borderColor: "rgba(245, 245, 240, 0.95)",
     zIndex: 2000,
     elevation: 8,
-    gap: 12,
+    gap: 16,
   },
   junctionIcon: {
     marginRight: 4,
@@ -4485,10 +4443,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   junctionDistance: {
-    fontSize: 40,
+    fontSize: 48,
     fontWeight: "700",
     color: "rgba(245, 245, 240, 0.95)",
-    lineHeight: 48,
+    lineHeight: 56,
   },
   junctionRemaining: {
     fontSize: 12,
@@ -4497,7 +4455,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   junctionLabel: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: "rgba(245, 245, 240, 0.95)",
     marginTop: 4,

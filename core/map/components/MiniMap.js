@@ -1,8 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
 import { useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import MapView, { Circle, Polyline } from 'react-native-maps';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 
 /**
  * Mini map component to show group member locations
@@ -19,7 +19,6 @@ export default function MiniMap({
 }) {
   const theme = useTheme();
   const miniMapRef = useRef(null);
-  const lastUpdateRef = useRef(0);
 
   // Calculate bounds to fit all riders and user
   const initialRegion = useMemo(() => {
@@ -45,23 +44,21 @@ export default function MiniMap({
     const minLng = Math.min(...lngs);
     const maxLng = Math.max(...lngs);
 
-    const latDelta = (maxLat - minLat) * 1.15; // 15% padding for closer zoom
-    const lngDelta = (maxLng - minLng) * 1.15;
+    const latDelta = (maxLat - minLat) * 1.3; // 30% padding
+    const lngDelta = (maxLng - minLng) * 1.3;
 
     return {
       latitude: (minLat + maxLat) / 2,
       longitude: (minLng + maxLng) / 2,
-      latitudeDelta: Math.max(latDelta, 0.003),
-      longitudeDelta: Math.max(lngDelta, 0.003),
+      latitudeDelta: Math.max(latDelta, 0.05),
+      longitudeDelta: Math.max(lngDelta, 0.05),
     };
   }, [userLocation, riderLocations]);
 
-  // Zoom to fit when riders change - throttled to 10 seconds for balance between responsiveness and battery
+  // Zoom to fit when riders change
   useEffect(() => {
-    const now = Date.now();
-    if (miniMapRef.current && (riderLocations.length > 0 || userLocation) && now - lastUpdateRef.current > 10000) {
+    if (miniMapRef.current && (riderLocations.length > 0 || userLocation)) {
       miniMapRef.current.animateToRegion(initialRegion, 500);
-      lastUpdateRef.current = now;
     }
   }, [riderLocations.length, userLocation?.latitude, userLocation?.longitude]);
 
@@ -98,35 +95,60 @@ export default function MiniMap({
           </>
         )}
 
-        {/* User current location - blue dot */}
+        {/* User location */}
         {userLocation && (
-          <Circle
-            center={{
+          <Marker
+            coordinate={{
               latitude: userLocation.latitude,
               longitude: userLocation.longitude,
             }}
-            radius={20}
-            fillColor="rgba(33, 150, 243, 0.4)"
-            strokeColor="#2196F3"
-            strokeWidth={2.5}
-            zIndex={102}
-          />
+            anchor={{ x: 0.5, y: 0.5 }}
+            zIndex={200}
+          >
+            <View style={styles.userLocationMarker}>
+              <View style={styles.userLocationInner}>
+                <MaterialCommunityIcons
+                  name="navigation"
+                  size={20}
+                  color={theme.colors.primary}
+                />
+              </View>
+            </View>
+          </Marker>
         )}
 
-        {/* Other riders - simple colored dots */}
+        {/* Other riders */}
         {riderLocations.map((rider) => (
-          <Circle
+          <Marker
             key={`rider-${rider.id}`}
-            center={{
+            coordinate={{
               latitude: rider.latitude,
               longitude: rider.longitude,
             }}
-            radius={22}
-            fillColor="rgba(255, 152, 0, 0.5)"
-            strokeColor="#FF9800"
-            strokeWidth={2}
+            anchor={{ x: 0.5, y: 0.5 }}
             zIndex={300}
-          />
+          >
+            <View style={styles.riderMarker}>
+              {rider.userAvatar ? (
+                <Image
+                  source={{ uri: rider.userAvatar }}
+                  style={styles.riderAvatar}
+                />
+              ) : (
+                <MaterialCommunityIcons
+                  name="account-circle"
+                  size={40}
+                  color={theme.colors.accentLight}
+                />
+              )}
+              <View
+                style={[
+                  styles.riderStatusDot,
+                  { backgroundColor: theme.colors.success },
+                ]}
+              />
+            </View>
+          </Marker>
         ))}
       </MapView>
 
@@ -157,6 +179,50 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  userLocationMarker: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(33, 150, 243, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#2196F3',
+  },
+  userLocationInner: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#2196F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  riderMarker: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+    backgroundColor: '#fff',
+  },
+  riderAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  riderStatusDot: {
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#fff',
+    bottom: 0,
+    right: 0,
   },
   badge: {
     position: 'absolute',
