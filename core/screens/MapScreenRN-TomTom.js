@@ -5,9 +5,9 @@ import { useTheme } from "@context/ThemeContext";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
-import { collection, doc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
+import { collection, doc, getDocs, onSnapshot, updateDoc , getDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme } from "react-native";
+import { AppState, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme , Platform } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -42,8 +42,6 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
 import { useRouter } from "expo-router";
-import { getDoc } from "firebase/firestore";
-import { Platform } from "react-native";
 import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
@@ -2754,13 +2752,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     console.log("  - Destination:", finalDestination.latitude.toFixed(5), finalDestination.longitude.toFixed(5));
 
     // Try cache first if offline or as optimization
-    // BUT: Always skip cache for Follow Me (skipFitToView=true indicates Follow Me)
-    // to ensure we get a fresh route with the new waypoints
+    // BUT: Always skip cache for Follow Me or AutoReroute (skipFitToView=true)
+    // to ensure we get a fresh route with the correct travel mode and current location
     let result = null;
     
     try {
-      // Skip cache if this is a Follow Me request - always fetch fresh
-      if (!skipFitToView) {
+      // Skip cache if this is a Follow Me request - always fetch fresh with current travel mode
+      // Use both followUser flag AND skipFitToView check for safety
+      if (!skipFitToView && !followUser) {
         console.log('[mapRoute] Checking cache...');
         console.log('[mapRoute] Cache query - origin:', startCoord.latitude.toFixed(5), startCoord.longitude.toFixed(5));
         console.log('[mapRoute] Cache query - destination:', finalDestination.latitude.toFixed(5), finalDestination.longitude.toFixed(5));
@@ -2791,7 +2790,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           return false;
         }
       } else {
-        console.log('[mapRoute] Skipping cache for Follow Me - fetching fresh route');
+        console.log('[mapRoute] Skipping cache - Follow Me or AutoReroute (skipping fresh route)');
       }
     } catch (error) {
       console.warn('[mapRoute] Error checking cache:', error);
