@@ -38,6 +38,7 @@ import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
 import { cacheRoute, getCachedRoute } from "@core/utils/routeCache";
+import { getRouteStyle, shouldRenderOutline } from "@core/map/routingEngine";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
@@ -3460,12 +3461,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           )}
 
             {/* Base route - outline layer for pedestrians and cyclists */}
-              {(isPedestrianRoute || isCyclingRoute) && routeCoords.length > 0 && (
+              {shouldRenderOutline(userTravelMode) && routeCoords.length > 0 && (
                 <Polyline
                   key={`base-outline-${routeVersion}`}
                   coordinates={routeCoords}
-                  strokeWidth={isNavigationMode ? 12 : 8}
-                  strokeColor={isCyclingRoute ? "#7B1FA2" : "#2E7D32"}
+                  strokeWidth={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth}
+                  strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                   zIndex={899}
                 />
               )}
@@ -3474,25 +3475,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 <Polyline
                   key={`base-${routeVersion}`}
                   coordinates={routeCoords}
-                  strokeWidth={isNavigationMode ? 10 : 6}
-                  strokeColor={
-                    isPedestrianRoute ? "#4CAF50" :
-                    isCyclingRoute ? "#CE93D8" :
-                    isCarRoute ? "#DC2626" :
-                    isMotorcycleRoute ? "#1565C0" :
-                    "#1565C0"
-                  }
+                  strokeWidth={getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth}
+                  strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                   zIndex={900}
-                />
-              )}
-              {/* Car route - dark red outline */}
-              {isCarRoute && routeCoords.length > 0 && (
-                <Polyline
-                  key={`base-car-outline-${routeVersion}`}
-                  coordinates={routeCoords}
-                  strokeWidth={isNavigationMode ? 12 : 8}
-                  strokeColor="#7F1D1D"
-                  zIndex={899}
                 />
               )}
 
@@ -3518,12 +3503,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               )}
 
             {/* Remaining route - outline layer for pedestrians and cyclists */}
-              {(isPedestrianRoute || isCyclingRoute) && routeCoords.length > 0 && (
+              {shouldRenderOutline(userTravelMode) && routeCoords.length > 0 && (
                 <Polyline
                   key={`active-outline-${routeVersion}`}
                   coordinates={routeCoords}
                   strokeWidth={isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)}
-                  strokeColor={isCyclingRoute ? "#7B1FA2" : "#2E7D32"}
+                  strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                   zIndex={999}
                 />
               )}
@@ -3533,24 +3518,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   key={`active-${routeVersion}`}
                   coordinates={routeCoords}
                   strokeWidth={isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)}
-                  strokeColor={
-                    isPedestrianRoute ? "#4CAF50" :
-                    isCyclingRoute ? "#CE93D8" :
-                    isCarRoute ? "#DC2626" :
-                    isMotorcycleRoute ? "#42A5F5" :
-                    "#42A5F5"
-                  }
+                  strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                   zIndex={1000}
-                />
-              )}
-              {/* Car route remaining - dark red outline */}
-              {isCarRoute && routeCoords.length > 0 && (
-                <Polyline
-                  key={`active-car-outline-${routeVersion}`}
-                  coordinates={routeCoords}
-                  strokeWidth={isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)}
-                  strokeColor="#7F1D1D"
-                  zIndex={999}
                 />
               )}
         </MapView>
