@@ -1800,48 +1800,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     let rerouteReason = '';
     
     if (closestDist > OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
-      // User is significantly off-route (>200m)
-      // Check heading to see if they're at least heading in the right general direction
-      
-      if (userLocation.heading !== undefined && userLocation.heading !== -1) {
-        // Get bearing of route ahead from closest point
-        // Defensive check: ensure we have at least 2 different points
-        let routeAheadIdx = Math.min(userPolylineIdx + 10, routeCoords.length - 1);
-        
-        // If points are the same, try to go further ahead
-        if (routeAheadIdx === userPolylineIdx && routeCoords.length > userPolylineIdx + 1) {
-          routeAheadIdx = Math.min(userPolylineIdx + 1, routeCoords.length - 1);
-        }
-        
-        // Only calculate bearing if we have 2 different valid points
-        if (routeAheadIdx !== userPolylineIdx && routeCoords[userPolylineIdx] && routeCoords[routeAheadIdx]) {
-          try {
-            const routeBearing = calculateBearing(routeCoords[userPolylineIdx], routeCoords[routeAheadIdx]);
-            const userHeading = userLocation.heading;
-            const headingDiff = getBearingDifference(routeBearing, userHeading);
-            
-            // Only reroute if heading is significantly wrong (>90° off)
-            if (headingDiff > MAX_HEADING_TOLERANCE) {
-              shouldReroute = true;
-              rerouteReason = `heading backwards (${headingDiff.toFixed(0)}° off route)`;
-            } else {
-              // User is heading generally right direction but off the road
-              // This is normal on parallel roads or roundabout approaches - don't reroute yet
-              console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route but heading in correct direction (${headingDiff.toFixed(0)}° offset) - no reroute needed`);
-              shouldReroute = false;
-            }
-          } catch (error) {
-            console.error('[AutoReroute] Error calculating bearing for large off-route:', error);
-            shouldReroute = false;
-          }
-        }
-      } else {
-        // No heading data available - use conservative approach
-        console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route but heading unavailable - waiting for navigation clarity`);
-        shouldReroute = false;
-      }
+      // User is significantly off-route (>200m) - reroute immediately
+      // At this distance, they're not on a parallel road, they've left the route entirely
+      shouldReroute = true;
+      rerouteReason = `significantly off-route (${closestDist.toFixed(0)}m)`;
     } else if (closestDist > BACKWARDS_THRESHOLD_METERS && closestDist <= OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
-      // User is moderately off-route (80-200m) - check heading more aggressively
+      // User is moderately off-route (80-200m) - check heading to see if heading backwards
       if (userLocation.heading !== undefined && userLocation.heading !== -1) {
         let routeAheadIdx = Math.min(userPolylineIdx + 5, routeCoords.length - 1);
         let routeBackIdx = Math.max(0, userPolylineIdx - 5);
@@ -1853,7 +1817,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             const userHeading = userLocation.heading;
             const headingDiff = getBearingDifference(routeBearing, userHeading);
             
-            // At moderate distance, be more aggressive about backwards detection
+            // At moderate distance, only reroute if heading is significantly wrong (>120°)
             if (headingDiff > 120) {
               shouldReroute = true;
               rerouteReason = `heading wrong way (${headingDiff.toFixed(0)}° off) + moderate distance`;
