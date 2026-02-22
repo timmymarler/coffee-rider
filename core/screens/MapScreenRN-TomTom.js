@@ -1734,6 +1734,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Auto-rerouting when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
+  const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
   const OFF_ROUTE_THRESHOLD_METERS = 200; // Reroute if >200m off the route
   const BACKWARDS_THRESHOLD_METERS = 80;  // Reroute immediately if <80m off-route AND heading backwards
   const REROUTE_COOLDOWN_SECONDS = 30; // Only attempt reroute every 30 seconds max
@@ -1746,6 +1747,27 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!Array.isArray(routeCoords)) {
       console.warn('[AutoReroute] routeCoords is not an array, skipping auto-reroute');
       return;
+    }
+
+    // Force route rebuild when transitioning to Follow Me to ensure correct travel mode is used
+    const justEnabledFollowMe = !followUserPrevRef.current && followUser;
+    followUserPrevRef.current = followUser;
+    
+    if (justEnabledFollowMe) {
+      console.log('[AutoReroute] Follow Me just enabled - forcing route rebuild with current travel mode');
+      const requestId = ++routeRequestId.current;
+      mapRoute({
+        origin: userLocation,
+        waypoints: waypoints,
+        destination: routeDestination,
+        travelMode: userTravelMode,
+        routeType: userRouteType,
+        requestId,
+        skipFitToView: true, // Don't zoom out, stay in Follow Me view
+      }).catch(error => {
+        console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
+      });
+      return; // Exit early, don't do off-route checking on first run
     }
 
     // Find closest point on route to user
@@ -2943,8 +2965,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Also for active rides, ALWAYS use current location since user is joining mid-ride
     const origin = (followUser || activeRide) ? userLocation : (manualStartPoint || userLocation);
 
-    // For active rides, always fetch fresh to ensure polyline from current location is included
-    const skipFit = activeRide ? true : false;
+    // For active rides and Follow Me, always fetch fresh to ensure polyline from current location
+    // is included and correct travel mode is used (not a cached route from different mode)
+    const skipFit = (activeRide || followUser) ? true : false;
 
     // Call the core mapRoute function
     await mapRoute({
