@@ -612,10 +612,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Routing
   const router = useRouter();
   const [routeCoords, setRouteCoords] = useState([]);
-  const [isPedestrianRoute, setIsPedestrianRoute] = useState(false);
-  const [isCyclingRoute, setIsCyclingRoute] = useState(false);
-  const [isCarRoute, setIsCarRoute] = useState(false);
-  const [isMotorcycleRoute, setIsMotorcycleRoute] = useState(false);
 
   // Newly created place (shown until it's fetched into crPlaces)
   const [newlyCreatedPlace, setNewlyCreatedPlace] = useState(null);
@@ -694,16 +690,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const isNavigationMode = followUser || !!activeRide;
   
   // When vehicle type changes, clear only the polyline to force rebuild
-  // Keep the color flags to be updated by the new route build
+  // Colors will be derived from new travel mode when rendering
   const previousTravelModeRef = useRef(userTravelMode);
   useEffect(() => {
     if (previousTravelModeRef.current !== userTravelMode && routeCoords.length > 0) {
       // Vehicle type changed with an active route - clear the polyline to force visual rebuild
-      // Reset all color flags immediately, new ones will be set when route rebuilds
-      setIsPedestrianRoute(false);
-      setIsCyclingRoute(false);
-      setIsCarRoute(false);
-      setIsMotorcycleRoute(false);
+      // Colors will be derived from new travel mode when rendering
       setRouteCoords([]);
       setRouteVersion(v => v + 1);
       
@@ -959,10 +951,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
       setRouteCoords(decoded);
       setRouteVersion(v => v + 1);
-      setIsPedestrianRoute(userTravelMode === "pedestrian");
-      setIsCyclingRoute(userTravelMode === "bike");
-      setIsCarRoute(userTravelMode === "car");
-      setIsMotorcycleRoute(userTravelMode === "motorcycle");
       setRouteDistanceMeters(result.distanceMeters ?? result.distance);
       setRouteMeta({
         distanceMeters: result.distanceMeters ?? result.distance,
@@ -2203,10 +2191,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     clearWaypoints();
     setRouteCoords([]);            // ✅ clear polyline HERE
     setRouteVersion(v => v + 1);
-    setIsPedestrianRoute(false);
-    setIsCyclingRoute(false);
-    setIsCarRoute(false);
-    setIsMotorcycleRoute(false);
     setRouteDistanceMeters(null);
     setManualStartPoint(null); 
     routeFittedRef.current = false;
@@ -2804,7 +2788,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     if (!result?.polyline) {
       console.log("[mapRoute] No polyline in result");
-      setIsPedestrianRoute(false);
       return false;
     }
 
@@ -2816,10 +2799,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Update state with route data
     setRouteCoords(simplified);
     setRouteVersion(v => v + 1);
-    setIsPedestrianRoute(travelMode === "pedestrian");
-    setIsCyclingRoute(travelMode === "bike");
-    setIsCarRoute(travelMode === "car");
-    setIsMotorcycleRoute(travelMode === "motorcycle");
     setRouteMeta({
       distanceMeters: result.distanceMeters ?? result.distance,
       durationSeconds: result.durationSeconds ?? result.duration,
