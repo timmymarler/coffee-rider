@@ -6,6 +6,7 @@ import { useAllUserGroups } from "@core/groups/hooks";
 import { useEventForm } from "@core/hooks/useEventForm";
 import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
+import { deleteEvent as deleteEventUtil } from "@core/map/events/deleteEvent";
 import { useSavedRoutes } from "@core/map/routes/useSavedRoutes";
 import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
 import { getCapabilities } from "@core/roles/capabilities";
@@ -56,6 +57,10 @@ export default function CreateEventScreen() {
   // Group sharing state
   const [visibility, setVisibility] = useState(EVENT_VISIBILITY.PRIVATE);
   const [selectedGroupIds, setSelectedGroupIds] = useState([]);
+
+  // Delete confirmation state
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Edit mode: fetch event data if eventId is present
   useEffect(() => {
@@ -502,6 +507,22 @@ function getRegionFromAddressOrLocation(address, location) {
       } else {
         Alert.alert("Error", error || "Failed to create event");
       }
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!eventId) return;
+    setDeleting(true);
+    try {
+      await deleteEventUtil(eventId, user?.uid, false);
+      Alert.alert("Success", "Event deleted. You have 30 days to recover it.");
+      setDeleteConfirmVisible(false);
+      router.replace({ pathname: '/calendar' });
+    } catch (err) {
+      Alert.alert("Error", err.message || "Failed to delete event");
+      console.error("Delete error:", err);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1117,18 +1138,37 @@ function getRegionFromAddressOrLocation(address, location) {
             </View>
           )}
 
-          {/* Submit Button */}
-          <TouchableOpacity
-            style={[styles.submitButton, submitting && { opacity: 0.7 }]}
-            disabled={submitting || (eventId && edit === 'true' ? !isFormChanged() : !isFormComplete())}
-            onPress={handleSubmit}
-          >
-            {submitting ? (
-              <ActivityIndicator size="small" color={colors.primaryDark} />
-            ) : (
-              <Text style={styles.submitButtonText}>Save</Text>
+          {/* Button Row */}
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: spacing.lg }}>
+            {/* Delete Button - only in edit mode */}
+            {eventId && edit === 'true' && (
+              <TouchableOpacity
+                style={[styles.deleteButton, deleting && { opacity: 0.7 }]}
+                disabled={deleting}
+                onPress={() => setDeleteConfirmVisible(true)}
+              >
+                <MaterialCommunityIcons name="trash-can" size={20} color={colors.intext} />
+                <Text style={styles.deleteButtonText}>Delete</Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+            
+            {/* Save Button */}
+            <TouchableOpacity
+              style={[
+                styles.submitButton,
+                submitting && { opacity: 0.7 },
+                eventId && edit === 'true' ? { flex: 1 } : {},
+              ]}
+              disabled={submitting || (eventId && edit === 'true' ? !isFormChanged() : !isFormComplete())}
+              onPress={handleSubmit}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color={colors.primaryDark} />
+              ) : (
+                <Text style={styles.submitButtonText}>Save</Text>
+              )}
+            </TouchableOpacity>
+          </View>
 
           <View style={{ height: spacing.lg }} />
         </ScrollView>
@@ -1268,6 +1308,39 @@ function getRegionFromAddressOrLocation(address, location) {
                   style={styles.timeInput}
                 />
               </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete Event Confirmation Modal */}
+      <Modal
+        visible={deleteConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !deleting && setDeleteConfirmVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModal}>
+            <Text style={styles.confirmTitle}>Delete Event?</Text>
+            <Text style={styles.confirmMessage}>
+              This event will be deleted. You have 30 days to recover it.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity
+                style={[styles.deleteButton, deleting && { opacity: 0.7 }]}
+                disabled={deleting}
+                onPress={handleDelete}
+              >
+                <Text style={styles.deleteButtonText}>{deleting ? "Deleting…" : "Delete"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.cancelButton]}
+                disabled={deleting}
+                onPress={() => !deleting && setDeleteConfirmVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1780,5 +1853,61 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: "600",
     marginBottom: 4,
+  },
+  deleteButton: {
+    backgroundColor: theme.colors.danger,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    flex: 1,
+  },
+  deleteButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.intext,
+  },
+  cancelButton: {
+    backgroundColor: theme.colors.border,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  confirmModal: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: 16,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 20,
+    width: "80%",
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  confirmMessage: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    marginBottom: 20,
+    lineHeight: 20,
   },
 });
