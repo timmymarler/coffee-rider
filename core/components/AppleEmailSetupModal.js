@@ -1,6 +1,6 @@
 import { db } from "@config/firebase";
-import CRInput from "@core/components/CRInput";
-import CRLabel from "@core/components/CRLabel";
+import CRInput from "@core/components/ui/CRInput";
+import CRLabel from "@core/components/ui/CRLabel";
 import { AuthContext } from "@core/context/AuthContext";
 import { useStyles } from "@themes/index";
 import { updateProfile } from "firebase/auth";
