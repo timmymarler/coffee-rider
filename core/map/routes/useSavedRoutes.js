@@ -4,7 +4,14 @@ import { incMetric } from "@core/utils/devMetrics";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 
-export function useSavedRoutes(includePublic = false) {
+/**
+ * Fetch user's saved routes
+ * 
+ * @param {Boolean} includePublic - Include public routes from other users
+ * @param {Boolean} includeDeleted - Include soft-deleted routes (within 30-day window)
+ * @returns {Object} { routes: Route[], loading: Boolean }
+ */
+export function useSavedRoutes(includePublic = false, includeDeleted = false) {
   const { user, role = "guest" } = useContext(AuthContext);
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +43,12 @@ export function useSavedRoutes(includePublic = false) {
 
     const updateRoutes = () => {
       if (userRoutesLoaded && publicRoutesLoaded) {
-        setRoutes(Array.from(routesMap.values()));
+        // Filter deleted routes unless includeDeleted is true
+        const filteredRoutes = Array.from(routesMap.values()).filter(route => {
+          if (includeDeleted) return true; // Include all routes
+          return !route.deleted; // Exclude deleted routes
+        });
+        setRoutes(filteredRoutes);
         setLoading(false);
       }
     };
@@ -63,7 +75,10 @@ export function useSavedRoutes(includePublic = false) {
           incMetric("useSavedRoutes:publicSnapshot");
           incMetric("useSavedRoutes:publicDocs", snap.docs.length, 25);
           snap.docs.forEach(doc => {
-            routesMap.set(doc.id, { id: doc.id, ...doc.data() });
+            // Only include non-deleted public routes
+            if (!doc.data().deleted) {
+              routesMap.set(doc.id, { id: doc.id, ...doc.data() });
+            }
           });
           publicRoutesLoaded = true;
           updateRoutes();
@@ -74,7 +89,7 @@ export function useSavedRoutes(includePublic = false) {
       unsubUser();
       unsubPublic && unsubPublic();
     };
-  }, [user, includePublic]);
+  }, [user, includePublic, includeDeleted]);
 
   return { routes, loading };
 }

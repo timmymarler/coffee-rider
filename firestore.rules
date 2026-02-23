@@ -157,7 +157,11 @@ service cloud.firestore {
           )
         )
       );
-      allow delete: if false;
+      allow delete: if isAuthed() && (
+        // Owner or admin can soft-delete by setting deleted: true, deletedAt, deletedBy
+        isAdmin() ||
+        resource.data.createdBy == request.auth.uid
+      );
     }
 
     /* RIDES - SAVED COMPLETED RIDES */
