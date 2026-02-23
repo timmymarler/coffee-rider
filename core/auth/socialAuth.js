@@ -197,14 +197,16 @@ export const signInWithApple = async () => {
     const firebaseUser = result.user;
 
     // Get display name from Apple credential if available
-    let displayName = firebaseUser.displayName || "Apple User";
-    if (
-      credential.fullName?.givenName ||
-      credential.fullName?.familyName
-    ) {
+    let displayName = firebaseUser.displayName;
+    if (credential.fullName?.givenName || credential.fullName?.familyName) {
       const givenName = credential.fullName?.givenName || "";
       const familyName = credential.fullName?.familyName || "";
-      displayName = `${givenName} ${familyName}`.trim() || "Apple User";
+      displayName = `${givenName} ${familyName}`.trim();
+    }
+    
+    // If still no name, use first part of email or a generic name
+    if (!displayName) {
+      displayName = firebaseUser.email?.split("@")[0] || "Coffee Rider User";
     }
 
     // Create user doc if it doesn't exist
