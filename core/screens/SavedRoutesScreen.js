@@ -490,10 +490,10 @@ export default function SavedRoutesScreen() {
   }
 
   async function handleDeleteRoute() {
-    if (!routeToDelete) return;
+    if (!routeToDelete || !user?.uid) return;
     setDeleting(true);
     try {
-      await deleteRoute(routeToDelete);
+      await deleteRoute(routeToDelete, user.uid, capabilities?.isAdmin);
       Alert.alert("Success", "Route deleted. You have 30 days to recover it.");
       setDeleteConfirmVisible(false);
       setRouteToDelete(null);
@@ -507,10 +507,10 @@ export default function SavedRoutesScreen() {
   }
 
   async function handleRecoverRoute() {
-    if (!routeToRecover) return;
+    if (!routeToRecover || !user?.uid) return;
     setRecovering(true);
     try {
-      await recoverRoute(routeToRecover);
+      await recoverRoute(routeToRecover, user.uid, capabilities?.isAdmin);
       Alert.alert("Success", "Route recovered!");
       setRecoverConfirmVisible(false);
       setRouteToRecover(null);
