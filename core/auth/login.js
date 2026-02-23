@@ -4,7 +4,7 @@ import { auth } from "@config/firebase";
 import theme from "@themes";
 import { useRouter } from "expo-router";
 import { sendEmailVerification, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -17,9 +17,12 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import AuthLayout from "./AuthLayout";
 import RegisterScreen from "./register";
 import { resetPassword } from "./resetPassword";
+import { initializeGoogleSignIn, isGoogleSignInAvailable, isAppleSignInAvailable, signInWithGoogle, signInWithApple } from "./socialAuth";
+
 export default function LoginScreen() {
   const router = useRouter();
   const { colors, spacing } = theme;
@@ -29,6 +32,16 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [socialSubmitting, setSocialSubmitting] = useState(false);
+  const [socialProcess, setSocialProcess] = useState(null);
+  const [googleAvailable, setGoogleAvailable] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    initializeGoogleSignIn();
+    setGoogleAvailable(isGoogleSignInAvailable());
+    setAppleAvailable(isAppleSignInAvailable());
+  }, []);
 
   async function handleResetPassword() {
     if (!email) {
@@ -114,6 +127,40 @@ export default function LoginScreen() {
       );
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setSocialSubmitting(true);
+    setSocialProcess('google');
+    try {
+      await signInWithGoogle();
+      setSocialSubmitting(false);
+      setSocialProcess(null);
+      router.replace("map");
+    } catch (err) {
+      setSocialSubmitting(false);
+      setSocialProcess(null);
+      if (!err.message?.includes("cancelled")) {
+        Alert.alert("Sign-in Failed", err.message || "Google sign-in failed. Please try again.");
+      }
+    }
+  }
+
+  async function handleAppleSignIn() {
+    setSocialSubmitting(true);
+    setSocialProcess('apple');
+    try {
+      await signInWithApple();
+      setSocialSubmitting(false);
+      setSocialProcess(null);
+      router.replace("map");
+    } catch (err) {
+      setSocialSubmitting(false);
+      setSocialProcess(null);
+      if (!err.message?.includes("cancelled")) {
+        Alert.alert("Sign-in Failed", err.message || "Apple sign-in failed. Please try again.");
+      }
     }
   }
 
@@ -231,6 +278,32 @@ export default function LoginScreen() {
         <Text style={[styles.linkText, { color: colors.accent }]}>Reset Password</Text>
       </TouchableOpacity>
 
+      {googleAvailable && (
+        <TouchableOpacity
+          onPress={handleGoogleSignIn}
+          disabled={socialSubmitting && socialProcess === 'google'}
+          style={[styles.socialButton, styles.googleButton, { opacity: socialSubmitting && socialProcess === 'google' ? 0.7 : 1 }]}
+        >
+          <MaterialCommunityIcons name="google" size={20} color="white" style={{ marginRight: spacing.sm }} />
+          <Text style={styles.socialButtonText}>
+            {socialSubmitting && socialProcess === 'google' ? 'Signing in...' : 'Sign in with Google'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {appleAvailable && (
+        <TouchableOpacity
+          onPress={handleAppleSignIn}
+          disabled={socialSubmitting && socialProcess === 'apple'}
+          style={[styles.socialButton, styles.appleButton, { opacity: socialSubmitting && socialProcess === 'apple' ? 0.7 : 1 }]}
+        >
+          <MaterialCommunityIcons name="apple" size={20} color="white" style={{ marginRight: spacing.sm }} />
+          <Text style={styles.socialButtonText}>
+            {socialSubmitting && socialProcess === 'apple' ? 'Signing in...' : 'Sign in with Apple'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity
         onPress={() => setShowRegister(true)}
         style={{ marginTop: spacing.md, alignItems: "center" }}
@@ -289,5 +362,28 @@ const styles = StyleSheet.create({
     color: theme.colors.accentMid,
     fontSize: 14,
     fontWeight: "500",
+  },
+  socialButton: {
+    marginTop: theme.spacing.md,
+    paddingVertical: 12,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+  googleButton: {
+    backgroundColor: "#000",
+    borderWidth: 1,
+    borderColor: "#fff",
+  },
+  appleButton: {
+    backgroundColor: "#000",
+    borderWidth: 1,
+    borderColor: "#fff",
+  },
+  socialButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

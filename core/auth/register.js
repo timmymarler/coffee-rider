@@ -1,7 +1,8 @@
 // core/auth/register.js
 import { useRouter } from "expo-router";
 import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import {
   ActivityIndicator,
   Alert,
@@ -23,6 +24,7 @@ import { RIDER_CATEGORIES } from "@core/config/categories/rider";
 import theme from "@themes";
 import { addDoc, collection, doc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import AuthLayout from "./AuthLayout";
+import { initializeGoogleSignIn, isGoogleSignInAvailable, isAppleSignInAvailable, signInWithGoogle, signInWithApple } from "./socialAuth";
 
 const ROLES = [
   { id: "user", label: "User", description: "Find coffee stops" },
@@ -48,6 +50,16 @@ export default function RegisterScreen({ onBack }) {
   const [placeMatches, setPlaceMatches] = useState([]); // Matching places found
   const [selectedPlace, setSelectedPlace] = useState(null); // Selected existing place or null for new
   const [showPlaceSelectionModal, setShowPlaceSelectionModal] = useState(false);
+  const [socialSubmitting, setSocialSubmitting] = useState(false);
+  const [socialProcess, setSocialProcess] = useState(null);
+  const [googleAvailable, setGoogleAvailable] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    initializeGoogleSignIn();
+    setGoogleAvailable(isGoogleSignInAvailable());
+    setAppleAvailable(isAppleSignInAvailable());
+  }, []);
   const [isSearching, setIsSearching] = useState(false);
 
   // Search for matching places by name
@@ -112,6 +124,40 @@ export default function RegisterScreen({ onBack }) {
       console.error("Error searching places:", err);
     } finally {
       setIsSearching(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setSocialSubmitting(true);
+    setSocialProcess('google');
+    try {
+      await signInWithGoogle();
+      setSocialSubmitting(false);
+      setSocialProcess(null);
+      router.replace("map");
+    } catch (err) {
+      setSocialSubmitting(false);
+      setSocialProcess(null);
+      if (!err.message?.includes("cancelled")) {
+        Alert.alert("Sign-in Failed", err.message || "Google sign-in failed. Please try again.");
+      }
+    }
+  }
+
+  async function handleAppleSignIn() {
+    setSocialSubmitting(true);
+    setSocialProcess('apple');
+    try {
+      await signInWithApple();
+      setSocialSubmitting(false);
+      setSocialProcess(null);
+      router.replace("map");
+    } catch (err) {
+      setSocialSubmitting(false);
+      setSocialProcess(null);
+      if (!err.message?.includes("cancelled")) {
+        Alert.alert("Sign-in Failed", err.message || "Apple sign-in failed. Please try again.");
+      }
     }
   }
 
@@ -443,6 +489,32 @@ export default function RegisterScreen({ onBack }) {
             </Text>
           </TouchableOpacity>
 
+          {googleAvailable && (
+            <TouchableOpacity
+              onPress={handleGoogleSignIn}
+              disabled={socialSubmitting && socialProcess === 'google'}
+              style={[styles.socialButton, styles.googleButton, { opacity: socialSubmitting && socialProcess === 'google' ? 0.7 : 1 }]}
+            >
+              <MaterialCommunityIcons name="google" size={20} color="white" style={{ marginRight: spacing.sm }} />
+              <Text style={styles.socialButtonText}>
+                {socialSubmitting && socialProcess === 'google' ? 'Signing in...' : 'Sign in with Google'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {appleAvailable && (
+            <TouchableOpacity
+              onPress={handleAppleSignIn}
+              disabled={socialSubmitting && socialProcess === 'apple'}
+              style={[styles.socialButton, styles.appleButton, { opacity: socialSubmitting && socialProcess === 'apple' ? 0.7 : 1 }]}
+            >
+              <MaterialCommunityIcons name="apple" size={20} color="white" style={{ marginRight: spacing.sm }} />
+              <Text style={styles.socialButtonText}>
+                {socialSubmitting && socialProcess === 'apple' ? 'Signing in...' : 'Sign in with Apple'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* Continue as Guest */}
           <TouchableOpacity
             onPress={handleGuestMode}
@@ -733,4 +805,28 @@ const styles = StyleSheet.create({
     color: theme.colors.accentMid,
     fontSize: 14,
     fontWeight: "600",
-  },});
+  },
+  socialButton: {
+    marginTop: theme.spacing.md,
+    paddingVertical: 12,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+  googleButton: {
+    backgroundColor: "#000",
+    borderWidth: 1,
+    borderColor: "#fff",
+  },
+  appleButton: {
+    backgroundColor: "#000",
+    borderWidth: 1,
+    borderColor: "#fff",
+  },
+  socialButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+});

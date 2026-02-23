@@ -5,9 +5,9 @@ import { CRLabel } from "@components-ui/CRLabel";
 import { AuthContext } from "@context/AuthContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useTheme } from "@context/ThemeContext";
+import { deleteGroup } from "@core/groups/deleteGroup";
 import { useAllUserGroups, useGroupEvents, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
 import { acceptInvite, createGroup, declineInvite, leaveGroup, removeGroupMember, revokeInvite, sendInvite } from "@core/groups/service";
-import { deleteGroup } from "@core/groups/deleteGroup";
 import useActiveRide from "@core/map/routes/useActiveRide";
 import { useGroupSharedRoutes, useMembersActiveRides } from "@core/map/routes/useSharedRides";
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
@@ -433,7 +433,7 @@ export default function GroupsScreen() {
                             return (isSoloOwner || isNonOwner) ? (
                               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md }}>
                                 <CRButton
-                                  title={leavingGroup ? (isSoloOwner ? "Deleting…" : "Leaving…") : (isSoloOwner ? "Leave & Delete" : "Leave Group")}
+                                  title={leavingGroup ? "Leaving…" : "Leave"}
                                   variant="danger"
                                   loading={leavingGroup}
                                   onPress={() => {
@@ -447,7 +447,7 @@ export default function GroupsScreen() {
                                       [
                                         { text: "Cancel", style: "cancel" },
                                         {
-                                          text: isSoloOwner ? "Leave & Delete" : "Leave",
+                                          text: "Leave",
                                           style: "destructive",
                                           onPress: async () => {
                                             setLeavingGroup(true);

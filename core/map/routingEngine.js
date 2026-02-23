@@ -6,8 +6,7 @@
  * - Route state management
  */
 
-import { fetchTomTomRoute } from "@core/map/utils/tomtomRouting";
-import { fetchGoogleRoute } from "@core/map/utils/tomtomRouting"; // Google route also in same file
+import { fetchGoogleRoute, fetchTomTomRoute } from "@core/map/utils/tomtomRouting";
 import { cacheRoute, getCachedRoute } from "@core/utils/routeCache";
 
 /**

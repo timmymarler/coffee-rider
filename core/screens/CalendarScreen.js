@@ -2,8 +2,8 @@
 import { AuthContext } from "@context/AuthContext";
 import { useAllUserGroups } from "@core/groups/hooks";
 import { useEvents } from "@core/hooks/useEvents";
+import { deleteEvent as deleteEventUtil } from "@core/map/events/deleteEvent";
 import { EVENT_VISIBILITY, shareEvent } from "@core/map/events/sharedEvents";
-import { deleteEvent as deleteEventUtil, deleteEventSeries as deleteEventSeriesUtil, recoverEvent } from "@core/map/events/deleteEvent";
 import { getCapabilities } from "@core/roles/capabilities";
 // Remove DropDownPicker import
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";

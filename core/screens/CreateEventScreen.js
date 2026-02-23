@@ -1,12 +1,13 @@
 // core/screens/CreateEventScreen.js
+import { CRButton } from "@components-ui/CRButton";
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import RouteDropdown from "@core/components/RouteDropdown";
 import { useAllUserGroups } from "@core/groups/hooks";
 import { useEventForm } from "@core/hooks/useEventForm";
 import { useEvents } from "@core/hooks/useEvents";
-import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
 import { deleteEvent as deleteEventUtil } from "@core/map/events/deleteEvent";
+import { EVENT_VISIBILITY } from "@core/map/events/sharedEvents";
 import { useSavedRoutes } from "@core/map/routes/useSavedRoutes";
 import { useGroupSharedRoutes } from "@core/map/routes/useSharedRides";
 import { getCapabilities } from "@core/roles/capabilities";
@@ -17,7 +18,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     FlatList,
     KeyboardAvoidingView,
@@ -1142,32 +1142,23 @@ function getRegionFromAddressOrLocation(address, location) {
           <View style={{ flexDirection: 'row', gap: 12, marginBottom: spacing.lg }}>
             {/* Delete Button - only in edit mode */}
             {eventId && edit === 'true' && (
-              <TouchableOpacity
-                style={[styles.deleteButton, deleting && { opacity: 0.7 }]}
-                disabled={deleting}
+              <CRButton
+                title={deleting ? "Deleting…" : "Delete"}
+                variant="danger"
+                loading={deleting}
                 onPress={() => setDeleteConfirmVisible(true)}
-              >
-                <MaterialCommunityIcons name="trash-can" size={20} color={colors.intext} />
-                <Text style={styles.deleteButtonText}>Delete</Text>
-              </TouchableOpacity>
+                style={{ flex: 1 }}
+              />
             )}
             
             {/* Save Button */}
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                submitting && { opacity: 0.7 },
-                eventId && edit === 'true' ? { flex: 1 } : {},
-              ]}
+            <CRButton
+              title={submitting ? "Saving…" : "Save"}
+              loading={submitting}
               disabled={submitting || (eventId && edit === 'true' ? !isFormChanged() : !isFormComplete())}
               onPress={handleSubmit}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color={colors.primaryDark} />
-              ) : (
-                <Text style={styles.submitButtonText}>Save</Text>
-              )}
-            </TouchableOpacity>
+              style={{ flex: 1 }}
+            />
           </View>
 
           <View style={{ height: spacing.lg }} />
@@ -1327,20 +1318,20 @@ function getRegionFromAddressOrLocation(address, location) {
               This event will be deleted. You have 30 days to recover it.
             </Text>
             <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity
-                style={[styles.deleteButton, deleting && { opacity: 0.7 }]}
+              <CRButton
+                title={deleting ? "Deleting…" : "Delete"}
+                variant="danger"
+                loading={deleting}
                 disabled={deleting}
                 onPress={handleDelete}
-              >
-                <Text style={styles.deleteButtonText}>{deleting ? "Deleting…" : "Delete"}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.cancelButton]}
+                style={{ flex: 1 }}
+              />
+              <CRButton
+                title="Cancel"
                 disabled={deleting}
                 onPress={() => !deleting && setDeleteConfirmVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
+                style={{ flex: 1 }}
+              />
             </View>
           </View>
         </View>
@@ -1617,18 +1608,7 @@ const styles = StyleSheet.create({
     color: "white",
     fontWeight: "500",
   },
-  submitButton: {
-    backgroundColor: theme.colors.accentMid,
-    paddingVertical: 12,
-    borderRadius: 999,
-    alignItems: "center",
-    marginBottom: theme.spacing.md,
-  },
-  submitButtonText: {
-    color: theme.colors.primaryDark,
-    fontSize: 16,
-    fontWeight: "600",
-  },
+
   datePickerModalContainer: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -1854,36 +1834,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 4,
   },
-  deleteButton: {
-    backgroundColor: theme.colors.danger,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    flex: 1,
-  },
-  deleteButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: theme.colors.intext,
-  },
-  cancelButton: {
-    backgroundColor: theme.colors.border,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: theme.colors.text,
-  },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.6)",

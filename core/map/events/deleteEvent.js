@@ -1,5 +1,5 @@
 import { db } from "@config/firebase";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
 
 /**
  * Soft-delete a calendar event (marks deleted but keeps data for 30-day recovery window)

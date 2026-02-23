@@ -58,6 +58,10 @@ service cloud.firestore {
       allow create: if isAuthed() && request.auth.uid == userId;
       allow read: if isAuthed();
       allow update: if isAuthed() && request.auth.uid == userId;
+      allow delete: if isAuthed() && (
+        request.auth.uid == userId ||
+        isAdmin()
+      );
     }
 
     /* UPGRADES */

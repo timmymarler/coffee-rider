@@ -10,6 +10,7 @@ import { CRScreen } from "@components-ui/CRScreen";
 import { AuthContext } from "@context/AuthContext";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { useThemeControls } from "@context/ThemeContext";
+import { deleteUser } from "@core/auth/deleteUser";
 import { RIDER_AMENITIES } from "@core/config/amenities/rider";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
 import { RIDER_SUITABILITY } from "@core/config/suitability/rider";
@@ -66,6 +67,10 @@ export default function ProfileScreen() {
   const [placeAddress, setPlaceAddress] = useState("");
   const [placeAmenities, setPlaceAmenities] = useState([]);
   const [placeSuitability, setPlaceSuitability] = useState([]);
+
+  // Delete account
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Track changes for Save button
   const [initialValues, setInitialValues] = useState({});
@@ -170,6 +175,66 @@ export default function ProfileScreen() {
 
   const email = user?.email || "";
   const role = profile?.role || "user";
+
+  // Create theme-aware styles inside component so they update when theme changes
+  // MUST be defined before guest mode check to avoid "Cannot read property 'container' of undefined"
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      paddingHorizontal: theme.spacing.lg,
+    },
+    heading: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: theme.colors.text,
+      marginBottom: theme.spacing.sm,
+      textAlign: "center",
+    },
+    subText: {
+      fontSize: 14,
+      color: theme.colors.textMuted,
+      textAlign: "center",
+    },
+    loginButton: {
+      backgroundColor: theme.colors.accentMid,
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      borderRadius: 999,
+      alignItems: "center",
+      width: "100%",
+      marginBottom: theme.spacing.md,
+    },
+    loginButtonText: {
+      color: theme.colors.primaryDark,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    registerButton: {
+      borderWidth: 2,
+      borderColor: theme.colors.accentMid,
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      borderRadius: 999,
+      alignItems: "center",
+      width: "100%",
+    },
+    registerButtonText: {
+      color: theme.colors.accentMid,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    cardWrap: {
+      marginHorizontal: 16,
+      marginBottom: theme.spacing.sm, 
+   },
+    actionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    actionButtonGrow: {
+      flex: 1,
+    },
+  });
 
   if (loading) {
     return null;
@@ -499,68 +564,29 @@ export default function ProfileScreen() {
     }
   }
 
+  async function handleDeleteAccount() {
+    if (!user) return;
+
+    setDeleting(true);
+    try {
+      const isAdmin = profile?.role === 'admin';
+      await deleteUser(user.uid, user.uid, isAdmin);
+      
+      // User's data is soft-deleted, now log them out
+      setTimeout(() => {
+        logout();
+      }, 500);
+    } catch (error) {
+      console.error("[ProfileScreen] Delete account error:", error);
+      Alert.alert("Delete Failed", error.message || "Failed to delete account");
+      setDeleting(false);
+      setDeleteConfirmVisible(false);
+    }
+  }
+
   // -----------------------------------
   // MAIN PROFILE LAYOUT
   // -----------------------------------
-
-  // Create theme-aware styles inside component so they update when theme changes
-  const dynamicStyles = StyleSheet.create({
-    container: {
-      flex: 1,
-      paddingHorizontal: theme.spacing.lg,
-    },
-    heading: {
-      fontSize: 24,
-      fontWeight: "bold",
-      color: theme.colors.text,
-      marginBottom: theme.spacing.sm,
-      textAlign: "center",
-    },
-    subText: {
-      fontSize: 14,
-      color: theme.colors.textMuted,
-      textAlign: "center",
-    },
-    loginButton: {
-      backgroundColor: theme.colors.accentMid,
-      paddingVertical: 12,
-      paddingHorizontal: 24,
-      borderRadius: 999,
-      alignItems: "center",
-      width: "100%",
-      marginBottom: theme.spacing.md,
-    },
-    loginButtonText: {
-      color: theme.colors.primaryDark,
-      fontSize: 16,
-      fontWeight: "600",
-    },
-    registerButton: {
-      borderWidth: 2,
-      borderColor: theme.colors.accentMid,
-      paddingVertical: 12,
-      paddingHorizontal: 24,
-      borderRadius: 999,
-      alignItems: "center",
-      width: "100%",
-    },
-    registerButtonText: {
-      color: theme.colors.accentMid,
-      fontSize: 16,
-      fontWeight: "600",
-    },
-    cardWrap: {
-      marginHorizontal: 16,
-      marginBottom: theme.spacing.sm, 
-   },
-    actionRow: {
-      flexDirection: "row",
-      alignItems: "center",
-    },
-    actionButtonGrow: {
-      flex: 1,
-    },
-  });
 
   return (
     <CRScreen
@@ -968,6 +994,87 @@ export default function ProfileScreen() {
         </View>
       </CRCard>
       </View>
+
+      {/* Delete Account Section */}
+      <View style={styles.cardWrap}>
+      <CRCard>
+        <CRButton
+          title="Delete Account"
+          variant="danger"
+          onPress={() => setDeleteConfirmVisible(true)}
+          style={{ width: '100%' }}
+        />
+        <Text style={{ 
+          color: theme.colors.textMuted, 
+          fontSize: 12, 
+          marginTop: theme.spacing.sm,
+          textAlign: 'center'
+        }}>
+          Permanently delete your account and all associated data
+        </Text>
+      </CRCard>
+      </View>
+
+      {/* Delete Account Confirmation Modal */}
+      {deleteConfirmVisible && (
+        <View style={{ 
+          position: 'absolute', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+        }}>
+          <View style={{
+            backgroundColor: theme.colors.background,
+            borderRadius: 12,
+            paddingHorizontal: theme.spacing.lg,
+            paddingVertical: theme.spacing.lg,
+            marginHorizontal: 20,
+            maxWidth: 400,
+          }}>
+            <Text style={{ 
+              fontSize: 18, 
+              fontWeight: '700', 
+              color: theme.colors.text,
+              marginBottom: theme.spacing.md,
+              textAlign: 'center'
+            }}>
+              Delete Account?
+            </Text>
+
+            <Text style={{ 
+              fontSize: 14, 
+              color: theme.colors.textMuted,
+              marginBottom: theme.spacing.md,
+              lineHeight: 20,
+            }}>
+              This action is permanent and cannot be undone. Your account and all associated data (routes, events, groups) will be permanently deleted.
+            </Text>
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <CRButton
+                title={deleting ? "Deleting…" : "Delete"}
+                variant="danger"
+                loading={deleting}
+                disabled={deleting}
+                onPress={handleDeleteAccount}
+                style={{ flex: 1 }}
+              />
+              <CRButton
+                title="Cancel"
+                variant="accentMid"
+                disabled={deleting}
+                onPress={() => setDeleteConfirmVisible(false)}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Debug Logs Section */}
       <View style={styles.cardWrap}>
