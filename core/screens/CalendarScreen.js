@@ -735,7 +735,7 @@ export default function CalendarScreen() {
                 )}
 
                 {/* Share button - only for event creator */}
-                {selectedEvent.createdBy === user?.uid && (
+                {((selectedEvent.createdBy === user?.uid) || (selectedEvent.userId === user?.uid)) && (
                   <TouchableOpacity
                     style={styles.shareEventButton}
                     onPress={openShareModal}
@@ -747,11 +747,13 @@ export default function CalendarScreen() {
 
                 {/* Delete button - only for event creator */}
                 {(() => {
-                  const isCreator = selectedEvent.createdBy === user?.uid;
+                  const isCreator = (selectedEvent.createdBy === user?.uid) || (selectedEvent.userId === user?.uid);
                   console.log('[CalendarScreen] Delete button check:', {
                     eventCreatedBy: selectedEvent?.createdBy,
+                    eventUserId: selectedEvent?.userId,
                     userId: user?.uid,
                     isCreator,
+                    selectedEventKeys: Object.keys(selectedEvent || {}),
                   });
                   return isCreator && (
                     <TouchableOpacity
