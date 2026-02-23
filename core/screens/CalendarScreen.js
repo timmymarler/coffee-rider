@@ -735,48 +735,29 @@ export default function CalendarScreen() {
                 )}
 
                 {/* Share button - only for event creator */}
-                {(() => {
-                  const isCreator = (selectedEvent.createdBy === user?.uid) || (selectedEvent.userId === user?.uid);
-                  console.log('[CalendarScreen] Share button check:', {
-                    eventCreatedBy: selectedEvent?.createdBy,
-                    eventUserId: selectedEvent?.userId,
-                    userId: user?.uid,
-                    isCreator,
-                  });
-                  return isCreator && (
-                    <TouchableOpacity
-                      style={styles.shareEventButton}
-                      onPress={openShareModal}
-                    >
-                      <Ionicons name="share-social" size={20} color={theme.colors.accentMid} />
-                      <Text style={styles.shareEventButtonText}>Share Event</Text>
-                    </TouchableOpacity>
-                  );
-                })()}
+                {((selectedEvent.createdBy === user?.uid) || (selectedEvent.userId === user?.uid)) && (
+                  <TouchableOpacity
+                    style={styles.shareEventButton}
+                    onPress={openShareModal}
+                  >
+                    <Ionicons name="share-social" size={20} color={theme.colors.accentMid} />
+                    <Text style={styles.shareEventButtonText}>Share Event</Text>
+                  </TouchableOpacity>
+                )}
 
 
                 {/* Delete button - only for event creator */}
-                {(() => {
-                  const isCreator = (selectedEvent.createdBy === user?.uid) || (selectedEvent.userId === user?.uid);
-                  console.log('[CalendarScreen] Delete button check:', {
-                    eventCreatedBy: selectedEvent?.createdBy,
-                    eventUserId: selectedEvent?.userId,
-                    userId: user?.uid,
-                    isCreator,
-                    selectedEventKeys: Object.keys(selectedEvent || {}),
-                  });
-                  return isCreator && (
-                    <TouchableOpacity
-                      style={styles.deleteEventButton}
-                      onPress={() => {
-                        setDeleteConfirmVisible(true);
-                      }}
-                    >
-                      <MaterialCommunityIcons name="trash-can" size={20} color={colors.danger} />
-                      <Text style={styles.deleteEventButtonText}>Delete Event</Text>
-                    </TouchableOpacity>
-                  );
-                })()}
+                {((selectedEvent.createdBy === user?.uid) || (selectedEvent.userId === user?.uid)) && (
+                  <TouchableOpacity
+                    style={styles.deleteEventButton}
+                    onPress={() => {
+                      setDeleteConfirmVisible(true);
+                    }}
+                  >
+                    <MaterialCommunityIcons name="trash-can" size={20} color={colors.danger} />
+                    <Text style={styles.deleteEventButtonText}>Delete Event</Text>
+                  </TouchableOpacity>
+                )}
 
                 <View style={{ height: 20 }} />
               </ScrollView>
