@@ -1482,12 +1482,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       clearWaypoints();
       setRouteCoords([]);
       setRouteVersion(v => v + 1);
-      setIsPedestrianRoute(false);
-      setIsCyclingRoute(false);
-      setIsCarRoute(false);
-      setIsMotorcycleRoute(false);
-      setIsCarRoute(false);
-      setIsMotorcycleRoute(false);
       routeFittedRef.current = false;
       setRouteClearedByUser(false); // Ensure route building is not blocked
 
@@ -1573,7 +1567,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!routeSteps || routeSteps.length === 0) return;
     if (!routeCoords || routeCoords.length === 0) return;
 
-    const STEP_ADVANCE_THRESHOLD_METERS = 15; // Advance when <15m from step end and moving forward
+    const STEP_ADVANCE_THRESHOLD_METERS = 0; // Advance only AFTER passing the junction (0m = at/past the point)
     const MAX_BACKTRACK_TOLERANCE_METERS = 30; // Allow 30m backward before considering off-track
 
     // Step 1: Find user's closest point on the polyline
@@ -1831,8 +1825,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
     }
 
-    // Only include points the user has actually passed (within 50m)
-    const completedIdx = minDistance < 50 ? closestIdx : Math.max(0, closestIdx - 1);
+    // Only include points the user has actually passed (within 5m - must be close/past the point)
+    const completedIdx = minDistance < 5 ? closestIdx : Math.max(0, closestIdx - 1);
 
     // Split polyline at the current user location
     return {
