@@ -1,21 +1,21 @@
 // core/auth/register.js
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useRouter } from "expo-router";
 import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { useContext, useEffect, useState } from "react";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 
 import { AuthContext } from "@/core/context/AuthContext";
@@ -24,7 +24,7 @@ import { RIDER_CATEGORIES } from "@core/config/categories/rider";
 import theme from "@themes";
 import { addDoc, collection, doc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import AuthLayout from "./AuthLayout";
-import { initializeGoogleSignIn, isGoogleSignInAvailable, isAppleSignInAvailable, signInWithGoogle, signInWithApple } from "./socialAuth";
+import { initializeGoogleSignIn, isAppleSignInAvailable, isGoogleSignInAvailable, signInWithApple, signInWithGoogle } from "./socialAuth";
 
 const ROLES = [
   { id: "user", label: "User", description: "Find coffee stops" },

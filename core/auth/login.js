@@ -1,27 +1,27 @@
 // core/auth/login.js
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth } from "@config/firebase";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import theme from "@themes";
 import { useRouter } from "expo-router";
 import { sendEmailVerification, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { useContext, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import AuthLayout from "./AuthLayout";
 import RegisterScreen from "./register";
 import { resetPassword } from "./resetPassword";
-import { initializeGoogleSignIn, isGoogleSignInAvailable, isAppleSignInAvailable, signInWithGoogle, signInWithApple } from "./socialAuth";
+import { initializeGoogleSignIn, isAppleSignInAvailable, isGoogleSignInAvailable, signInWithApple, signInWithGoogle } from "./socialAuth";
 
 export default function LoginScreen() {
   const router = useRouter();

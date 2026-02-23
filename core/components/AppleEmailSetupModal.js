@@ -1,21 +1,21 @@
-import React, { useContext, useState } from "react";
-import {
-  Alert,
-  Modal,
-  Text,
-  TouchableOpacity,
-  View,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from "react-native";
-import { updateProfile, updateEmail } from "firebase/auth";
-import { doc, updateDoc } from "firebase/firestore";
-import { auth, db } from "@config/firebase";
-import { AuthContext } from "@core/context/AuthContext";
-import { useStyles } from "@themes/index";
+import { db } from "@config/firebase";
 import CRInput from "@core/components/CRInput";
 import CRLabel from "@core/components/CRLabel";
+import { AuthContext } from "@core/context/AuthContext";
+import { useStyles } from "@themes/index";
+import { updateEmail, updateProfile } from "firebase/auth";
+import { doc, updateDoc } from "firebase/firestore";
+import { useContext, useState } from "react";
+import {
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 export default function AppleEmailSetupModal() {
   const { user, needsAppleEmailSetup, completeAppleEmailSetup } =
