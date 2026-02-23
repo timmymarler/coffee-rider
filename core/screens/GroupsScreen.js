@@ -7,6 +7,7 @@ import { TabBarContext } from "@context/TabBarContext";
 import { useTheme } from "@context/ThemeContext";
 import { useAllUserGroups, useGroupEvents, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
 import { acceptInvite, createGroup, declineInvite, leaveGroup, removeGroupMember, revokeInvite, sendInvite } from "@core/groups/service";
+import { deleteGroup } from "@core/groups/deleteGroup";
 import useActiveRide from "@core/map/routes/useActiveRide";
 import { useGroupSharedRoutes, useMembersActiveRides } from "@core/map/routes/useSharedRides";
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
@@ -367,13 +368,19 @@ export default function GroupsScreen() {
                                         justifyContent: 'center',
                                       }}
                                       onPress={() => {
+                                        const isRemovingOwn = m.uid === user?.uid;
+                                        const alertTitle = isRemovingOwn ? "Leave & Delete Group?" : "Remove Member?";
+                                        const alertMsg = isRemovingOwn 
+                                          ? "You are the only member. Leaving will delete the group." 
+                                          : `Remove ${m.displayName || m.email || m.uid} from the group?`;
+                                        
                                         Alert.alert(
-                                          "Remove Member?",
-                                          `Remove ${m.displayName || m.email || m.uid} from the group?`,
+                                          alertTitle,
+                                          alertMsg,
                                           [
                                             { text: "Cancel", style: "cancel" },
                                             {
-                                              text: "Remove",
+                                              text: isRemovingOwn ? "Leave & Delete" : "Remove",
                                               style: "destructive",
                                               onPress: async () => {
                                                 setRemovingMemberId(m.uid);
@@ -384,7 +391,19 @@ export default function GroupsScreen() {
                                                     userId: user?.uid,
                                                     capabilities,
                                                   });
-                                                  Alert.alert("Removed", "Member has been removed from the group.");
+                                                  
+                                                  // If owner removed themselves (only member), delete the group
+                                                  if (isRemovingOwn) {
+                                                    try {
+                                                      await deleteGroup(selectedGroupId, user?.uid);
+                                                      Alert.alert("Deleted", "Group has been deleted.");
+                                                      setSelectedGroupId(null);
+                                                    } catch (deleteErr) {
+                                                      Alert.alert("Note", "Member removed but group deletion failed. " + deleteErr.message);
+                                                    }
+                                                  } else {
+                                                    Alert.alert("Removed", "Member has been removed from the group.");
+                                                  }
                                                 } catch (err) {
                                                   Alert.alert("Unable to remove", err?.message || "Unexpected error");
                                                 } finally {
@@ -406,7 +425,7 @@ export default function GroupsScreen() {
                               </View>
                             );
                           })}
-                          {/* Leave Group button - only for non-owners */}
+                          {/* Leave Group button - only for non-owners or solo owners */}
                           {members.find(m => m.uid === user?.uid)?.role !== "owner" && (
                             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md }}>
                               <CRButton
