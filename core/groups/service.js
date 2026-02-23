@@ -10,6 +10,7 @@ import {
     updateDoc,
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
+import { findUserByContactEmail } from "@firebaseLocal/users";
 import {
     computeInviteExpiry,
     GROUP_INVITE_EXPIRY_DAYS,
@@ -67,7 +68,7 @@ export async function sendInvite({
   assertGroupsAccess(capabilities);
   if (!groupId) throw new Error("groupId is required");
   if (!inviterId) throw new Error("inviterId is required");
-  if (!inviteeUid && !inviteeEmail) throw new Error("inviteeUid or inviteeEmail is required");
+  if (!inviteeUid && !inviteeEmail) throw new Error("inviteeUid or contactEmail is required");
 
   // Verify inviter is the group owner
   const groupRef = doc(db, GROUPS_COLLECTION, groupId);
@@ -77,12 +78,22 @@ export async function sendInvite({
     throw new Error("Only the group owner can send invites");
   }
 
+  // If email provided, look up user by contactEmail to get UID
+  let finalUid = inviteeUid;
+  if (inviteeEmail && !inviteeUid) {
+    const foundUser = await findUserByContactEmail(inviteeEmail);
+    if (!foundUser) {
+      throw new Error(`No user found with email: ${inviteeEmail}`);
+    }
+    finalUid = foundUser.uid;
+  }
+
   const expiresAt = Timestamp.fromDate(computeInviteExpiry(expiryDays));
 
   return addDoc(collection(db, GROUP_INVITES_COLLECTION), {
     groupId,
     inviterId,
-    inviteeUid: inviteeUid || null,
+    inviteeUid: finalUid || null,
     inviteeEmail: inviteeEmail || null,
     role,
     status: GROUP_INVITE_STATUS.PENDING,

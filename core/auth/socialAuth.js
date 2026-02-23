@@ -120,6 +120,7 @@ export const signInWithGoogle = async () => {
         {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
+          contactEmail: firebaseUser.email, // Use real email for group invites
           displayName: firebaseUser.displayName || "Google User",
           photoURL: firebaseUser.photoURL,
           role: "user",
@@ -217,6 +218,7 @@ export const signInWithApple = async () => {
         {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
+          contactEmail: null, // Will be set when user fills the setup modal
           displayName: displayName,
           role: "user",
           authProvider: "apple",

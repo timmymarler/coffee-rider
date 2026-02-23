@@ -3,7 +3,7 @@ import CRInput from "@core/components/CRInput";
 import CRLabel from "@core/components/CRLabel";
 import { AuthContext } from "@core/context/AuthContext";
 import { useStyles } from "@themes/index";
-import { updateEmail, updateProfile } from "firebase/auth";
+import { updateProfile } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { useContext, useState } from "react";
 import {
@@ -50,20 +50,16 @@ export default function AppleEmailSetupModal() {
     try {
       setLoading(true);
 
-      // Update email in Firebase Auth
-      if (email !== user?.email) {
-        await updateEmail(user, email);
-      }
-
       // Update display name in Firebase Auth
       if (displayName !== user?.displayName) {
         await updateProfile(user, { displayName });
       }
 
-      // Update Firestore user document
+      // Update Firestore user document with contactEmail (not auth email)
+      // Auth email stays tied to Apple's provider for consistency
       const userDocRef = doc(db, "users", user.uid);
       await updateDoc(userDocRef, {
-        email,
+        contactEmail: email,
         displayName,
         updatedAt: new Date().toISOString(),
       });

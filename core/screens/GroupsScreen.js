@@ -246,12 +246,13 @@ export default function GroupsScreen() {
       content: (
         <View style={styles.cardWrap}>
           <CRCard>
-            <CRLabel>Send Invite (email or UID)</CRLabel>
+            <CRLabel>Send Invite</CRLabel>
             <CRInput
-              placeholder="rider@example.com"
+              placeholder="Enter email address"
               value={inviteeInput}
               onChangeText={setInviteeInput}
               autoCapitalize="none"
+              keyboardType="email-address"
             />
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md }}>
               <TouchableOpacity
@@ -277,8 +278,7 @@ export default function GroupsScreen() {
                   }
                   await sendInvite({
                     groupId: selectedGroupId,
-                    inviteeEmail: inviteeInput.includes("@") ? inviteeInput.trim() : null,
-                    inviteeUid: inviteeInput.includes("@") ? null : inviteeInput.trim(),
+                    inviteeEmail: inviteeInput.trim(),
                     inviterId: user.uid,
                     capabilities,
                   });
