@@ -2,7 +2,7 @@ import { db } from "@config/firebase";
 import CRInput from "@core/components/ui/CRInput";
 import CRLabel from "@core/components/ui/CRLabel";
 import { AuthContext } from "@core/context/AuthContext";
-import { useStyles } from "@themes/index";
+import theme from "@themes";
 import { updateProfile } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { useContext, useState } from "react";
@@ -20,7 +20,6 @@ import {
 export default function AppleEmailSetupModal() {
   const { user, needsAppleEmailSetup, completeAppleEmailSetup } =
     useContext(AuthContext);
-  const { theme } = useStyles();
 
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState(user?.displayName || "");
