@@ -56,10 +56,14 @@ export function useEvents(filters = {}) {
         const { getCapabilities } = require('@core/roles/capabilities');
         const caps = getCapabilities(profile?.role || 'guest');
         if (caps?.isAdmin) {
-          // No filtering for admin
+          // No filtering for admin (but still filter deleted)
+          eventsList = eventsList.filter(e => !e.deleted);
         } else {
           // Filter client-side for visibility and ownership
           eventsList = eventsList.filter((event) => {
+            // Skip deleted events for non-admins
+            if (event.deleted) return false;
+            
             // Always include events created by current user
             if (event.userId === user.uid || event.createdBy === user.uid) {
               return true;

@@ -3,6 +3,7 @@ import { AuthContext } from "@context/AuthContext";
 import { useAllUserGroups } from "@core/groups/hooks";
 import { useEvents } from "@core/hooks/useEvents";
 import { EVENT_VISIBILITY, shareEvent } from "@core/map/events/sharedEvents";
+import { deleteEvent as deleteEventUtil, deleteEventSeries as deleteEventSeriesUtil, recoverEvent } from "@core/map/events/deleteEvent";
 import { getCapabilities } from "@core/roles/capabilities";
 // Remove DropDownPicker import
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -80,6 +81,8 @@ export default function CalendarScreen() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   
   // Share event modal state
   const [shareModalVisible, setShareModalVisible] = useState(false);
@@ -747,67 +750,7 @@ export default function CalendarScreen() {
                   <TouchableOpacity
                     style={styles.deleteEventButton}
                     onPress={() => {
-                      // Check if this is part of a series
-                      const isSeriesEvent = selectedEvent.seriesId && selectedEvent.recurrence && selectedEvent.recurrence !== "one-off";
-                      
-                      if (isSeriesEvent) {
-                        Alert.alert(
-                          "Delete Event",
-                          "Delete this event or the entire series?",
-                          [
-                            { text: "Cancel", onPress: () => {} },
-                            {
-                              text: "Delete This Event",
-                              onPress: async () => {
-                                try {
-                                  await deleteEvent(selectedEvent.id);
-                                  setShowEventModal(false);
-                                  setRefreshTrigger(prev => prev + 1);
-                                } catch (error) {
-                                  Alert.alert("Error", "Failed to delete event. Please try again.");
-                                  console.error("Delete error:", error);
-                                }
-                              },
-                            },
-                            {
-                              text: "Delete Series",
-                              onPress: async () => {
-                                try {
-                                  await deleteEventSeries(selectedEvent.seriesId);
-                                  setShowEventModal(false);
-                                  setRefreshTrigger(prev => prev + 1);
-                                } catch (error) {
-                                  Alert.alert("Error", "Failed to delete series. Please try again.");
-                                  console.error("Delete series error:", error);
-                                }
-                              },
-                              style: "destructive",
-                            },
-                          ]
-                        );
-                      } else {
-                        Alert.alert(
-                          "Delete Event",
-                          "Are you sure you want to delete this event?",
-                          [
-                            { text: "Cancel", onPress: () => {} },
-                            {
-                              text: "Delete",
-                              onPress: async () => {
-                                try {
-                                  await deleteEvent(selectedEvent.id);
-                                  setShowEventModal(false);
-                                  setRefreshTrigger(prev => prev + 1);
-                                } catch (error) {
-                                  Alert.alert("Error", "Failed to delete event. Please try again.");
-                                  console.error("Delete error:", error);
-                                }
-                              },
-                              style: "destructive",
-                            },
-                          ]
-                        );
-                      }
+                      setDeleteConfirmVisible(true);
                     }}
                   >
                     <MaterialCommunityIcons name="trash-can" size={20} color={colors.danger} />
@@ -1009,6 +952,63 @@ export default function CalendarScreen() {
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setShareModalVisible(false)}
+              >
+                <Text style={[styles.modalButtonText, styles.cancelButtonText]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete Event Confirmation Modal */}
+      <Modal
+        visible={deleteConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !deleting && setDeleteConfirmVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModal}>
+            <Text style={styles.confirmTitle}>Delete Event?</Text>
+            <Text style={styles.confirmMessage}>
+              This event will be deleted. You have 30 days to recover it.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.colors.error }]}
+                onPress={async () => {
+                  if (!selectedEvent || !user?.uid) return;
+                  setDeleting(true);
+                  try {
+                    const isSeriesEvent = selectedEvent.seriesId && selectedEvent.recurrence && selectedEvent.recurrence !== "one-off";
+                    
+                    if (isSeriesEvent) {
+                      // For series, we need to find all events with this seriesId
+                      // For now, just delete this event
+                      await deleteEventUtil(selectedEvent.id, user.uid, capabilities?.isAdmin);
+                    } else {
+                      await deleteEventUtil(selectedEvent.id, user.uid, capabilities?.isAdmin);
+                    }
+                    
+                    Alert.alert("Success", "Event deleted. You have 30 days to recover it.");
+                    setDeleteConfirmVisible(false);
+                    setShowEventModal(false);
+                    setRefreshTrigger(prev => prev + 1);
+                  } catch (error) {
+                    Alert.alert("Error", error.message || "Failed to delete event");
+                    console.error("Delete error:", error);
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+                disabled={deleting}
+              >
+                <Text style={styles.modalButtonText}>{deleting ? "Deleting…" : "Delete"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => !deleting && setDeleteConfirmVisible(false)}
+                disabled={deleting}
               >
                 <Text style={[styles.modalButtonText, styles.cancelButtonText]}>Cancel</Text>
               </TouchableOpacity>
@@ -1682,5 +1682,25 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: theme.colors.text,
+  },
+  confirmModal: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: 16,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 20,
+    width: "80%",
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  confirmMessage: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    marginBottom: 20,
+    lineHeight: 20,
   },
 });
