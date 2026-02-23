@@ -30,7 +30,8 @@ export function useAvailableSharedRides(userGroups = []) {
     const publicQuery = query(
       collection(db, "routes"),
       where("visibility", "==", RIDE_VISIBILITY.PUBLIC),
-      where("isActive", "==", true)
+      where("isActive", "==", true),
+      where("deleted", "!=", true)
     );
 
     const unsubPublic = onSnapshot(publicQuery, snap => {
@@ -51,6 +52,7 @@ export function useAvailableSharedRides(userGroups = []) {
         collection(db, "routes"),
         where("visibility", "==", RIDE_VISIBILITY.GROUP),
         where("isActive", "==", true),
+        where("deleted", "!=", true),
         where("groupId", "in", userGroups.map(g => g.id))
       );
 
@@ -93,7 +95,8 @@ export function useUserActiveRides() {
     const q = query(
       collection(db, "routes"),
       where("createdBy", "==", user.uid),
-      where("isActive", "==", true)
+      where("isActive", "==", true),
+      where("deleted", "!=", true)
     );
 
     const unsubscribe = onSnapshot(q, snap => {
@@ -173,7 +176,8 @@ export function useGroupSharedRoutes(groupId) {
     const q = query(
       collection(db, "routes"),
       where("visibility", "==", RIDE_VISIBILITY.GROUP),
-      where("groupId", "==", groupId)
+      where("groupId", "==", groupId),
+      where("deleted", "!=", true)
     );
 
     const unsubscribe = onSnapshot(q, snap => {
