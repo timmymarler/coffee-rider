@@ -7,6 +7,8 @@ import { useAllUserGroups } from "@core/groups/hooks";
 import { RIDE_VISIBILITY, shareRoute } from "@core/map/routes/sharedRides";
 import { useSavedRides } from "@core/map/routes/useSavedRides";
 import { useSavedRoutes } from "@core/map/routes/useSavedRoutes";
+import { deleteRoute } from "@core/map/routes/deleteRoute";
+import { recoverRoute } from "@core/map/routes/recoverRoute";
 import { useWaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -49,6 +51,7 @@ const FILTER_OPTIONS = [
   { key: "private", label: "Private" },
   { key: "public", label: "Public" },
   { key: "shared", label: "Shared" },
+  { key: "deleted", label: "Recently Deleted" },
 ];
 
 export default function SavedRoutesScreen() {
@@ -327,15 +330,42 @@ export default function SavedRoutesScreen() {
     cancelButtonText: {
       color: theme.colors.text,
     },
+    confirmModal: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+      paddingHorizontal: 24,
+      paddingTop: 24,
+      paddingBottom: 20,
+      width: "80%",
+    },
+    confirmTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    confirmMessage: {
+      fontSize: 14,
+      color: theme.colors.textMuted,
+      marginBottom: 20,
+      lineHeight: 20,
+    },
   });
 
   const [viewMode, setViewMode] = useState("routes"); // 'routes' or 'rides'
   const [sortBy, setSortBy] = useState("created");
   const [filterBy, setFilterBy] = useState("all");
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [routeToDelete, setRouteToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [recoverConfirmVisible, setRecoverConfirmVisible] = useState(false);
+  const [routeToRecover, setRouteToRecover] = useState(null);
+  const [recovering, setRecovering] = useState(false);
 
   // Include public routes when viewing all or explicitly public
   const includePublic = filterBy === "all" || filterBy === "public";
-  const { routes, loading: loadingRoutes } = useSavedRoutes(includePublic);
+  const includeDeleted = filterBy === "deleted";
+  const { routes, loading: loadingRoutes } = useSavedRoutes(includePublic, includeDeleted);
   const { rides, loading: loadingRides } = useSavedRides();
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState(null);
@@ -457,6 +487,50 @@ export default function SavedRoutesScreen() {
     setSelectedVisibility(RIDE_VISIBILITY.PRIVATE);
     setSelectedGroupId(null);
     setShareModalVisible(true);
+  }
+
+  async function handleDeleteRoute() {
+    if (!routeToDelete) return;
+    setDeleting(true);
+    try {
+      await deleteRoute(routeToDelete);
+      Alert.alert("Success", "Route deleted. You have 30 days to recover it.");
+      setDeleteConfirmVisible(false);
+      setRouteToDelete(null);
+      // Re-fetch routes will happen automatically via hook
+    } catch (error) {
+      console.error("Error deleting route:", error);
+      Alert.alert("Error", error.message || "Failed to delete route");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleRecoverRoute() {
+    if (!routeToRecover) return;
+    setRecovering(true);
+    try {
+      await recoverRoute(routeToRecover);
+      Alert.alert("Success", "Route recovered!");
+      setRecoverConfirmVisible(false);
+      setRouteToRecover(null);
+      // Re-fetch routes will happen automatically via hook
+    } catch (error) {
+      console.error("Error recovering route:", error);
+      Alert.alert("Error", error.message || "Failed to recover route");
+    } finally {
+      setRecovering(false);
+    }
+  }
+
+  function confirmDeleteRoute(route) {
+    setRouteToDelete(route.id);
+    setDeleteConfirmVisible(true);
+  }
+
+  function confirmRecoverRoute(route) {
+    setRouteToRecover(route.id);
+    setRecoverConfirmVisible(true);
   }
 
   function renderHeader() {
@@ -583,6 +657,19 @@ export default function SavedRoutesScreen() {
                 <Text style={dynamicStyles.badgeText}>{groupInfo.name}</Text>
               </View>
             )}
+            {!isRide && item.deleted && item.deletedAt && (
+              <View style={[dynamicStyles.badge, { borderColor: theme.colors.error, backgroundColor: hexToRgba(theme.colors.error, 0.15) }]}>
+                <MaterialCommunityIcons name="delete-outline" size={12} color={theme.colors.error} />
+                <Text style={[dynamicStyles.badgeText, { color: theme.colors.error }]}>
+                  {(() => {
+                    const deletedTime = item.deletedAt.seconds * 1000;
+                    const now = Date.now();
+                    const daysLeft = Math.ceil((deletedTime + 30 * 24 * 60 * 60 * 1000 - now) / (24 * 60 * 60 * 1000));
+                    return Math.max(0, daysLeft);
+                  })()} days
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={dynamicStyles.metaRow}>
@@ -652,19 +739,46 @@ export default function SavedRoutesScreen() {
               />
               <Text style={dynamicStyles.actionLabel}>Save Route</Text>
             </TouchableOpacity>
-          ) : canShare ? (
+          ) : item.deleted ? (
             <TouchableOpacity
               style={dynamicStyles.actionButton}
-              onPress={() => openShareModal(item)}
+              onPress={() => confirmRecoverRoute(item)}
             >
               <MaterialCommunityIcons
-                name="share-variant"
+                name="restore"
                 size={18}
-                color={theme.colors.accentMid}
+                color={theme.colors.success}
               />
-              <Text style={dynamicStyles.actionLabel}>Share</Text>
+              <Text style={dynamicStyles.actionLabel}>Recover</Text>
             </TouchableOpacity>
-          ) : null}
+          ) : (
+            <>
+              {canShare && (
+                <TouchableOpacity
+                  style={dynamicStyles.actionButton}
+                  onPress={() => openShareModal(item)}
+                >
+                  <MaterialCommunityIcons
+                    name="share-variant"
+                    size={18}
+                    color={theme.colors.accentMid}
+                  />
+                  <Text style={dynamicStyles.actionLabel}>Share</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={dynamicStyles.actionButton}
+                onPress={() => confirmDeleteRoute(item)}
+              >
+                <MaterialCommunityIcons
+                  name="delete-outline"
+                  size={18}
+                  color={theme.colors.error}
+                />
+                <Text style={dynamicStyles.actionLabel}>Delete</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     );
@@ -874,6 +988,68 @@ export default function SavedRoutesScreen() {
               />
               <CRButton
                 onPress={() => setShareModalVisible(false)}
+                title="Cancel"
+                style={[dynamicStyles.modalButton, dynamicStyles.cancelButton]}
+                textStyle={dynamicStyles.cancelButtonText}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={deleteConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !deleting && setDeleteConfirmVisible(false)}
+      >
+        <View style={dynamicStyles.modalOverlay}>
+          <View style={dynamicStyles.confirmModal}>
+            <Text style={dynamicStyles.confirmTitle}>Delete Route?</Text>
+            <Text style={dynamicStyles.confirmMessage}>
+              This route will be deleted. You have 30 days to recover it.
+            </Text>
+            <View style={dynamicStyles.buttonRow}>
+              <CRButton
+                onPress={handleDeleteRoute}
+                title="Delete"
+                loading={deleting}
+                style={[dynamicStyles.modalButton, { backgroundColor: theme.colors.error }]}
+              />
+              <CRButton
+                onPress={() => !deleting && setDeleteConfirmVisible(false)}
+                title="Cancel"
+                style={[dynamicStyles.modalButton, dynamicStyles.cancelButton]}
+                textStyle={dynamicStyles.cancelButtonText}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Recover Confirmation Modal */}
+      <Modal
+        visible={recoverConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !recovering && setRecoverConfirmVisible(false)}
+      >
+        <View style={dynamicStyles.modalOverlay}>
+          <View style={dynamicStyles.confirmModal}>
+            <Text style={dynamicStyles.confirmTitle}>Recover Route?</Text>
+            <Text style={dynamicStyles.confirmMessage}>
+              This route will be restored and visible again.
+            </Text>
+            <View style={dynamicStyles.buttonRow}>
+              <CRButton
+                onPress={handleRecoverRoute}
+                title="Recover"
+                loading={recovering}
+                style={[dynamicStyles.modalButton, { backgroundColor: theme.colors.success }]}
+              />
+              <CRButton
+                onPress={() => !recovering && setRecoverConfirmVisible(false)}
                 title="Cancel"
                 style={[dynamicStyles.modalButton, dynamicStyles.cancelButton]}
                 textStyle={dynamicStyles.cancelButtonText}
