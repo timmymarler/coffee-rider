@@ -203,7 +203,9 @@ export function useAllUserGroups(userId) {
             const g = await getDoc(doc(db, GROUPS_COLLECTION, gid));
             return g.exists() ? { id: gid, ...g.data() } : null;
           });
-          const rows = (await Promise.all(promises)).filter(Boolean);
+          const rows = (await Promise.all(promises))
+            .filter(Boolean)
+            .filter(g => !g.deleted); // Filter out soft-deleted groups
           setGroups(rows);
           setError(null);
           setLoading(false);
