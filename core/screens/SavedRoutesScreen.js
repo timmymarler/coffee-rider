@@ -74,7 +74,7 @@ export default function SavedRoutesScreen() {
   // Create theme-aware styles inside component so they update when theme changes
   const dynamicStyles = StyleSheet.create({
     list: {
-      paddingBottom: 24,
+      paddingBottom: 120,
     },
     header: {
       backgroundColor: theme.colors.background,
@@ -388,6 +388,9 @@ export default function SavedRoutesScreen() {
         break;
       case "shared":
         list = list.filter((r) => r.visibility === RIDE_VISIBILITY.GROUP);
+        break;
+      case "deleted":
+        list = list.filter((r) => r.deleted === true);
         break;
       case "all":
       default:
