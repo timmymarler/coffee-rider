@@ -53,6 +53,7 @@ export async function saveRoute({
       name: name || null,
       createdBy: user.uid,
       createdAt: serverTimestamp(),
+      deleted: false,
       ...routeData,
     });
   }
