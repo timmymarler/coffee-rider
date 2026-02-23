@@ -746,17 +746,25 @@ export default function CalendarScreen() {
                 )}
 
                 {/* Delete button - only for event creator */}
-                {selectedEvent.createdBy === user?.uid && (
-                  <TouchableOpacity
-                    style={styles.deleteEventButton}
-                    onPress={() => {
-                      setDeleteConfirmVisible(true);
-                    }}
-                  >
-                    <MaterialCommunityIcons name="trash-can" size={20} color={colors.danger} />
-                    <Text style={styles.deleteEventButtonText}>Delete Event</Text>
-                  </TouchableOpacity>
-                )}
+                {(() => {
+                  const isCreator = selectedEvent.createdBy === user?.uid;
+                  console.log('[CalendarScreen] Delete button check:', {
+                    eventCreatedBy: selectedEvent?.createdBy,
+                    userId: user?.uid,
+                    isCreator,
+                  });
+                  return isCreator && (
+                    <TouchableOpacity
+                      style={styles.deleteEventButton}
+                      onPress={() => {
+                        setDeleteConfirmVisible(true);
+                      }}
+                    >
+                      <MaterialCommunityIcons name="trash-can" size={20} color={colors.danger} />
+                      <Text style={styles.deleteEventButtonText}>Delete Event</Text>
+                    </TouchableOpacity>
+                  );
+                })()}
 
                 <View style={{ height: 20 }} />
               </ScrollView>
