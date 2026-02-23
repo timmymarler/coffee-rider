@@ -425,48 +425,67 @@ export default function GroupsScreen() {
                               </View>
                             );
                           })}
-                          {/* Leave Group button - only for non-owners or solo owners */}
-                          {members.find(m => m.uid === user?.uid)?.role !== "owner" && (
-                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md }}>
-                              <CRButton
-                                title={leavingGroup ? "Leaving…" : "Leave Group"}
-                                variant="danger"
-                                loading={leavingGroup}
-                                onPress={() => {
-                                  Alert.alert(
-                                    "Leave Group?",
-                                    "You will no longer have access to this group and its shared routes.",
-                                    [
-                                      { text: "Cancel", style: "cancel" },
-                                      {
-                                        text: "Leave",
-                                        style: "destructive",
-                                        onPress: async () => {
-                                          setLeavingGroup(true);
-                                          try {
-                                            await leaveGroup({
-                                              groupId: selectedGroupId,
-                                              userId: user?.uid,
-                                            });
-                                            setSelectedGroupId(null); // Hide Leave button immediately
-                                            setTimeout(() => {
-                                              Alert.alert("Left", "You have left the group.");
-                                            }, 100);
-                                          } catch (err) {
-                                            Alert.alert("Unable to leave", err?.message || "Unexpected error");
-                                          } finally {
-                                            setLeavingGroup(false);
-                                          }
+                          {/* Leave Group button - for non-owners or solo owners */}
+                          {(() => {
+                            const userRole = members.find(m => m.uid === user?.uid)?.role;
+                            const isSoloOwner = userRole === "owner" && members.length === 1;
+                            const isNonOwner = userRole !== "owner";
+                            return (isSoloOwner || isNonOwner) ? (
+                              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md }}>
+                                <CRButton
+                                  title={leavingGroup ? (isSoloOwner ? "Deleting…" : "Leaving…") : (isSoloOwner ? "Leave & Delete" : "Leave Group")}
+                                  variant="danger"
+                                  loading={leavingGroup}
+                                  onPress={() => {
+                                    const msg = isSoloOwner
+                                      ? "You are the only member. Leaving will delete the group."
+                                      : "You will no longer have access to this group and its shared routes.";
+                                    
+                                    Alert.alert(
+                                      isSoloOwner ? "Leave & Delete Group?" : "Leave Group?",
+                                      msg,
+                                      [
+                                        { text: "Cancel", style: "cancel" },
+                                        {
+                                          text: isSoloOwner ? "Leave & Delete" : "Leave",
+                                          style: "destructive",
+                                          onPress: async () => {
+                                            setLeavingGroup(true);
+                                            try {
+                                              if (isSoloOwner) {
+                                                // Delete the group
+                                                await deleteGroup(selectedGroupId, user?.uid);
+                                                setSelectedGroupId(null);
+                                                setTimeout(() => {
+                                                  Alert.alert("Deleted", "Group has been deleted.");
+                                                }, 100);
+                                              } else {
+                                                // Leave the group
+                                                await leaveGroup({
+                                                  groupId: selectedGroupId,
+                                                  userId: user?.uid,
+                                                });
+                                                setSelectedGroupId(null);
+                                                setTimeout(() => {
+                                                  Alert.alert("Left", "You have left the group.");
+                                                }, 100);
+                                              }
+                                            } catch (err) {
+                                              Alert.alert("Unable to " + (isSoloOwner ? "delete" : "leave"), err?.message || "Unexpected error");
+                                            } finally {
+                                              setLeavingGroup(false);
+                                            }
+                                          },
                                         },
-                                      },
-                                    ]
-                                  );
-                                }}
-                                disabled={leavingGroup}
-                                style={{ minWidth: 120, alignSelf: 'flex-end' }}
-                              />
-                            </View>
-                          )}
+                                      ]
+                                    );
+                                  }}
+                                  disabled={leavingGroup}
+                                  style={{ minWidth: 120, alignSelf: 'flex-end' }}
+                                />
+                              </View>
+                            ) : null;
+                          })()}
                         </>
                       )}
                     </>
