@@ -35,7 +35,7 @@ const ROLES = [
 export default function RegisterScreen({ onBack }) {
   const router = useRouter();
   const { colors, spacing } = theme;
-  const { enterGuestMode } = useContext(AuthContext);
+  const { enterGuestMode, requireAppleEmailSetup } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -149,6 +149,12 @@ export default function RegisterScreen({ onBack }) {
     setSocialProcess('apple');
     try {
       await signInWithApple();
+      
+      // Check if user has Privacy Relay email and prompt for real email
+      if (auth.currentUser?.email?.includes('@privaterelay.appleid.com')) {
+        requireAppleEmailSetup();
+      }
+      
       setSocialSubmitting(false);
       setSocialProcess(null);
       router.replace("map");

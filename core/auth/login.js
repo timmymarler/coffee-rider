@@ -26,7 +26,7 @@ import { initializeGoogleSignIn, isGoogleSignInAvailable, isAppleSignInAvailable
 export default function LoginScreen() {
   const router = useRouter();
   const { colors, spacing } = theme;
-  const { enterGuestMode, user, emailVerified } = useContext(AuthContext);
+  const { enterGuestMode, user, emailVerified, requireAppleEmailSetup } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -152,6 +152,12 @@ export default function LoginScreen() {
     setSocialProcess('apple');
     try {
       await signInWithApple();
+      
+      // Check if user has Privacy Relay email and prompt for real email
+      if (auth.currentUser?.email?.includes('@privaterelay.appleid.com')) {
+        requireAppleEmailSetup();
+      }
+      
       setSocialSubmitting(false);
       setSocialProcess(null);
       router.replace("map");

@@ -33,6 +33,7 @@ export default function AuthProvider({ children }) {
   const [isGuest, setIsGuest] = useState(false); // Guest mode flag
   const [loading, setLoading] = useState(true);
   const [emailVerified, setEmailVerified] = useState(false); // Email verification status
+  const [needsAppleEmailSetup, setNeedsAppleEmailSetup] = useState(false); // Apple user needs to add email
   const [versionStatus, setVersionStatus] = useState({
     status: "current",
     hasUpdate: false,
@@ -206,6 +207,16 @@ export default function AuthProvider({ children }) {
     return updated;
   }
 
+  // Set flag for Apple users to add email
+  function requireAppleEmailSetup() {
+    setNeedsAppleEmailSetup(true);
+  }
+
+  // Clear flag after email setup complete
+  function completeAppleEmailSetup() {
+    setNeedsAppleEmailSetup(false);
+  }
+
   // ----------------------------------------
   // INITIALIZATION: Restore guest mode and session on app startup
   // ----------------------------------------
@@ -319,12 +330,15 @@ export default function AuthProvider({ children }) {
     emailVerified,
     loading,
     versionStatus,
+    needsAppleEmailSetup,
     login,
     logout,
     register,
     refreshProfile,
     enterGuestMode,
     exitGuestMode,
+    requireAppleEmailSetup,
+    completeAppleEmailSetup,
   };
 
   return (

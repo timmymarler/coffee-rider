@@ -5,6 +5,7 @@ import { RoutingPreferencesProvider } from "@context/RoutingPreferencesContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import { ThemeProvider } from "@context/ThemeContext";
 import AppHeader from "@core/components/layout/AppHeader";
+import AppleEmailSetupModal from "@core/components/AppleEmailSetupModal";
 import SplashScreen from "@core/components/ui/SplashScreen";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
 import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
@@ -329,6 +330,8 @@ function LayoutContent() {
           onDismiss={handleDismissVersion}
         />
       )}
+
+      <AppleEmailSetupModal />
     </>
   );
 }
