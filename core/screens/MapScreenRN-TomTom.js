@@ -1750,13 +1750,35 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     if (closestDist > OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
       // User is significantly off-route (>200m) - reroute immediately
-      // At this distance, they're not on a parallel road, they've left the route entirely
+      // But add heading check: only reroute if also heading wrong way
+      let headingMissing = !userLocation.heading || userLocation.heading === -1;
+      let headingWrong = false;
+      
+      if (!headingMissing) {
+        let routeAheadIdx = Math.min(userPolylineIdx + 10, routeCoords.length - 1);
+        let routeBackIdx = Math.max(0, userPolylineIdx - 5);
+        
+        if (routeBackIdx !== routeAheadIdx && routeCoords[routeBackIdx] && routeCoords[routeAheadIdx]) {
+          try {
+            const routeBearing = calculateBearing(routeCoords[routeBackIdx], routeCoords[routeAheadIdx]);
+            const userHeading = userLocation.heading;
+            const headingDiff = getBearingDifference(routeBearing, userHeading);
+            
+            // At large distance, reroute even if heading is okay (they've truly left the route)
+            // But prioritize if heading is also wrong (>90°)
+            headingWrong = headingDiff > 90;
+          } catch (error) {
+            console.warn('[AutoReroute] Error calculating bearing for large off-route:', error);
+          }
+        }
+      }
+      
       shouldReroute = true;
-      rerouteReason = `significantly off-route (${closestDist.toFixed(0)}m)`;
+      rerouteReason = `severely off-route (${closestDist.toFixed(0)}m)${headingWrong ? ' + wrong heading' : ''}`;
     } else if (closestDist > BACKWARDS_THRESHOLD_METERS && closestDist <= OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
       // User is moderately off-route (80-200m) - check heading to see if heading backwards
       if (userLocation.heading !== undefined && userLocation.heading !== -1) {
-        let routeAheadIdx = Math.min(userPolylineIdx + 5, routeCoords.length - 1);
+        let routeAheadIdx = Math.min(userPolylineIdx + 10, routeCoords.length - 1);
         let routeBackIdx = Math.max(0, userPolylineIdx - 5);
         
         // Ensure we have valid points
