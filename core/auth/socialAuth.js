@@ -54,8 +54,6 @@ export const initializeGoogleSignIn = () => {
         "1001945286149-4oq0pkng0mlfps1vje2es9h69ja5561v.apps.googleusercontent.com",
       iosClientId:
         "1001945286149-vkem3dmdu6p4mld7vp5j2atncvv97uct.apps.googleusercontent.com",
-      androidClientId:
-        "1001945286149-81qbma27hbe3k91vq7pb7ckh1e8o2jrp.apps.googleusercontent.com",
       offlineAccess: true,
       scopes: ["profile", "email"],
     });
