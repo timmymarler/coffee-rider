@@ -3724,15 +3724,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       {/* Junction panel (top-left) during navigation - helmet visible */}
       {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
         (() => {
-          // Only show next instruction if we've passed (or are at) the current junction
-          // Otherwise show current instruction with "Continue"
-          const showNextInstruction = nextJunctionDistance != null && nextJunctionDistance < 30; // Show next instruction when within 30m of junction
-          const displayStepIndex = showNextInstruction ? Math.min(currentStepIndex + 1, routeSteps.length - 1) : currentStepIndex;
-          const step = routeSteps[displayStepIndex];
-          
-          // For current step display, show distance to next junction
-          // For next step display, show 0 (already at/past it)
-          const displayDistance = showNextInstruction ? 0 : nextJunctionDistance;
+          // Always display the CURRENT step instruction with distance to its end
+          // The step automatically advances via currentStepIndex when you pass the junction
+          // So the next instruction only appears AFTER you've passed the current one
+          const step = routeSteps[currentStepIndex];
           
           // Normalize maneuver type
           let m = (step?.maneuver || "STRAIGHT").trim().toUpperCase();
@@ -3745,7 +3740,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               : MANEUVER_ICON_MAP.STRAIGHT;
           }
 
-          const distText = displayDistance != null ? formatDistanceImperial(displayDistance) : "";
+          const distText = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : "";
           
           // Determine instruction label - handle roundabouts specially
           let label = meta.label;
