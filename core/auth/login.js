@@ -156,11 +156,15 @@ export default function LoginScreen() {
       // Check if user has Privacy Relay email and prompt for real email
       if (auth.currentUser?.email?.includes('@privaterelay.appleid.com')) {
         requireAppleEmailSetup();
+        // Don't navigate - let the modal show first
+        setSocialSubmitting(false);
+        setSocialProcess(null);
+      } else {
+        // No email setup needed, proceed to map
+        setSocialSubmitting(false);
+        setSocialProcess(null);
+        router.replace("map");
       }
-      
-      setSocialSubmitting(false);
-      setSocialProcess(null);
-      router.replace("map");
     } catch (err) {
       setSocialSubmitting(false);
       setSocialProcess(null);
