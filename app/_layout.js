@@ -4,7 +4,6 @@ import AuthProvider, { AuthContext } from "@context/AuthContext";
 import { RoutingPreferencesProvider } from "@context/RoutingPreferencesContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import { ThemeProvider } from "@context/ThemeContext";
-import AppleEmailSetupModal from "@core/components/AppleEmailSetupModal";
 import AppHeader from "@core/components/layout/AppHeader";
 import SplashScreen from "@core/components/ui/SplashScreen";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
@@ -271,7 +270,7 @@ function ThemeAwareLayoutContent() {
 function LayoutContent() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [versionModalDismissed, setVersionModalDismissed] = useState(false);
-  const { user, loading, versionStatus, isGuest, emailVerified, needsAppleEmailSetup } = useContext(AuthContext);
+  const { user, loading, versionStatus, isGuest, emailVerified } = useContext(AuthContext);
 
   // Show version modal when status changes and update is available
   useEffect(() => {
@@ -299,8 +298,8 @@ function LayoutContent() {
     return null;
   }
 
-  // Not authenticated and not in guest mode, OR authenticated but not verified, OR needs Apple email setup: show login screen
-  const showLoginScreen = (!user && !isGuest) || (user && !emailVerified) || needsAppleEmailSetup;
+  // Not authenticated and not in guest mode, OR authenticated but not verified: show login screen
+  const showLoginScreen = (!user && !isGuest) || (user && !emailVerified);
   
   const LoginScreen = require("@/core/auth/login").default;
   const mainContent = showLoginScreen ? <LoginScreen /> : (
@@ -330,8 +329,6 @@ function LayoutContent() {
           onDismiss={handleDismissVersion}
         />
       )}
-
-      <AppleEmailSetupModal />
     </>
   );
 }
