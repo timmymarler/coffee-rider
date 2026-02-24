@@ -49,6 +49,7 @@ export default function ProfileScreen() {
     "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
 
   const [displayName, setDisplayName] = useState(profile?.displayName || user?.displayName || "");
+  const [contactEmail, setContactEmail] = useState(profile?.contactEmail || "");
   const [bio, setBio] = useState(profile?.bio || "");
   const [bike, setBike] = useState(profile?.bike || "");
   const [homeLocation, setHomeLocation] = useState(profile?.homeLocation || "");
@@ -78,6 +79,7 @@ export default function ProfileScreen() {
   // Update when profile changes
   useEffect(() => {
     setDisplayName(profile?.displayName || user?.displayName || "");
+    setContactEmail(profile?.contactEmail || "");
     
     // Load different fields based on role
     if (profile?.role === "place-owner") {
@@ -96,6 +98,7 @@ export default function ProfileScreen() {
       // For riders, set initial values
       setInitialValues({
         displayName: displayName,
+        contactEmail: contactEmail,
         bio: bio,
         bike: bike,
         homeLocation: homeLocation,
@@ -406,6 +409,7 @@ export default function ProfileScreen() {
     } else {
       return (
         displayName !== initialValues.displayName ||
+        contactEmail !== initialValues.contactEmail ||
         bio !== initialValues.bio ||
         bike !== initialValues.bike ||
         homeLocation !== initialValues.homeLocation ||
@@ -430,6 +434,7 @@ export default function ProfileScreen() {
       
       const updateData = {
         displayName: displayName.trim(),
+        contactEmail: contactEmail.trim() || null,
         updatedAt: Date.now(),
       };
 
@@ -482,6 +487,7 @@ export default function ProfileScreen() {
           placeAmenities: placeAmenities,
           placeSuitability: placeSuitability,
         } : {
+          contactEmail: contactEmail,
           bio: bio,
           bike: bike,
           homeLocation: homeLocation,
@@ -651,7 +657,7 @@ export default function ProfileScreen() {
               marginTop: theme.spacing.xs,
             }}
           >
-            {email}
+            {contactEmail || "(No contact email)"}
           </Text>
           <View style={{ marginTop: theme.spacing.sm }}>
             <CRInfoBadge label={role.charAt(0).toUpperCase() + role.slice(1)} />
@@ -675,6 +681,18 @@ export default function ProfileScreen() {
 
         <CRLabel>Display Name</CRLabel>
         <CRInput value={displayName} onChangeText={setDisplayName} />
+
+        <CRLabel style={{ marginTop: theme.spacing.md }}>Contact Email</CRLabel>
+        <CRInput 
+          value={contactEmail} 
+          onChangeText={setContactEmail}
+          placeholder="your.email@example.com"
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+        <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 4 }}>
+          Used for group invitations (Apple users will need to set this)
+        </Text>
 
         {role === "place-owner" ? (
           <>

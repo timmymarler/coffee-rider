@@ -218,7 +218,7 @@ export const signInWithApple = async () => {
         {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
-          contactEmail: null, // Will be set when user fills the setup modal
+          contactEmail: null, // Apple users will set this in Profile when upgrading
           displayName: displayName,
           role: "user",
           authProvider: "apple",
