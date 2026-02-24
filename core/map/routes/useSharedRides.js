@@ -30,14 +30,18 @@ export function useAvailableSharedRides(userGroups = []) {
     const publicQuery = query(
       collection(db, "routes"),
       where("visibility", "==", RIDE_VISIBILITY.PUBLIC),
-      where("isActive", "==", true),
-      where("deleted", "==", false)
+      where("isActive", "==", true)
     );
 
     const unsubPublic = onSnapshot(publicQuery, snap => {
       incMetric("useSharedRides:publicSnapshot");
       incMetric("useSharedRides:publicDocs", snap.docs.length, 25);
-      snap.docs.forEach(d => ridesMap.set(d.id, { id: d.id, ...d.data() }));
+      snap.docs.forEach(d => {
+        // Filter out deleted routes (include if deleted field is missing or false)
+        if (!d.data().deleted) {
+          ridesMap.set(d.id, { id: d.id, ...d.data() });
+        }
+      });
       publicLoaded = true;
       if (publicLoaded && groupLoaded) {
         setRides(Array.from(ridesMap.values()));
@@ -52,14 +56,18 @@ export function useAvailableSharedRides(userGroups = []) {
         collection(db, "routes"),
         where("visibility", "==", RIDE_VISIBILITY.GROUP),
         where("isActive", "==", true),
-        where("deleted", "==", false),
         where("groupId", "in", userGroups.map(g => g.id))
       );
 
       const unsubGroup = onSnapshot(groupQuery, snap => {
         incMetric("useSharedRides:groupSnapshot");
         incMetric("useSharedRides:groupDocs", snap.docs.length, 25);
-        snap.docs.forEach(d => ridesMap.set(d.id, { id: d.id, ...d.data() }));
+        snap.docs.forEach(d => {
+          // Filter out deleted routes (include if deleted field is missing or false)
+          if (!d.data().deleted) {
+            ridesMap.set(d.id, { id: d.id, ...d.data() });
+          }
+        });
         groupLoaded = true;
         if (publicLoaded && groupLoaded) {
           setRides(Array.from(ridesMap.values()));
@@ -95,16 +103,17 @@ export function useUserActiveRides() {
     const q = query(
       collection(db, "routes"),
       where("createdBy", "==", user.uid),
-      where("isActive", "==", true),
-      where("deleted", "==", false)
+      where("isActive", "==", true)
     );
 
     const unsubscribe = onSnapshot(q, snap => {
       setRides(
-        snap.docs.map(d => ({
-          id: d.id,
-          ...d.data(),
-        }))
+        snap.docs
+          .filter(d => !d.data().deleted) // Filter out deleted routes
+          .map(d => ({
+            id: d.id,
+            ...d.data(),
+          }))
       );
       setLoading(false);
     });
@@ -176,16 +185,17 @@ export function useGroupSharedRoutes(groupId) {
     const q = query(
       collection(db, "routes"),
       where("visibility", "==", RIDE_VISIBILITY.GROUP),
-      where("groupId", "==", groupId),
-      where("deleted", "==", false)
+      where("groupId", "==", groupId)
     );
 
     const unsubscribe = onSnapshot(q, snap => {
       setRoutes(
-        snap.docs.map(d => ({
-          id: d.id,
-          ...d.data(),
-        }))
+        snap.docs
+          .filter(d => !d.data().deleted) // Filter out deleted routes
+          .map(d => ({
+            id: d.id,
+            ...d.data(),
+          }))
       );
       setLoading(false);
     });
