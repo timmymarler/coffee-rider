@@ -5,6 +5,7 @@ import { AuthContext } from "@core/context/AuthContext";
 import theme from "@themes";
 import { updateProfile } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
+import { useRouter } from "expo-router";
 import { useContext, useState } from "react";
 import {
     Alert,
@@ -18,6 +19,7 @@ import {
 } from "react-native";
 
 export default function AppleEmailSetupModal() {
+  const router = useRouter();
   const { user, needsAppleEmailSetup, completeAppleEmailSetup } =
     useContext(AuthContext);
 
@@ -64,7 +66,9 @@ export default function AppleEmailSetupModal() {
       });
 
       completeAppleEmailSetup();
-      Alert.alert("Success", "Your profile has been updated!");
+      Alert.alert("Success", "Your profile has been updated!", [
+        { text: "OK", onPress: () => router.replace("map") }
+      ]);
     } catch (err) {
       console.error("[AppleEmailSetupModal] Error:", err);
       Alert.alert(
@@ -210,7 +214,10 @@ export default function AppleEmailSetupModal() {
 
               <TouchableOpacity
                 style={{ marginTop: theme.spacing.md }}
-                onPress={() => completeAppleEmailSetup()}
+                onPress={() => {
+                  completeAppleEmailSetup();
+                  router.replace("map");
+                }}
                 disabled={loading}
               >
                 <Text
