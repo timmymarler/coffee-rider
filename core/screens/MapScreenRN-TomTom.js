@@ -1635,8 +1635,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (closestEndpointIdx !== -1) {
       detectedStepIdx = closestEndpointIdx;
     }
-      }
-    }
 
     // If we've reached the end, stay on the last step
     detectedStepIdx = Math.min(detectedStepIdx, routeSteps.length - 1);
