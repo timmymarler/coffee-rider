@@ -54,6 +54,8 @@ export const initializeGoogleSignIn = () => {
         "1001945286149-4oq0pkng0mlfps1vje2es9h69ja5561v.apps.googleusercontent.com",
       iosClientId:
         "1001945286149-vkem3dmdu6p4mld7vp5j2atncvv97uct.apps.googleusercontent.com",
+      androidClientId:
+        "1001945286149-4oq0pkng0mlfps1vje2es9h69ja5561v.apps.googleusercontent.com",
       offlineAccess: true,
       scopes: ["profile", "email"],
     });
@@ -145,13 +147,17 @@ export const signInWithGoogle = async () => {
       throw new Error("Google Sign-in was cancelled");
     }
 
-    // Log actual errors
+    // Log actual errors with full details for debugging
     console.error("[SocialAuth] Google Sign-in error:", error);
+    console.error("[SocialAuth] Error code:", error.code);
+    console.error("[SocialAuth] Error details:", JSON.stringify(error, null, 2));
 
     if (error.code === statusCodes.IN_PROGRESS) {
       throw new Error("Google Sign-in is already in progress");
     } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
       throw new Error("Google Play Services not available on this device");
+    } else if (error.code === "DEVELOPER_ERROR") {
+      throw new Error("Google Sign-in configuration error. Please ensure SHA-1 certificate fingerprint matches Google Cloud Console configuration:\nhttps://react-native-google-signin.github.io/docs/troubleshooting");
     } else {
       throw new Error(
         error.message || "Google Sign-in failed. Please try again."
