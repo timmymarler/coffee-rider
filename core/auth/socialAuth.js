@@ -90,10 +90,18 @@ export const signInWithGoogle = async () => {
     console.log("[SocialAuth] Starting Google Sign-in...");
 
     // Check if device has Google Play services
-    await GoogleSignin.hasPlayServices();
+    try {
+      await GoogleSignin.hasPlayServices();
+      console.log("[SocialAuth] ✓ Google Play Services available");
+    } catch (playServicesError) {
+      console.error("[SocialAuth] Play Services error:", playServicesError);
+      throw playServicesError;
+    }
 
     // Get the user's ID and access token
+    console.log("[SocialAuth] Attempting to sign in with GoogleSignin.signIn()...");
     const response = await GoogleSignin.signIn();
+    console.log("[SocialAuth] Response received:", response ? "yes" : "null");
 
     // Handle cancel or missing response
     if (!response || !response.data || !response.data.idToken) {
@@ -145,16 +153,20 @@ export const signInWithGoogle = async () => {
       throw new Error("Google Sign-in was cancelled");
     }
 
-    // Log actual errors with full details for debugging
-    console.error("[SocialAuth] Google Sign-in error:", error);
-    console.error("[SocialAuth] Error code:", error.code);
-    console.error("[SocialAuth] Error details:", JSON.stringify(error, null, 2));
+    // Log actual errors with FULL details for debugging
+    console.error("[SocialAuth] ===== GOOGLE SIGN-IN ERROR =====");
+    console.error("[SocialAuth] Error type:", typeof error);
+    console.error("[SocialAuth] Error.message:", error.message);
+    console.error("[SocialAuth] Error.code:", error.code);
+    console.error("[SocialAuth] Error.toString():", error.toString());
+    console.error("[SocialAuth] Full error object:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
 
     if (error.code === statusCodes.IN_PROGRESS) {
       throw new Error("Google Sign-in is already in progress");
     } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
       throw new Error("Google Play Services not available on this device");
-    } else if (error.code === "DEVELOPER_ERROR") {
+    } else if (error.code === "DEVELOPER_ERROR" || error.message?.includes("DEVELOPER_ERROR")) {
+      console.error("[SocialAuth] DEVELOPER_ERROR detected - likely SHA-1 or package name mismatch");
       throw new Error("Google Sign-in configuration error. Please ensure SHA-1 certificate fingerprint matches Google Cloud Console configuration:\nhttps://react-native-google-signin.github.io/docs/troubleshooting");
     } else {
       throw new Error(
@@ -176,13 +188,24 @@ export const signInWithApple = async () => {
   try {
     console.log("[SocialAuth] Starting Apple Sign-in...");
 
-    // Request Apple Sign-in
-    const credential = await AppleAuthentication.signInAsync({
-      requestedScopes: [
-        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-        AppleAuthentication.AppleAuthenticationScope.EMAIL,
-      ],
-    });
+    // Request Apple Sign-in with error handling
+    let credential;
+    try {
+      credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      console.log("[SocialAuth] ✓ Apple credential received");
+    } catch (appleError) {
+      console.error("[SocialAuth] Apple native error codes:", appleError.code);
+      console.error("[SocialAuth] Apple native error message:", appleError.message);
+      if (appleError.code === "ERR_CANCELLED" || appleError.message?.includes("cancelled")) {
+        throw new Error("Apple Sign-in was cancelled");
+      }
+      throw appleError;
+    }
 
     if (!credential.identityToken) {
       throw new Error("No identity token received from Apple");
@@ -246,8 +269,11 @@ export const signInWithApple = async () => {
       throw new Error("Apple Sign-in was cancelled");
     }
 
-    // Log actual errors
-    console.error("[SocialAuth] Apple Sign-in error:", error);
+    // Log actual errors with full details
+    console.error("[SocialAuth] ===== APPLE SIGN-IN ERROR =====");
+    console.error("[SocialAuth] Error.code:", error.code);
+    console.error("[SocialAuth] Error.message:", error.message);
+    console.error("[SocialAuth] Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
 
     throw new Error(
       error.message || "Apple Sign-in failed. Please try again."
