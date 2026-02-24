@@ -1609,15 +1609,32 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Step 3: Determine current step - find the step whose endpoint is closest AHEAD of user
+    // For overlapping routes, prefer the step that's closer to us (not far ahead)
     let detectedStepIdx = currentStepIndex;
+    let closestEndpointDist = Infinity;
+    let closestEndpointIdx = -1;
     
     for (let i = currentStepIndex; i < routeSteps.length; i++) {
       const stepEndIdx = stepEndPolylineIndices[i];
       
-      // User is still before this step's end
+      // User is still before this step's end (ahead on polyline)
       if (closestPolylineIdx < stepEndIdx) {
-        detectedStepIdx = i;
-        break;
+        // Calculate distance from user to this step's endpoint
+        const step = routeSteps[i];
+        if (step?.end?.latitude) {
+          const distToEnd = distanceBetweenMeters(userLocation, step.end);
+          // Prefer the closest endpoint ahead (most likely the step we're on)
+          if (closestEndpointIdx === -1 || distToEnd < closestEndpointDist) {
+            closestEndpointDist = distToEnd;
+            closestEndpointIdx = i;
+          }
+        }
+      }
+    }
+    
+    if (closestEndpointIdx !== -1) {
+      detectedStepIdx = closestEndpointIdx;
+    }
       }
     }
 
