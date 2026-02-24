@@ -271,7 +271,7 @@ function ThemeAwareLayoutContent() {
 function LayoutContent() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [versionModalDismissed, setVersionModalDismissed] = useState(false);
-  const { user, loading, versionStatus, isGuest, emailVerified } = useContext(AuthContext);
+  const { user, loading, versionStatus, isGuest, emailVerified, needsAppleEmailSetup } = useContext(AuthContext);
 
   // Show version modal when status changes and update is available
   useEffect(() => {
@@ -299,26 +299,26 @@ function LayoutContent() {
     return null;
   }
 
-  // Not authenticated and not in guest mode, OR authenticated but not verified: show login screen
-  if ((!user && !isGuest) || (user && !emailVerified)) {
-    // Import LoginScreen directly instead of using layout to avoid Expo Router conflicts
-    const LoginScreen = require("@/core/auth/login").default;
-    return <LoginScreen />;
-  }
+  // Not authenticated and not in guest mode, OR authenticated but not verified, OR needs Apple email setup: show login screen
+  const showLoginScreen = (!user && !isGuest) || (user && !emailVerified) || needsAppleEmailSetup;
+  
+  const LoginScreen = require("@/core/auth/login").default;
+  const mainContent = showLoginScreen ? <LoginScreen /> : (
+    <Tabs
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => <FloatingTabBar {...props} />}
+    >
+      <Tabs.Screen name="map" />
+      <Tabs.Screen name="saved-routes" />
+      <Tabs.Screen name="groups" />
+      <Tabs.Screen name="calendar" />
+      <Tabs.Screen name="profile" />
+    </Tabs>
+  );
 
-  // Authenticated or guest mode: show main app with tabs
   return (
     <>
-      <Tabs
-        screenOptions={{ headerShown: false }}
-        tabBar={(props) => <FloatingTabBar {...props} />}
-      >
-        <Tabs.Screen name="map" />
-        <Tabs.Screen name="saved-routes" />
-        <Tabs.Screen name="groups" />
-        <Tabs.Screen name="calendar" />
-        <Tabs.Screen name="profile" />
-      </Tabs>
+      {mainContent}
 
       {versionStatus && versionStatus.hasUpdate && (
         <VersionUpgradeModal
