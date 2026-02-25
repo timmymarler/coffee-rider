@@ -92,18 +92,29 @@ export default function ProfileScreen() {
     }
   }, [profile]);
 
+  // Initialize initialValues when profile first loads (only once per profile change)
+  useEffect(() => {
+    if (!profile) return;
+    
+    if (profile.role === "place-owner") {
+      // Will be set by the place listener below
+      return;
+    }
+    
+    // For riders, set initial values based on loaded profile
+    setInitialValues({
+      displayName: profile.displayName || "",
+      contactEmail: profile.contactEmail || "",
+      bio: profile.bio || "",
+      bike: profile.bike || "",
+      homeLocation: profile.homeLocation || "",
+      homeAddress: profile.homeAddress || "",
+    });
+  }, [profile?.uid]); // Only re-initialize when a different user loads
+
   // Load place data from places collection for place owners
   useEffect(() => {
     if (role !== "place-owner" || !profile?.linkedPlaceId) {
-      // For riders, set initial values
-      setInitialValues({
-        displayName: displayName,
-        contactEmail: contactEmail,
-        bio: bio,
-        bike: bike,
-        homeLocation: homeLocation,
-        homeAddress: homeAddress,
-      });
       return;
     }
 

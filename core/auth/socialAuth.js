@@ -5,7 +5,7 @@ import {
     OAuthProvider,
     signInWithCredential,
 } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import { Platform } from "react-native";
 
 // Conditionally import Apple Sign-in (only available after native compilation)
@@ -117,29 +117,36 @@ export const signInWithGoogle = async () => {
     const result = await signInWithCredential(auth, credential);
     const firebaseUser = result.user;
 
-    // Check if this is a new user
+    // Check if user doc exists to preserve user edits
     const userDocRef = doc(db, "users", firebaseUser.uid);
-    const userSnapshot = await firebaseUser.getIdTokenResult();
-
-    // If user doc doesn't exist, create it
+    const userSnapshot = await getDoc(userDocRef);
+    
     try {
-      await setDoc(
-        userDocRef,
-        {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          contactEmail: firebaseUser.email, // Use real email for group invites
-          displayName: firebaseUser.displayName || "Google User",
+      if (!userSnapshot.exists()) {
+        // New user - set all fields including displayName and contactEmail
+        await setDoc(
+          userDocRef,
+          {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            contactEmail: firebaseUser.email, // Use real email for group invites
+            displayName: firebaseUser.displayName || "Google User",
+            photoURL: firebaseUser.photoURL,
+            role: "user",
+            authProvider: "google",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }
+        );
+      } else {
+        // Existing user - only update photoURL, preserve displayName and contactEmail that user may have edited
+        await updateDoc(userDocRef, {
           photoURL: firebaseUser.photoURL,
-          role: "user",
-          authProvider: "google",
-          createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+        });
+      }
     } catch (e) {
-      console.log("[SocialAuth] User doc already exists or error creating it:", e.message);
+      console.log("[SocialAuth] Error creating/updating user doc:", e.message);
     }
 
     console.log("[SocialAuth] ✓ Google sign-in successful");
@@ -237,25 +244,35 @@ export const signInWithApple = async () => {
       displayName = firebaseUser.email?.split("@")[0] || "Coffee Rider User";
     }
 
-    // Create user doc if it doesn't exist
+    // Create user doc if it doesn't exist - preserve user edits on re-login
     const userDocRef = doc(db, "users", firebaseUser.uid);
     try {
-      await setDoc(
-        userDocRef,
-        {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          contactEmail: null, // Apple users will set this in Profile when upgrading
-          displayName: displayName,
-          role: "user",
-          authProvider: "apple",
-          createdAt: serverTimestamp(),
+      const userSnapshot = await getDoc(userDocRef);
+      
+      if (!userSnapshot.exists()) {
+        // New user - set all fields including displayName and contactEmail
+        await setDoc(
+          userDocRef,
+          {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            contactEmail: null, // Apple users will set this in Profile when upgrading
+            displayName: displayName,
+            role: "user",
+            authProvider: "apple",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }
+        );
+      } else {
+        // Existing user - don't overwrite displayName or contactEmail that user may have edited
+        // Just update timestamp
+        await updateDoc(userDocRef, {
           updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+        });
+      }
     } catch (e) {
-      console.log("[SocialAuth] User doc already exists or error creating it:", e.message);
+      console.log("[SocialAuth] Error creating/updating user doc:", e.message);
     }
 
     console.log("[SocialAuth] ✓ Apple sign-in successful");
