@@ -21,7 +21,7 @@ import {
 import AuthLayout from "./AuthLayout";
 import RegisterScreen from "./register";
 import { resetPassword } from "./resetPassword";
-import { initializeGoogleSignIn, isAppleSignInAvailable, isGoogleSignInAvailable, signInWithApple, signInWithGoogle } from "./socialAuth";
+import { isAppleSignInAvailable, signInWithApple } from "./socialAuth";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -34,12 +34,9 @@ export default function LoginScreen() {
   const [showRegister, setShowRegister] = useState(false);
   const [socialSubmitting, setSocialSubmitting] = useState(false);
   const [socialProcess, setSocialProcess] = useState(null);
-  const [googleAvailable, setGoogleAvailable] = useState(false);
   const [appleAvailable, setAppleAvailable] = useState(false);
 
   useEffect(() => {
-    initializeGoogleSignIn();
-    setGoogleAvailable(isGoogleSignInAvailable());
     setAppleAvailable(isAppleSignInAvailable());
   }, []);
 
@@ -127,23 +124,6 @@ export default function LoginScreen() {
       );
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function handleGoogleSignIn() {
-    setSocialSubmitting(true);
-    setSocialProcess('google');
-    try {
-      await signInWithGoogle();
-      setSocialSubmitting(false);
-      setSocialProcess(null);
-      router.replace("map");
-    } catch (err) {
-      setSocialSubmitting(false);
-      setSocialProcess(null);
-      if (!err.message?.includes("cancelled")) {
-        Alert.alert("Sign-in Failed", err.message || "Google sign-in failed. Please try again.");
-      }
     }
   }
 
@@ -278,19 +258,6 @@ export default function LoginScreen() {
         <Text style={[styles.linkText, { color: colors.accent }]}>Reset Password</Text>
       </TouchableOpacity>
 
-      {googleAvailable && (
-        <TouchableOpacity
-          onPress={handleGoogleSignIn}
-          disabled={socialSubmitting && socialProcess === 'google'}
-          style={[styles.socialButton, styles.googleButton, { opacity: socialSubmitting && socialProcess === 'google' ? 0.7 : 1 }]}
-        >
-          <MaterialCommunityIcons name="google" size={20} color="white" style={{ marginRight: spacing.sm }} />
-          <Text style={styles.socialButtonText}>
-            {socialSubmitting && socialProcess === 'google' ? 'Signing in...' : 'Sign in with Google'}
-          </Text>
-        </TouchableOpacity>
-      )}
-
       {appleAvailable && (
         <TouchableOpacity
           onPress={handleAppleSignIn}
@@ -370,11 +337,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-  },
-  googleButton: {
-    backgroundColor: "#000",
-    borderWidth: 1,
-    borderColor: "#fff",
   },
   appleButton: {
     backgroundColor: "#000",
