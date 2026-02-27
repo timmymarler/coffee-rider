@@ -1600,10 +1600,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Auto-rerouting when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
-  const OFF_ROUTE_THRESHOLD_METERS = 200; // Reroute if >200m off the route
-  const BACKWARDS_THRESHOLD_METERS = 80;  // Reroute immediately if <80m off-route AND heading backwards
+  const OFF_ROUTE_THRESHOLD_METERS = 100; // Reroute if 100m+ off the route
   const REROUTE_COOLDOWN_SECONDS = 30; // Only attempt reroute every 30 seconds max
-  const MAX_HEADING_TOLERANCE = 90; // Allow ±90° from route direction before rerouting
   
   useEffect(() => {
     if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation || !routeDestination) return;
@@ -1660,65 +1658,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const now = Date.now();
     const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
     
-    // Determine if we should reroute based on distance AND heading
-    let shouldReroute = false;
-    let rerouteReason = '';
-    
-    if (closestDist > OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
-      // User is significantly off-route (>200m) - reroute immediately
-      // But add heading check: only reroute if also heading wrong way
-      let headingMissing = !userLocation.heading || userLocation.heading === -1;
-      let headingWrong = false;
-      
-      if (!headingMissing) {
-        let routeAheadIdx = Math.min(userPolylineIdx + 10, routeCoords.length - 1);
-        let routeBackIdx = Math.max(0, userPolylineIdx - 5);
-        
-        if (routeBackIdx !== routeAheadIdx && routeCoords[routeBackIdx] && routeCoords[routeAheadIdx]) {
-          try {
-            const routeBearing = calculateBearing(routeCoords[routeBackIdx], routeCoords[routeAheadIdx]);
-            const userHeading = userLocation.heading;
-            const headingDiff = getBearingDifference(routeBearing, userHeading);
-            
-            // At large distance, reroute even if heading is okay (they've truly left the route)
-            // But prioritize if heading is also wrong (>90°)
-            headingWrong = headingDiff > 90;
-          } catch (error) {
-            console.warn('[AutoReroute] Error calculating bearing for large off-route:', error);
-          }
-        }
-      }
-      
-      shouldReroute = true;
-      rerouteReason = `severely off-route (${closestDist.toFixed(0)}m)${headingWrong ? ' + wrong heading' : ''}`;
-    } else if (closestDist > BACKWARDS_THRESHOLD_METERS && closestDist <= OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute > REROUTE_COOLDOWN_SECONDS) {
-      // User is moderately off-route (80-200m) - check heading to see if heading backwards
-      if (userLocation.heading !== undefined && userLocation.heading !== -1) {
-        let routeAheadIdx = Math.min(userPolylineIdx + 10, routeCoords.length - 1);
-        let routeBackIdx = Math.max(0, userPolylineIdx - 5);
-        
-        // Ensure we have valid points
-        if (routeBackIdx !== routeAheadIdx && routeCoords[routeBackIdx] && routeCoords[routeAheadIdx]) {
-          try {
-            const routeBearing = calculateBearing(routeCoords[routeBackIdx], routeCoords[routeAheadIdx]);
-            const userHeading = userLocation.heading;
-            const headingDiff = getBearingDifference(routeBearing, userHeading);
-            
-            // At moderate distance, only reroute if heading is significantly wrong (>120°)
-            if (headingDiff > 120) {
-              shouldReroute = true;
-              rerouteReason = `heading wrong way (${headingDiff.toFixed(0)}° off) + moderate distance`;
-            }
-          } catch (error) {
-            console.error('[AutoReroute] Error calculating bearing for moderate off-route:', error);
-            shouldReroute = false;
-          }
-        }
-      }
-    }
-    
-    if (shouldReroute) {
-      console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route and ${rerouteReason}, triggering reroute...`);
+    // Simple rule: if 100m+ off-route, reroute with cooldown
+    if (closestDist >= OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute >= REROUTE_COOLDOWN_SECONDS) {
+      console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route, triggering reroute...`);
       lastRerouteAttemptRef.current = now;
       
       // Filter to only remaining waypoints (ahead of user on polyline)
