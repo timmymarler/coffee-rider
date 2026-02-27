@@ -1561,41 +1561,55 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Smart step detection: track which step you're on and automatically advance when past it
   // This fixes the "getting further away" issue by detecting step transitions more intelligently
-  // Track which junction is next - like Google Maps: always show the closest one ahead
   useEffect(() => {
     if (!isNavigationMode) return;
     if (!userLocation) return;
     if (!routeSteps || routeSteps.length === 0) return;
 
-    // Find the closest step endpoint (the next junction you need to navigate to)
-    let nextStepIdx = currentStepIndex;
-    let closestDist = Infinity;
+    // Strategy: User is on current step, approaching its END point
+    // When user passes that end point, advance to next step
+    // This ensures we always show the distance to the END of the current instruction
     
-    for (let i = 0; i < routeSteps.length; i++) {
-      const step = routeSteps[i];
-      if (!step?.end?.latitude) continue;
-      
-      const distToJunction = distanceBetweenMeters(userLocation, step.end);
-      if (distToJunction < closestDist) {
-        closestDist = distToJunction;
-        nextStepIdx = i;
+    let nextStepIdx = currentStepIndex;
+    
+    // Check if we've passed the current step's endpoint
+    if (currentStepIndex < routeSteps.length) {
+      const currentStep = routeSteps[currentStepIndex];
+      if (currentStep?.end?.latitude) {
+        const distToCurrentEnd = distanceBetweenMeters(userLocation, currentStep.end);
+        
+        // If we're getting closer to a future step, might be off-route
+        // But linearly advance when crossing the current step's endpoint
+        const advanceThreshold = 50; // meters - advance when within 50m of the endpoint
+        
+        if (distToCurrentEnd < advanceThreshold && currentStepIndex + 1 < routeSteps.length) {
+          // Approaching the endpoint of current step - prepare to advance
+          nextStepIdx = currentStepIndex + 1;
+          console.log('[Navigation] Advancing step:', {
+            from: currentStepIndex,
+            to: nextStepIdx,
+            currentStepEnd: Math.round(distToCurrentEnd),
+            nextInstruction: routeSteps[nextStepIdx]?.instruction || 'Unknown',
+          });
+        } else {
+          nextStepIdx = currentStepIndex;
+        }
       }
     }
-
-    // Update to closest junction (this naturally handles passing intersections)
-    // When you pass a junction, the next one becomes closest, so we auto-advance
+    
+    // Update step index if we've advanced
     if (nextStepIdx !== currentStepIndex) {
-      console.log('[Navigation] Next junction:', {
-        step: nextStepIdx,
-        distance: Math.round(closestDist),
-        instruction: routeSteps[nextStepIdx]?.instruction || 'Unknown',
-      });
       setCurrentStepIndex(nextStepIdx);
     }
 
-    // Always show distance to the closest junction
-    setNextJunctionDistance(closestDist);
-  }, [userLocation, isNavigationMode, routeSteps]);
+    // Show distance to the END of the current step (not closest junction overall)
+    if (currentStepIndex < routeSteps.length && routeSteps[currentStepIndex]?.end?.latitude) {
+      const distToEnd = distanceBetweenMeters(userLocation, routeSteps[currentStepIndex].end);
+      setNextJunctionDistance(distToEnd);
+    } else {
+      setNextJunctionDistance(null);
+    }
+  }, [userLocation, isNavigationMode, routeSteps, currentStepIndex]);
 
   // Auto-rerouting when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
@@ -3590,10 +3604,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       {/* Junction panel (top-left) during navigation - helmet visible */}
       {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
         (() => {
-          // Always display the CURRENT step instruction with distance to its end
-          // The step automatically advances via currentStepIndex when you pass the junction
-          // So the next instruction only appears AFTER you've passed the current one
           const step = routeSteps[currentStepIndex];
+          
+          if (!step) return null;
           
           // Normalize maneuver type
           let m = (step?.maneuver || "STRAIGHT").trim().toUpperCase();
@@ -3608,36 +3621,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
           const distText = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : "";
           
-          // Determine instruction label - handle roundabouts specially
-          let label = meta.label;
-          
-          if (m.includes("ROUNDABOUT")) {
-            // Try to extract roundabout exit number from multiple sources
-            const exitNum = 
-              step?.roundaboutExitNumber ||  // TomTom primary field
-              step?.exitNumber ||             // Alternative field
-              (step?.instruction?.match(/exit\s*(\d+)/i)?.[1]); // Parse from text
-            
-            if (exitNum && parseInt(exitNum) > 0) {
-              label = `Take exit ${exitNum}`;
-            } else {
-              // Fallback roundabout instructions based on maneuver subtype
-              if (step?.instruction && step.instruction !== "Continue") {
-                label = step.instruction;
-              } else if (m.includes("STRAIGHT")) {
-                label = "Go straight through roundabout";
-              } else if (m.includes("LEFT")) {
-                label = "Exit left from roundabout";
-              } else if (m.includes("RIGHT")) {
-                label = "Exit right from roundabout";
-              } else {
-                label = "Proceed through roundabout";
-              }
-            }
-          } else if (step?.instruction && step.instruction !== "Continue") {
-            // Use custom instruction if available
-            label = step.instruction;
-          }
+          // Use the instruction that was already computed in tomtomRouting.js
+          // This ensures roundabout instructions are consistent
+          let label = step?.instruction || meta.label || "Continue";
 
           return (
             <View style={styles.junctionPanel}>
