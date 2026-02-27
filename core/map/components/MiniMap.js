@@ -20,11 +20,12 @@ export default function MiniMap({
   const theme = useTheme();
   const miniMapRef = useRef(null);
 
-  // Calculate bounds to fit all riders and user
+  // Calculate bounds to fit all riders, user, and full route
   const initialRegion = useMemo(() => {
     const allPoints = [
       ...(userLocation ? [userLocation] : []),
       ...riderLocations.map(r => ({ latitude: r.latitude, longitude: r.longitude })),
+      ...routeCoords,
     ];
 
     if (allPoints.length === 0) {
@@ -53,14 +54,14 @@ export default function MiniMap({
       latitudeDelta: Math.max(latDelta, 0.05),
       longitudeDelta: Math.max(lngDelta, 0.05),
     };
-  }, [userLocation, riderLocations]);
+  }, [userLocation, riderLocations, routeCoords]);
 
-  // Zoom to fit when riders change
+  // Zoom to fit when riders or route changes
   useEffect(() => {
-    if (miniMapRef.current && (riderLocations.length > 0 || userLocation)) {
+    if (miniMapRef.current && (riderLocations.length > 0 || userLocation || routeCoords.length > 0)) {
       miniMapRef.current.animateToRegion(initialRegion, 500);
     }
-  }, [riderLocations.length, userLocation?.latitude, userLocation?.longitude]);
+  }, [riderLocations.length, userLocation?.latitude, userLocation?.longitude, routeCoords.length];
 
   return (
     <View style={[styles.container, containerStyles]}>
@@ -154,14 +155,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userLocationMarker: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
   },
   riderMarker: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
   badge: {
     position: 'absolute',

@@ -4121,7 +4121,7 @@ const styles = StyleSheet.create({
 
   miniMapContainer: {
     position: "absolute",
-    bottom: 245,
+    bottom: 100,
     right: 16,
     width: 110,
     height: 200,
@@ -4192,7 +4192,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 100,
     left: 20,
-    maxWidth: 280,
+    maxWidth: 200,
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 16,
