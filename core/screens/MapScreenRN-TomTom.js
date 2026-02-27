@@ -1627,6 +1627,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         routeType: userRouteType,
         requestId,
         skipFitToView: true, // Don't zoom out, stay in Follow Me view
+        vehicleHeading: userLocation?.heading || null, // Tell TomTom our current heading
       }).catch(error => {
         console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
       });
@@ -1699,6 +1700,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         routeType: userRouteType,
         requestId,
         skipFitToView: true, // Don't zoom out, stay in Follow Me view
+        vehicleHeading: userLocation?.heading || null, // Tell TomTom which direction we're traveling
       }).catch(error => {
         console.warn('[AutoReroute] mapRoute error:', error);
       });
@@ -2556,6 +2558,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     routeType,
     requestId,
     skipFitToView = false, // Don't auto-center when in Follow Me mode
+    vehicleHeading = null, // User's current heading in degrees (0-359), used for rerouting
   } = {}) {
     console.log("[mapRoute] Starting with requestId:", requestId, "waypoints:", waypointsList.length);
     
@@ -2631,6 +2634,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         useCache,
         customHilliness,
         customWindingness,
+        vehicleHeading, // Pass heading to prevent backward rerouting
       });
     } catch (error) {
       console.warn('[mapRoute] Error fetching route:', error.message);

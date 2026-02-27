@@ -36,6 +36,7 @@ export async function fetchRoute({
   useCache = true,
   customHilliness = null,
   customWindingness = null,
+  vehicleHeading = null,
 }) {
   if (!origin || !destination) {
     throw new Error('Origin and destination are required');
@@ -77,7 +78,8 @@ export async function fetchRoute({
       routeType,
       routeTypeMap,
       customHilliness,
-      customWindingness
+      customWindickness,
+      vehicleHeading
     );
   }
 

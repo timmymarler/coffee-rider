@@ -198,7 +198,7 @@ export async function fetchGoogleRoute(origin, destination, waypoints = [], mode
  * @param {string} customWindingness - Override windingness for custom routes (optional, 'low', 'normal', 'high')
  * @returns {Promise<Object>} Route data with polyline, distance, duration
  */
-export async function fetchTomTomRoute(origin, destination, waypoints = [], vehicleType = "car", routeTypeId = null, routeTypeMap = null, customHilliness = null, customWindingness = null) {
+export async function fetchTomTomRoute(origin, destination, waypoints = [], vehicleType = "car", routeTypeId = null, routeTypeMap = null, customHilliness = null, customWindingness = null, vehicleHeading = null) {
   // Use Google Maps API for pedestrian routing (better depth of routing)
   if (vehicleType === "pedestrian") {
     console.log('[tomtomRouting] Delegating pedestrian routing to Google Maps API');
@@ -342,6 +342,12 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       instructionsType: "coded",  // Get structured instruction codes (e.g., ROUNDABOUT_1, ROUNDABOUT_2)
       language: "en-GB",
     });
+    
+    // Add vehicle heading if provided (helps prevent backtracking during reroutes)
+    // Heading is in degrees: 0=North, 90=East, 180=South, 270=West
+    if (vehicleHeading !== null && typeof vehicleHeading === 'number' && vehicleHeading >= 0 && vehicleHeading < 360) {
+      params.append("vehicleHeading", Math.round(vehicleHeading));
+    }
     
     // Add hilliness and windingness parameters for thrilling routes
     if (hilliness && tomtomRouteType === "thrilling") {
