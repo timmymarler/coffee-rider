@@ -78,7 +78,7 @@ export async function fetchRoute({
       routeType,
       routeTypeMap,
       customHilliness,
-      customWindickness,
+      customWindingness,
       vehicleHeading
     );
   }
