@@ -1561,50 +1561,40 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Smart step detection: track which step you're on and automatically advance when past it
   // This fixes the "getting further away" issue by detecting step transitions more intelligently
-  // Smart step detection: track which step you're on and automatically advance when past it
+  // Track which junction is next - like Google Maps: always show the closest one ahead
   useEffect(() => {
     if (!isNavigationMode) return;
     if (!userLocation) return;
     if (!routeSteps || routeSteps.length === 0) return;
 
-    // Simple & robust: find which step endpoint you're closest to
-    // This is much more reliable than trying to sync with polyline coordinates
-    
-    let detectedStepIdx = currentStepIndex;
+    // Find the closest step endpoint (the next junction you need to navigate to)
+    let nextStepIdx = currentStepIndex;
     let closestDist = Infinity;
     
     for (let i = 0; i < routeSteps.length; i++) {
       const step = routeSteps[i];
       if (!step?.end?.latitude) continue;
       
-      const distToEndpoint = distanceBetweenMeters(userLocation, step.end);
-      const isAlreadyPassed = i <= currentStepIndex;
-      const penalty = isAlreadyPassed ? 0 : 300; // Penalize future steps to avoid jumping ahead
-      
-      if (distToEndpoint + penalty < closestDist) {
-        closestDist = distToEndpoint + penalty;
-        detectedStepIdx = i;
+      const distToJunction = distanceBetweenMeters(userLocation, step.end);
+      if (distToJunction < closestDist) {
+        closestDist = distToJunction;
+        nextStepIdx = i;
       }
     }
 
-    // Update if significantly closer (100m hysteresis)
-    if (detectedStepIdx !== currentStepIndex && closestDist < 100) {
-      console.log('[Navigation] Step advance:', {
-        from: currentStepIndex,
-        to: detectedStepIdx,
-        distToEndpoint: Math.round(closestDist),
+    // Update to closest junction (this naturally handles passing intersections)
+    // When you pass a junction, the next one becomes closest, so we auto-advance
+    if (nextStepIdx !== currentStepIndex) {
+      console.log('[Navigation] Next junction:', {
+        step: nextStepIdx,
+        distance: Math.round(closestDist),
+        instruction: routeSteps[nextStepIdx]?.instruction || 'Unknown',
       });
-      setCurrentStepIndex(detectedStepIdx);
+      setCurrentStepIndex(nextStepIdx);
     }
 
-    // Distance to current step's end
-    const currentStep = routeSteps[currentStepIndex];
-    if (currentStep?.end?.latitude) {
-      const distToJunction = distanceBetweenMeters(userLocation, currentStep.end);
-      setNextJunctionDistance(distToJunction);
-    } else {
-      setNextJunctionDistance(null);
-    }
+    // Always show distance to the closest junction
+    setNextJunctionDistance(closestDist);
   }, [userLocation, isNavigationMode, routeSteps]);
 
   // Auto-rerouting when significantly off-route during Follow Me
