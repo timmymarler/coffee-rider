@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
 import { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -122,9 +123,21 @@ export default function MiniMap({
             <View style={[styles.riderMarker, { backgroundColor: theme.colors.accentLight }]} />
           </Marker>
         ))}
-          </Marker>
-        ))}
       </MapView>
+
+      {/* Rider count badge */}
+      {riderLocations.length > 0 && (
+        <View style={[styles.badge, { backgroundColor: theme.colors.accentMid }]}>
+          <MaterialCommunityIcons
+            name="account-multiple"
+            size={16}
+            color={theme.colors.primaryDark}
+          />
+          <Text style={[styles.badgeText, { color: theme.colors.primaryDark }]}>
+            {riderLocations.length}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -149,5 +162,20 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
+  },
+  badge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
