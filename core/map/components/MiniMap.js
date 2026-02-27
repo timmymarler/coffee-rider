@@ -1,7 +1,6 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
 import { useEffect, useMemo, useRef } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
 /**
@@ -95,7 +94,7 @@ export default function MiniMap({
           </>
         )}
 
-        {/* User location */}
+        {/* User location - simple colored circle */}
         {userLocation && (
           <Marker
             coordinate={{
@@ -105,19 +104,11 @@ export default function MiniMap({
             anchor={{ x: 0.5, y: 0.5 }}
             zIndex={200}
           >
-            <View style={styles.userLocationMarker}>
-              <View style={styles.userLocationInner}>
-                <MaterialCommunityIcons
-                  name="navigation"
-                  size={20}
-                  color={theme.colors.primary}
-                />
-              </View>
-            </View>
+            <View style={[styles.userLocationMarker, { backgroundColor: theme.colors.primary }]} />
           </Marker>
         )}
 
-        {/* Other riders */}
+        {/* Other riders - simple colored circles */}
         {riderLocations.map((rider) => (
           <Marker
             key={`rider-${rider.id}`}
@@ -128,43 +119,12 @@ export default function MiniMap({
             anchor={{ x: 0.5, y: 0.5 }}
             zIndex={300}
           >
-            <View style={styles.riderMarker}>
-              {rider.userAvatar ? (
-                <Image
-                  source={{ uri: rider.userAvatar }}
-                  style={styles.riderAvatar}
-                />
-              ) : (
-                <MaterialCommunityIcons
-                  name="account-circle"
-                  size={40}
-                  color={theme.colors.accentLight}
-                />
-              )}
-              <View
-                style={[
-                  styles.riderStatusDot,
-                  { backgroundColor: theme.colors.success },
-                ]}
-              />
-            </View>
+            <View style={[styles.riderMarker, { backgroundColor: theme.colors.accentLight }]} />
+          </Marker>
+        ))}
           </Marker>
         ))}
       </MapView>
-
-      {/* Rider count badge */}
-      {riderLocations.length > 0 && (
-        <View style={[styles.badge, { backgroundColor: theme.colors.accentMid }]}>
-          <MaterialCommunityIcons
-            name="account-multiple"
-            size={16}
-            color={theme.colors.primaryDark}
-          />
-          <Text style={[styles.badgeText, { color: theme.colors.primaryDark }]}>
-            {riderLocations.length}
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -181,62 +141,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userLocationMarker: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(33, 150, 243, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#2196F3',
-  },
-  userLocationInner: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#2196F3',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
   },
   riderMarker: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-    backgroundColor: '#fff',
-  },
-  riderAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  riderStatusDot: {
-    position: 'absolute',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 2,
-    borderColor: '#fff',
-    bottom: 0,
-    right: 0,
-  },
-  badge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '700',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
 });
