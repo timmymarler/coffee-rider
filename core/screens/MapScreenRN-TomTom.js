@@ -3642,7 +3642,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           return (
             <View style={styles.junctionPanel}>
               {/* Large direction icon */}
-              <MaterialCommunityIcons name={meta.icon} size={56} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
+              <MaterialCommunityIcons name={meta.icon} size={48} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
               {/* Distance and label section */}
               <View style={styles.junctionContent}>
                 {distText ? (
@@ -4192,10 +4192,10 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 100,
     left: 20,
-    maxWidth: 200,
+    maxWidth: 245,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 16,
     backgroundColor: "#2196F3",
@@ -4214,10 +4214,10 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   junctionDistance: {
-    fontSize: 48,
+    fontSize: 44,
     fontWeight: "700",
     color: "rgba(245, 245, 240, 0.95)",
-    lineHeight: 56,
+    lineHeight: 52,
   },
   junctionRemaining: {
     fontSize: 12,
