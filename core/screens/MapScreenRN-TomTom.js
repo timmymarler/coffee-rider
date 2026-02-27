@@ -678,6 +678,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [routeSteps, setRouteSteps] = useState([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
+  const [debugMode, setDebugMode] = useState(false); // Toggle with long press on distance display
   const routeFittedRef = useRef(false);
   
   // Active ride & location sharing
@@ -3656,27 +3657,44 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           });
 
           return (
-            <View style={styles.junctionPanel}>
-              {/* Large direction icon */}
-              <MaterialCommunityIcons name={meta.icon} size={48} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
-              {/* Distance and label section */}
-              <View style={styles.junctionContent}>
-                {distText ? (
-                  <Text style={styles.junctionDistance}>{distText}</Text>
-                ) : null}
-                <Text style={styles.junctionLabel}>{label}</Text>
-                {remainingDistanceMeters && remainingDurationSeconds && (
-                  <Text style={styles.junctionRemaining}>
-                    {formatDistanceImperial(remainingDistanceMeters)} • {(() => {
-                      const totalMins = Math.round(remainingDurationSeconds / 60);
-                      const hours = Math.floor(totalMins / 60);
-                      const mins = totalMins % 60;
-                      return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-                    })()} remaining
-                  </Text>
-                )}
+            <>
+              <View style={styles.junctionPanel}>
+                {/* Large direction icon */}
+                <MaterialCommunityIcons name={meta.icon} size={48} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
+                {/* Distance and label section */}
+                <View style={styles.junctionContent}>
+                  {distText ? (
+                    <TouchableOpacity onLongPress={() => setDebugMode(!debugMode)}>
+                      <Text style={styles.junctionDistance}>{distText}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <Text style={styles.junctionLabel}>{label}</Text>
+                  {remainingDistanceMeters && remainingDurationSeconds && (
+                    <Text style={styles.junctionRemaining}>
+                      {formatDistanceImperial(remainingDistanceMeters)} • {(() => {
+                        const totalMins = Math.round(remainingDurationSeconds / 60);
+                        const hours = Math.floor(totalMins / 60);
+                        const mins = totalMins % 60;
+                        return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+                      })()} remaining
+                    </Text>
+                  )}
+                </View>
               </View>
-            </View>
+              
+              {/* Debug overlay - long press on distance to toggle */}
+              {debugMode && (
+                <View style={styles.debugPanel}>
+                  <Text style={styles.debugText}>STEP {currentStepIndex}</Text>
+                  <Text style={styles.debugText}>Maneuver: {m}</Text>
+                  <Text style={styles.debugText}>Instruction: {step?.instruction?.substring(0, 30)}</Text>
+                  {step?.roundaboutExitNumber && (
+                    <Text style={styles.debugText}>Exit: {step.roundaboutExitNumber}</Text>
+                  )}
+                  <Text style={styles.debugText}>Dist: {Math.round(nextJunctionDistance || 0)}m</Text>
+                </View>
+              )}
+            </>
           );
         })()
       )}
@@ -4256,6 +4274,26 @@ const styles = StyleSheet.create({
   junctionText: {
     fontSize: 12,
     color: "#e5e7eb",
+  },
+
+  debugPanel: {
+    position: "absolute",
+    bottom: 320,
+    left: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#fbbf24",
+    zIndex: 1999,
+    maxWidth: 200,
+  },
+  debugText: {
+    color: "#fbbf24",
+    fontSize: 11,
+    fontWeight: "600",
+    fontFamily: "monospace",
+    marginVertical: 2,
   },
 
   postboxTitle: {
