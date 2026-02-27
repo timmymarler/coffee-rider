@@ -1561,123 +1561,51 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Smart step detection: track which step you're on and automatically advance when past it
   // This fixes the "getting further away" issue by detecting step transitions more intelligently
+  // Smart step detection: track which step you're on and automatically advance when past it
   useEffect(() => {
     if (!isNavigationMode) return;
     if (!userLocation) return;
     if (!routeSteps || routeSteps.length === 0) return;
-    if (!routeCoords || routeCoords.length === 0) return;
 
-    const STEP_ADVANCE_THRESHOLD_METERS = 0; // Advance only AFTER passing the junction (0m = at/past the point)
-    const MAX_BACKTRACK_TOLERANCE_METERS = 30; // Allow 30m backward before considering off-track
-
-    // Step 1: Find user's closest point on the polyline
-    let closestPolylineIdx = 0;
-    let closestPolylineDist = Infinity;
+    // Simple & robust: find which step endpoint you're closest to
+    // This is much more reliable than trying to sync with polyline coordinates
     
-    for (let i = 0; i < routeCoords.length; i++) {
-      const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
-      if (dist < closestPolylineDist) {
-        closestPolylineDist = dist;
-        closestPolylineIdx = i;
-      }
-    }
-
-    // Step 2: Find which step the user is ON by matching polyline position
-    // Build a map of where each step ends on the polyline
-    let stepEndPolylineIndices = [];
+    let detectedStepIdx = currentStepIndex;
+    let closestDist = Infinity;
     
     for (let i = 0; i < routeSteps.length; i++) {
       const step = routeSteps[i];
-      if (!step?.end?.latitude) {
-        stepEndPolylineIndices[i] = routeCoords.length - 1;
-        continue;
-      }
+      if (!step?.end?.latitude) continue;
       
-      // Find the closest polyline point to this step's end (within 250m)
-      let bestIdx = routeCoords.length - 1;
-      let bestDist = Infinity;
+      const distToEndpoint = distanceBetweenMeters(userLocation, step.end);
+      const isAlreadyPassed = i <= currentStepIndex;
+      const penalty = isAlreadyPassed ? 0 : 300; // Penalize future steps to avoid jumping ahead
       
-      for (let j = Math.max(0, closestPolylineIdx - 50); j < Math.min(routeCoords.length, closestPolylineIdx + 100); j++) {
-        const dist = distanceBetweenMeters(step.end, routeCoords[j]);
-        if (dist < bestDist && dist < 250) {
-          bestDist = dist;
-          bestIdx = j;
-        }
-      }
-      
-      stepEndPolylineIndices[i] = bestIdx;
-    }
-
-    // Step 3: Determine current step - find the step whose endpoint is closest AHEAD of user
-    // For overlapping routes, prefer the step that's closer to us (not far ahead)
-    let detectedStepIdx = currentStepIndex;
-    let closestEndpointDist = Infinity;
-    let closestEndpointIdx = -1;
-    
-    for (let i = currentStepIndex; i < routeSteps.length; i++) {
-      const stepEndIdx = stepEndPolylineIndices[i];
-      
-      // User is still before this step's end (ahead on polyline)
-      if (closestPolylineIdx < stepEndIdx) {
-        // Calculate distance from user to this step's endpoint
-        const step = routeSteps[i];
-        if (step?.end?.latitude) {
-          const distToEnd = distanceBetweenMeters(userLocation, step.end);
-          // Prefer the closest endpoint ahead (most likely the step we're on)
-          if (closestEndpointIdx === -1 || distToEnd < closestEndpointDist) {
-            closestEndpointDist = distToEnd;
-            closestEndpointIdx = i;
-          }
-        }
+      if (distToEndpoint + penalty < closestDist) {
+        closestDist = distToEndpoint + penalty;
+        detectedStepIdx = i;
       }
     }
-    
-    if (closestEndpointIdx !== -1) {
-      detectedStepIdx = closestEndpointIdx;
-    }
 
-    // If we've reached the end, stay on the last step
-    detectedStepIdx = Math.min(detectedStepIdx, routeSteps.length - 1);
-
-    // Step 4: Calculate distance to next junction (end of CURRENT step)
-    const currentStep = routeSteps[detectedStepIdx];
-    if (!currentStep?.end?.latitude) {
-      setNextJunctionDistance(null);
-      return;
-    }
-
-    const distToNextJunction = distanceBetweenMeters(userLocation, currentStep.end);
-    setNextJunctionDistance(distToNextJunction);
-
-    // Step 5: Auto-advance to next step if:
-    // - We're close to the current step's end (<15m)
-    // - AND we're not moving backward (distance is decreasing or stable)
-    if (
-      detectedStepIdx !== currentStepIndex &&
-      detectedStepIdx < routeSteps.length
-    ) {
-      console.log('[Navigation] Step transition detected:', {
+    // Update if significantly closer (100m hysteresis)
+    if (detectedStepIdx !== currentStepIndex && closestDist < 100) {
+      console.log('[Navigation] Step advance:', {
         from: currentStepIndex,
         to: detectedStepIdx,
-        userPolylinePos: closestPolylineIdx,
-        stepEndPos: stepEndPolylineIndices[detectedStepIdx],
-        distanceToJunction: Math.round(distToNextJunction),
+        distToEndpoint: Math.round(closestDist),
       });
       setCurrentStepIndex(detectedStepIdx);
-    } else if (
-      distToNextJunction !== null &&
-      distToNextJunction < STEP_ADVANCE_THRESHOLD_METERS &&
-      detectedStepIdx < routeSteps.length - 1
-    ) {
-      // Also advance if we're very close to the junction
-      console.log('[Navigation] Near junction advance:', {
-        from: detectedStepIdx,
-        to: detectedStepIdx + 1,
-        distanceToJunction: Math.round(distToNextJunction),
-      });
-      setCurrentStepIndex(detectedStepIdx + 1);
     }
-  }, [userLocation, isNavigationMode, routeSteps, routeCoords]);
+
+    // Distance to current step's end
+    const currentStep = routeSteps[currentStepIndex];
+    if (currentStep?.end?.latitude) {
+      const distToJunction = distanceBetweenMeters(userLocation, currentStep.end);
+      setNextJunctionDistance(distToJunction);
+    } else {
+      setNextJunctionDistance(null);
+    }
+  }, [userLocation, isNavigationMode, routeSteps]);
 
   // Auto-rerouting when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
