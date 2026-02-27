@@ -3624,6 +3624,36 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           // Use the instruction that was already computed in tomtomRouting.js
           // This ensures roundabout instructions are consistent
           let label = step?.instruction || meta.label || "Continue";
+          
+          // If this is a roundabout maneuver, ensure we have proper roundabout instruction
+          // (in case roundabout instruction wasn't set during routing)
+          if (m.includes("ROUNDABOUT")) {
+            // If instruction doesn't mention roundabout or exit, use the available fields
+            if (!label.toLowerCase().includes("roundabout") && !label.toLowerCase().includes("exit")) {
+              if (step?.roundaboutExitNumber) {
+                label = `Take exit ${step.roundaboutExitNumber}`;
+              } else if (m.includes("STRAIGHT")) {
+                label = "Go straight through roundabout";
+              } else if (m.includes("LEFT")) {
+                label = "Exit left from roundabout";
+              } else if (m.includes("RIGHT")) {
+                label = "Exit right from roundabout";
+              } else {
+                label = "Proceed through roundabout";
+              }
+            }
+          }
+          
+          // DEBUG: Log what we're showing
+          console.log('[DirectionsPanel] Step:', {
+            index: currentStepIndex,
+            maneuver: m,
+            instruction: step?.instruction,
+            ManeuverFromStep: step?.maneuver,
+            roundaboutExitNumber: step?.roundaboutExitNumber,
+            distance: Math.round(nextJunctionDistance || 0),
+            finalLabel: label,
+          });
 
           return (
             <View style={styles.junctionPanel}>
