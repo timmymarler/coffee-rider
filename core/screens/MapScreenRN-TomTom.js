@@ -2225,6 +2225,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setManualStartPoint(null); 
     routeFittedRef.current = false;
     setCurrentLoadedRouteId(null);
+    setFollowUser(false);          // Disable Follow Me when clearing route
+    setCurrentStepIndex(0);        // Reset step index
+    setNextJunctionDistance(null); // Clear junction distance
+    setRouteSteps([]);             // Clear steps
   }
 
   function clearSearch() {
