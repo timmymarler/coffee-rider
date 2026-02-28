@@ -3623,58 +3623,31 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           
           if (!step) return null;
           
-          // Normalize maneuver type
-          let m = (step?.maneuver || "STRAIGHT").trim().toUpperCase();
-          let meta = MANEUVER_ICON_MAP[m];
+          // Get the NEXT instruction (what comes after the current step)
+          // This is embedded in the step during route creation, so it's always correct
+          const nextManeuver = (step?.nextManeuver || "STRAIGHT").trim().toUpperCase();
+          const nextInstruction = step?.nextInstruction || "Continue";
+          let meta = MANEUVER_ICON_MAP[nextManeuver];
           
           // Fallback for unrecognized maneuvers
           if (!meta) {
-            meta = m.includes("ROUNDABOUT") 
+            meta = nextManeuver.includes("ROUNDABOUT") 
               ? MANEUVER_ICON_MAP.ROUNDABOUT_ENTER 
               : MANEUVER_ICON_MAP.STRAIGHT;
           }
 
           const distText = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : "";
           
-          // Use the instruction that was already computed in tomtomRouting.js
-          // This ensures roundabout instructions are consistent
-          let label = step?.instruction || meta.label || "Continue";
-          
-          // If this is a roundabout maneuver, ensure we have proper roundabout instruction
-          // (in case roundabout instruction wasn't set during routing)
-          if (m.includes("ROUNDABOUT")) {
-            // If instruction doesn't mention roundabout or exit, use the available fields
-            if (!label.toLowerCase().includes("roundabout") && !label.toLowerCase().includes("exit")) {
-              if (step?.roundaboutExitNumber) {
-                label = `Take exit ${step.roundaboutExitNumber}`;
-              } else if (m.includes("STRAIGHT")) {
-                label = "Go straight through roundabout";
-              } else if (m.includes("LEFT")) {
-                label = "Exit left from roundabout";
-              } else if (m.includes("RIGHT")) {
-                label = "Exit right from roundabout";
-              } else {
-                label = "Proceed through roundabout";
-              }
-            }
-          }
+          // Use the nextInstruction directly - it's been properly computed during route creation
+          const label = nextInstruction;
           
           // DEBUG: Log what we're showing
-          console.log('[DirectionsPanel] RENDERING STEP:', {
+          console.log('[DirectionsPanel] Step:', {
             stepIndex: currentStepIndex,
-            totalSteps: routeSteps.length,
-            maneuver: m,
-            rawManeuver: step?.maneuver,
-            instruction: step?.instruction,
-            roundaboutExitNumber: step?.roundaboutExitNumber,
+            nextManeuver,
+            nextInstruction,
+            nextRoundaboutExitNumber: step?.nextRoundaboutExitNumber,
             distance: Math.round(nextJunctionDistance || 0),
-            finalLabel: label,
-            stepObject: JSON.stringify({
-              maneuver: step?.maneuver,
-              instruction: step?.instruction,
-              roundaboutExitNumber: step?.roundaboutExitNumber,
-              distance: step?.distance,
-            }),
           });
 
           return (
@@ -3706,21 +3679,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               {/* Debug overlay - long press on distance to toggle */}
               {debugMode && step && (
                 <View style={styles.debugPanel}>
-                  <Text style={styles.debugText}>═ CURRENT STEP {currentStepIndex}/{routeSteps.length - 1} ═</Text>
-                  <Text style={styles.debugText}>Maneuver: {m}</Text>
-                  <Text style={styles.debugText}>Instr: {step?.instruction?.substring(0, 32)}</Text>
-                  {step?.roundaboutExitNumber !== undefined && (
-                    <Text style={styles.debugText}>Exit: {step.roundaboutExitNumber || "n/a"}</Text>
+                  <Text style={styles.debugText}>═ STEP {currentStepIndex} ═</Text>
+                  <Text style={styles.debugText}>Next→ {nextManeuver?.substring(0, 20)}</Text>
+                  <Text style={styles.debugText}>Instr: {nextInstruction?.substring(0, 28)}</Text>
+                  {step?.nextRoundaboutExitNumber !== undefined && (
+                    <Text style={styles.debugText}>Exit: {step.nextRoundaboutExitNumber || "n/a"}</Text>
                   )}
                   <Text style={styles.debugText}>Dist: {Math.round(nextJunctionDistance || 0)}m</Text>
-                  
-                  {/* Show next step for comparison */}
-                  {currentStepIndex + 1 < routeSteps.length && (
-                    <>
-                      <Text style={[styles.debugText, {marginTop: 6, color: "#aaa"}]}>Next: {routeSteps[currentStepIndex + 1]?.maneuver?.substring(0, 15)}</Text>
-                      <Text style={[styles.debugText, {color: "#aaa"}]}>{routeSteps[currentStepIndex + 1]?.instruction?.substring(0, 25)}</Text>
-                    </>
-                  )}
                 </View>
               )}
             </>
