@@ -1572,6 +1572,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // This ensures we always show the distance to the END of the current instruction
     
     let nextStepIdx = currentStepIndex;
+    let distanceForDisplay = null;
     
     // Check if we've passed the current step's endpoint
     if (currentStepIndex < routeSteps.length) {
@@ -1586,25 +1587,38 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         if (distToCurrentEnd < advanceThreshold && currentStepIndex + 1 < routeSteps.length) {
           // Approaching the endpoint of current step - prepare to advance
           nextStepIdx = currentStepIndex + 1;
+          const nextStep = routeSteps[nextStepIdx];
+          
+          // Calculate distance to the NEXT step's end
+          if (nextStep?.end?.latitude) {
+            distanceForDisplay = distanceBetweenMeters(userLocation, nextStep.end);
+          }
+          
           console.log('[Navigation] Advancing step:', {
             from: currentStepIndex,
             to: nextStepIdx,
-            currentStepEnd: Math.round(distToCurrentEnd),
-            nextInstruction: routeSteps[nextStepIdx]?.instruction || 'Unknown',
+            previousStepEnd: Math.round(distToCurrentEnd),
+            nextStepManeuver: nextStep?.maneuver,
+            nextStepInstruction: nextStep?.instruction?.substring(0, 40),
+            nextStepDistance: Math.round(distanceForDisplay || 0),
           });
         } else {
           nextStepIdx = currentStepIndex;
+          distanceForDisplay = distToCurrentEnd;
         }
       }
     }
     
     // Update step index if we've advanced
     if (nextStepIdx !== currentStepIndex) {
+      console.log('[Navigation] setCurrentStepIndex:', nextStepIdx);
       setCurrentStepIndex(nextStepIdx);
     }
 
-    // Show distance to the END of the current step (not closest junction overall)
-    if (currentStepIndex < routeSteps.length && routeSteps[currentStepIndex]?.end?.latitude) {
+    // Show distance to the END of the current/next step
+    if (distanceForDisplay !== null) {
+      setNextJunctionDistance(distanceForDisplay);
+    } else if (currentStepIndex < routeSteps.length && routeSteps[currentStepIndex]?.end?.latitude) {
       const distToEnd = distanceBetweenMeters(userLocation, routeSteps[currentStepIndex].end);
       setNextJunctionDistance(distToEnd);
     } else {
@@ -3646,14 +3660,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           }
           
           // DEBUG: Log what we're showing
-          console.log('[DirectionsPanel] Step:', {
-            index: currentStepIndex,
+          console.log('[DirectionsPanel] RENDERING STEP:', {
+            stepIndex: currentStepIndex,
+            totalSteps: routeSteps.length,
             maneuver: m,
+            rawManeuver: step?.maneuver,
             instruction: step?.instruction,
-            ManeuverFromStep: step?.maneuver,
             roundaboutExitNumber: step?.roundaboutExitNumber,
             distance: Math.round(nextJunctionDistance || 0),
             finalLabel: label,
+            stepObject: JSON.stringify({
+              maneuver: step?.maneuver,
+              instruction: step?.instruction,
+              roundaboutExitNumber: step?.roundaboutExitNumber,
+              distance: step?.distance,
+            }),
           });
 
           return (
@@ -3683,15 +3704,23 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               </View>
               
               {/* Debug overlay - long press on distance to toggle */}
-              {debugMode && (
+              {debugMode && step && (
                 <View style={styles.debugPanel}>
-                  <Text style={styles.debugText}>STEP {currentStepIndex}</Text>
+                  <Text style={styles.debugText}>═ CURRENT STEP {currentStepIndex}/{routeSteps.length - 1} ═</Text>
                   <Text style={styles.debugText}>Maneuver: {m}</Text>
-                  <Text style={styles.debugText}>Instruction: {step?.instruction?.substring(0, 30)}</Text>
-                  {step?.roundaboutExitNumber && (
-                    <Text style={styles.debugText}>Exit: {step.roundaboutExitNumber}</Text>
+                  <Text style={styles.debugText}>Instr: {step?.instruction?.substring(0, 32)}</Text>
+                  {step?.roundaboutExitNumber !== undefined && (
+                    <Text style={styles.debugText}>Exit: {step.roundaboutExitNumber || "n/a"}</Text>
                   )}
                   <Text style={styles.debugText}>Dist: {Math.round(nextJunctionDistance || 0)}m</Text>
+                  
+                  {/* Show next step for comparison */}
+                  {currentStepIndex + 1 < routeSteps.length && (
+                    <>
+                      <Text style={[styles.debugText, {marginTop: 6, color: "#aaa"}]}>Next: {routeSteps[currentStepIndex + 1]?.maneuver?.substring(0, 15)}</Text>
+                      <Text style={[styles.debugText, {color: "#aaa"}]}>{routeSteps[currentStepIndex + 1]?.instruction?.substring(0, 25)}</Text>
+                    </>
+                  )}
                 </View>
               )}
             </>

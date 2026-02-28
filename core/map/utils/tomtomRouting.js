@@ -516,16 +516,19 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       firstStep: steps[0] || 'no steps',
     });
     
-    // Log all steps with their instructions for debugging
-    steps.forEach((step, idx) => {
-      if (step.maneuver.includes('ROUNDABOUT') || idx < 3 || idx === steps.length - 1) {
-        console.log(`[tomtomRouting] Step ${idx}:`, {
-          maneuver: step.maneuver,
-          instruction: step.instruction,
-          roundaboutExitNumber: step.roundaboutExitNumber,
-          distance: step.distance,
-        });
-      }
+    // Log ALL instructions - raw AND processed - for debugging
+    instructions.forEach((instr, idx) => {
+      const step = steps[idx];
+      console.log(`[tomtomRouting] INSTRUCTION ${idx}:`, {
+        rawText: instr.text,
+        rawManeuver: instr.maneuver,
+        rawRoundaboutExitNumber: instr.roundaboutExitNumber,
+        processedInstruction: step?.instruction,
+        processedManeuver: step?.maneuver,
+        processedExitNumber: step?.roundaboutExitNumber,
+        street: instr.street,
+        distance: instr.distance,
+      });
     });
 
     // Extract polyline points from legs
