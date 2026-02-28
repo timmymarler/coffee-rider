@@ -492,9 +492,9 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       if (idx + 1 < instructions.length) {
         const nextInstr = instructions[idx + 1];
         nextManeuver = nextInstr.maneuver || "STRAIGHT";
-        nextInstruction = nextInstr.text || "Continue";
-
-        // If next is a roundabout, extract its exit number
+        
+        // Apply the same instruction conversion logic to the next instruction
+        // Don't just use raw text - interpret the maneuver properly
         if (nextManeuver.includes("ROUNDABOUT")) {
           if (typeof nextInstr.roundaboutExitNumber === "number" && nextInstr.roundaboutExitNumber > 0) {
             nextRoundaboutExitNumber = nextInstr.roundaboutExitNumber;
@@ -508,6 +508,32 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
           } else {
             nextInstruction = "Enter roundabout";
           }
+        } else if (nextManeuver.includes("TURN_LEFT") || nextManeuver === "LEFT") {
+          nextInstruction = "Turn left";
+        } else if (nextManeuver.includes("TURN_RIGHT") || nextManeuver === "RIGHT") {
+          nextInstruction = "Turn right";
+        } else if (nextManeuver.includes("TURN_SLIGHT_LEFT")) {
+          nextInstruction = "Slight left";
+        } else if (nextManeuver.includes("TURN_SLIGHT_RIGHT")) {
+          nextInstruction = "Slight right";
+        } else if (nextManeuver === "STRAIGHT") {
+          // Look ahead to see if we're approaching a junction
+          const instr_after_next = instructions[idx + 2];
+          if (instr_after_next) {
+            const maneuver_after = instr_after_next.maneuver || "";
+            if (maneuver_after.includes("ROUNDABOUT")) {
+              nextInstruction = "Approach roundabout";
+            } else if (maneuver_after.includes("TURN")) {
+              nextInstruction = "Continue straight to next junction";
+            } else {
+              nextInstruction = "Continue straight";
+            }
+          } else {
+            nextInstruction = "Continue straight";
+          }
+        } else {
+          // Fallback: use the raw text or a default
+          nextInstruction = nextInstr.text || "Continue";
         }
       }
 
