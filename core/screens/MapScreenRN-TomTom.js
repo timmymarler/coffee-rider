@@ -1562,50 +1562,43 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Smart step detection: track which step you're on and automatically advance when past it
   // This fixes the "getting further away" issue by detecting step transitions more intelligently
+  const prevStepDistRef = useRef(null);
   useEffect(() => {
     if (!isNavigationMode) return;
     if (!userLocation) return;
     if (!routeSteps || routeSteps.length === 0) return;
 
-    // Strategy: User is on current step, approaching its END point
-    // When user passes that end point, advance to next step
-    // This ensures we always show the distance to the END of the current instruction
-    
     let nextStepIdx = currentStepIndex;
-    let distanceForDisplay = null;
     
     // Check if we've passed the current step's endpoint
     if (currentStepIndex < routeSteps.length) {
       const currentStep = routeSteps[currentStepIndex];
       if (currentStep?.end?.latitude) {
         const distToCurrentEnd = distanceBetweenMeters(userLocation, currentStep.end);
+        const prevDist = prevStepDistRef.current;
         
-        // If we're getting closer to a future step, might be off-route
-        // But linearly advance when crossing the current step's endpoint
-        const advanceThreshold = 50; // meters - advance when within 50m of the endpoint
+        // Advance logic:
+        // 1. If very close (< 15m) AND approaching (distance decreasing), prepare to advance
+        // 2. If was close but now moving away, we've passed the endpoint - advance
+        const isClose = distToCurrentEnd < 15;
+        const wasClosing = prevDist !== null && distToCurrentEnd < prevDist;
+        const wasPassing = prevDist !== null && prevDist < 30 && distToCurrentEnd > prevDist + 5;
         
-        if (distToCurrentEnd < advanceThreshold && currentStepIndex + 1 < routeSteps.length) {
-          // Approaching the endpoint of current step - prepare to advance
-          nextStepIdx = currentStepIndex + 1;
-          const nextStep = routeSteps[nextStepIdx];
-          
-          // Calculate distance to the NEXT step's end
-          if (nextStep?.end?.latitude) {
-            distanceForDisplay = distanceBetweenMeters(userLocation, nextStep.end);
+        if ((isClose && wasClosing) || wasPassing) {
+          if (currentStepIndex + 1 < routeSteps.length) {
+            nextStepIdx = currentStepIndex + 1;
+            const nextStep = routeSteps[nextStepIdx];
+            console.log('[Navigation] Advanced step:', {
+              from: currentStepIndex,
+              to: nextStepIdx,
+              distToOldEnd: Math.round(distToCurrentEnd),
+              nextManeuver: nextStep?.maneuver,
+              nextInstruction: nextStep?.instruction?.substring(0, 40),
+            });
           }
-          
-          console.log('[Navigation] Advancing step:', {
-            from: currentStepIndex,
-            to: nextStepIdx,
-            previousStepEnd: Math.round(distToCurrentEnd),
-            nextStepManeuver: nextStep?.maneuver,
-            nextStepInstruction: nextStep?.instruction?.substring(0, 40),
-            nextStepDistance: Math.round(distanceForDisplay || 0),
-          });
-        } else {
-          nextStepIdx = currentStepIndex;
-          distanceForDisplay = distToCurrentEnd;
         }
+        
+        prevStepDistRef.current = distToCurrentEnd;
       }
     }
     
@@ -1616,9 +1609,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Show distance to the END of the current/next step
-    if (distanceForDisplay !== null) {
-      setNextJunctionDistance(distanceForDisplay);
-    } else if (currentStepIndex < routeSteps.length && routeSteps[currentStepIndex]?.end?.latitude) {
+    if (currentStepIndex < routeSteps.length && routeSteps[currentStepIndex]?.end?.latitude) {
       const distToEnd = distanceBetweenMeters(userLocation, routeSteps[currentStepIndex].end);
       setNextJunctionDistance(distToEnd);
     } else {
