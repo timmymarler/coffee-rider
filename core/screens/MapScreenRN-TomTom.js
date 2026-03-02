@@ -680,6 +680,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
   const [debugMode, setDebugMode] = useState(false); // Toggle with long press on distance display
   const routeFittedRef = useRef(false);
+  const prevStepDistRef = useRef(null); // Track previous distance to step endpoint to detect crossing
   
   // Active ride & location sharing
   const { activeRide, endRide } = useActiveRide(user);
@@ -1580,12 +1581,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       if (currentStep?.end?.latitude) {
         const distToCurrentEnd = distanceBetweenMeters(userLocation, currentStep.end);
         
-        // If we're getting closer to a future step, might be off-route
-        // But linearly advance when crossing the current step's endpoint
-        const advanceThreshold = 50; // meters - advance when within 50m of the endpoint
+        // Detect when user crosses the step's endpoint by checking if distance increases
+        // This avoids showing the next instruction until AFTER passing the junction
+        const crossingThreshold = 50; // meters - get close enough to detect crossing
+        const wasPreviouslyCloser = prevStepDistRef.current !== null && distToCurrentEnd > prevStepDistRef.current;
+        const hasPassedJunction = distToCurrentEnd < crossingThreshold && wasPreviouslyCloser;
         
-        if (distToCurrentEnd < advanceThreshold && currentStepIndex + 1 < routeSteps.length) {
-          // Approaching the endpoint of current step - prepare to advance
+        if (hasPassedJunction && currentStepIndex + 1 < routeSteps.length) {
+          // User has crossed the endpoint - advance to next step
           nextStepIdx = currentStepIndex + 1;
           const nextStep = routeSteps[nextStepIdx];
           
@@ -1594,10 +1597,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             distanceForDisplay = distanceBetweenMeters(userLocation, nextStep.end);
           }
           
-          console.log('[Navigation] Advancing step:', {
+          console.log('[Navigation] Advanced step (crossed endpoint):', {
             from: currentStepIndex,
             to: nextStepIdx,
-            previousStepEnd: Math.round(distToCurrentEnd),
+            distanceToEndpoint: Math.round(distToCurrentEnd),
             nextStepManeuver: nextStep?.maneuver,
             nextStepInstruction: nextStep?.instruction?.substring(0, 40),
             nextStepDistance: Math.round(distanceForDisplay || 0),
@@ -1606,6 +1609,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           nextStepIdx = currentStepIndex;
           distanceForDisplay = distToCurrentEnd;
         }
+        
+        // Update ref for next iteration
+        prevStepDistRef.current = distToCurrentEnd;
       }
     }
     
@@ -1613,6 +1619,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (nextStepIdx !== currentStepIndex) {
       console.log('[Navigation] setCurrentStepIndex:', nextStepIdx);
       setCurrentStepIndex(nextStepIdx);
+      prevStepDistRef.current = null; // Reset distance tracking for new step
     }
 
     // Show distance to the END of the current/next step
