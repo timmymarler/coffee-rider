@@ -2697,6 +2697,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     console.log("[mapRoute] Decoded", decoded.length, "points, simplified to", simplified.length, "points");
     
     // Update state with route data
+    // CRITICAL FIX: Always clear polylines first (if not already empty) to prevent Android
+    // from rendering old polylines along side new ones. The issue is that on Android,
+    // if you just replace coordinates without unmounting, native rendering can cache/retain the old lines.
+    // By explicitly clearing first, we force the Polyline components to unmount completely.
+    if (routeCoords.length > 0) {
+      // Clear old route first, then set new one with incremented version
+      // This causes: old Polylines unmount -> new Polylines mount with updated key
+      setRouteCoords([]);
+      setRouteVersion(v => v + 1);
+    }
+    
+    // Always set new route with incremented version to ensure fresh Polyline key
     setRouteCoords(simplified);
     setRouteVersion(v => v + 1);
     setRouteMeta({
