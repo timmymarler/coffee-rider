@@ -2213,12 +2213,27 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setIsHomeDestination(false);
     clearWaypoints();
     
-    // Clear polylines with proper unmount
-    console.log('[clearRoute] Clearing routeCoords, pendingRidePolyline, lastEncodedPolyline');
-    setRouteCoords([]);
-    setRouteVersion(v => v + 1);  // Ensure Polyline components with old key are unmounted
-    setPendingRidePolyline(null); // Clear ride polyline if present
-    setLastEncodedPolyline(null); // Clear saved polyline string
+    // For clearing, we need TWO-PHASE approach on Android:
+    // Phase 1: Increment version FIRST to tell old Polylines to unmount
+    // Phase 2: Then clear coords, with deferred clear to allow Android time to unmount
+    console.log('[clearRoute] Phase 1: Incrementing version to unmount old Polylines');
+    setRouteVersion(v => v + 1);
+    
+    // Use requestAnimationFrame to defer the actual clearing to let unmount complete
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => {
+        console.log('[clearRoute] Phase 2 (RAF): Clearing routeCoords, pendingRidePolyline, lastEncodedPolyline');
+        setRouteCoords([]);
+        setPendingRidePolyline(null);
+        setLastEncodedPolyline(null);
+      });
+    } else {
+      // Direct clear if no RAF
+      console.log('[clearRoute] Phase 2 (no RAF): Clearing routeCoords, pendingRidePolyline, lastEncodedPolyline');
+      setRouteCoords([]);
+      setPendingRidePolyline(null);
+      setLastEncodedPolyline(null);
+    }
     
     setRouteDistanceMeters(null);
     setManualStartPoint(null); 
