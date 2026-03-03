@@ -688,54 +688,47 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   
   // Navigation mode is active when Follow Me is enabled OR user is on an active ride
   const isNavigationMode = followUser || !!activeRide;
-  
-  // When vehicle type changes, clear only the polyline to force rebuild
-  // Colors will be derived from new travel mode when rendering
-  const previousTravelModeRef = useRef(userTravelMode);
-  useEffect(() => {
-    if (previousTravelModeRef.current !== userTravelMode && routeCoords.length > 0) {
-      // Vehicle type changed with an active route - clear the polyline to force visual rebuild
-      // Colors will be derived from new travel mode when rendering
-      setRouteCoords([]);
-      setRouteVersion(v => v + 1);
-      
-      // Trigger rebuild with new vehicle type
-      if ((routeDestination || waypoints.length > 0) && userLocation) {
-        console.log('[VEHICLE_TYPE_CHANGE] Vehicle type changed, rebuilding route with new travel mode...');
-        const requestId = ++routeRequestId.current;
-        buildRoute({ requestId }).catch(error => {
-          console.warn('[VEHICLE_TYPE_CHANGE] buildRoute error:', error);
-        });
-      }
-    }
-    previousTravelModeRef.current = userTravelMode;
-  }, [userTravelMode, routeCoords.length, routeDestination, waypoints, userLocation]);
 
-  // Rebuild route when route type changes while a route is active
-  const previousRouteTypeRef = useRef(userRouteType);
-  useEffect(() => {
-    if (previousRouteTypeRef.current !== userRouteType) {
-      previousRouteTypeRef.current = userRouteType;
-      
-      // If there's an active route displayed, rebuild it with the new route type
-      if (routeCoords.length > 0 && (routeDestination || waypoints.length > 0) && !followUser && userLocation) {
-        console.log('[MAP_ROUTE_TYPE_EFFECT] Route type changed, rebuilding...');
-        const requestId = ++routeRequestId.current;
-        buildRoute({ requestId }).catch(error => {
-          console.warn('[MAP_ROUTE_TYPE_EFFECT] buildRoute error:', error);
-        });
-      }
-    }
-  }, [userRouteType]);
+  // Track activeRide state separately - update TabBarContext when it changes
+  const previousActiveRideRef = useRef(null);
   
-  // Sync activeRide to TabBarContext so floating tab bar can access it
+  // Explicit handler: Rebuild route when vehicle type changes
+  const handleVehicleTypeChange = useCallback(() => {
+    if (routeCoords.length > 0 && (routeDestination || waypoints.length > 0) && userLocation && !followUser) {
+      console.log('[VEHICLE_TYPE_CHANGE] User changed vehicle type, rebuilding route...');
+      const requestId = ++routeRequestId.current;
+      buildRoute({ requestId }).catch(error => {
+        console.warn('[VEHICLE_TYPE_CHANGE] buildRoute error:', error);
+      });
+    }
+  }, [routeCoords.length, routeDestination, waypoints.length, userLocation, followUser]);
+
+  // Explicit handler: Rebuild route when route type changes
+  const handleRouteTypeChange = useCallback(() => {
+    if (routeCoords.length > 0 && (routeDestination || waypoints.length > 0) && !followUser && userLocation) {
+      console.log('[ROUTE_TYPE_CHANGE] User changed route type, rebuilding route...');
+      const requestId = ++routeRequestId.current;
+      buildRoute({ requestId }).catch(error => {
+        console.warn('[ROUTE_TYPE_CHANGE] buildRoute error:', error);
+      });
+    }
+  }, [routeCoords.length, routeDestination, waypoints.length, followUser, userLocation]);
+
+  // IMPORTANT: activeRide syncing and rebuild
+  // Use regular useEffect (not useFocusEffect) so it responds to activeRide changes immediately
+  // Only rebuild if ride is NEWLY started (previousActiveRideRef.current was null)
+  // This prevents cascading rebuilds but ensures we respond to new rides
   useEffect(() => {
+    // Always sync activeRide to TabBarContext and refs
     setActiveRide(activeRide);
     activeRideRef.current = activeRide;
     endRideRef.current = endRide;
     
-    // When an active ride starts, rebuild the route with current location as origin
-    if (activeRide && routeDestination && userLocation && !followUser) {
+    // Only rebuild if ride is NEWLY started (previousActiveRideRef.current was null)
+    const rideJustStarted = previousActiveRideRef.current === null && activeRide;
+    
+    if (rideJustStarted && routeDestination && userLocation && !followUser) {
+      console.log('[ACTIVE_RIDE] New active ride detected, rebuilding route...');
       const requestId = ++routeRequestId.current;
       mapRoute({
         origin: userLocation,
@@ -744,11 +737,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         travelMode: userTravelMode,
         routeType: userRouteType,
         requestId,
-        skipFitToView: false, // Fit to view for active rides so user sees full route
+        skipFitToView: false,
       }).catch(error => {
-        console.warn('[MapScreenRN] Error rebuilding route for active ride:', error);
+        console.warn('[ACTIVE_RIDE] mapRoute error:', error);
       });
     }
+    
+    // Update ref for next comparison
+    previousActiveRideRef.current = activeRide;
   }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType]);
   
   const canSaveRoute = 
@@ -844,6 +840,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const closeRefreshRouteMenu = () => {
     setShowRefreshRouteMenu(false);
   };
+
+  // Explicit handlers that UI components can call (not via dependency effects)
+  const onVehicleTypeSelected = useCallback(() => {
+    handleVehicleTypeChange();
+  }, [handleVehicleTypeChange]);
+
+  const onRouteTypeSelected = useCallback(() => {
+    handleRouteTypeChange();
+  }, [handleRouteTypeChange]);
 
   const handleRefreshRouteToNextWaypoint = async () => {
     closeRefreshRouteMenu();
@@ -2924,6 +2929,33 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Allow rebuild when route loading is complete (regardless of polyline source)
     isLoadingSavedRouteRef.current = false;
     setRoutingActive(true);
+    
+    // CRITICAL: If destination equals current location, we need to rebuild the route
+    // because the saved polyline is from originalOrigin → waypoints → originalDestination
+    // But user wants originalOrigin → waypoints → currentLocation
+    if (userLocation && route.destination) {
+      const destLat = route.destination.latitude ?? route.destination.lat;
+      const destLng = route.destination.longitude ?? route.destination.lng;
+      const currLat = userLocation.latitude;
+      const currLng = userLocation.longitude;
+      
+      // Check if destination is close to current location (within ~100m)
+      const destDistFromCurrent = Math.sqrt(
+        Math.pow((destLat - currLat) * 111000, 2) + 
+        Math.pow((destLng - currLng) * 111000 * Math.cos(currLat * Math.PI / 180), 2)
+      );
+      
+      if (destDistFromCurrent < 100) {
+        console.log('[loadSavedRoute] Destination matches current location, rebuilding route with manualStartPoint as origin...');
+        const requestId = ++routeRequestId.current;
+        // Small delay to ensure state is settled
+        setTimeout(() => {
+          buildRoute({ requestId }).catch(error => {
+            console.warn('[loadSavedRoute] buildRoute error:', error);
+          });
+        }, 100);
+      }
+    }
   }
 
   async function loadSavedRideById(rideId) {
