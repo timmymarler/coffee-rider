@@ -3509,16 +3509,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
             {/* Base route - outline layer for pedestrians and cyclists */}
               {(() => {
-                const shouldRender = shouldRenderOutline(userTravelMode) && routeCoords.length > 0;
+                const shouldRender = shouldRenderOutline(userTravelMode);
                 console.log('[RENDER] Base outline check - routeCoords.length:', routeCoords.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
-                if (shouldRender) {
-                  console.log('[POLYLINE MOUNT] base-outline-', routeVersion);
+                if (shouldRender && routeCoords.length > 0) {
+                  console.log('[POLYLINE MOUNT] base-outline- 0');
                 }
-                return shouldRender && (
+                return (
                   <Polyline
                     key="base-outline"
                     coordinates={routeCoords}
-                    strokeWidth={hidePolylines ? 0 : getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth}
+                    strokeWidth={shouldRender ? (hidePolylines ? 0 : getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth) : 0}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                     zIndex={899}
                   />
@@ -3526,16 +3526,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               })()}
               {/* Base route */}
               {(() => {
-                const shouldRender = routeCoords.length > 0;
+                const shouldRender = true;  // Always render, vary strokeWidth
                 console.log('[RENDER] Base route check - routeCoords.length:', routeCoords.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
-                if (shouldRender) {
-                  console.log('[POLYLINE MOUNT] base-', routeVersion);
+                if (routeCoords.length > 0) {
+                  console.log('[POLYLINE MOUNT] base- 0');
                 }
-                return shouldRender && (
+                return (
                   <Polyline
                     key="base-route"
                     coordinates={routeCoords}
-                    strokeWidth={hidePolylines ? 0 : getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth}
+                    strokeWidth={hidePolylines ? 0 : (routeCoords.length > 0 ? getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth : 0)}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                     zIndex={900}
                   />
@@ -3544,16 +3544,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
             {/* Traveled route (during Follow Me) - outline layer */}
               {(() => {
-                const shouldRender = followUser && traveledPolyline.length > 1;
+                const shouldRender = true;  // Always render, vary strokeWidth
                 console.log('[RENDER] Traveled outline check - followUser:', followUser, 'traveledPolyline.length:', traveledPolyline.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
-                if (shouldRender) {
-                  console.log('[POLYLINE MOUNT] traveled-outline-', routeVersion);
+                if (followUser && traveledPolyline.length > 1) {
+                  console.log('[POLYLINE MOUNT] traveled-outline- 0');
                 }
-                return shouldRender && (
+                return (
                   <Polyline
                     key="traveled-outline"
                     coordinates={traveledPolyline}
-                    strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 9 : 7)}
+                    strokeWidth={hidePolylines ? 0 : (followUser && traveledPolyline.length > 1 ? (isNavigationMode && followUser ? 9 : 7) : 0)}
                     strokeColor={theme.colors.accentDark}
                     zIndex={1000}
                   />
@@ -3561,16 +3561,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               })()}
               {/* Traveled route (during Follow Me) - always accentMid regardless of vehicle type */}
               {(() => {
-                const shouldRender = followUser && traveledPolyline.length > 1;
+                const shouldRender = true;  // Always render, vary strokeWidth
                 console.log('[RENDER] Traveled route check - followUser:', followUser, 'traveledPolyline.length:', traveledPolyline.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
-                if (shouldRender) {
-                  console.log('[POLYLINE MOUNT] traveled-', routeVersion);
+                if (followUser && traveledPolyline.length > 1) {
+                  console.log('[POLYLINE MOUNT] traveled- 0');
                 }
-                return shouldRender && (
+                return (
                   <Polyline
                     key="traveled-route"
                     coordinates={traveledPolyline}
-                    strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 7 : 5)}
+                    strokeWidth={hidePolylines ? 0 : (followUser && traveledPolyline.length > 1 ? (isNavigationMode && followUser ? 7 : 5) : 0)}
                     strokeColor={theme.colors.accentMid}
                     zIndex={1001}
                   />
@@ -3578,25 +3578,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               })()}
 
             {/* Remaining route - outline layer for pedestrians and cyclists */}
-              {shouldRenderOutline(userTravelMode) && routeCoords.length > 0 && (
-                <Polyline
-                  key="active-outline"
-                  coordinates={routeCoords}
-                  strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5))}
-                  strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
-                  zIndex={999}
-                />
-              )}
+              <Polyline
+                key="active-outline"
+                coordinates={routeCoords}
+                strokeWidth={hidePolylines ? 0 : (shouldRenderOutline(userTravelMode) && routeCoords.length > 0 ? (isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)) : 0)}
+                strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
+                zIndex={999}
+              />
               {/* Remaining route */}
-              {routeCoords.length > 0 && (
-                <Polyline
-                  key="active-route"
-                  coordinates={routeCoords}
-                  strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3))}
-                  strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
-                  zIndex={1000}
-                />
-              )}
+              <Polyline
+                key="active-route"
+                coordinates={routeCoords}
+                strokeWidth={hidePolylines ? 0 : (routeCoords.length > 0 ? (isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)) : 0)}
+                strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
+                zIndex={1000}
+              />
         </MapView>
       ) : (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.primaryDark }}>
