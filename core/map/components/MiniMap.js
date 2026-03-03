@@ -61,7 +61,7 @@ export default function MiniMap({
     if (miniMapRef.current && (riderLocations.length > 0 || userLocation || routeCoords.length > 0)) {
       miniMapRef.current.animateToRegion(initialRegion, 500);
     }
-  }, [riderLocations.length, userLocation?.latitude, userLocation?.longitude, routeCoords.length];
+  }, [riderLocations.length, userLocation?.latitude, userLocation?.longitude, routeCoords.length]);
 
   return (
     <View style={[styles.container, containerStyles]}>
