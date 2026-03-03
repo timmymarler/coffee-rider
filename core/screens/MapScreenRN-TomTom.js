@@ -565,6 +565,9 @@ function normalizeCoord(obj) {
 /* ------------------------------------------------------------------ */
 
 export default function MapScreenRN({ placeId, openPlaceCard }) {
+    // DEBUG: Log each render
+    console.log('[MapScreenRN RENDER] Component rendering - routeCoords.length will be logged in effects');
+    
     // Open PlaceCard and zoom to marker if placeId and openPlaceCard are provided
     useEffect(() => {
       if (placeId && openPlaceCard && mapRef.current) {
@@ -3568,8 +3571,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
             {/* Base route - outline layer for pedestrians and cyclists */}
               {(() => {
-                console.log('[RENDER] Base outline check - routeCoords.length:', routeCoords.length, 'shouldRender:', shouldRenderOutline(userTravelMode) && routeCoords.length > 0);
-                return shouldRenderOutline(userTravelMode) && routeCoords.length > 0 && (
+                const shouldRender = shouldRenderOutline(userTravelMode) && routeCoords.length > 0;
+                console.log('[RENDER] Base outline check - routeCoords.length:', routeCoords.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
+                if (shouldRender) {
+                  console.log('[POLYLINE MOUNT] base-outline-', routeVersion);
+                }
+                return shouldRender && (
                   <Polyline
                     key={`base-outline-${routeVersion}`}
                     coordinates={routeCoords}
@@ -3581,8 +3588,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               })()}
               {/* Base route */}
               {(() => {
-                console.log('[RENDER] Base route check - routeCoords.length:', routeCoords.length, 'shouldRender:', routeCoords.length > 0);
-                return routeCoords.length > 0 && (
+                const shouldRender = routeCoords.length > 0;
+                console.log('[RENDER] Base route check - routeCoords.length:', routeCoords.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
+                if (shouldRender) {
+                  console.log('[POLYLINE MOUNT] base-', routeVersion);
+                }
+                return shouldRender && (
                   <Polyline
                     key={`base-${routeVersion}`}
                     coordinates={routeCoords}
@@ -3595,8 +3606,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
             {/* Traveled route (during Follow Me) - outline layer */}
               {(() => {
-                console.log('[RENDER] Traveled outline check - followUser:', followUser, 'traveledPolyline.length:', traveledPolyline.length);
-                return followUser && traveledPolyline.length > 1 && (
+                const shouldRender = followUser && traveledPolyline.length > 1;
+                console.log('[RENDER] Traveled outline check - followUser:', followUser, 'traveledPolyline.length:', traveledPolyline.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
+                if (shouldRender) {
+                  console.log('[POLYLINE MOUNT] traveled-outline-', routeVersion);
+                }
+                return shouldRender && (
                   <Polyline
                     key={`traveled-outline-${routeVersion}`}
                     coordinates={traveledPolyline}
@@ -3608,8 +3623,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               })()}
               {/* Traveled route (during Follow Me) - always accentMid regardless of vehicle type */}
               {(() => {
-                console.log('[RENDER] Traveled route check - followUser:', followUser, 'traveledPolyline.length:', traveledPolyline.length);
-                return followUser && traveledPolyline.length > 1 && (
+                const shouldRender = followUser && traveledPolyline.length > 1;
+                console.log('[RENDER] Traveled route check - followUser:', followUser, 'traveledPolyline.length:', traveledPolyline.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
+                if (shouldRender) {
+                  console.log('[POLYLINE MOUNT] traveled-', routeVersion);
+                }
+                return shouldRender && (
                   <Polyline
                     key={`traveled-${routeVersion}`}
                     coordinates={traveledPolyline}
