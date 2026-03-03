@@ -678,6 +678,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [routeClearedByUser, setRouteClearedByUser] = useState(false);
   const routeRequestId = useRef(0);
   const [routeVersion, setRouteVersion] = useState(0);
+  const [hidePolylines, setHidePolylines] = useState(false); // Force polylines transparent during clearing
   
   // DEBUG: Log routeVersion changes
   useEffect(() => {
@@ -2231,30 +2232,36 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setIsHomeDestination(false);
     clearWaypoints();
     
-    // FIX: Clear coordinates FIRST, then increment version
+    // CRITICAL FIX FOR ANDROID: Hide polylines FIRST before clearing
+    // Android's react-native-maps doesn't properly unmount Polyline views
+    // Setting hidePolylines=true forces them transparent so they disappear visually
+    // while we work on the state underneath
+    console.log('[clearRoute] Phase 1: Force polylines transparent');
+    setHidePolylines(true);
+    
+    // Phase 2: Clear coordinates FIRST, then increment version
     // If we increment version first with old coords still there, React mounts a new Polyline with old coords!
     // So we must clear coords immediately, THEN increment version so React sees empty coords + new key = no render
-    console.log('[clearRoute] Phase 1: Clearing routeCoords and pendingRidePolyline immediately');
+    console.log('[clearRoute] Phase 2: Clearing routeCoords and pendingRidePolyline');
     setRouteCoords([]);
     setPendingRidePolyline(null);
     setLastEncodedPolyline(null);
     
     // NOW increment version to ensure old Polyline components unmount
-    console.log('[clearRoute] Phase 2: Incrementing version to unmount any stale Polyline components');
+    console.log('[clearRoute] Phase 3: Incrementing version to unmount Polyline components');
     setRouteVersion(v => {
       console.log('[clearRoute] setRouteVersion - current: ', v, 'new:', v + 1);
       return v + 1;
     });
     
-    // Phase 3: Force native Android to render empty polylines before React unmounts
-    // On Android, react-native-maps sometimes doesn't remove native Polylines when React unmounts
-    // So we explicitly set empty coordinates again after version increment to ensure native render
+    // Phase 4: After giving native layer time to render transparent polylines,
+    // use RAF to schedule actual cleanup
     if (typeof requestAnimationFrame !== 'undefined') {
-      console.log('[clearRoute] Scheduling Phase 3 (RAF): Force-render empty coordinates');
-      requestAnimationFrame(() => {
-        console.log('[clearRoute] Phase 3 (RAF): Setting coordinates to empty array again');
-        setRouteCoords([]);
-      });
+      console.log('[clearRoute] Scheduling Phase 4 (150ms delay): Clear hidePolylines flag');
+      setTimeout(() => {
+        console.log('[clearRoute] Phase 4 (150ms): Clearing hidePolylines flag');
+        setHidePolylines(false);
+      }, 150);
     }
     
     setRouteDistanceMeters(null);
@@ -3598,7 +3605,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   <Polyline
                     key={`base-outline-${routeVersion}`}
                     coordinates={routeCoords}
-                    strokeWidth={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth}
+                    strokeWidth={hidePolylines ? 0 : getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                     zIndex={899}
                   />
@@ -3615,7 +3622,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   <Polyline
                     key={`base-${routeVersion}`}
                     coordinates={routeCoords}
-                    strokeWidth={getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth}
+                    strokeWidth={hidePolylines ? 0 : getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                     zIndex={900}
                   />
@@ -3633,7 +3640,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   <Polyline
                     key={`traveled-outline-${routeVersion}`}
                     coordinates={traveledPolyline}
-                    strokeWidth={isNavigationMode && followUser ? 9 : 7}
+                    strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 9 : 7)}
                     strokeColor={theme.colors.accentDark}
                     zIndex={1000}
                   />
@@ -3650,7 +3657,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   <Polyline
                     key={`traveled-${routeVersion}`}
                     coordinates={traveledPolyline}
-                    strokeWidth={isNavigationMode && followUser ? 7 : 5}
+                    strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 7 : 5)}
                     strokeColor={theme.colors.accentMid}
                     zIndex={1001}
                   />
@@ -3662,7 +3669,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 <Polyline
                   key={`active-outline-${routeVersion}`}
                   coordinates={routeCoords}
-                  strokeWidth={isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)}
+                  strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5))}
                   strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                   zIndex={999}
                 />
@@ -3672,7 +3679,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 <Polyline
                   key={`active-${routeVersion}`}
                   coordinates={routeCoords}
-                  strokeWidth={isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)}
+                  strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3))}
                   strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                   zIndex={1000}
                 />
