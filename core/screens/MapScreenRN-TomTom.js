@@ -1658,20 +1658,28 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     followUserPrevRef.current = followUser;
     
     if (justEnabledFollowMe) {
-      console.log('[AutoReroute] Follow Me just enabled - forcing route rebuild with current travel mode');
-      const requestId = ++routeRequestId.current;
-      mapRoute({
-        origin: userLocation,
-        waypoints: waypoints,
-        destination: routeDestination,
-        travelMode: userTravelMode,
-        routeType: userRouteType,
-        requestId,
-        skipFitToView: true, // Don't zoom out, stay in Follow Me view
-        vehicleHeading: userLocation?.heading || null, // Tell TomTom our current heading
-      }).catch(error => {
-        console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
-      });
+      // EDGE CASE: Don't rebuild if destination = current location (would create a problematic loop)
+      const destAtCurrentLoc = routeDestination && userLocation &&
+        distanceBetweenMeters(routeDestination, userLocation) < 100;
+      
+      if (!destAtCurrentLoc) {
+        console.log('[AutoReroute] Follow Me just enabled - forcing route rebuild with current travel mode');
+        const requestId = ++routeRequestId.current;
+        mapRoute({
+          origin: userLocation,
+          waypoints: waypoints,
+          destination: routeDestination,
+          travelMode: userTravelMode,
+          routeType: userRouteType,
+          requestId,
+          skipFitToView: true, // Don't zoom out, stay in Follow Me view
+          vehicleHeading: userLocation?.heading || null, // Tell TomTom our current heading
+        }).catch(error => {
+          console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
+        });
+      } else {
+        console.log('[AutoReroute] Destination matches current location - skipping rebuild, using saved route');
+      }
       return; // Exit early, don't do off-route checking on first run
     }
 
@@ -2935,30 +2943,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     isLoadingSavedRouteRef.current = false;
     setRoutingActive(true);
     
-    // CRITICAL: If destination equals current location, user is AT the destination
-    // The saved route steps are meaningless (they point to the original start point)
-    // Solution: Clear the destination and show only the waypoints visually
-    // This prevents broken navigation directions while preserving the visual route
-    if (userLocation && route.destination) {
-      const destLat = route.destination.latitude ?? route.destination.lat;
-      const destLng = route.destination.longitude ?? route.destination.lng;
-      const currLat = userLocation.latitude;
-      const currLng = userLocation.longitude;
-      
-      const destDistFromCurrent = Math.sqrt(
-        Math.pow((destLat - currLat) * 111000, 2) + 
-        Math.pow((destLng - currLng) * 111000 * Math.cos(currLat * Math.PI / 180), 2)
-      );
-      
-      if (destDistFromCurrent < 100) {
-        console.log('[loadSavedRoute] User is at the destination (distance:', Math.round(destDistFromCurrent), 'm) - clearing destination to prevent broken navigation');
-        // Clear destination but keep waypoints so the route is visible but not "navigatable"
-        setRouteDestination(null);
-        setRouteSteps([]); // Clear invalid steps
-        setCurrentStepIndex(0);
-        setNextJunctionDistance(null);
-      }
-    }
+    // Special handling: If destination equals current location, we have an edge case
+    // The saved route is from originalOrigin → waypoints → originalDestination
+    // If user is AT the destination, they can still navigate the same route again
+    // But Follow Me needs special handling to avoid marking everything as traveled
+    // This is managed in the Auto-Reroute effect when Follow Me is enabled
   }
 
   async function loadSavedRideById(rideId) {
