@@ -1658,20 +1658,28 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     followUserPrevRef.current = followUser;
     
     if (justEnabledFollowMe) {
-      console.log('[AutoReroute] Follow Me just enabled - forcing route rebuild with current travel mode');
-      const requestId = ++routeRequestId.current;
-      mapRoute({
-        origin: userLocation,
-        waypoints: waypoints,
-        destination: routeDestination,
-        travelMode: userTravelMode,
-        routeType: userRouteType,
-        requestId,
-        skipFitToView: true, // Don't zoom out, stay in Follow Me view
-        vehicleHeading: userLocation?.heading || null, // Tell TomTom our current heading
-      }).catch(error => {
-        console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
-      });
+      // EDGE CASE: Don't rebuild if destination = current location (would create a problematic loop)
+      const destAtCurrentLoc = routeDestination && userLocation &&
+        distanceBetweenMeters(routeDestination, userLocation) < 100;
+      
+      if (!destAtCurrentLoc) {
+        console.log('[AutoReroute] Follow Me just enabled - forcing route rebuild with current travel mode');
+        const requestId = ++routeRequestId.current;
+        mapRoute({
+          origin: userLocation,
+          waypoints: waypoints,
+          destination: routeDestination,
+          travelMode: userTravelMode,
+          routeType: userRouteType,
+          requestId,
+          skipFitToView: true, // Don't zoom out, stay in Follow Me view
+          vehicleHeading: userLocation?.heading || null, // Tell TomTom our current heading
+        }).catch(error => {
+          console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
+        });
+      } else {
+        console.log('[AutoReroute] Destination matches current location - skipping rebuild, using saved route');
+      }
       return; // Exit early, don't do off-route checking on first run
     }
 
@@ -1763,6 +1771,23 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         minDistance = dist;
         closestIdx = i;
       }
+    }
+
+    // EDGE CASE: If user is close to BOTH the start AND end of the route,
+    // assume we're starting a NEW navigation of the route (traveled = empty)
+    // This prevents the issue where dest = current location causes the entire route to be marked as traveled
+    const distToStart = distanceBetweenMeters(userLocation, routeCoords[0]);
+    const distToEnd = distanceBetweenMeters(userLocation, routeCoords[routeCoords.length - 1]);
+    const bothCloseThreshold = 50; // meters
+    
+    if (distToStart < bothCloseThreshold && distToEnd < bothCloseThreshold) {
+      // Very close to both start and end - this is a loop where dest = current location
+      // Assume we're starting fresh (no distance traveled yet)
+      console.log('[Navigation] Route is a loop to current location, starting fresh (no traveled distance)');
+      return {
+        traveledPolyline: [],
+        remainingPolyline: routeCoords,
+      };
     }
 
     // Only include points the user has actually passed (within 5m - must be close/past the point)
@@ -2930,32 +2955,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     isLoadingSavedRouteRef.current = false;
     setRoutingActive(true);
     
-    // CRITICAL: If destination equals current location, we need to rebuild the route
-    // because the saved polyline is from originalOrigin → waypoints → originalDestination
-    // But user wants originalOrigin → waypoints → currentLocation
-    if (userLocation && route.destination) {
-      const destLat = route.destination.latitude ?? route.destination.lat;
-      const destLng = route.destination.longitude ?? route.destination.lng;
-      const currLat = userLocation.latitude;
-      const currLng = userLocation.longitude;
-      
-      // Check if destination is close to current location (within ~100m)
-      const destDistFromCurrent = Math.sqrt(
-        Math.pow((destLat - currLat) * 111000, 2) + 
-        Math.pow((destLng - currLng) * 111000 * Math.cos(currLat * Math.PI / 180), 2)
-      );
-      
-      if (destDistFromCurrent < 100) {
-        console.log('[loadSavedRoute] Destination matches current location, rebuilding route with manualStartPoint as origin...');
-        const requestId = ++routeRequestId.current;
-        // Small delay to ensure state is settled
-        setTimeout(() => {
-          buildRoute({ requestId }).catch(error => {
-            console.warn('[loadSavedRoute] buildRoute error:', error);
-          });
-        }, 100);
-      }
-    }
+    // Special handling: If destination equals current location, we have an edge case
+    // The saved route is from originalOrigin → waypoints → originalDestination
+    // If user is AT the destination, they can still navigate the same route again
+    // But Follow Me needs special handling to avoid marking everything as traveled
+    // This is managed in the Auto-Reroute effect when Follow Me is enabled
   }
 
   async function loadSavedRideById(rideId) {
