@@ -1908,6 +1908,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [followUser, activeRide]);
 
+  // DEBUG: Log routeCoords changes to see if something is rebuilding after clearRoute
+  useEffect(() => {
+    console.log('[DEBUG routeCoords change] New length:', routeCoords.length, 'routeVersion:', routeVersion);
+    if (routeCoords.length === 0) {
+      console.log('[DEBUG] routeCoords is now EMPTY');
+    } else {
+      console.log('[DEBUG] routeCoords has', routeCoords.length, 'points');
+    }
+  }, [routeCoords, routeVersion]);
+
   /**
    * Route to the currently selected place and start Follow Me navigation
    * Used by the Follow Me tab button when a place is selected
@@ -3557,46 +3567,58 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           )}
 
             {/* Base route - outline layer for pedestrians and cyclists */}
-              {shouldRenderOutline(userTravelMode) && routeCoords.length > 0 && (
-                <Polyline
-                  key={`base-outline-${routeVersion}`}
-                  coordinates={routeCoords}
-                  strokeWidth={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth}
-                  strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
-                  zIndex={899}
-                />
-              )}
+              {(() => {
+                console.log('[RENDER] Base outline check - routeCoords.length:', routeCoords.length, 'shouldRender:', shouldRenderOutline(userTravelMode) && routeCoords.length > 0);
+                return shouldRenderOutline(userTravelMode) && routeCoords.length > 0 && (
+                  <Polyline
+                    key={`base-outline-${routeVersion}`}
+                    coordinates={routeCoords}
+                    strokeWidth={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth}
+                    strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
+                    zIndex={899}
+                  />
+                );
+              })()}
               {/* Base route */}
-              {routeCoords.length > 0 && (
-                <Polyline
-                  key={`base-${routeVersion}`}
-                  coordinates={routeCoords}
-                  strokeWidth={getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth}
-                  strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
-                  zIndex={900}
-                />
-              )}
+              {(() => {
+                console.log('[RENDER] Base route check - routeCoords.length:', routeCoords.length, 'shouldRender:', routeCoords.length > 0);
+                return routeCoords.length > 0 && (
+                  <Polyline
+                    key={`base-${routeVersion}`}
+                    coordinates={routeCoords}
+                    strokeWidth={getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth}
+                    strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
+                    zIndex={900}
+                  />
+                );
+              })()}
 
             {/* Traveled route (during Follow Me) - outline layer */}
-              {followUser && traveledPolyline.length > 1 && (
-                <Polyline
-                  key={`traveled-outline-${routeVersion}`}
-                  coordinates={traveledPolyline}
-                  strokeWidth={isNavigationMode && followUser ? 9 : 7}
-                  strokeColor={theme.colors.accentDark}
-                  zIndex={1000}
-                />
-              )}
+              {(() => {
+                console.log('[RENDER] Traveled outline check - followUser:', followUser, 'traveledPolyline.length:', traveledPolyline.length);
+                return followUser && traveledPolyline.length > 1 && (
+                  <Polyline
+                    key={`traveled-outline-${routeVersion}`}
+                    coordinates={traveledPolyline}
+                    strokeWidth={isNavigationMode && followUser ? 9 : 7}
+                    strokeColor={theme.colors.accentDark}
+                    zIndex={1000}
+                  />
+                );
+              })()}
               {/* Traveled route (during Follow Me) - always accentMid regardless of vehicle type */}
-              {followUser && traveledPolyline.length > 1 && (
-                <Polyline
-                  key={`traveled-${routeVersion}`}
-                  coordinates={traveledPolyline}
-                  strokeWidth={isNavigationMode && followUser ? 7 : 5}
-                  strokeColor={theme.colors.accentMid}
-                  zIndex={1001}
-                />
-              )}
+              {(() => {
+                console.log('[RENDER] Traveled route check - followUser:', followUser, 'traveledPolyline.length:', traveledPolyline.length);
+                return followUser && traveledPolyline.length > 1 && (
+                  <Polyline
+                    key={`traveled-${routeVersion}`}
+                    coordinates={traveledPolyline}
+                    strokeWidth={isNavigationMode && followUser ? 7 : 5}
+                    strokeColor={theme.colors.accentMid}
+                    zIndex={1001}
+                  />
+                );
+              })()}
 
             {/* Remaining route - outline layer for pedestrians and cyclists */}
               {shouldRenderOutline(userTravelMode) && routeCoords.length > 0 && (
