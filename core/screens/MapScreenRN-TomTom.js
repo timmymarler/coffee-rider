@@ -2231,31 +2231,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setIsHomeDestination(false);
     clearWaypoints();
     
-    // For clearing, we need TWO-PHASE approach on Android:
-    // Phase 1: Increment version FIRST to tell old Polylines to unmount
-    // Phase 2: Then clear coords, with deferred clear to allow Android time to unmount
-    console.log('[clearRoute] Phase 1: About to increment routeVersion (should force Polyline key change)');
-    console.log('[clearRoute] Current routeVersion before setRouteVersion call:', routeVersion);
+    // FIX: Clear coordinates FIRST, then increment version
+    // If we increment version first with old coords still there, React mounts a new Polyline with old coords!
+    // So we must clear coords immediately, THEN increment version so React sees empty coords + new key = no render
+    console.log('[clearRoute] Clearing routeCoords and pendingRidePolyline immediately');
+    setRouteCoords([]);
+    setPendingRidePolyline(null);
+    setLastEncodedPolyline(null);
+    
+    // NOW increment version to ensure old Polyline components unmount
+    console.log('[clearRoute] Incrementing version to unmount any stale Polyline components');
     setRouteVersion(v => {
-      console.log('[clearRoute] setRouteVersion callback - current value:', v, 'new value will be:', v + 1);
+      console.log('[clearRoute] setRouteVersion - current: ', v, 'new:', v + 1);
       return v + 1;
     });
-    
-    // Use requestAnimationFrame to defer the actual clearing to let unmount complete
-    if (typeof requestAnimationFrame !== 'undefined') {
-      requestAnimationFrame(() => {
-        console.log('[clearRoute] Phase 2 (RAF): Clearing routeCoords, pendingRidePolyline, lastEncodedPolyline');
-        setRouteCoords([]);
-        setPendingRidePolyline(null);
-        setLastEncodedPolyline(null);
-      });
-    } else {
-      // Direct clear if no RAF
-      console.log('[clearRoute] Phase 2 (no RAF): Clearing routeCoords, pendingRidePolyline, lastEncodedPolyline');
-      setRouteCoords([]);
-      setPendingRidePolyline(null);
-      setLastEncodedPolyline(null);
-    }
     
     setRouteDistanceMeters(null);
     setManualStartPoint(null); 
