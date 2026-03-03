@@ -678,6 +678,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [routeClearedByUser, setRouteClearedByUser] = useState(false);
   const routeRequestId = useRef(0);
   const [routeVersion, setRouteVersion] = useState(0);
+  
+  // DEBUG: Log routeVersion changes
+  useEffect(() => {
+    console.log('[DEBUG routeVersion change] New routeVersion:', routeVersion);
+  }, [routeVersion]);
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
   const [routeSteps, setRouteSteps] = useState([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -2229,8 +2234,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // For clearing, we need TWO-PHASE approach on Android:
     // Phase 1: Increment version FIRST to tell old Polylines to unmount
     // Phase 2: Then clear coords, with deferred clear to allow Android time to unmount
-    console.log('[clearRoute] Phase 1: Incrementing version to unmount old Polylines');
-    setRouteVersion(v => v + 1);
+    console.log('[clearRoute] Phase 1: About to increment routeVersion (should force Polyline key change)');
+    console.log('[clearRoute] Current routeVersion before setRouteVersion call:', routeVersion);
+    setRouteVersion(v => {
+      console.log('[clearRoute] setRouteVersion callback - current value:', v, 'new value will be:', v + 1);
+      return v + 1;
+    });
     
     // Use requestAnimationFrame to defer the actual clearing to let unmount complete
     if (typeof requestAnimationFrame !== 'undefined') {
@@ -2293,7 +2302,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Phase 1: Mark old polylines for unmount
     console.log('[setRouteCoordsWithFlush] Phase 1: Clearing routeCoords and incrementing version');
     setRouteCoords([]);
-    setRouteVersion(v => v + 1);
+    setRouteVersion(v => {
+      console.log('[setRouteCoordsWithFlush] Phase 1 setRouteVersion callback - current:', v, 'new:', v + 1);
+      return v + 1;
+    });
     
     // Phase 2: Wait for native rendering, then set new polylines  
     const flushOp = { cancelled: false, timeoutId: null };
@@ -2307,7 +2319,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         if (flushOp && !flushOp.cancelled) {
           console.log('[setRouteCoordsWithFlush] Phase 2 (RAF): Setting new coords and updating metadata');
           setRouteCoords(newCoords);
-          setRouteVersion(v => v + 1);
+          setRouteVersion(v => {
+            console.log('[setRouteCoordsWithFlush] Phase 2 setRouteVersion callback - current:', v, 'new:', v + 1);
+            return v + 1;
+          });
           
           // Update metadata if provided
           if (metadata.distance !== undefined) {
@@ -2331,7 +2346,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         if (flushOp && !flushOp.cancelled) {
           console.log('[setRouteCoordsWithFlush] Phase 2 (setTimeout): Setting new coords and updating metadata');
           setRouteCoords(newCoords);
-          setRouteVersion(v => v + 1);
+          setRouteVersion(v => {
+            console.log('[setRouteCoordsWithFlush] Phase 2 setRouteVersion callback - current:', v, 'new:', v + 1);
+            return v + 1;
+          });
           
           if (metadata.distance !== undefined) {
             setRouteDistanceMeters(metadata.distance);
