@@ -1699,6 +1699,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               // Update distance
               const totalDistance = (connectingRoute.distanceMeters || 0) + (routeDistanceMeters || 0);
               setRouteDistanceMeters(totalDistance);
+              
+              // CRITICAL: Also merge the steps so navigation works correctly
+              // Connecting route has steps from current → start
+              // Existing route has steps from start → destination
+              const mergedSteps = [
+                ...((connectingRoute.steps || []).filter(step => step !== undefined)),
+                ...(routeSteps || []),
+              ];
+              
+              if (mergedSteps.length > 0) {
+                setRouteSteps(mergedSteps);
+                console.log('[AutoReroute] Merged steps:', connectingRoute.steps?.length, '+', routeSteps.length, '=', mergedSteps.length);
+              }
+              
+              setCurrentStepIndex(0);
             }
           } catch (error) {
             console.warn('[AutoReroute] Error building connecting route:', error);
