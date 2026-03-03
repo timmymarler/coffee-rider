@@ -1007,6 +1007,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 // state
 
   function clearNavigationIntent() {
+    console.log('[clearNavigationIntent] Called - clear all');
     clearRoute();
   }
 
@@ -2191,13 +2192,19 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }
 
   function clearRoute() {
+    console.log('[clearRoute] Starting - cancelling any pending flushes');
+    
     // Cancel any pending polyline flush operations to prevent them from reappearing
     if (pendingFlushRef.current) {
+      console.log('[clearRoute] Cancelling pending flush operation:', pendingFlushRef.current);
       pendingFlushRef.current.cancelled = true;
       if (pendingFlushRef.current.timeoutId !== null) {
+        console.log('[clearRoute] Clearing timeout ID:', pendingFlushRef.current.timeoutId);
         clearTimeout(pendingFlushRef.current.timeoutId);
       }
       pendingFlushRef.current = null;
+    } else {
+      console.log('[clearRoute] No pending flush to cancel');
     }
     
     routeRequestId.current += 1;   // invalidate in-flight requests
@@ -2207,6 +2214,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     clearWaypoints();
     
     // Clear polylines with proper unmount
+    console.log('[clearRoute] Clearing routeCoords, pendingRidePolyline, lastEncodedPolyline');
     setRouteCoords([]);
     setRouteVersion(v => v + 1);  // Ensure Polyline components with old key are unmounted
     setPendingRidePolyline(null); // Clear ride polyline if present
@@ -2220,6 +2228,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setCurrentStepIndex(0);        // Reset step index
     setNextJunctionDistance(null); // Clear junction distance
     setRouteSteps([]);             // Clear steps
+    
+    console.log('[clearRoute] Complete');
   }
 
   /**
@@ -2238,8 +2248,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
    * to prevent polylines from reappearing after clearing.
    */
   function setRouteCoordsWithFlush(newCoords, metadata = {}) {
+    console.log('[setRouteCoordsWithFlush] Called with', newCoords.length, 'coords, metadata:', Object.keys(metadata));
+    
     // Cancel any previous pending flush
     if (pendingFlushRef.current) {
+      console.log('[setRouteCoordsWithFlush] Cancelling previous pending flush');
       const prevFlush = pendingFlushRef.current;
       // If it was a setTimeout, clear it
       if (prevFlush.timeoutId) {
@@ -2250,17 +2263,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
     
     // Phase 1: Mark old polylines for unmount
+    console.log('[setRouteCoordsWithFlush] Phase 1: Clearing routeCoords and incrementing version');
     setRouteCoords([]);
     setRouteVersion(v => v + 1);
     
     // Phase 2: Wait for native rendering, then set new polylines  
     const flushOp = { cancelled: false, timeoutId: null };
     pendingFlushRef.current = flushOp;
+    console.log('[setRouteCoordsWithFlush] Scheduling Phase 2 (deferred render)');
     
     if (typeof requestAnimationFrame !== 'undefined') {
       requestAnimationFrame(() => {
+        console.log('[setRouteCoordsWithFlush] Phase 2 (RAF): checking if cancelled:', flushOp.cancelled);
         // Only apply if this flush hasn't been cancelled
         if (flushOp && !flushOp.cancelled) {
+          console.log('[setRouteCoordsWithFlush] Phase 2 (RAF): Setting new coords and updating metadata');
           setRouteCoords(newCoords);
           setRouteVersion(v => v + 1);
           
@@ -2273,13 +2290,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           }
           
           pendingFlushRef.current = null;
+        } else {
+          console.log('[setRouteCoordsWithFlush] Phase 2 (RAF): SKIPPED - flush was cancelled');
         }
       });
     } else {
       // Fallback for environments without requestAnimationFrame
+      console.log('[setRouteCoordsWithFlush] Using setTimeout fallback (no RAF)');
       flushOp.timeoutId = setTimeout(() => {
+        console.log('[setRouteCoordsWithFlush] Phase 2 (setTimeout): checking if cancelled:', flushOp.cancelled);
         // Only apply if this flush hasn't been cancelled
         if (flushOp && !flushOp.cancelled) {
+          console.log('[setRouteCoordsWithFlush] Phase 2 (setTimeout): Setting new coords and updating metadata');
           setRouteCoords(newCoords);
           setRouteVersion(v => v + 1);
           
@@ -2291,6 +2313,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           }
           
           pendingFlushRef.current = null;
+        } else {
+          console.log('[setRouteCoordsWithFlush] Phase 2 (setTimeout): SKIPPED - flush was cancelled');
         }
       }, 0);
     }
@@ -2967,6 +2991,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }
 
   async function loadSavedRoute(route, routeId) {
+    console.log('[loadSavedRoute] Starting - route ID:', routeId);
     clearRoute();
     clearWaypoints();
     isLoadingSavedRouteRef.current = true;
@@ -3073,6 +3098,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         ? route.distanceMeters 
         : (typeof route.distance === 'number' && route.distance > 0 ? route.distance : null);
       
+      console.log('[loadSavedRoute] About to set polyline via flush -', decoded.length, 'coords, distance:', routeDistance);
       setRouteCoordsWithFlush(decoded, {
         distance: routeDistance,
       });
