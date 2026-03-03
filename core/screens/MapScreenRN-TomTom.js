@@ -1763,31 +1763,19 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Find the closest coordinate to current user location
+    // BUT: Exclude the last point (destination) from the search
+    // When destination = current location, we don't want the algorithm to find
+    // the end point as closest, which would mark the entire route as traveled
     let closestIdx = 0;
     let minDistance = Infinity;
-    for (let i = 0; i < routeCoords.length; i++) {
+    const searchEndIdx = routeCoords.length - 1; // Exclude the final destination point
+    
+    for (let i = 0; i < searchEndIdx; i++) {
       const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
       if (dist < minDistance) {
         minDistance = dist;
         closestIdx = i;
       }
-    }
-
-    // EDGE CASE: If user is close to BOTH the start AND end of the route,
-    // assume we're starting a NEW navigation of the route (traveled = empty)
-    // This prevents the issue where dest = current location causes the entire route to be marked as traveled
-    const distToStart = distanceBetweenMeters(userLocation, routeCoords[0]);
-    const distToEnd = distanceBetweenMeters(userLocation, routeCoords[routeCoords.length - 1]);
-    const bothCloseThreshold = 50; // meters
-    
-    if (distToStart < bothCloseThreshold && distToEnd < bothCloseThreshold) {
-      // Very close to both start and end - this is a loop where dest = current location
-      // Assume we're starting fresh (no distance traveled yet)
-      console.log('[Navigation] Route is a loop to current location, starting fresh (no traveled distance)');
-      return {
-        traveledPolyline: [],
-        remainingPolyline: routeCoords,
-      };
     }
 
     // Only include points the user has actually passed (within 5m - must be close/past the point)
