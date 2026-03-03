@@ -2211,165 +2211,78 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }
 
   function clearRoute() {
-    console.log('[clearRoute] Starting - cancelling any pending flushes');
+    console.log('[clearRoute] Clearing route');
     
-    // Cancel any pending polyline flush operations to prevent them from reappearing
+    // Cancel any pending operations
     if (pendingFlushRef.current) {
-      console.log('[clearRoute] Cancelling pending flush operation:', pendingFlushRef.current);
       pendingFlushRef.current.cancelled = true;
-      if (pendingFlushRef.current.timeoutId !== null) {
-        console.log('[clearRoute] Clearing timeout ID:', pendingFlushRef.current.timeoutId);
+      if (pendingFlushRef.current.timeoutId) {
         clearTimeout(pendingFlushRef.current.timeoutId);
       }
       pendingFlushRef.current = null;
-    } else {
-      console.log('[clearRoute] No pending flush to cancel');
     }
     
     routeRequestId.current += 1;   // invalidate in-flight requests
-    setRoutingActive(false);
-    setRouteDestination(null);
-    setIsHomeDestination(false);
-    clearWaypoints();
     
-    // CRITICAL FIX FOR ANDROID: Hide polylines FIRST before clearing
-    // Android's react-native-maps doesn't properly unmount Polyline views
-    // Setting hidePolylines=true forces them transparent so they disappear visually
-    // while we work on the state underneath
-    console.log('[clearRoute] Phase 1: Force polylines transparent');
+    // Hide polylines temporarily for visual clearness (extra failsafe for Android)
     setHidePolylines(true);
     
-    // Phase 2: Clear coordinates FIRST, then increment version
-    // If we increment version first with old coords still there, React mounts a new Polyline with old coords!
-    // So we must clear coords immediately, THEN increment version so React sees empty coords + new key = no render
-    console.log('[clearRoute] Phase 2: Clearing routeCoords and pendingRidePolyline');
+    // Clear all route state - Polyline components stay mounted and update naturally
     setRouteCoords([]);
     setPendingRidePolyline(null);
     setLastEncodedPolyline(null);
-    
-    // NOW increment version to ensure old Polyline components unmount
-    console.log('[clearRoute] Phase 3: Incrementing version to unmount Polyline components');
-    setRouteVersion(v => {
-      console.log('[clearRoute] setRouteVersion - current: ', v, 'new:', v + 1);
-      return v + 1;
-    });
-    
-    // Phase 4: After giving native layer time to render transparent polylines,
-    // use RAF to schedule actual cleanup
-    if (typeof requestAnimationFrame !== 'undefined') {
-      console.log('[clearRoute] Scheduling Phase 4 (150ms delay): Clear hidePolylines flag');
-      setTimeout(() => {
-        console.log('[clearRoute] Phase 4 (150ms): Clearing hidePolylines flag');
-        setHidePolylines(false);
-      }, 150);
-    }
-    
+    setRoutingActive(false);
+    setRouteDestination(null);
+    setIsHomeDestination(false);
     setRouteDistanceMeters(null);
     setManualStartPoint(null); 
+    setRouteSteps([]);
+    
+    // Restore visibility after giving native layer time to process empty state
+    setTimeout(() => {
+      console.log('[clearRoute] Restoring polyline visibility');
+      setHidePolylines(false);
+    }, 100);
+    
+    clearWaypoints();
     routeFittedRef.current = false;
     setCurrentLoadedRouteId(null);
     setFollowUser(false);          // Disable Follow Me when clearing route
     setCurrentStepIndex(0);        // Reset step index
     setNextJunctionDistance(null); // Clear junction distance
-    setRouteSteps([]);             // Clear steps
-    
-    console.log('[clearRoute] Complete');
   }
 
   /**
-   * ANDROID FIX: Replace route coordinates with proper flush
+   * Update route coordinates directly via state
    * 
-   * On Android, react-native-maps sometimes doesn't clear old polylines
-   * when state updates happen rapidly. This function:
-   * 1. Clears coordinates and increments version (unmounts old polylines)
-   * 2. Waits for native render to complete (via requestAnimationFrame)
-   * 3. Sets new coordinates and increments version again (mounts new polylines)
+   * No longer needs complex two-phase flush because Polyline components
+   * are no longer remounted (no version-based keys). React updates 
+   * coordinates naturally and the native layer responds properly.
    * 
-   * This two-phase approach ensures the Android native drawing pipeline
-   * properly clears before rendering the new polylines.
-   * 
-   * Pending operations are tracked and can be cancelled via clearRoute()
-   * to prevent polylines from reappearing after clearing.
+   * Best practice from react-native-maps: Create layer once, update only data.
    */
   function setRouteCoordsWithFlush(newCoords, metadata = {}) {
-    console.log('[setRouteCoordsWithFlush] Called with', newCoords.length, 'coords, metadata:', Object.keys(metadata));
+    console.log('[setRouteCoordsWithFlush] Updating route with', newCoords.length, 'coords');
     
-    // Cancel any previous pending flush
+    // Cancel any previous pending operations
     if (pendingFlushRef.current) {
-      console.log('[setRouteCoordsWithFlush] Cancelling previous pending flush');
-      const prevFlush = pendingFlushRef.current;
-      // If it was a setTimeout, clear it
-      if (prevFlush.timeoutId) {
-        clearTimeout(prevFlush.timeoutId);
+      pendingFlushRef.current.cancelled = true;
+      if (pendingFlushRef.current.timeoutId) {
+        clearTimeout(pendingFlushRef.current.timeoutId);
       }
-      prevFlush.cancelled = true;
       pendingFlushRef.current = null;
     }
     
-    // Phase 1: Mark old polylines for unmount
-    console.log('[setRouteCoordsWithFlush] Phase 1: Clearing routeCoords and incrementing version');
-    setRouteCoords([]);
-    setRouteVersion(v => {
-      console.log('[setRouteCoordsWithFlush] Phase 1 setRouteVersion callback - current:', v, 'new:', v + 1);
-      return v + 1;
-    });
+    // Simple: Just update coordinates. Polyline component stays mounted.
+    // React detects coordinates changed and updates native layer properly.
+    setRouteCoords(newCoords);
     
-    // Phase 2: Wait for native rendering, then set new polylines  
-    const flushOp = { cancelled: false, timeoutId: null };
-    pendingFlushRef.current = flushOp;
-    console.log('[setRouteCoordsWithFlush] Scheduling Phase 2 (deferred render)');
-    
-    if (typeof requestAnimationFrame !== 'undefined') {
-      requestAnimationFrame(() => {
-        console.log('[setRouteCoordsWithFlush] Phase 2 (RAF): checking if cancelled:', flushOp.cancelled);
-        // Only apply if this flush hasn't been cancelled
-        if (flushOp && !flushOp.cancelled) {
-          console.log('[setRouteCoordsWithFlush] Phase 2 (RAF): Setting new coords and updating metadata');
-          setRouteCoords(newCoords);
-          setRouteVersion(v => {
-            console.log('[setRouteCoordsWithFlush] Phase 2 setRouteVersion callback - current:', v, 'new:', v + 1);
-            return v + 1;
-          });
-          
-          // Update metadata if provided
-          if (metadata.distance !== undefined) {
-            setRouteDistanceMeters(metadata.distance);
-          }
-          if (metadata.steps) {
-            setRouteSteps(metadata.steps);
-          }
-          
-          pendingFlushRef.current = null;
-        } else {
-          console.log('[setRouteCoordsWithFlush] Phase 2 (RAF): SKIPPED - flush was cancelled');
-        }
-      });
-    } else {
-      // Fallback for environments without requestAnimationFrame
-      console.log('[setRouteCoordsWithFlush] Using setTimeout fallback (no RAF)');
-      flushOp.timeoutId = setTimeout(() => {
-        console.log('[setRouteCoordsWithFlush] Phase 2 (setTimeout): checking if cancelled:', flushOp.cancelled);
-        // Only apply if this flush hasn't been cancelled
-        if (flushOp && !flushOp.cancelled) {
-          console.log('[setRouteCoordsWithFlush] Phase 2 (setTimeout): Setting new coords and updating metadata');
-          setRouteCoords(newCoords);
-          setRouteVersion(v => {
-            console.log('[setRouteCoordsWithFlush] Phase 2 setRouteVersion callback - current:', v, 'new:', v + 1);
-            return v + 1;
-          });
-          
-          if (metadata.distance !== undefined) {
-            setRouteDistanceMeters(metadata.distance);
-          }
-          if (metadata.steps) {
-            setRouteSteps(metadata.steps);
-          }
-          
-          pendingFlushRef.current = null;
-        } else {
-          console.log('[setRouteCoordsWithFlush] Phase 2 (setTimeout): SKIPPED - flush was cancelled');
-        }
-      }, 0);
+    // Update metadata if provided
+    if (metadata.distance !== undefined) {
+      setRouteDistanceMeters(metadata.distance);
+    }
+    if (metadata.steps) {
+      setRouteSteps(metadata.steps);
     }
   }
 
@@ -3603,7 +3516,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 }
                 return shouldRender && (
                   <Polyline
-                    key={`base-outline-${routeVersion}`}
+                    key="base-outline"
                     coordinates={routeCoords}
                     strokeWidth={hidePolylines ? 0 : getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
@@ -3620,7 +3533,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 }
                 return shouldRender && (
                   <Polyline
-                    key={`base-${routeVersion}`}
+                    key="base-route"
                     coordinates={routeCoords}
                     strokeWidth={hidePolylines ? 0 : getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
@@ -3638,7 +3551,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 }
                 return shouldRender && (
                   <Polyline
-                    key={`traveled-outline-${routeVersion}`}
+                    key="traveled-outline"
                     coordinates={traveledPolyline}
                     strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 9 : 7)}
                     strokeColor={theme.colors.accentDark}
@@ -3655,7 +3568,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 }
                 return shouldRender && (
                   <Polyline
-                    key={`traveled-${routeVersion}`}
+                    key="traveled-route"
                     coordinates={traveledPolyline}
                     strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 7 : 5)}
                     strokeColor={theme.colors.accentMid}
@@ -3667,7 +3580,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             {/* Remaining route - outline layer for pedestrians and cyclists */}
               {shouldRenderOutline(userTravelMode) && routeCoords.length > 0 && (
                 <Polyline
-                  key={`active-outline-${routeVersion}`}
+                  key="active-outline"
                   coordinates={routeCoords}
                   strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5))}
                   strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
@@ -3677,7 +3590,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               {/* Remaining route */}
               {routeCoords.length > 0 && (
                 <Polyline
-                  key={`active-${routeVersion}`}
+                  key="active-route"
                   coordinates={routeCoords}
                   strokeWidth={hidePolylines ? 0 : (isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3))}
                   strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
