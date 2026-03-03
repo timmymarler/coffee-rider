@@ -2234,17 +2234,28 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // FIX: Clear coordinates FIRST, then increment version
     // If we increment version first with old coords still there, React mounts a new Polyline with old coords!
     // So we must clear coords immediately, THEN increment version so React sees empty coords + new key = no render
-    console.log('[clearRoute] Clearing routeCoords and pendingRidePolyline immediately');
+    console.log('[clearRoute] Phase 1: Clearing routeCoords and pendingRidePolyline immediately');
     setRouteCoords([]);
     setPendingRidePolyline(null);
     setLastEncodedPolyline(null);
     
     // NOW increment version to ensure old Polyline components unmount
-    console.log('[clearRoute] Incrementing version to unmount any stale Polyline components');
+    console.log('[clearRoute] Phase 2: Incrementing version to unmount any stale Polyline components');
     setRouteVersion(v => {
       console.log('[clearRoute] setRouteVersion - current: ', v, 'new:', v + 1);
       return v + 1;
     });
+    
+    // Phase 3: Force native Android to render empty polylines before React unmounts
+    // On Android, react-native-maps sometimes doesn't remove native Polylines when React unmounts
+    // So we explicitly set empty coordinates again after version increment to ensure native render
+    if (typeof requestAnimationFrame !== 'undefined') {
+      console.log('[clearRoute] Scheduling Phase 3 (RAF): Force-render empty coordinates');
+      requestAnimationFrame(() => {
+        console.log('[clearRoute] Phase 3 (RAF): Setting coordinates to empty array again');
+        setRouteCoords([]);
+      });
+    }
     
     setRouteDistanceMeters(null);
     setManualStartPoint(null); 
