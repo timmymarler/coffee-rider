@@ -657,6 +657,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
   const previousFollowUserRef = useRef(false); // Track previous Follow Me state to detect when it turn off
+  const pendingFlushRef = useRef(null); // Track pending polyline flush to cancel on clearRoute
   const {
     waypoints,
     addFromPlace,
@@ -1491,7 +1492,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Clear existing waypoints and route
       clearWaypoints();
       setRouteCoords([]);
-      setRouteVersion(v => v + 1);
+      setRouteVersion(v => v + 1);  // Ensure old Polyline components unmount
       routeFittedRef.current = false;
       setRouteClearedByUser(false); // Ensure route building is not blocked
 
@@ -2190,13 +2191,27 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }
 
   function clearRoute() {
+    // Cancel any pending polyline flush operations to prevent them from reappearing
+    if (pendingFlushRef.current) {
+      pendingFlushRef.current.cancelled = true;
+      if (pendingFlushRef.current.timeoutId !== null) {
+        clearTimeout(pendingFlushRef.current.timeoutId);
+      }
+      pendingFlushRef.current = null;
+    }
+    
     routeRequestId.current += 1;   // invalidate in-flight requests
     setRoutingActive(false);
     setRouteDestination(null);
     setIsHomeDestination(false);
     clearWaypoints();
-    setRouteCoords([]);            // ✅ clear polyline HERE
-    setRouteVersion(v => v + 1);
+    
+    // Clear polylines with proper unmount
+    setRouteCoords([]);
+    setRouteVersion(v => v + 1);  // Ensure Polyline components with old key are unmounted
+    setPendingRidePolyline(null); // Clear ride polyline if present
+    setLastEncodedPolyline(null); // Clear saved polyline string
+    
     setRouteDistanceMeters(null);
     setManualStartPoint(null); 
     routeFittedRef.current = false;
@@ -2218,37 +2233,64 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
    * 
    * This two-phase approach ensures the Android native drawing pipeline
    * properly clears before rendering the new polylines.
+   * 
+   * Pending operations are tracked and can be cancelled via clearRoute()
+   * to prevent polylines from reappearing after clearing.
    */
   function setRouteCoordsWithFlush(newCoords, metadata = {}) {
+    // Cancel any previous pending flush
+    if (pendingFlushRef.current) {
+      const prevFlush = pendingFlushRef.current;
+      // If it was a setTimeout, clear it
+      if (prevFlush.timeoutId) {
+        clearTimeout(prevFlush.timeoutId);
+      }
+      prevFlush.cancelled = true;
+      pendingFlushRef.current = null;
+    }
+    
     // Phase 1: Mark old polylines for unmount
     setRouteCoords([]);
     setRouteVersion(v => v + 1);
     
-    // Phase 2: Wait for native rendering, then set new polylines
+    // Phase 2: Wait for native rendering, then set new polylines  
+    const flushOp = { cancelled: false, timeoutId: null };
+    pendingFlushRef.current = flushOp;
+    
     if (typeof requestAnimationFrame !== 'undefined') {
       requestAnimationFrame(() => {
-        setRouteCoords(newCoords);
-        setRouteVersion(v => v + 1);
-        
-        // Update metadata if provided
-        if (metadata.distance) {
-          setRouteDistanceMeters(metadata.distance);
-        }
-        if (metadata.steps) {
-          setRouteSteps(metadata.steps);
+        // Only apply if this flush hasn't been cancelled
+        if (flushOp && !flushOp.cancelled) {
+          setRouteCoords(newCoords);
+          setRouteVersion(v => v + 1);
+          
+          // Update metadata if provided
+          if (metadata.distance !== undefined) {
+            setRouteDistanceMeters(metadata.distance);
+          }
+          if (metadata.steps) {
+            setRouteSteps(metadata.steps);
+          }
+          
+          pendingFlushRef.current = null;
         }
       });
     } else {
       // Fallback for environments without requestAnimationFrame
-      setTimeout(() => {
-        setRouteCoords(newCoords);
-        setRouteVersion(v => v + 1);
-        
-        if (metadata.distance) {
-          setRouteDistanceMeters(metadata.distance);
-        }
-        if (metadata.steps) {
-          setRouteSteps(metadata.steps);
+      flushOp.timeoutId = setTimeout(() => {
+        // Only apply if this flush hasn't been cancelled
+        if (flushOp && !flushOp.cancelled) {
+          setRouteCoords(newCoords);
+          setRouteVersion(v => v + 1);
+          
+          if (metadata.distance !== undefined) {
+            setRouteDistanceMeters(metadata.distance);
+          }
+          if (metadata.steps) {
+            setRouteSteps(metadata.steps);
+          }
+          
+          pendingFlushRef.current = null;
         }
       }, 0);
     }
@@ -2457,7 +2499,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!hasInputs) {
       if (routeCoords.length > 0) {
         setRouteCoords([]);
-        setRouteVersion(v => v + 1);
+        setRouteVersion(v => v + 1);  // Ensure old Polyline components unmount
       }
       return;
     }
