@@ -955,14 +955,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // TomTom returns polyline as array of {latitude, longitude} objects
       const decoded = result.polyline;
 
-      setRouteCoords(decoded);
-      setRouteVersion(v => v + 1);
-      setRouteDistanceMeters(result.distanceMeters ?? result.distance);
+      // Use flush mechanism to prevent Android polyline ghosting
+      setRouteCoordsWithFlush(decoded, {
+        distance: result.distanceMeters ?? result.distance,
+        steps: result.steps ?? [],
+      });
+      
       setRouteMeta({
         distanceMeters: result.distanceMeters ?? result.distance,
         durationSeconds: result.durationSeconds ?? result.duration,
       });
-      setRouteSteps(result.steps ?? []);
+      
       setCurrentStepIndex(0);
 
     } catch (error) {
@@ -1693,13 +1696,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               
               console.log('[AutoReroute] Merged polyline: connecting', connectingPolyline.length, 'points + saved', routeCoords.length, 'points =', mergedPolyline.length, 'total');
               
-              setRouteCoords(mergedPolyline);
-              setRouteVersion(v => v + 1);
-              
-              // Update distance
-              const totalDistance = (connectingRoute.distanceMeters || 0) + (routeDistanceMeters || 0);
-              setRouteDistanceMeters(totalDistance);
-              
               // CRITICAL: Also merge the steps so navigation works correctly
               // Connecting route has steps from current → start
               // Existing route has steps from start → destination
@@ -1709,9 +1705,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               ];
               
               if (mergedSteps.length > 0) {
-                setRouteSteps(mergedSteps);
                 console.log('[AutoReroute] Merged steps:', connectingRoute.steps?.length, '+', routeSteps.length, '=', mergedSteps.length);
               }
+              
+              // Use flush mechanism to prevent Android polyline ghosting
+              const totalDistance = (connectingRoute.distanceMeters || 0) + (routeDistanceMeters || 0);
+              setRouteCoordsWithFlush(mergedPolyline, {
+                distance: totalDistance,
+                steps: mergedSteps,
+              });
               
               setCurrentStepIndex(0);
             }
@@ -2203,6 +2205,53 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setCurrentStepIndex(0);        // Reset step index
     setNextJunctionDistance(null); // Clear junction distance
     setRouteSteps([]);             // Clear steps
+  }
+
+  /**
+   * ANDROID FIX: Replace route coordinates with proper flush
+   * 
+   * On Android, react-native-maps sometimes doesn't clear old polylines
+   * when state updates happen rapidly. This function:
+   * 1. Clears coordinates and increments version (unmounts old polylines)
+   * 2. Waits for native render to complete (via requestAnimationFrame)
+   * 3. Sets new coordinates and increments version again (mounts new polylines)
+   * 
+   * This two-phase approach ensures the Android native drawing pipeline
+   * properly clears before rendering the new polylines.
+   */
+  function setRouteCoordsWithFlush(newCoords, metadata = {}) {
+    // Phase 1: Mark old polylines for unmount
+    setRouteCoords([]);
+    setRouteVersion(v => v + 1);
+    
+    // Phase 2: Wait for native rendering, then set new polylines
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => {
+        setRouteCoords(newCoords);
+        setRouteVersion(v => v + 1);
+        
+        // Update metadata if provided
+        if (metadata.distance) {
+          setRouteDistanceMeters(metadata.distance);
+        }
+        if (metadata.steps) {
+          setRouteSteps(metadata.steps);
+        }
+      });
+    } else {
+      // Fallback for environments without requestAnimationFrame
+      setTimeout(() => {
+        setRouteCoords(newCoords);
+        setRouteVersion(v => v + 1);
+        
+        if (metadata.distance) {
+          setRouteDistanceMeters(metadata.distance);
+        }
+        if (metadata.steps) {
+          setRouteSteps(metadata.steps);
+        }
+      }, 0);
+    }
   }
 
   function clearSearch() {
@@ -2779,23 +2828,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const simplified = simplifyPolyline(decoded, 0.00005); // ~5m tolerance
     console.log("[mapRoute] Decoded", decoded.length, "points, simplified to", simplified.length, "points");
     
-    // Update state with route data
-    setRouteCoords(simplified);
-    setRouteVersion(v => v + 1);
+    // Get distance value
+    const distance = result.distanceMeters ?? result.distance;
+    
+    // Use flush mechanism to prevent Android polyline ghosting
+    setRouteCoordsWithFlush(simplified, {
+      distance: distance,
+      steps: result.steps ?? [],
+    });
+    
     setRouteMeta({
-      distanceMeters: result.distanceMeters ?? result.distance,
+      distanceMeters: distance,
       durationSeconds: result.durationSeconds ?? result.duration,
     });
-    setRouteSteps(result.steps ?? []);
-    setCurrentStepIndex(0);
     
-    if (typeof result?.distanceMeters === 'number' && result.distanceMeters > 0) {
-      setRouteDistanceMeters(result.distanceMeters);
-    } else if (typeof result?.distance === 'number' && result.distance > 0) {
-      setRouteDistanceMeters(result.distance);
-    } else {
-      setRouteDistanceMeters(null);
-    }
+    setCurrentStepIndex(0);
 
     // Auto-fit view if not in Follow Me and not already fitted
     if (!skipFitToView && !routeFittedRef.current && !followUser) {
@@ -2979,18 +3026,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         decoded = [];
       }
 
-      setRouteCoords(decoded);
-      setRouteVersion(v => v + 1);
+      // Use flush mechanism to prevent Android polyline ghosting
+      const routeDistance = typeof route.distanceMeters === 'number' && route.distanceMeters > 0 
+        ? route.distanceMeters 
+        : (typeof route.distance === 'number' && route.distance > 0 ? route.distance : null);
+      
+      setRouteCoordsWithFlush(decoded, {
+        distance: routeDistance,
+      });
+      
       setLastEncodedPolyline(typeof route.routePolyline === 'string' ? route.routePolyline : null);
-
-      // Set routed total distance from saved route (if present)
-      if (typeof route.distanceMeters === 'number' && route.distanceMeters > 0) {
-        setRouteDistanceMeters(route.distanceMeters);
-      } else if (typeof route.distance === 'number' && route.distance > 0) {
-        setRouteDistanceMeters(route.distance);
-      } else {
-        setRouteDistanceMeters(null);
-      }
 
       // 🔑 use the pending-fit system you already built
       pendingFitRef.current = decoded;
