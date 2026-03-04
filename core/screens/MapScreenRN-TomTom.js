@@ -3945,7 +3945,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         />
       )}
 
-      {hasRouteIntent && !followUser && !activeRide && canSaveRoute && (
+      {hasRouteIntent && !followUser && !activeRide && canSaveRoute && !pendingRidePolyline && (
         <TouchableOpacity
           style={[styles.saveRouteButton, { bottom: saveButtonBottom }]}
           onPress={() => setShowSaveRouteModal(true)}
@@ -3955,7 +3955,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             size={22}
             color={theme.colors.primaryDark}
           />
-          <Text style={styles.saveRouteButtonText}>Save</Text>
+          <Text style={styles.saveRouteButtonText}>Save Route</Text>
+        </TouchableOpacity>
+      )}
+
+      {pendingRidePolyline && !followUser && !activeRide && (
+        <TouchableOpacity
+          style={[styles.saveRouteButton, { bottom: saveButtonBottom }]}
+          onPress={() => setShowSaveRideModal(true)}
+        >
+          <MaterialCommunityIcons
+            name="map-marker-path"
+            size={22}
+            color={theme.colors.accentDark}
+          />
+          <Text style={styles.saveRouteButtonText}>Save Ride</Text>
         </TouchableOpacity>
       )}
 
