@@ -1661,9 +1661,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Auto-rerouting when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
+  const lastOffRouteCheckPos = useRef(null); // Track last position where we checked for off-route
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
   const OFF_ROUTE_THRESHOLD_METERS = 100; // Reroute if 100m+ off the route
   const REROUTE_COOLDOWN_SECONDS = 30; // Only attempt reroute every 30 seconds max
+  const MIN_MOVEMENT_BEFORE_CHECK = 25; // Only check off-route after user moves 25m to reduce unnecessary calculations
   
   useEffect(() => {
     if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation || !routeDestination) return;
@@ -1760,6 +1762,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
       return; // Exit early, don't do off-route checking on first run
     }
+
+    // Only check off-route if user has moved significantly since last check (reduce expensive calculations)
+    if (lastOffRouteCheckPos.current) {
+      const distFromLastCheck = distanceBetweenMeters(userLocation, lastOffRouteCheckPos.current);
+      if (distFromLastCheck < MIN_MOVEMENT_BEFORE_CHECK) {
+        // User hasn't moved enough to warrant another check
+        return;
+      }
+    }
+    lastOffRouteCheckPos.current = userLocation;
 
     // Find closest point on route to user
     let closestDist = Infinity;
@@ -2900,7 +2912,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
     
     setLastEncodedPolyline(result.polyline);
-    await debugLog("ROUTE_BUILT", `Route built: ${simplified.length} points, ${(result.distanceMeters / 1000).toFixed(1)}km`, { points: simplified.length, distanceKm: (result.distanceMeters / 1000).toFixed(1) });
+    await debugLog("ROUTE_BUILT", `Route built: ${simplified.length} points, ${(distance / 1000).toFixed(1)}km`, { points: simplified.length, distanceKm: (distance / 1000).toFixed(1) });
     
     return true;
   }
