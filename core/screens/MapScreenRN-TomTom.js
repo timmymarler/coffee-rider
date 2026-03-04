@@ -1686,6 +1686,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       const destAtCurrentLoc = routeDestination && userLocation &&
         distanceBetweenMeters(routeDestination, userLocation) < 100;
       
+      console.log('[AutoReroute] justEnabledFollowMe - destAtCurrentLoc:', destAtCurrentLoc, 'manualStartPoint:', manualStartPoint ? 'exists' : 'NULL', 'routeCoords.length:', routeCoords.length);
+      
       if (destAtCurrentLoc && manualStartPoint && routeCoords.length > 0) {
         // Build route from current location to original start point and merge
         console.log('[AutoReroute] Follow Me enabled with destination = current location - building connecting route...');
@@ -1727,6 +1729,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               if (mergedSteps.length > 0) {
                 console.log('[AutoReroute] Merged steps:', connectingRoute.steps?.length, '+', routeSteps.length, '=', mergedSteps.length);
               }
+              
+              // Ensure polylines are visible before updating with merged coordinates
+              setHidePolylines(false);
               
               // Use flush mechanism to prevent Android polyline ghosting
               const totalDistance = (connectingRoute.distanceMeters || 0) + (routeDistanceMeters || 0);
@@ -3542,7 +3547,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 }
                 return (
                   <Polyline
-                    key="base-outline"
+                    key={`base-outline-${routeCoords.length}`}
                     coordinates={routeCoords}
                     strokeWidth={shouldRender ? (hidePolylines ? 0 : getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth) : 0}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
