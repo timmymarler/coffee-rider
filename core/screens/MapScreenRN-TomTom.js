@@ -1595,7 +1595,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     let distanceForDisplay = null;
     
     // Check if we've passed the current step's endpoint
-    if (currentStepIndex < routeSteps.length) {
+    // IMPORTANT: Skip the destination endpoint if destination = current location
+    // This prevents immediately marking the route as complete when loading a saved
+    // route where the destination happens to be at the current location
+    const isDestinationThisStep = routeDestination && 
+      routeSteps[currentStepIndex]?.end &&
+      distanceBetweenMeters(routeSteps[currentStepIndex].end, routeDestination) < 100;
+    
+    if (currentStepIndex < routeSteps.length && !isDestinationThisStep) {
       const currentStep = routeSteps[currentStepIndex];
       if (currentStep?.end?.latitude) {
         const distToCurrentEnd = distanceBetweenMeters(userLocation, currentStep.end);
