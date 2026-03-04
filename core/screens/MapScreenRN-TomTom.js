@@ -1840,6 +1840,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return { traveledPolyline: [], remainingPolyline: routeCoords };
     }
 
+    // Special case: If at destination already, show no traveled portion
+    // This prevents marking the entire route as traveled before the user has moved
+    if (routeDestination && distanceBetweenMeters(userLocation, routeDestination) < 100) {
+      // User is at or very close to destination - don't show any traveled portion yet
+      return { traveledPolyline: [], remainingPolyline: routeCoords };
+    }
+
     // Find the closest coordinate to current user location
     // BUT: Exclude the last point (destination) from the search
     // When destination = current location, we don't want the algorithm to find
