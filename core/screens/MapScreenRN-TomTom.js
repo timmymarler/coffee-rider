@@ -1608,8 +1608,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         const distToCurrentEnd = distanceBetweenMeters(userLocation, currentStep.end);
         
         // Detect when user crosses the step's endpoint by checking if distance increases
-        // This avoids showing the next instruction until AFTER passing the junction
-        const crossingThreshold = 50; // meters - get close enough to detect crossing
+        // Only advance when AT or PAST the junction (not before)
+        const crossingThreshold = 10; // meters - only within 10m of junction
         const wasPreviouslyCloser = prevStepDistRef.current !== null && distToCurrentEnd > prevStepDistRef.current;
         const hasPassedJunction = distToCurrentEnd < crossingThreshold && wasPreviouslyCloser;
         
