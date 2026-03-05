@@ -1686,8 +1686,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       const destAtCurrentLoc = routeDestination && userLocation &&
         distanceBetweenMeters(routeDestination, userLocation) < 100;
       
-      console.log('[AutoReroute] justEnabledFollowMe - destAtCurrentLoc:', destAtCurrentLoc, 'manualStartPoint:', manualStartPoint ? 'exists' : 'NULL', 'routeCoords.length:', routeCoords.length);
-      
       if (destAtCurrentLoc && manualStartPoint && routeCoords.length > 0) {
         // Build route from current location to original start point and merge
         console.log('[AutoReroute] Follow Me enabled with destination = current location - building connecting route...');
@@ -1729,9 +1727,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               if (mergedSteps.length > 0) {
                 console.log('[AutoReroute] Merged steps:', connectingRoute.steps?.length, '+', routeSteps.length, '=', mergedSteps.length);
               }
-              
-              // Ensure polylines are visible before updating with merged coordinates
-              setHidePolylines(false);
               
               // Use flush mechanism to prevent Android polyline ghosting
               const totalDistance = (connectingRoute.distanceMeters || 0) + (routeDistanceMeters || 0);
@@ -2993,11 +2988,32 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     clearWaypoints();
     isLoadingSavedRouteRef.current = true;
 
+    // Check if saved route origin is reasonably close to current location
+    // If not, don't load waypoints since they won't make sense for recalculation
+    let shouldLoadWaypoints = true;
+    const ORIGIN_PROXIMITY_THRESHOLD = 1000; // 1km - consider origin "close" if within this distance
+    
+    if (route.origin && userLocation) {
+      const originLat = route.origin.latitude ?? route.origin.lat;
+      const originLng = route.origin.longitude ?? route.origin.lng;
+      const distFromOrigin = distanceBetweenMeters(
+        { latitude: originLat, longitude: originLng },
+        userLocation
+      );
+      
+      if (distFromOrigin > ORIGIN_PROXIMITY_THRESHOLD) {
+        console.log(`[loadSavedRoute] Saved origin is ${distFromOrigin.toFixed(0)}m away from current location - not loading waypoints to avoid confusion`);
+        shouldLoadWaypoints = false;
+      } else {
+        console.log(`[loadSavedRoute] Saved origin is ${distFromOrigin.toFixed(0)}m away - loading waypoints`);
+      }
+    }
+
     // Waypoints (normalise + rebuild)
     let actualOrigin = route.origin;
     let originWasCorrected = false;
     
-    if (Array.isArray(route.waypoints)) {
+    if (Array.isArray(route.waypoints) && shouldLoadWaypoints) {
       const normalisedWaypoints = route.waypoints.map((wp, idx) => {
         const normalized = {
           latitude: wp.latitude ?? wp.lat,
@@ -3037,13 +3053,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       });
     }
     
-    // Set the origin (using actualOrigin which may have been corrected)
-    if (actualOrigin) {
-      setManualStartPoint({
-        latitude: actualOrigin.lat ?? actualOrigin.latitude,
-        longitude: actualOrigin.lng ?? actualOrigin.longitude,
-      });
-    }
+    // DO NOT set manualStartPoint when loading saved routes
+    // The route will use current location as origin during navigation
+    // This prevents confusion between saved origin and actual current location
+    // Only manual "Set Start" button clicks should set manualStartPoint
     
     // If origin was corrected, update the route in Firestore
     if (originWasCorrected && routeId) {
@@ -3547,7 +3560,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 }
                 return (
                   <Polyline
-                    key={`base-outline-${routeCoords.length}`}
+                    key="base-outline"
                     coordinates={routeCoords}
                     strokeWidth={shouldRender ? (hidePolylines ? 0 : getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth) : 0}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
@@ -3950,7 +3963,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         />
       )}
 
-      {hasRouteIntent && !followUser && !activeRide && canSaveRoute && !pendingRidePolyline && (
+      {hasRouteIntent && !followUser && !activeRide && canSaveRoute && (
         <TouchableOpacity
           style={[styles.saveRouteButton, { bottom: saveButtonBottom }]}
           onPress={() => setShowSaveRouteModal(true)}
@@ -3960,21 +3973,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             size={22}
             color={theme.colors.primaryDark}
           />
-          <Text style={styles.saveRouteButtonText}>Save Route</Text>
-        </TouchableOpacity>
-      )}
-
-      {pendingRidePolyline && !followUser && !activeRide && (
-        <TouchableOpacity
-          style={[styles.saveRouteButton, { bottom: saveButtonBottom }]}
-          onPress={() => setShowSaveRideModal(true)}
-        >
-          <MaterialCommunityIcons
-            name="map-marker-path"
-            size={22}
-            color={theme.colors.accentDark}
-          />
-          <Text style={styles.saveRouteButtonText}>Save Ride</Text>
+          <Text style={styles.saveRouteButtonText}>Save</Text>
         </TouchableOpacity>
       )}
 
