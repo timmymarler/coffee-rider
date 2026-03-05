@@ -2988,32 +2988,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     clearWaypoints();
     isLoadingSavedRouteRef.current = true;
 
-    // Check if saved route origin is reasonably close to current location
-    // If not, don't load waypoints since they won't make sense for recalculation
-    let shouldLoadWaypoints = true;
-    const ORIGIN_PROXIMITY_THRESHOLD = 1000; // 1km - consider origin "close" if within this distance
-    
-    if (route.origin && userLocation) {
-      const originLat = route.origin.latitude ?? route.origin.lat;
-      const originLng = route.origin.longitude ?? route.origin.lng;
-      const distFromOrigin = distanceBetweenMeters(
-        { latitude: originLat, longitude: originLng },
-        userLocation
-      );
-      
-      if (distFromOrigin > ORIGIN_PROXIMITY_THRESHOLD) {
-        console.log(`[loadSavedRoute] Saved origin is ${distFromOrigin.toFixed(0)}m away from current location - not loading waypoints to avoid confusion`);
-        shouldLoadWaypoints = false;
-      } else {
-        console.log(`[loadSavedRoute] Saved origin is ${distFromOrigin.toFixed(0)}m away - loading waypoints`);
-      }
-    }
-
     // Waypoints (normalise + rebuild)
+    // ALWAYS load waypoints for display, regardless of distance from origin
     let actualOrigin = route.origin;
     let originWasCorrected = false;
     
-    if (Array.isArray(route.waypoints) && shouldLoadWaypoints) {
+    if (Array.isArray(route.waypoints)) {
       const normalisedWaypoints = route.waypoints.map((wp, idx) => {
         const normalized = {
           latitude: wp.latitude ?? wp.lat,
