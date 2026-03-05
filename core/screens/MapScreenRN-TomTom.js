@@ -2990,7 +2990,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Waypoints (normalise + rebuild)
     // ALWAYS load waypoints for display, regardless of distance from origin
     let actualOrigin = route.origin;
-    let originWasCorrected = false;
     
     if (Array.isArray(route.waypoints)) {
       const normalisedWaypoints = route.waypoints.map((wp, idx) => {
@@ -3003,29 +3002,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.log(`  [${idx}] ${normalized.latitude}, ${normalized.longitude} (${normalized.title})`);
         return normalized;
       });
-
-      // CHECK: If origin looks wrong, use first waypoint as origin
-      if (actualOrigin && route.waypoints.length > 0 && userLocation) {
-        const origLat = actualOrigin.lat ?? actualOrigin.latitude;
-        const origLng = actualOrigin.lng ?? actualOrigin.longitude;
-        const firstWpLat = normalisedWaypoints[0].latitude;
-        const firstWpLng = normalisedWaypoints[0].longitude;
-        const userLat = userLocation.latitude;
-        const userLng = userLocation.longitude;
-        
-        // Calculate rough distances
-        const distOriginToUser = Math.abs(origLat - userLat) + Math.abs(origLng - userLng);
-        const distOriginToFirstWp = Math.abs(origLat - firstWpLat) + Math.abs(origLng - firstWpLng);
-        
-        // If origin is very close to user but far from first waypoint, it's wrong
-        if (distOriginToUser < 0.001 && distOriginToFirstWp > 0.01) {
-          actualOrigin = {
-            lat: firstWpLat,
-            lng: firstWpLng,
-          };
-          originWasCorrected = true;
-        }
-      }
 
       normalisedWaypoints.forEach((wp) => {
         addFromPlace(wp);
@@ -3044,20 +3020,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         latitude: actualOrigin.lat ?? actualOrigin.latitude,
         longitude: actualOrigin.lng ?? actualOrigin.longitude,
       });
-    }
-    
-    // If origin was corrected, update the route in Firestore
-    if (originWasCorrected && routeId) {
-      try {
-        await updateDoc(doc(db, "routes", routeId), {
-          origin: {
-            lat: actualOrigin.lat || actualOrigin.latitude,
-            lng: actualOrigin.lng || actualOrigin.longitude,
-          }
-        });
-      } catch (error) {
-        console.error("[loadSavedRoute] Error updating route in Firestore:", error);
-      }
     }
     
     if (route.destination) {
