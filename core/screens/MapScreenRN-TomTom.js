@@ -1691,9 +1691,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           // Current location is far from saved route's start point
           // Build connecting route: current → start → existing route
           console.log(`[AutoReroute] Follow Me enabled - current location is ${distToStart.toFixed(0)}m from start. Building connecting route...`);
+          console.log(`[AutoReroute] Current location: ${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}`);
+          console.log(`[AutoReroute] Start point: ${manualStartPoint.latitude.toFixed(4)}, ${manualStartPoint.longitude.toFixed(4)}`);
+          console.log(`[AutoReroute] Current saved routeCoords: ${routeCoords.length} points`);
+          
+          // CAPTURE current route state to avoid closure issues
+          const savedRouteCoordsSnapshot = [...routeCoords];
+          const savedRouteStepsSnapshot = [...(routeSteps || [])];
+          const savedRouteDistanceSnapshot = routeDistanceMeters || 0;
           
           (async () => {
             try {
+              console.log('[AutoReroute] Fetching connecting route...');
               // Fetch route from current location to original start
               const connectingRoute = await fetchRoute({
                 origin: userLocation,
@@ -1710,28 +1719,41 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 customWindingness,
               });
               
-              if (connectingRoute && connectingRoute.polyline) {
+              console.log('[AutoReroute] Connecting route response:', {
+                hasPolyline: !!connectingRoute?.polyline,
+                polylineLength: connectingRoute?.polyline?.length || 0,
+                hasSteps: !!connectingRoute?.steps,
+                stepsCount: connectingRoute?.steps?.length || 0,
+                distance: connectingRoute?.distanceMeters || 0
+              });
+              
+              if (connectingRoute && connectingRoute.polyline && connectingRoute.polyline.length > 0) {
                 // Merge: new route from current to start + existing route
                 // Remove the last point of the connecting route (it's the start point, which is the first point of saved route)
                 const connectingPolyline = connectingRoute.polyline.slice(0, -1);
-                const mergedPolyline = [...connectingPolyline, ...routeCoords];
+                const mergedPolyline = [...connectingPolyline, ...savedRouteCoordsSnapshot];
                 
-                console.log('[AutoReroute] Merged polyline: connecting', connectingPolyline.length, 'points + saved', routeCoords.length, 'points =', mergedPolyline.length, 'total');
+                console.log('[AutoReroute] MERGING: connecting', connectingPolyline.length, 'points + saved', savedRouteCoordsSnapshot.length, 'points =', mergedPolyline.length, 'total');
+                console.log('[AutoReroute] Merged polyline first point:', mergedPolyline[0]);
+                console.log('[AutoReroute] Merged polyline last point:', mergedPolyline[mergedPolyline.length - 1]);
                 
                 // Merge steps too
                 const mergedSteps = [
                   ...((connectingRoute.steps || []).filter(step => step !== undefined)),
-                  ...(routeSteps || []),
+                  ...savedRouteStepsSnapshot,
                 ];
                 
                 // Use flush mechanism to prevent Android polyline ghosting
-                const totalDistance = (connectingRoute.distanceMeters || 0) + (routeDistanceMeters || 0);
+                const totalDistance = (connectingRoute.distanceMeters || 0) + savedRouteDistanceSnapshot;
+                console.log('[AutoReroute] Calling setRouteCoordsWithFlush with merged polyline, total distance:', totalDistance);
                 setRouteCoordsWithFlush(mergedPolyline, {
                   distance: totalDistance,
                   steps: mergedSteps,
                 });
                 
                 setCurrentStepIndex(0);
+              } else {
+                console.warn('[AutoReroute] No polyline in connecting route response or polyline is empty');
               }
             } catch (error) {
               console.warn('[AutoReroute] Error building connecting route:', error);
