@@ -435,6 +435,10 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       let instruction = instr.text || "Continue";
       let extra = {};
 
+      // IMPORTANT: Interpret instruction based on maneuver type, not just raw text
+      // This fixes cases where road names don't change but the actual turn direction does
+      // e.g., staying on "Panenham Rd" even though the main road changes name
+      
       // Handle roundabout maneuvers and extract exit number
       if (maneuver.includes("ROUNDABOUT")) {
         let exitNumber = null;
@@ -470,6 +474,14 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
         }
         
         extra.roundaboutExitNumber = exitNumber;
+      } else if (maneuver.includes("TURN_LEFT")) {
+        instruction = "Turn left";
+      } else if (maneuver.includes("TURN_RIGHT")) {
+        instruction = "Turn right";
+      } else if (maneuver.includes("TURN_SLIGHT_LEFT")) {
+        instruction = "Slight left";
+      } else if (maneuver.includes("TURN_SLIGHT_RIGHT")) {
+        instruction = "Slight right";
       } else if (maneuver === "STRAIGHT") {
         const nextInstr = instructions[idx + 1];
         if (nextInstr) {
@@ -481,6 +493,8 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
           } else {
             instruction = "Continue straight";
           }
+        } else {
+          instruction = "Continue straight";
         }
       }
 
