@@ -2262,7 +2262,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setIsHomeDestination(false);
     setRouteDistanceMeters(null);
     setManualStartPoint(null); 
-    setRouteSteps([]);
     
     // Restore visibility after giving native layer time to process empty state
     setTimeout(() => {
@@ -3038,6 +3037,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // This prevents confusion between saved origin and actual current location
     // Only manual "Set Start" button clicks should set manualStartPoint
     
+    // ALSO set manualStartPoint for the connecting route logic in AutoReroute
+    // This allows merging current location → start point → waypoints → destination when Follow Me starts
+    if (actualOrigin) {
+      setManualStartPoint({
+        latitude: actualOrigin.lat ?? actualOrigin.latitude,
+        longitude: actualOrigin.lng ?? actualOrigin.longitude,
+      });
+    }
+    
     // If origin was corrected, update the route in Firestore
     if (originWasCorrected && routeId) {
       try {
@@ -3513,7 +3521,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           )}
 
           {/* Waypoint markers - show all waypoints in the route */}
-          {capabilities.canCreateRoutes && waypoints.length > 0 && (
+          {waypoints.length > 0 && (
             (() => {
               return waypoints.map((wp, index) => (
                 <Marker
