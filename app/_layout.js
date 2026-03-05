@@ -174,17 +174,9 @@ function FloatingTabBar({ state }) {
           {/* Follow Me */}
           <LongPressGestureHandler
             onActivated={() => {
-              if (mapActions?.isFollowing?.()) {
-                // When following: reroute from current location if there's an active route
-                if (mapActions?.canRefreshRoute?.()) {
-                  mapActions?.refreshRoute?.();
-                }
-              } else if (mapActions?.selectedPlaceId) {
-                // When NOT following and a place is selected: route to that place with Follow Me
-                mapActions?.routeToSelectedPlace?.();
-              } else {
-                // When NOT following and no place selected: route to home
-                mapActions?.routeToHome?.();
+              // Long press: open current route in native maps
+              if (mapActions?.openInMaps) {
+                mapActions.openInMaps();
               }
             }}
             minDurationMs={500}

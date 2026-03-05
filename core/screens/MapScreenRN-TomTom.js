@@ -2010,6 +2010,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }, 300);
   }
 
+  function openCurrentRouteInMaps() {
+    handleNavigate();
+  }
+
   useEffect(() => {
     setMapActions({
       recenter: handleRecentre,
@@ -2022,6 +2026,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       routeToSelectedPlace: routeToSelectedPlace,
       endRide: endRide,
       selectedPlaceId: selectedPlaceId,
+      openInMaps: openCurrentRouteInMaps,
     });
 
     return () => {
