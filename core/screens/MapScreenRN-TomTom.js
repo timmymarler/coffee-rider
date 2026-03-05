@@ -1681,69 +1681,70 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     followUserPrevRef.current = followUser;
     
     if (justEnabledFollowMe) {
-      // SPECIAL CASE: If destination = current location, we need to prepend a route
-      // from current location to the original start point
-      const destAtCurrentLoc = routeDestination && userLocation &&
-        distanceBetweenMeters(routeDestination, userLocation) < 100;
+      // When Follow Me starts, always use current location as the route origin
       
-      if (destAtCurrentLoc && manualStartPoint && routeCoords.length > 0) {
-        // Build route from current location to original start point and merge
-        console.log('[AutoReroute] Follow Me enabled with destination = current location - building connecting route...');
+      if (manualStartPoint && userLocation && routeCoords.length > 0) {
+        // We have a saved route with a start point
+        const distToStart = distanceBetweenMeters(userLocation, manualStartPoint);
         
-        (async () => {
-          try {
-            // Fetch route from current location to original start
-            const connectingRoute = await fetchRoute({
-              origin: userLocation,
-              destination: {
-                latitude: manualStartPoint.latitude,
-                longitude: manualStartPoint.longitude,
-              },
-              waypoints: [],
-              travelMode: userTravelMode,
-              routeType: userRouteType,
-              routeTypeMap,
-              useCache: false,
-              customHilliness,
-              customWindingness,
-            });
-            
-            if (connectingRoute && connectingRoute.polyline) {
-              // Merge: new route from current to start + existing route
-              // Remove the last point of the connecting route (it's the start point, which is the first point of saved route)
-              const connectingPolyline = connectingRoute.polyline.slice(0, -1);
-              const mergedPolyline = [...connectingPolyline, ...routeCoords];
-              
-              console.log('[AutoReroute] Merged polyline: connecting', connectingPolyline.length, 'points + saved', routeCoords.length, 'points =', mergedPolyline.length, 'total');
-              
-              // CRITICAL: Also merge the steps so navigation works correctly
-              // Connecting route has steps from current → start
-              // Existing route has steps from start → destination
-              const mergedSteps = [
-                ...((connectingRoute.steps || []).filter(step => step !== undefined)),
-                ...(routeSteps || []),
-              ];
-              
-              if (mergedSteps.length > 0) {
-                console.log('[AutoReroute] Merged steps:', connectingRoute.steps?.length, '+', routeSteps.length, '=', mergedSteps.length);
-              }
-              
-              // Use flush mechanism to prevent Android polyline ghosting
-              const totalDistance = (connectingRoute.distanceMeters || 0) + (routeDistanceMeters || 0);
-              setRouteCoordsWithFlush(mergedPolyline, {
-                distance: totalDistance,
-                steps: mergedSteps,
+        if (distToStart > 50) {
+          // Current location is far from saved route's start point
+          // Build connecting route: current → start → existing route
+          console.log(`[AutoReroute] Follow Me enabled - current location is ${distToStart.toFixed(0)}m from start. Building connecting route...`);
+          
+          (async () => {
+            try {
+              // Fetch route from current location to original start
+              const connectingRoute = await fetchRoute({
+                origin: userLocation,
+                destination: {
+                  latitude: manualStartPoint.latitude,
+                  longitude: manualStartPoint.longitude,
+                },
+                waypoints: [],
+                travelMode: userTravelMode,
+                routeType: userRouteType,
+                routeTypeMap,
+                useCache: false,
+                customHilliness,
+                customWindingness,
               });
               
-              setCurrentStepIndex(0);
+              if (connectingRoute && connectingRoute.polyline) {
+                // Merge: new route from current to start + existing route
+                // Remove the last point of the connecting route (it's the start point, which is the first point of saved route)
+                const connectingPolyline = connectingRoute.polyline.slice(0, -1);
+                const mergedPolyline = [...connectingPolyline, ...routeCoords];
+                
+                console.log('[AutoReroute] Merged polyline: connecting', connectingPolyline.length, 'points + saved', routeCoords.length, 'points =', mergedPolyline.length, 'total');
+                
+                // Merge steps too
+                const mergedSteps = [
+                  ...((connectingRoute.steps || []).filter(step => step !== undefined)),
+                  ...(routeSteps || []),
+                ];
+                
+                // Use flush mechanism to prevent Android polyline ghosting
+                const totalDistance = (connectingRoute.distanceMeters || 0) + (routeDistanceMeters || 0);
+                setRouteCoordsWithFlush(mergedPolyline, {
+                  distance: totalDistance,
+                  steps: mergedSteps,
+                });
+                
+                setCurrentStepIndex(0);
+              }
+            } catch (error) {
+              console.warn('[AutoReroute] Error building connecting route:', error);
             }
-          } catch (error) {
-            console.warn('[AutoReroute] Error building connecting route:', error);
-          }
-        })();
-      } else if (!destAtCurrentLoc) {
-        // Normal case: rebuild from current location with current travel mode
-        console.log('[AutoReroute] Follow Me just enabled - forcing route rebuild with current travel mode');
+          })();
+        } else {
+          // Already at/near the start point, just use the existing polyline
+          console.log('[AutoReroute] Follow Me enabled - current location is at/near start point. Using existing route.');
+          setCurrentStepIndex(0);
+        }
+      } else {
+        // No saved route, rebuild from current location
+        console.log('[AutoReroute] Follow Me enabled - rebuilding route from current location');
         const requestId = ++routeRequestId.current;
         mapRoute({
           origin: userLocation,
@@ -1757,8 +1758,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         }).catch(error => {
           console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
         });
-      } else {
-        console.log('[AutoReroute] Destination matches current location but no manualStartPoint - skipping route adjustment');
       }
       return; // Exit early, don't do off-route checking on first run
     }
