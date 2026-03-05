@@ -1685,14 +1685,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       
       if (manualStartPoint && userLocation && routeCoords.length > 0) {
         // We have a saved route with a start point
-        const distToStart = distanceBetweenMeters(userLocation, manualStartPoint);
+        // Use the ACTUAL first point of the polyline, not the stored origin
+        // (they may differ due to route generation variations)
+        const polylineStartPoint = routeCoords[0];
+        const distToStart = distanceBetweenMeters(userLocation, polylineStartPoint);
         
         if (distToStart > 50) {
           // Current location is far from saved route's start point
-          // Build connecting route: current → start → existing route
-          console.log(`[AutoReroute] Follow Me enabled - current location is ${distToStart.toFixed(0)}m from start. Building connecting route...`);
+          // Build connecting route: current → polyline start → existing route
+          console.log(`[AutoReroute] Follow Me enabled - current location is ${distToStart.toFixed(0)}m from polyline start. Building connecting route...`);
           console.log(`[AutoReroute] Current location: ${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}`);
-          console.log(`[AutoReroute] Start point: ${manualStartPoint.latitude.toFixed(4)}, ${manualStartPoint.longitude.toFixed(4)}`);
+          console.log(`[AutoReroute] Polyline first point: ${polylineStartPoint.latitude.toFixed(4)}, ${polylineStartPoint.longitude.toFixed(4)}`);
           console.log(`[AutoReroute] Current saved routeCoords: ${routeCoords.length} points`);
           
           // CAPTURE current route state to avoid closure issues
@@ -1703,12 +1706,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           (async () => {
             try {
               console.log('[AutoReroute] Fetching connecting route...');
-              // Fetch route from current location to original start
+              // Fetch route from current location to ACTUAL polyline start
               const connectingRoute = await fetchRoute({
                 origin: userLocation,
                 destination: {
-                  latitude: manualStartPoint.latitude,
-                  longitude: manualStartPoint.longitude,
+                  latitude: polylineStartPoint.latitude,
+                  longitude: polylineStartPoint.longitude,
                 },
                 waypoints: [],
                 travelMode: userTravelMode,
@@ -1771,8 +1774,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             }
           })();
         } else {
-          // Already at/near the start point, just use the existing polyline
-          console.log('[AutoReroute] Follow Me enabled - current location is at/near start point. Using existing route.');
+          // Already at/near the polyline's start point, just use the existing route
+          console.log(`[AutoReroute] Follow Me enabled - current location is at/near polyline start point (${distToStart.toFixed(0)}m). Using existing route.`);
           setCurrentStepIndex(0);
         }
       } else {
