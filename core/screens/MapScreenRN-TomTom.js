@@ -1683,10 +1683,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (justEnabledFollowMe) {
       // When Follow Me starts, always use current location as the route origin
       
-      if (manualStartPoint && userLocation && routeCoords.length > 0) {
-        // We have a saved route with a start point
-        // Use the ACTUAL first point of the polyline, not the stored origin
-        // (they may differ due to route generation variations)
+      if (userLocation && routeCoords.length > 0) {
+        // We have a saved route - use the actual first point of the polyline for merging
+        // The polyline's first point is the true start, not the stored manualStartPoint
         const polylineStartPoint = routeCoords[0];
         const distToStart = distanceBetweenMeters(userLocation, polylineStartPoint);
         
@@ -2306,6 +2305,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     clearWaypoints();
     routeFittedRef.current = false;
+    followUserPrevRef.current = false; // Reset Follow Me transition detector for next route
     setCurrentLoadedRouteId(null);
     setFollowUser(false);          // Disable Follow Me when clearing route
     setCurrentStepIndex(0);        // Reset step index
