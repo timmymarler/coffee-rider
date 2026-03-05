@@ -1733,7 +1733,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 const connectingPolyline = connectingRoute.polyline.slice(0, -1);
                 const mergedPolyline = [...connectingPolyline, ...savedRouteCoordsSnapshot];
                 
-                console.log('[AutoReroute] MERGING: connecting', connectingPolyline.length, 'points + saved', savedRouteCoordsSnapshot.length, 'points =', mergedPolyline.length, 'total');
+                // CHECK: Is there a gap between connecting route and saved route?
+                let gapWarning = '';
+                if (connectingPolyline.length > 0 && savedRouteCoordsSnapshot.length > 0) {
+                  const lastConnectingPoint = connectingPolyline[connectingPolyline.length - 1];
+                  const firstSavedPoint = savedRouteCoordsSnapshot[0];
+                  const gapDistance = distanceBetweenMeters(lastConnectingPoint, firstSavedPoint);
+                  if (gapDistance > 10) {
+                    gapWarning = ` GAP WARNING: ${gapDistance.toFixed(1)}m between connecting route end and saved route start!`;
+                  }
+                }
+                
+                console.log('[AutoReroute] MERGING: connecting', connectingPolyline.length, 'points + saved', savedRouteCoordsSnapshot.length, 'points =', mergedPolyline.length, 'total' + gapWarning);
                 console.log('[AutoReroute] Merged polyline first point:', mergedPolyline[0]);
                 console.log('[AutoReroute] Merged polyline last point:', mergedPolyline[mergedPolyline.length - 1]);
                 
@@ -3041,6 +3052,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         latitude: actualOrigin.lat ?? actualOrigin.latitude,
         longitude: actualOrigin.lng ?? actualOrigin.longitude,
       });
+      console.log('[loadSavedRoute] manualStartPoint set to:', {
+        latitude: actualOrigin.lat ?? actualOrigin.latitude,
+        longitude: actualOrigin.lng ?? actualOrigin.longitude,
+      });
     }
     
     if (route.destination) {
@@ -3078,6 +3093,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       const routeDistance = typeof route.distanceMeters === 'number' && route.distanceMeters > 0 
         ? route.distanceMeters 
         : (typeof route.distance === 'number' && route.distance > 0 ? route.distance : null);
+      
+      // LOG: Check if polyline first point matches manualStartPoint
+      if (decoded.length > 0 && actualOrigin) {
+        const polylineStart = decoded[0];
+        const expectedStart = {
+          latitude: actualOrigin.lat ?? actualOrigin.latitude,
+          longitude: actualOrigin.lng ?? actualOrigin.longitude,
+        };
+        const startDist = distanceBetweenMeters(polylineStart, expectedStart);
+        console.log('[loadSavedRoute] Polyline start check:', {
+          polylineFirstPoint: polylineStart,
+          expectedManualStartPoint: expectedStart,
+          distanceBetweenMeters: startDist.toFixed(1),
+          mismatch: startDist > 1 ? 'YES - MISMATCH!' : 'OK'
+        });
+      }
       
       console.log('[loadSavedRoute] About to set polyline via flush -', decoded.length, 'coords, distance:', routeDistance);
       setRouteCoordsWithFlush(decoded, {
