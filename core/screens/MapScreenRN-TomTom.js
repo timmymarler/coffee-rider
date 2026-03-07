@@ -3900,7 +3900,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             <>
               <View style={styles.junctionPanel}>
                 {/* Large direction icon */}
-                <MaterialCommunityIcons name={meta.icon} size={48} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
+                <MaterialCommunityIcons name={meta.icon} size={80} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
                 {/* Distance and label section */}
                 <View style={styles.junctionContent}>
                   {distText ? (
@@ -4464,11 +4464,11 @@ const styles = StyleSheet.create({
 
   junctionPanel: {
     position: "absolute",
-    bottom: 100,
-    left: 20,
-    maxWidth: 245,
+    top: 16,
+    left: 16,
+    right: 16,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 16,
