@@ -57,7 +57,7 @@ export default {
     name: DISPLAY_NAME[APP_NAME],
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
-    version: "2.10.4",
+    version: "2.12.1",
     icon: `${brandFolder}/icon.png`,
     splash: {
       image: `${brandFolder}/splash.png`,
