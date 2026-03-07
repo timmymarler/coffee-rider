@@ -1602,7 +1602,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         
         // If we're getting closer to a future step, might be off-route
         // But linearly advance when crossing the current step's endpoint
-        const advanceThreshold = 50; // meters - advance when within 50m of the endpoint
+        const advanceThreshold = 10; // meters - advance when within 10m of the endpoint
         if (distToCurrentEnd < advanceThreshold && currentStepIndex + 1 < routeSteps.length) {
           // Approaching the endpoint of current step - prepare to advance
           nextStepIdx = currentStepIndex + 1;
