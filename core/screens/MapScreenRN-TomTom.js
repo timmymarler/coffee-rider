@@ -979,6 +979,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       });
       
       setCurrentStepIndex(0);
+      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity };
+      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity };
 
     } catch (error) {
       console.error("[REFRESH] Error refreshing route:", error);
@@ -1788,6 +1790,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [userLocation, isNavigationMode]);
 
+  // Track progression through steps to detect crossings accurately
+  const stepProgressRef = useRef({
+    lastStepIdx: 0,
+    lastDistToEnd: Infinity,
+  });
+
   // Unified route progress tracking: determine current step based on location projection
   // onto the polyline, then display next junction and track progression
   useEffect(() => {
@@ -1800,56 +1808,73 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const projectedPoint = projectPointToPolyline(userLocation, routeCoords);
     const positionToUse = projectedPoint || userLocation;
     
-    // Find which step contains this projected position by comparing distances
-    // to each step's start/end points
-    let bestStepIdx = 0;
-    let bestStepDistance = Infinity;
+    let nextStepIdx = stepProgressRef.current.lastStepIdx;
+    const currentStep = routeSteps[nextStepIdx];
     
-    for (let i = 0; i < routeSteps.length; i++) {
-      const step = routeSteps[i];
-      if (!step?.end?.latitude) continue;
+    // Safety check: don't go past last step
+    if (nextStepIdx >= routeSteps.length) {
+      nextStepIdx = routeSteps.length - 1;
+    }
+    
+    if (currentStep?.end?.latitude) {
+      // Distance to the current step's end point
+      const distToCurrentEnd = distanceBetweenMeters(positionToUse, currentStep.end);
+      const lastDist = stepProgressRef.current.lastDistToEnd;
       
-      // Distance from our position to this step's end point
-      const distToStepEnd = distanceBetweenMeters(positionToUse, step.end);
+      // Check if we've crossed the current step's endpoint
+      // We've crossed if:
+      // 1. We were moving toward it (distance was decreasing)
+      // 2. We're now very close or past it (< 10m)
+      // 3. OR distance started increasing again (we passed it)
+      const hasPassedCurrentEnd = 
+        lastDist !== Infinity && 
+        ((distToCurrentEnd < 10) || (lastDist < distToCurrentEnd && lastDist < 100));
       
-      // We're on the step that makes the most sense given our position
-      // Prefer closer steps, but bias toward not skipping steps
-      if (distToStepEnd < bestStepDistance) {
-        bestStepDistance = distToStepEnd;
-        bestStepIdx = i;
+      if (hasPassedCurrentEnd && nextStepIdx + 1 < routeSteps.length) {
+        // Advance to next step
+        nextStepIdx = nextStepIdx + 1;
+        stepProgressRef.current.lastStepIdx = nextStepIdx;
+        stepProgressRef.current.lastDistToEnd = Infinity; // Reset for new step
+        
+        console.log('[Navigation] Step advanced at junction:', {
+          from: stepProgressRef.current.lastStepIdx - 1,
+          to: nextStepIdx,
+          reason: 'crossed endpoint',
+          distToEndpoint: Math.round(distToCurrentEnd),
+        });
+      } else {
+        // Still on current step, update distance tracking
+        stepProgressRef.current.lastDistToEnd = distToCurrentEnd;
       }
     }
     
-    // Don't advance past destination if it coincides with current location
-    // (handles saved routes where destination = current location)
+    // Handle destination special case
     const isDestinationThisStep = routeDestination && 
-      routeSteps[bestStepIdx]?.end &&
-      distanceBetweenMeters(routeSteps[bestStepIdx].end, routeDestination) < 100;
+      routeSteps[nextStepIdx]?.end &&
+      distanceBetweenMeters(routeSteps[nextStepIdx].end, routeDestination) < 100;
       
-    let finalStepIdx = bestStepIdx;
-    if (isDestinationThisStep && bestStepIdx === routeSteps.length - 1) {
-      finalStepIdx = bestStepIdx; // Stay on last step
+    if (isDestinationThisStep && nextStepIdx === routeSteps.length - 1) {
+      // Stay on last step at destination
+      nextStepIdx = routeSteps.length - 1;
     }
     
     // Update step index if different
-    if (finalStepIdx !== currentStepIndex) {
-      console.log('[Navigation] Step advanced:', {
+    if (nextStepIdx !== currentStepIndex) {
+      console.log('[Navigation] Step index updated:', {
         from: currentStepIndex,
-        to: finalStepIdx,
-        reason: 'location projection',
-        projectedDistance: Math.round(bestStepDistance),
+        to: nextStepIdx,
       });
-      setCurrentStepIndex(finalStepIdx);
+      setCurrentStepIndex(nextStepIdx);
     }
     
     // Calculate and display distance to current step's end
-    if (finalStepIdx < routeSteps.length && routeSteps[finalStepIdx]?.end?.latitude) {
-      const distToEnd = distanceBetweenMeters(positionToUse, routeSteps[finalStepIdx].end);
+    if (nextStepIdx < routeSteps.length && routeSteps[nextStepIdx]?.end?.latitude) {
+      const distToEnd = distanceBetweenMeters(positionToUse, routeSteps[nextStepIdx].end);
       setNextJunctionDistance(distToEnd);
     } else {
       setNextJunctionDistance(null);
     }
-  }, [userLocation, isNavigationMode, routeSteps, routeCoords]);
+  }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex]);
 
   // Auto-reroute when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
@@ -2369,6 +2394,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setFollowUser(false);          // Disable Follow Me when clearing route
     setCurrentStepIndex(0);        // Reset step index
     setNextJunctionDistance(null); // Clear junction distance
+    stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity }; // Reset step progress tracker
   }
 
   /**
@@ -3033,6 +3059,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     });
     
     setCurrentStepIndex(0);
+    stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity };
 
     // Auto-fit view if not in Follow Me and not already fitted
     if (!skipFitToView && !routeFittedRef.current && !followUser) {
