@@ -983,33 +983,168 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   };
 
+  /**
+   * UNIFIED ROUTE STRUCTURE LOGIC
+   * 
+   * Determines where a new place goes in the route.
+   * Returns { start, waypoints, destination, action }
+   */
+  function determineRouteAction(newPlace, currentState = {}) {
+    const {
+      currentStart = manualStartPoint,
+      currentWaypoints = waypoints,
+      currentDestination = routeDestination,
+      currentUserLocation = userLocation,
+      isExplicitStart = false, // User tapped "Set as Start Point"
+      isExplicitDestination = false, // User tapped "Add as Destination"
+    } = currentState;
+
+    // Rule 1: If user explicitly sets a start point, use that
+    if (isExplicitStart) {
+      return {
+        start: newPlace,
+        waypoints: currentWaypoints,
+        destination: currentDestination,
+        action: 'set-start',
+      };
+    }
+
+    // Rule 2: If user explicitly sets a destination (and one already exists)
+    // promote old destination to waypoint and use new as destination
+    if (isExplicitDestination) {
+      let newWaypoints = currentWaypoints;
+      if (currentDestination) {
+        newWaypoints = [...currentWaypoints, currentDestination];
+      }
+      return {
+        start: currentStart || currentUserLocation,
+        waypoints: newWaypoints,
+        destination: newPlace,
+        action: 'set-destination',
+      };
+    }
+
+    // Rule 3: User adding a place via "Add Waypoint" - always a waypoint
+    // (This is explicit from the button, not ambiguous)
+    return {
+      start: currentStart || currentUserLocation,
+      waypoints: [...currentWaypoints, newPlace],
+      destination: currentDestination,
+      action: 'add-waypoint',
+    };
+  }
+
+  /**
+   * Updates UI state to reflect the new route structure
+   * (For persistence and display only - actual route building is done separately)
+   */
+  function updateRouteUIState(structure) {
+    const { start, waypoints: newWaypoints, destination, action } = structure;
+    
+    console.log(`[updateRouteUIState] Action: ${action}`);
+    console.log(`  Current: ${waypoints.length} waypoints, dest=${routeDestination?.title}, start=${manualStartPoint ? 'manual' : 'location'}`);
+    console.log(`  New: ${newWaypoints.length} waypoints, dest=${destination?.title}`);
+
+    if (action === 'set-start') {
+      setManualStartPoint(start);
+    } else if (action === 'set-destination' || action === 'add-waypoint') {
+      // IMPORTANT: All state updates are batched, so the useEffect
+      // that depends on [waypoints, routeDestination] will trigger
+      // But buildRoute has already been called explicitly with the new structure,
+      // so we use the override parameters to ensure it uses the new structure
+      clearWaypoints();
+      
+      for (let i = 0; i < newWaypoints.length; i++) {
+        const wp = newWaypoints[i];
+        if (wp && wp.latitude && wp.longitude) {
+          addFromPlace({
+            latitude: wp.latitude,
+            longitude: wp.longitude,
+            title: wp.title,
+            source: wp.source || 'structured-route',
+          });
+        }
+      }
+      
+      if (destination) {
+        setRouteDestination({
+          latitude: destination.latitude,
+          longitude: destination.longitude,
+          title: destination.title,
+        });
+      }
+    }
+  }
+
   const handleAddWaypoint = () => {
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
-    addFromMapPress(pendingMapPoint);
+    
+    const newPlace = formatPoint(pendingMapPoint);
+    const structure = determineRouteAction(newPlace, {
+      currentStart: manualStartPoint,
+      currentWaypoints: waypoints,
+      currentDestination: routeDestination,
+      currentUserLocation: userLocation,
+      isExplicitStart: false,
+      isExplicitDestination: false,
+    });
+
+    updateRouteUIState(structure);
+    
+    // Build with explicit structure to avoid state timing issues
+    buildRoute({ 
+      waypointsOverride: structure.waypoints,
+      destinationOverride: structure.destination,
+    }).catch(e => console.warn('[handleAddWaypoint] Build error:', e));
+    
     closeAddPointMenu();
   };
 
   const handleSetStart = () => {
     setSelectedPlaceId(null);
-    setManualStartPoint({
+    
+    const newPlace = {
       latitude: pendingMapPoint.latitude,
       longitude: pendingMapPoint.longitude,
+      title: pendingMapPoint.name || 'Custom Location',
+    };
+    
+    const structure = determineRouteAction(newPlace, {
+      currentStart: manualStartPoint,
+      currentWaypoints: waypoints,
+      currentDestination: routeDestination,
+      currentUserLocation: userLocation,
+      isExplicitStart: true,
+      isExplicitDestination: false,
     });
+
+    updateRouteUIState(structure);
     closeAddPointMenu();
   };
 
   const handleSetDestination = () => {
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
-    const point = formatPoint(pendingMapPoint);
-    setRouteDestination({
-      latitude: point.lat,
-      longitude: point.lng,
-      title: point.title,
+    
+    const newPlace = formatPoint(pendingMapPoint);
+    const structure = determineRouteAction(newPlace, {
+      currentStart: manualStartPoint,
+      currentWaypoints: waypoints,
+      currentDestination: routeDestination,
+      currentUserLocation: userLocation,
+      isExplicitStart: false,
+      isExplicitDestination: true,
     });
-    setIsHomeDestination(false);
 
+    updateRouteUIState(structure);
+    
+    // Build with explicit structure to immediately use the new waypoints/destination
+    buildRoute({ 
+      waypointsOverride: structure.waypoints,
+      destinationOverride: structure.destination,
+    }).catch(e => console.warn('[handleSetDestination] Build error:', e));
+    
     closeAddPointMenu();
   };
 
@@ -2745,11 +2880,30 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     routeRequestId.current += 1;
     const requestId = routeRequestId.current;
 
-    isLoadingSavedRouteRef.current = false;  // Allow rebuild when user starts new route
+    isLoadingSavedRouteRef.current = false;
     setRoutingActive(true);
-    setRouteDestination(place);
-    await buildRoute({ destinationOverride: place, requestId });
-    routeFittedRef.current = false; // Need to see if this works. Might need to go BEFORE buildRoute
+    
+    // Use unified route structure logic
+    const structure = determineRouteAction(place, {
+      currentStart: manualStartPoint,
+      currentWaypoints: waypoints || [],
+      currentDestination: routeDestination,
+      currentUserLocation: userLocation,
+      isExplicitStart: false,
+      isExplicitDestination: true,
+    });
+
+    // Update UI state for persistence
+    updateRouteUIState(structure);
+    
+    // Build route with explicit structure (don't rely on state being updated)
+    console.log('[handleRoute] Building with explicit structure');
+    await buildRoute({ 
+      waypointsOverride: structure.waypoints,
+      destinationOverride: structure.destination,
+      requestId 
+    });
+    routeFittedRef.current = false;
   }
 
   function getActiveDestination() {
@@ -2818,13 +2972,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     skipFitToView = false, // Don't auto-center when in Follow Me mode
     vehicleHeading = null, // User's current heading in degrees (0-359), used for rerouting
   } = {}) {
-    console.log("[mapRoute] Starting with requestId:", requestId, "waypoints:", waypointsList.length);
-    
-    // DEBUG: Log all waypoints received by mapRoute
-    waypointsList.forEach((wp, idx) => {
-      console.log(`[mapRoute] waypointsList[${idx}]:`, `(${wp.latitude?.toFixed(6) ?? wp.lat?.toFixed(6)}, ${wp.longitude?.toFixed(6) ?? wp.lng?.toFixed(6)})`);
-    });
-    
     if (!origin) {
       console.log("[mapRoute] No origin provided");
       return false;
@@ -2874,24 +3021,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return false;
     }
 
-    console.log("[mapRoute] Building route with:");
-    console.log("  - Origin:", startCoord.latitude.toFixed(5), startCoord.longitude.toFixed(5));
-    console.log("  - Waypoints:", normalizedIntermediates.length, normalizedIntermediates.map(w => `${w.latitude.toFixed(5)}, ${w.longitude.toFixed(5)}`));
-    console.log("  - Destination:", finalDestination.latitude.toFixed(5), finalDestination.longitude.toFixed(5));
-
     // Try cache first if offline or as optimization
     // BUT: Always skip cache for Follow Me or AutoReroute (skipFitToView=true)
     // to ensure we get a fresh route with the correct travel mode and current location
     const useCache = !skipFitToView && !followUser;
-    
-    // DEBUG: Log the exact data being sent to fetchRoute
-    console.log("[mapRoute] About to call fetchRoute with:");
-    console.log("  startCoord:", startCoord);
-    console.log("  finalDestination:", finalDestination);
-    console.log("  normalizedIntermediates:", normalizedIntermediates.length, "waypoints");
-    normalizedIntermediates.forEach((wp, idx) => {
-      console.log(`    [${idx}] ${wp.latitude.toFixed(6)}, ${wp.longitude.toFixed(6)}`);
-    });
     
     // Use unified routing engine
     let result;
@@ -2917,7 +3050,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return false;
     }
 
-    console.log("[mapRoute] Result received. Has polyline:", !!result?.polyline);
     if (!result) {
       console.log("[mapRoute] Result is null, returning");
       return false;
@@ -2986,17 +3118,23 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     return true;
   }
 
-  async function buildRoute({ destinationOverride = null, requestId } = {}) {
+  async function buildRoute({ 
+    destinationOverride = null, 
+    requestId,
+    waypointsOverride = null, // Explicit waypoints to use instead of component state
+  } = {}) {
     // Wrapper that calls mapRoute with current component state
+    // Can accept explicit overrides to avoid state timing issues
     const finalRequestId = requestId || routeRequestId.current;
-    console.log("[buildRoute] Starting - requestId:", finalRequestId, "destination:", routeDestination?.title, "waypoints:", waypoints.length);
     
-    // DEBUG: Log all waypoints
-    waypoints.forEach((wp, idx) => {
-      console.log(`[buildRoute] waypoint[${idx}]:`, wp.title, `(${wp.lat.toFixed(6)}, ${wp.lng.toFixed(6)})`);
-    });
+    const effectiveWaypoints = waypointsOverride !== null ? waypointsOverride : waypoints;
+    const effectiveDestination = destinationOverride || routeDestination;
     
-    if (!routeDestination && !destinationOverride && waypoints.length === 0) {
+    console.log("[buildRoute] Starting - requestId:", finalRequestId);
+    console.log(`  Destination: ${effectiveDestination?.title}`);
+    console.log(`  Waypoints: ${effectiveWaypoints?.length || 0}`);
+    
+    if (!effectiveDestination && effectiveWaypoints?.length === 0) {
       console.log("[buildRoute] No destination or waypoints, returning");
       return;
     }
@@ -3005,9 +3143,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
-    const destination = destinationOverride || routeDestination || null;
+    const destination = effectiveDestination || null;
 
-    if (!destination && waypoints.length === 0) {
+    if (!destination && !effectiveWaypoints?.length) {
       console.log("[buildRoute] No destination and no waypoints, returning");
       return;
     }
@@ -3017,7 +3155,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       const startCoord = normalizeCoord(manualStartPoint || userLocation);
       lastRouteBuildLocationRef.current = startCoord;
       lastRouteTypeRef.current = userRouteType;
-      lastWaypoints.current = waypoints;
+      lastWaypoints.current = effectiveWaypoints;
       lastManualStartPointRef.current = manualStartPoint;
     }
 
@@ -3032,7 +3170,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Call the core mapRoute function
     await mapRoute({
       origin,
-      waypoints,
+      waypoints: effectiveWaypoints,
       destination,
       travelMode: userTravelMode,
       routeType: userRouteType,
