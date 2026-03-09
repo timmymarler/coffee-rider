@@ -690,7 +690,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
   const [debugMode, setDebugMode] = useState(false); // Toggle with long press on distance display
   const routeFittedRef = useRef(false);
-  const prevStepDistRef = useRef(null); // Track previous distance to step endpoint to detect crossing
   
   // Active ride & location sharing
   const { activeRide, endRide } = useActiveRide(user);
@@ -1787,205 +1786,85 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [userLocation, isNavigationMode]);
 
-  // Smart step detection: track which step you're on and automatically advance when past it
-  // This fixes the "getting further away" issue by detecting step transitions more intelligently
+  // Unified route progress tracking: determine current step based on location projection
+  // onto the polyline, then display next junction and track progression
   useEffect(() => {
     if (!isNavigationMode) return;
     if (!userLocation) return;
     if (!routeSteps || routeSteps.length === 0) return;
+    if (!routeCoords || routeCoords.length === 0) return;
 
-    // Strategy: User is on current step, approaching its END point
-    // When user passes that end point, advance to next step
-    // This ensures we always show the distance to the END of the current instruction
+    // Project current location onto the polyline
+    const projectedPoint = projectPointToPolyline(userLocation, routeCoords);
+    const positionToUse = projectedPoint || userLocation;
     
-    let nextStepIdx = currentStepIndex;
-    let distanceForDisplay = null;
+    // Find which step contains this projected position by comparing distances
+    // to each step's start/end points
+    let bestStepIdx = 0;
+    let bestStepDistance = Infinity;
     
-    // Check if we've passed the current step's endpoint
-    // IMPORTANT: Skip the destination endpoint if destination = current location
-    // This prevents immediately marking the route as complete when loading a saved
-    // route where the destination happens to be at the current location
-    const isDestinationThisStep = routeDestination && 
-      routeSteps[currentStepIndex]?.end &&
-      distanceBetweenMeters(routeSteps[currentStepIndex].end, routeDestination) < 100;
-    
-    if (currentStepIndex < routeSteps.length && !isDestinationThisStep) {
-      const currentStep = routeSteps[currentStepIndex];
-      if (currentStep?.end?.latitude) {
-        const distToCurrentEnd = distanceBetweenMeters(userLocation, currentStep.end);
-        
-        // Detect when user crosses the step's endpoint by checking if distance increases
-        // Only advance when AT or PAST the junction (not before)
-        const crossingThreshold = 5; // meters - trigger only after actually passing
-        const wasPreviouslyCloser = prevStepDistRef.current !== null && distToCurrentEnd > prevStepDistRef.current;
-        const hasPassedJunction = distToCurrentEnd < crossingThreshold && wasPreviouslyCloser;
-        
-        if (hasPassedJunction && currentStepIndex + 1 < routeSteps.length) {
-          // User has crossed the endpoint - advance to next step
-          nextStepIdx = currentStepIndex + 1;
-          const nextStep = routeSteps[nextStepIdx];
-          
-          // Calculate distance to the NEXT step's end
-          if (nextStep?.end?.latitude) {
-            distanceForDisplay = distanceBetweenMeters(userLocation, nextStep.end);
-          }
-          
-          console.log('[Navigation] Advanced step (crossed endpoint):', {
-            from: currentStepIndex,
-            to: nextStepIdx,
-            distanceToEndpoint: Math.round(distToCurrentEnd),
-            nextStepManeuver: nextStep?.maneuver,
-            nextStepInstruction: nextStep?.instruction?.substring(0, 40),
-            nextStepDistance: Math.round(distanceForDisplay || 0),
-          });
-        } else {
-          nextStepIdx = currentStepIndex;
-          distanceForDisplay = distToCurrentEnd;
-        }
-        
-        // Update ref for next iteration
-        prevStepDistRef.current = distToCurrentEnd;
+    for (let i = 0; i < routeSteps.length; i++) {
+      const step = routeSteps[i];
+      if (!step?.end?.latitude) continue;
+      
+      // Distance from our position to this step's end point
+      const distToStepEnd = distanceBetweenMeters(positionToUse, step.end);
+      
+      // We're on the step that makes the most sense given our position
+      // Prefer closer steps, but bias toward not skipping steps
+      if (distToStepEnd < bestStepDistance) {
+        bestStepDistance = distToStepEnd;
+        bestStepIdx = i;
       }
     }
     
-    // Update step index if we've advanced
-    if (nextStepIdx !== currentStepIndex) {
-      console.log('[Navigation] setCurrentStepIndex:', nextStepIdx);
-      setCurrentStepIndex(nextStepIdx);
-      prevStepDistRef.current = null; // Reset distance tracking for new step
+    // Don't advance past destination if it coincides with current location
+    // (handles saved routes where destination = current location)
+    const isDestinationThisStep = routeDestination && 
+      routeSteps[bestStepIdx]?.end &&
+      distanceBetweenMeters(routeSteps[bestStepIdx].end, routeDestination) < 100;
+      
+    let finalStepIdx = bestStepIdx;
+    if (isDestinationThisStep && bestStepIdx === routeSteps.length - 1) {
+      finalStepIdx = bestStepIdx; // Stay on last step
     }
-
-    // Show distance to the END of the current/next step
-    if (distanceForDisplay !== null) {
-      setNextJunctionDistance(distanceForDisplay);
-    } else if (currentStepIndex < routeSteps.length && routeSteps[currentStepIndex]?.end?.latitude) {
-      const distToEnd = distanceBetweenMeters(userLocation, routeSteps[currentStepIndex].end);
+    
+    // Update step index if different
+    if (finalStepIdx !== currentStepIndex) {
+      console.log('[Navigation] Step advanced:', {
+        from: currentStepIndex,
+        to: finalStepIdx,
+        reason: 'location projection',
+        projectedDistance: Math.round(bestStepDistance),
+      });
+      setCurrentStepIndex(finalStepIdx);
+    }
+    
+    // Calculate and display distance to current step's end
+    if (finalStepIdx < routeSteps.length && routeSteps[finalStepIdx]?.end?.latitude) {
+      const distToEnd = distanceBetweenMeters(positionToUse, routeSteps[finalStepIdx].end);
       setNextJunctionDistance(distToEnd);
     } else {
       setNextJunctionDistance(null);
     }
-  }, [userLocation, isNavigationMode, routeSteps, currentStepIndex]);
+  }, [userLocation, isNavigationMode, routeSteps, routeCoords]);
 
-  // Auto-rerouting when significantly off-route during Follow Me
+  // Auto-reroute when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
   const lastOffRouteCheckPos = useRef(null); // Track last position where we checked for off-route
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
   const OFF_ROUTE_THRESHOLD_METERS = 100; // Reroute if 100m+ off the route
   const REROUTE_COOLDOWN_SECONDS = 30; // Only attempt reroute every 30 seconds max
-  const MIN_MOVEMENT_BEFORE_CHECK = 25; // Only check off-route after user moves 25m to reduce unnecessary calculations
+  const MIN_MOVEMENT_BEFORE_CHECK = 25; // Only check off-route after user moves 25m
   
   useEffect(() => {
-    if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation || !routeDestination) return;
-
-    // Defensive check: ensure routeCoords is actually an array with valid coordinate objects
-    if (!Array.isArray(routeCoords)) {
-      console.warn('[AutoReroute] routeCoords is not an array, skipping auto-reroute');
-      return;
-    }
-
-    // Force route rebuild when transitioning to Follow Me to ensure correct travel mode is used
+    // Detect Follow Me enable transition
     const justEnabledFollowMe = !followUserPrevRef.current && followUser;
     followUserPrevRef.current = followUser;
     
+    // On Follow Me start: rebuild route from current location
     if (justEnabledFollowMe) {
-      // When Follow Me starts, always use current location as the route origin
-      
-      if (userLocation && routeCoords.length > 0) {
-        // We have a saved route - use the actual first point of the polyline for merging
-        // The polyline's first point is the true start, not the stored manualStartPoint
-        const polylineStartPoint = routeCoords[0];
-        const distToStart = distanceBetweenMeters(userLocation, polylineStartPoint);
-        
-        if (distToStart > 50) {
-          // Current location is far from saved route's start point
-          // Build connecting route: current → polyline start → existing route
-          console.log(`[AutoReroute] Follow Me enabled - current location is ${distToStart.toFixed(0)}m from polyline start. Building connecting route...`);
-          console.log(`[AutoReroute] Current location: ${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}`);
-          console.log(`[AutoReroute] Polyline first point: ${polylineStartPoint.latitude.toFixed(4)}, ${polylineStartPoint.longitude.toFixed(4)}`);
-          console.log(`[AutoReroute] Current saved routeCoords: ${routeCoords.length} points`);
-          
-          // CAPTURE current route state to avoid closure issues
-          const savedRouteCoordsSnapshot = [...routeCoords];
-          const savedRouteStepsSnapshot = [...(routeSteps || [])];
-          const savedRouteDistanceSnapshot = routeDistanceMeters || 0;
-          
-          (async () => {
-            try {
-              console.log('[AutoReroute] Fetching connecting route...');
-              // Fetch route from current location to ACTUAL polyline start
-              const connectingRoute = await fetchRoute({
-                origin: userLocation,
-                destination: {
-                  latitude: polylineStartPoint.latitude,
-                  longitude: polylineStartPoint.longitude,
-                },
-                waypoints: [],
-                travelMode: userTravelMode,
-                routeType: userRouteType,
-                routeTypeMap,
-                useCache: false,
-                customHilliness,
-                customWindingness,
-              });
-              
-              console.log('[AutoReroute] Connecting route response:', {
-                hasPolyline: !!connectingRoute?.polyline,
-                polylineLength: connectingRoute?.polyline?.length || 0,
-                hasSteps: !!connectingRoute?.steps,
-                stepsCount: connectingRoute?.steps?.length || 0,
-                distance: connectingRoute?.distanceMeters || 0
-              });
-              
-              if (connectingRoute && connectingRoute.polyline && connectingRoute.polyline.length > 0) {
-                // Merge: new route from current to start + existing route
-                // Remove the last point of the connecting route (it's the start point, which is the first point of saved route)
-                const connectingPolyline = connectingRoute.polyline.slice(0, -1);
-                const mergedPolyline = [...connectingPolyline, ...savedRouteCoordsSnapshot];
-                
-                // CHECK: Is there a gap between connecting route and saved route?
-                let gapWarning = '';
-                if (connectingPolyline.length > 0 && savedRouteCoordsSnapshot.length > 0) {
-                  const lastConnectingPoint = connectingPolyline[connectingPolyline.length - 1];
-                  const firstSavedPoint = savedRouteCoordsSnapshot[0];
-                  const gapDistance = distanceBetweenMeters(lastConnectingPoint, firstSavedPoint);
-                  if (gapDistance > 10) {
-                    gapWarning = ` GAP WARNING: ${gapDistance.toFixed(1)}m between connecting route end and saved route start!`;
-                  }
-                }
-                
-                console.log('[AutoReroute] MERGING: connecting', connectingPolyline.length, 'points + saved', savedRouteCoordsSnapshot.length, 'points =', mergedPolyline.length, 'total' + gapWarning);
-                console.log('[AutoReroute] Merged polyline first point:', mergedPolyline[0]);
-                console.log('[AutoReroute] Merged polyline last point:', mergedPolyline[mergedPolyline.length - 1]);
-                
-                // Merge steps too
-                const mergedSteps = [
-                  ...((connectingRoute.steps || []).filter(step => step !== undefined)),
-                  ...savedRouteStepsSnapshot,
-                ];
-                
-                // Use flush mechanism to prevent Android polyline ghosting
-                const totalDistance = (connectingRoute.distanceMeters || 0) + savedRouteDistanceSnapshot;
-                console.log('[AutoReroute] Calling setRouteCoordsWithFlush with merged polyline, total distance:', totalDistance);
-                setRouteCoordsWithFlush(mergedPolyline, {
-                  distance: totalDistance,
-                  steps: mergedSteps,
-                });
-                
-                setCurrentStepIndex(0);
-              } else {
-                console.warn('[AutoReroute] No polyline in connecting route response or polyline is empty');
-              }
-            } catch (error) {
-              console.warn('[AutoReroute] Error building connecting route:', error);
-            }
-          })();
-        } else {
-          // Already at/near the polyline's start point, just use the existing route
-          console.log(`[AutoReroute] Follow Me enabled - current location is at/near polyline start point (${distToStart.toFixed(0)}m). Using existing route.`);
-          setCurrentStepIndex(0);
-        }
-      } else {
-        // No saved route, rebuild from current location
+      if (userLocation && routeDestination) {
         console.log('[AutoReroute] Follow Me enabled - rebuilding route from current location');
         const requestId = ++routeRequestId.current;
         mapRoute({
@@ -2004,83 +1883,49 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return; // Exit early, don't do off-route checking on first run
     }
 
-    // Only check off-route if user has moved significantly since last check (reduce expensive calculations)
+    // Only check off-route if in Follow Me with an active route
+    if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation || !routeDestination) return;
+
+    // Only check off-route if user has moved significantly since last check
     if (lastOffRouteCheckPos.current) {
       const distFromLastCheck = distanceBetweenMeters(userLocation, lastOffRouteCheckPos.current);
       if (distFromLastCheck < MIN_MOVEMENT_BEFORE_CHECK) {
-        // User hasn't moved enough to warrant another check
-        return;
+        return; // User hasn't moved enough to warrant another check
       }
     }
     lastOffRouteCheckPos.current = userLocation;
 
     // Find closest point on route to user
     let closestDist = Infinity;
-    let userPolylineIdx = 0;
-    try {
-      for (let i = 0; i < routeCoords.length; i++) {
-        const coord = routeCoords[i];
-        if (!coord || coord.latitude === undefined || coord.longitude === undefined) {
-          console.warn(`[AutoReroute] Invalid coordinate at index ${i}:`, coord);
-          continue;
-        }
-        const dist = distanceBetweenMeters(userLocation, coord);
-        if (dist < closestDist) {
-          closestDist = dist;
-          userPolylineIdx = i;
-        }
+    for (let i = 0; i < routeCoords.length; i++) {
+      const coord = routeCoords[i];
+      if (!coord || coord.latitude === undefined || coord.longitude === undefined) continue;
+      
+      const dist = distanceBetweenMeters(userLocation, coord);
+      if (dist < closestDist) {
+        closestDist = dist;
       }
-    } catch (error) {
-      console.error('[AutoReroute] Error finding closest point on route:', error);
-      return;
     }
 
-    // Check if off-route and enough time since last reroute attempt
+    // If significantly off-route and enough time has passed, reroute
     const now = Date.now();
     const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
     
-    // Simple rule: if 100m+ off-route, reroute with cooldown
     if (closestDist >= OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute >= REROUTE_COOLDOWN_SECONDS) {
-      console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route, triggering reroute...`);
+      console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route, rebuilding route...`);
       lastRerouteAttemptRef.current = now;
       
-      // Filter to only remaining waypoints (ahead of user on polyline)
-      let remainingWaypoints = [];
-      try {
-        remainingWaypoints = waypoints.filter(wp => {
-          // Find this waypoint's position on the polyline
-          let waypointPolylineIdx = routeCoords.length - 1;
-          let minDist = Infinity;
-          for (let i = 0; i < routeCoords.length; i++) {
-            const coord = routeCoords[i];
-            if (!coord || coord.latitude === undefined || coord.longitude === undefined) {
-              continue;
-            }
-            const dist = distanceBetweenMeters(wp, coord);
-            if (dist < minDist) {
-              minDist = dist;
-              waypointPolylineIdx = i;
-            }
-          }
-          // Only include if waypoint is ahead of user's current position
-          return waypointPolylineIdx > userPolylineIdx;
-        });
-      } catch (error) {
-        console.error('[AutoReroute] Error filtering waypoints:', error);
-        remainingWaypoints = waypoints; // Fall back to all waypoints if filtering fails
-      }
-      
-      // Rebuild route from current location to destination
+      // Rebuild route from current location
       const requestId = ++routeRequestId.current;
       mapRoute({
         origin: userLocation,
-        waypoints: remainingWaypoints, // Only waypoints still ahead
+        waypoints: waypoints,
         destination: routeDestination,
         travelMode: userTravelMode,
         routeType: userRouteType,
         requestId,
-        skipFitToView: true, // Don't zoom out, stay in Follow Me view
-        vehicleHeading: userLocation?.heading || null, // Tell TomTom which direction we're traveling
+        skipFitToView: true,
+        vehicleHeading: userLocation?.heading || null,
       }).catch(error => {
         console.warn('[AutoReroute] mapRoute error:', error);
       });
