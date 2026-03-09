@@ -3988,14 +3988,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
           const distText = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : "";
           
-          // Use the nextInstruction directly - it's been properly computed during route creation
-          const label = nextInstruction;
+          // Use the maneuver icon map label for consistency, fallback to nextInstruction
+          const label = meta?.label || nextInstruction;
           
           // DEBUG: Log what we're showing
           console.log('[DirectionsPanel] Step:', {
             stepIndex: currentStepIndex,
             nextManeuver,
             nextInstruction,
+            displayLabel: label,
             nextRoundaboutExitNumber: step?.nextRoundaboutExitNumber,
             distance: Math.round(nextJunctionDistance || 0),
           });
