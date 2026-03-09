@@ -2879,6 +2879,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // to ensure we get a fresh route with the correct travel mode and current location
     const useCache = !skipFitToView && !followUser;
     
+    // DEBUG: Log the exact data being sent to fetchRoute
+    console.log("[mapRoute] About to call fetchRoute with:");
+    console.log("  startCoord:", startCoord);
+    console.log("  finalDestination:", finalDestination);
+    console.log("  normalizedIntermediates:", normalizedIntermediates.length, "waypoints");
+    normalizedIntermediates.forEach((wp, idx) => {
+      console.log(`    [${idx}] ${wp.latitude.toFixed(6)}, ${wp.longitude.toFixed(6)}`);
+    });
+    
     // Use unified routing engine
     let result;
     try {
@@ -2924,6 +2933,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const decoded = result.polyline;
     const simplified = simplifyPolyline(decoded, 0.00005); // ~5m tolerance
     console.log("[mapRoute] Decoded", decoded.length, "points, simplified to", simplified.length, "points");
+    
+    // DEBUG: Log the start and end points of the polyline
+    if (simplified.length > 0) {
+      const first = simplified[0];
+      const last = simplified[simplified.length - 1];
+      console.log("[mapRoute] POLYLINE START:", first.latitude.toFixed(6), first.longitude.toFixed(6));
+      console.log("[mapRoute] POLYLINE END:", last.latitude.toFixed(6), last.longitude.toFixed(6));
+      console.log("[mapRoute] DESTINATION:", finalDestination.latitude.toFixed(6), finalDestination.longitude.toFixed(6));
+      
+      // Check distance from end of polyline to destination
+      const endDist = Math.sqrt(
+        Math.pow((last.latitude - finalDestination.latitude) * 111000, 2) +
+        Math.pow((last.longitude - finalDestination.longitude) * 111000 * Math.cos(finalDestination.latitude * Math.PI / 180), 2)
+      );
+      console.log("[mapRoute] Distance from polyline end to destination (meters):", endDist.toFixed(1));
+    }
     
     // Get distance value
     const distance = result.distanceMeters ?? result.distance;
