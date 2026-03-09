@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
-import { useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View, Platform } from 'react-native';
+import { useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
 // Color palette for users
@@ -35,7 +35,6 @@ function getUserColor(userId, index) {
 
 /**
  * Mini map component to show group member locations
- * Automatically zooms to fit all riders in the viewport
  */
 export default function MiniMap({
   riderLocations = [],
@@ -48,15 +47,12 @@ export default function MiniMap({
   isModal = false,
 }) {
   const theme = useTheme();
-  const miniMapRef = useRef(null);
-  const zoomDebounceRef = useRef(null);
 
-  // Calculate bounds to fit all riders, user, and full route (but exclude route for fullscreen modal)
+  // Calculate initial region to fit all riders and user
   const initialRegion = useMemo(() => {
     const allPoints = [
       ...(userLocation ? [userLocation] : []),
       ...riderLocations.map(r => ({ latitude: r.latitude, longitude: r.longitude })),
-      ...(isModal ? [] : routeCoords), // Exclude route for fullscreen modal so it focuses on riders only
     ];
 
     if (allPoints.length === 0) {
@@ -85,102 +81,12 @@ export default function MiniMap({
       latitudeDelta: Math.max(latDelta, 0.05),
       longitudeDelta: Math.max(lngDelta, 0.05),
     };
-  }, [userLocation, riderLocations, routeCoords, isModal]);
+  }, [userLocation, riderLocations]);
 
-  const zoomLevelRef = useRef(null);
-
-  // Smooth zoom to fit when riders or route changes (debounced to prevent jitter)
-  useEffect(() => {
-    if (!miniMapRef.current || !userLocation) return;
-    
-    // Clear any pending zoom updates
-    if (zoomDebounceRef.current) {
-      clearTimeout(zoomDebounceRef.current);
-    }
-
-    // Debounce zoom to prevent jittery behavior while riders are moving
-    zoomDebounceRef.current = setTimeout(() => {
-      // Calculate optimal zoom based on rider spread
-      let zoom = 16; // default
-      
-      if (riderLocations.length > 0) {
-        const allRiders = [userLocation, ...riderLocations];
-        let minLat = allRiders[0].latitude;
-        let maxLat = allRiders[0].latitude;
-        let minLng = allRiders[0].longitude;
-        let maxLng = allRiders[0].longitude;
-
-        allRiders.forEach(rider => {
-          minLat = Math.min(minLat, rider.latitude);
-          maxLat = Math.max(maxLat, rider.latitude);
-          minLng = Math.min(minLng, rider.longitude);
-          maxLng = Math.max(maxLng, rider.longitude);
-        });
-
-        const latSpan = maxLat - minLat;
-        const lngSpan = maxLng - minLng;
-        const maxSpan = Math.max(latSpan, lngSpan);
-        // Much tighter padding for fullscreen modal, slightly looser for small view
-        const padding = isModal ? 0.00008 : 0.0005; // fullscreen needs much tighter zoom
-        const totalSpan = maxSpan + padding;
-        // Allow zoom up to 20 for fullscreen modal to really zoom in on riders
-        const maxZoom = isModal ? 20 : 19;
-        zoom = Math.max(14, Math.min(maxZoom, 17 - Math.log2(totalSpan * 111000)));
-      }
-
-      // Only animate zoom if it's significantly different
-      const zoomDiff = zoomLevelRef.current !== null ? Math.abs(zoom - zoomLevelRef.current) : 0;
-      if (zoomDiff > 0.5) {
-        zoomLevelRef.current = zoom;
-        const heading = userLocation.heading !== undefined && userLocation.heading !== -1 ? userLocation.heading : 0;
-        
-        // iOS has issues with zoom in animateCamera, use fitToCoordinates instead
-        if (Platform.OS === 'ios') {
-          const allRiders = [userLocation, ...riderLocations];
-          const edgePadding = isModal ? { top: 40, right: 40, bottom: 40, left: 40 } : { top: 50, right: 50, bottom: 50, left: 50 };
-          miniMapRef.current?.fitToCoordinates(
-            allRiders.map(r => ({ latitude: r.latitude, longitude: r.longitude })),
-            { edgePadding, animated: true }
-          );
-        } else {
-          miniMapRef.current?.animateCamera({
-            center: { latitude: userLocation.latitude, longitude: userLocation.longitude },
-            heading: heading,
-            pitch: 50,
-            zoom: Math.floor(zoom),
-            duration: 300
-          });
-        }
-      }
-    }, 500); // Longer debounce for zoom changes
-
-    return () => {
-      if (zoomDebounceRef.current) {
-        clearTimeout(zoomDebounceRef.current);
-      }
-    };
-  }, [riderLocations.length, isModal]);
-
-  // Continuous camera updates during Follow Me - non-animated to keep dot stationary
-  useEffect(() => {
-    if (!miniMapRef.current || !userLocation) return;
-
-    const heading = userLocation.heading !== undefined && userLocation.heading !== -1 ? userLocation.heading : 0;
-    const zoom = zoomLevelRef.current || 16;
-
-    // Use setCamera (non-animated) for continuous updates to prevent dot from appearing to move
-    miniMapRef.current?.setCamera({
-      center: { latitude: userLocation.latitude, longitude: userLocation.longitude },
-      heading: heading,
-      pitch: 50,
-      zoom: Math.floor(zoom),
-    });
-  }, [userLocation?.latitude, userLocation?.longitude, userLocation?.heading]);
 
   return (
     <View style={[styles.container, containerStyles]}>
       <MapView
-        ref={miniMapRef}
         style={styles.map}
         initialRegion={initialRegion}
         customMapStyle={colorScheme === 'dark' ? mapStyleDark : mapStyleLight}
