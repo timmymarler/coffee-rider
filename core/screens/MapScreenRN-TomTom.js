@@ -2820,6 +2820,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   } = {}) {
     console.log("[mapRoute] Starting with requestId:", requestId, "waypoints:", waypointsList.length);
     
+    // DEBUG: Log all waypoints received by mapRoute
+    waypointsList.forEach((wp, idx) => {
+      console.log(`[mapRoute] waypointsList[${idx}]:`, `(${wp.latitude?.toFixed(6) ?? wp.lat?.toFixed(6)}, ${wp.longitude?.toFixed(6) ?? wp.lng?.toFixed(6)})`);
+    });
+    
     if (!origin) {
       console.log("[mapRoute] No origin provided");
       return false;
@@ -2985,6 +2990,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Wrapper that calls mapRoute with current component state
     const finalRequestId = requestId || routeRequestId.current;
     console.log("[buildRoute] Starting - requestId:", finalRequestId, "destination:", routeDestination?.title, "waypoints:", waypoints.length);
+    
+    // DEBUG: Log all waypoints
+    waypoints.forEach((wp, idx) => {
+      console.log(`[buildRoute] waypoint[${idx}]:`, wp.title, `(${wp.lat.toFixed(6)}, ${wp.lng.toFixed(6)})`);
+    });
     
     if (!routeDestination && !destinationOverride && waypoints.length === 0) {
       console.log("[buildRoute] No destination or waypoints, returning");
