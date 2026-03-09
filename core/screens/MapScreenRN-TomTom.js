@@ -794,6 +794,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastRouteTypeRef = useRef(null); // Track the route type used for last route build to rebuild when it changes
   const lastWaypoints = useRef([]); // Track waypoints from last route build to rebuild when they change
   const lastManualStartPointRef = useRef(null); // Track manual start point to detect Follow Me transitions
+  const lastExplicitBuildRef = useRef({ waypointsId: null, destinationId: null }); // Track last explicit build to prevent duplicate rebuilds
   const MIN_ROUTE_REBUILD_DISTANCE_METERS = 10; // Only rebuild routes if user moves more than 10 meters
   const displayWaypoints = useMemo(() => {
     if (!routeDestination) return waypoints;
@@ -995,18 +996,26 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       currentWaypoints = waypoints,
       currentDestination = routeDestination,
       currentUserLocation = userLocation,
-      isExplicitStart = false, // User tapped "Set as Start Point"
-      isExplicitDestination = false, // User tapped "Add as Destination"
+      isExplicitStart = false,
+      isExplicitDestination = false,
     } = currentState;
+
+    console.log(`[determineRouteAction] Input:`);
+    console.log(`  newPlace: ${newPlace.title || 'unnamed'}`);
+    console.log(`  currentWaypoints: ${currentWaypoints.length}`, currentWaypoints.map((w, i) => `[${i}]${w.title}`).join(' '));
+    console.log(`  currentDestination: ${currentDestination?.title || 'none'}`);
+    console.log(`  isExplicitStart: ${isExplicitStart}, isExplicitDestination: ${isExplicitDestination}`);
 
     // Rule 1: If user explicitly sets a start point, use that
     if (isExplicitStart) {
-      return {
+      const result = {
         start: newPlace,
         waypoints: currentWaypoints,
         destination: currentDestination,
         action: 'set-start',
       };
+      console.log(`[determineRouteAction] Result: set-start`, result);
+      return result;
     }
 
     // Rule 2: If user explicitly sets a destination (and one already exists)
@@ -1014,24 +1023,28 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (isExplicitDestination) {
       let newWaypoints = currentWaypoints;
       if (currentDestination) {
+        console.log(`[determineRouteAction] Promoting existing destination to waypoint: ${currentDestination.title}`);
         newWaypoints = [...currentWaypoints, currentDestination];
       }
-      return {
+      const result = {
         start: currentStart || currentUserLocation,
         waypoints: newWaypoints,
         destination: newPlace,
         action: 'set-destination',
       };
+      console.log(`[determineRouteAction] Result: set-destination, waypoints: ${newWaypoints.length}`);
+      return result;
     }
 
     // Rule 3: User adding a place via "Add Waypoint" - always a waypoint
-    // (This is explicit from the button, not ambiguous)
-    return {
+    const result = {
       start: currentStart || currentUserLocation,
       waypoints: [...currentWaypoints, newPlace],
       destination: currentDestination,
       action: 'add-waypoint',
     };
+    console.log(`[determineRouteAction] Result: add-waypoint, waypoints: ${result.waypoints.length}`, result.waypoints.map((w, i) => `[${i}]${w.title}`).join(' '));
+    return result;
   }
 
   /**
@@ -1039,40 +1052,65 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
    * (For persistence and display only - actual route building is done separately)
    */
   function updateRouteUIState(structure) {
-    const { start, waypoints: newWaypoints, destination, action } = structure;
-    
-    console.log(`[updateRouteUIState] Action: ${action}`);
-    console.log(`  Current: ${waypoints.length} waypoints, dest=${routeDestination?.title}, start=${manualStartPoint ? 'manual' : 'location'}`);
-    console.log(`  New: ${newWaypoints.length} waypoints, dest=${destination?.title}`);
-
-    if (action === 'set-start') {
-      setManualStartPoint(start);
-    } else if (action === 'set-destination' || action === 'add-waypoint') {
-      // IMPORTANT: All state updates are batched, so the useEffect
-      // that depends on [waypoints, routeDestination] will trigger
-      // But buildRoute has already been called explicitly with the new structure,
-      // so we use the override parameters to ensure it uses the new structure
-      clearWaypoints();
+    try {
+      const { start, waypoints: newWaypoints, destination, action } = structure;
       
-      for (let i = 0; i < newWaypoints.length; i++) {
-        const wp = newWaypoints[i];
-        if (wp && wp.latitude && wp.longitude) {
+      console.log(`[updateRouteUIState] Action: ${action}`);
+      console.log(`  Current: ${waypoints.length} waypoints, dest=${routeDestination?.title}`);
+      console.log(`  New: ${newWaypoints.length} waypoints, dest=${destination?.title}`);
+
+      if (action === 'set-start') {
+        console.log('[updateRouteUIState] Setting manual start point');
+        setManualStartPoint(start);
+      } else if (action === 'add-waypoint') {
+        // ONLY add the new waypoint, don't rebuild the entire list
+        const newWaypoint = newWaypoints[newWaypoints.length - 1];
+        if (newWaypoint) {
+          if (!newWaypoint.latitude || !newWaypoint.longitude) {
+            console.warn(`[updateRouteUIState] Invalid waypoint coordinates:`, newWaypoint);
+            return;
+          }
+          console.log(`[updateRouteUIState] Adding single waypoint: ${newWaypoint.title} (lat: ${newWaypoint.latitude}, lng: ${newWaypoint.longitude})`);
           addFromPlace({
-            latitude: wp.latitude,
-            longitude: wp.longitude,
-            title: wp.title,
-            source: wp.source || 'structured-route',
+            latitude: newWaypoint.latitude,
+            longitude: newWaypoint.longitude,
+            title: newWaypoint.title,
+            source: newWaypoint.source || 'structured-route',
+          });
+        }
+      } else if (action === 'set-destination') {
+        // If destination existed and was promoted to waypoint, add all promoted waypoints
+        // Then set new destination
+        const promotedWaypoints = newWaypoints.slice(waypoints.length);
+        console.log(`[updateRouteUIState] Promoting ${promotedWaypoints.length} waypoint(s) and setting new destination`);
+        
+        for (const wp of promotedWaypoints) {
+          if (wp && wp.latitude && wp.longitude) {
+            console.log(`[updateRouteUIState] Adding promoted waypoint: ${wp.title}`);
+            addFromPlace({
+              latitude: wp.latitude,
+              longitude: wp.longitude,
+              title: wp.title,
+              source: wp.source || 'promoted-destination',
+            });
+          }
+        }
+        
+        if (destination) {
+          if (!destination.latitude || !destination.longitude) {
+            console.warn(`[updateRouteUIState] Invalid destination coordinates:`, destination);
+            return;
+          }
+          console.log(`[updateRouteUIState] Setting destination: ${destination.title} (lat: ${destination.latitude}, lng: ${destination.longitude})`);
+          setRouteDestination({
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+            title: destination.title,
           });
         }
       }
-      
-      if (destination) {
-        setRouteDestination({
-          latitude: destination.latitude,
-          longitude: destination.longitude,
-          title: destination.title,
-        });
-      }
+    } catch (error) {
+      console.error('[updateRouteUIState] Error:', error);
     }
   }
 
@@ -1081,7 +1119,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     isLoadingSavedRouteRef.current = false;
     
     const newPlace = formatPoint(pendingMapPoint);
-    const structure = determineRouteAction(newPlace, {
+    
+    // Convert from formatPoint's lat/lng to latitude/longitude for determineRouteAction
+    const placeWithCamelCase = {
+      latitude: newPlace.lat,
+      longitude: newPlace.lng,
+      title: newPlace.title,
+    };
+    
+    const structure = determineRouteAction(placeWithCamelCase, {
       currentStart: manualStartPoint,
       currentWaypoints: waypoints,
       currentDestination: routeDestination,
@@ -1124,28 +1170,54 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   };
 
   const handleSetDestination = () => {
-    setSelectedPlaceId(null);
-    isLoadingSavedRouteRef.current = false;
-    
-    const newPlace = formatPoint(pendingMapPoint);
-    const structure = determineRouteAction(newPlace, {
-      currentStart: manualStartPoint,
-      currentWaypoints: waypoints,
-      currentDestination: routeDestination,
-      currentUserLocation: userLocation,
-      isExplicitStart: false,
-      isExplicitDestination: true,
-    });
+    try {
+      console.log('[handleSetDestination] Starting');
+      setSelectedPlaceId(null);
+      isLoadingSavedRouteRef.current = false;
+      
+      if (!pendingMapPoint) {
+        console.error('[handleSetDestination] No pendingMapPoint');
+        return;
+      }
+      
+      const newPlace = formatPoint(pendingMapPoint);
+      console.log('[handleSetDestination] New place (from formatPoint):', newPlace);
+      
+      if (!newPlace || !newPlace.lat || !newPlace.lng) {
+        console.error('[handleSetDestination] Invalid newPlace from formatPoint:', newPlace);
+        return;
+      }
+      
+      // Convert from formatPoint's lat/lng to latitude/longitude
+      const placeWithCamelCase = {
+        latitude: newPlace.lat,
+        longitude: newPlace.lng,
+        title: newPlace.title,
+      };
+      
+      const structure = determineRouteAction(placeWithCamelCase, {
+        currentStart: manualStartPoint,
+        currentWaypoints: waypoints,
+        currentDestination: routeDestination,
+        currentUserLocation: userLocation,
+        isExplicitStart: false,
+        isExplicitDestination: true,
+      });
 
-    updateRouteUIState(structure);
-    
-    // Build with explicit structure to immediately use the new waypoints/destination
-    buildRoute({ 
-      waypointsOverride: structure.waypoints,
-      destinationOverride: structure.destination,
-    }).catch(e => console.warn('[handleSetDestination] Build error:', e));
-    
-    closeAddPointMenu();
+      console.log('[handleSetDestination] Structure determined:', structure);
+      updateRouteUIState(structure);
+      
+      // Build with explicit structure to immediately use the new waypoints/destination
+      buildRoute({ 
+        waypointsOverride: structure.waypoints,
+        destinationOverride: structure.destination,
+      }).catch(e => console.warn('[handleSetDestination] Build error:', e));
+      
+      closeAddPointMenu();
+    } catch (error) {
+      console.error('[handleSetDestination] Error:', error);
+      ToastAndroid.show(`Error setting destination: ${error.message}`, ToastAndroid.LONG);
+    }
   };
 
 // state
@@ -3121,18 +3193,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   async function buildRoute({ 
     destinationOverride = null, 
     requestId,
-    waypointsOverride = null, // Explicit waypoints to use instead of component state
+    waypointsOverride = null,
   } = {}) {
-    // Wrapper that calls mapRoute with current component state
-    // Can accept explicit overrides to avoid state timing issues
     const finalRequestId = requestId || routeRequestId.current;
     
     const effectiveWaypoints = waypointsOverride !== null ? waypointsOverride : waypoints;
     const effectiveDestination = destinationOverride || routeDestination;
     
-    console.log("[buildRoute] Starting - requestId:", finalRequestId);
-    console.log(`  Destination: ${effectiveDestination?.title}`);
-    console.log(`  Waypoints: ${effectiveWaypoints?.length || 0}`);
+    console.log("[buildRoute] Starting");
+    console.log(`  requestId: ${finalRequestId}`);
+    console.log(`  waypointsOverride provided: ${waypointsOverride !== null} (count: ${waypointsOverride?.length ?? 'n/a'})`);
+    console.log(`  using waypoints: ${effectiveWaypoints?.length || 0}`, effectiveWaypoints?.map((w, i) => `[${i}]${w.title}`).join(' '));
+    console.log(`  using destination: ${effectiveDestination?.title || 'none'}`);
     
     if (!effectiveDestination && effectiveWaypoints?.length === 0) {
       console.log("[buildRoute] No destination or waypoints, returning");
