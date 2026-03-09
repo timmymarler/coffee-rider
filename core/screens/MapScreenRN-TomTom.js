@@ -2769,23 +2769,35 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // If route type changed, always rebuild (ignore distance threshold)
     const routeTypeChanged = userRouteType !== lastRouteTypeRef.current;
     
+    // Helper to safely get lat/lng from waypoint (handles both naming conventions)
+    const getWpCoords = (wp) => ({
+      lat: wp?.lat ?? wp?.latitude,
+      lng: wp?.lng ?? wp?.longitude,
+    });
+    
     // If waypoints changed, always rebuild (ignore distance threshold)
     const waypointsChanged = waypoints.length !== lastWaypoints.current.length ||
-      waypoints.some((wp, idx) => 
-        !lastWaypoints.current[idx] || 
-        wp.lat !== lastWaypoints.current[idx].lat || 
-        wp.lng !== lastWaypoints.current[idx].lng
-      );
+      waypoints.some((wp, idx) => {
+        const lastWp = lastWaypoints.current[idx];
+        if (!lastWp) return true;
+        const wpCoords = getWpCoords(wp);
+        const lastWpCoords = getWpCoords(lastWp);
+        return wpCoords.lat !== lastWpCoords.lat || wpCoords.lng !== lastWpCoords.lng;
+      });
     
     if (waypoints.length === lastWaypoints.current.length) {
       waypoints.forEach((wp, idx) => {
         const lastWp = lastWaypoints.current[idx];
         if (!lastWp) {
           console.log(`    [${idx}] No previous waypoint`);
-        } else if (wp.lat !== lastWp.lat || wp.lng !== lastWp.lng) {
-          console.log(`    [${idx}] Coords differ: (${wp.lat.toFixed(5)}, ${wp.lng.toFixed(5)}) vs (${lastWp.lat.toFixed(5)}, ${lastWp.lng.toFixed(5)})`);
         } else {
-          console.log(`    [${idx}] Same coords`);
+          const wpCoords = getWpCoords(wp);
+          const lastWpCoords = getWpCoords(lastWp);
+          if (wpCoords.lat !== lastWpCoords.lat || wpCoords.lng !== lastWpCoords.lng) {
+            console.log(`    [${idx}] Coords differ: (${wpCoords.lat?.toFixed(5) ?? 'null'}, ${wpCoords.lng?.toFixed(5) ?? 'null'}) vs (${lastWpCoords.lat?.toFixed(5) ?? 'null'}, ${lastWpCoords.lng?.toFixed(5) ?? 'null'})`);
+          } else {
+            console.log(`    [${idx}] Same coords`);
+          }
         }
       });
     }
