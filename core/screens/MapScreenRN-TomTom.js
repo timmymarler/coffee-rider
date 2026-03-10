@@ -1916,6 +1916,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     };
   }, [currentStepIndex, nextJunctionDistance]);
 
+  // Detect when user reaches destination and capture traveled polyline for saving
+  useEffect(() => {
+    if (!isNavigationMode || !routeSteps || routeSteps.length === 0) return;
+    
+    const hasReachedDestination = currentStepIndex >= routeSteps.length - 1;
+    
+    if (hasReachedDestination && !pendingRidePolyline && traveledPolyline && traveledPolyline.length > 1) {
+      console.log('[DestinationReached] Capturing traveled polyline for save - length:', traveledPolyline.length);
+      setPendingRidePolyline(traveledPolyline);
+    }
+  }, [currentStepIndex, routeSteps, isNavigationMode, traveledPolyline, pendingRidePolyline]);
+
   // Auto-reroute when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
   const lastOffRouteCheckPos = useRef(null); // Track last position where we checked for off-route
@@ -4077,6 +4089,44 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           const step = routeSteps[displayedStepIndex];
           
           if (!step) return null;
+
+          // Check if we've reached the destination (at the last step)
+          const hasReachedDestination = currentStepIndex >= routeSteps.length - 1;
+          
+          if (hasReachedDestination) {
+            // Show destination reached message with Save Ride button
+            return (
+              <View style={styles.junctionPanel}>
+                <MaterialCommunityIcons name="check-circle" size={80} color="rgba(76, 175, 80, 0.95)" style={styles.junctionIcon} />
+                <View style={styles.junctionContent}>
+                  <Text style={styles.junctionLabel}>You have</Text>
+                  <Text style={styles.junctionLabel}>reached your</Text>
+                  <Text style={styles.junctionLabel}>destination</Text>
+                  
+                  {/* Save Ride button */}
+                  <TouchableOpacity
+                    onPress={() => setShowSaveRideModal(true)}
+                    style={{
+                      marginTop: 16,
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      backgroundColor: theme.colors.primary,
+                      borderRadius: 8,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{
+                      color: 'white',
+                      fontSize: 16,
+                      fontWeight: 'bold',
+                    }}>
+                      Save Ride
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          }
           
           // Get the NEXT instruction (what comes after the current step)
           // This is embedded in the step during route creation, so it's always correct
