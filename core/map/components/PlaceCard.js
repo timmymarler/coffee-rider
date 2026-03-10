@@ -473,21 +473,24 @@ export default function PlaceCard({
     return [...crPhotos, ...googlePhotos];
   }, [safePlace.photos, safePlace.createdBy, rawGooglePhotos, capabilities.googlePhotoAccess, capabilities.maxGooglePhotosPerPlace, user?.uid]);
 
-  const heroGooglePhoto =
-    googlePhotos.length > 0
-      ? buildGooglePhotoUrl(googlePhotos[0])
-      : null;
-
   const combinedPhotos = useMemo(() => {
     const list = [];
-    if (heroGooglePhoto) {
-      list.push(heroGooglePhoto); // string URL
+    
+    // Add all Google photos as URLs
+    if (Array.isArray(googlePhotos) && googlePhotos.length > 0) {
+      googlePhotos.forEach(photoRef => {
+        const url = buildGooglePhotoUrl(photoRef);
+        if (url) list.push(url);
+      });
     }
+    
+    // Add CR photos
     if (Array.isArray(safePlace.photos.cr)) {
       list.push(...safePlace.photos.cr);
     }
+    
     return list;
-  }, [heroGooglePhoto, safePlace.photos.cr]);
+  }, [googlePhotos, safePlace.photos.cr]);
 
 
   /* ------------------------------------------------------------------ */
