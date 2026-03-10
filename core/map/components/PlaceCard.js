@@ -639,6 +639,13 @@ export default function PlaceCard({
       return;
     }
 
+    // Category is required - prompt user to select one if not already selected
+    if (!category) {
+      setAddError("Please select a category.");
+      setCategoryModalVisible(true);
+      return;
+    }
+
     try {
       setAddError(null);
       const isNewPlace = place.source === "google" || place._temp === true;
@@ -676,11 +683,6 @@ export default function PlaceCard({
 
       if (!name || name.trim().length === 0) {
         setAddError("Please enter a place name.");
-        return;
-      }
-
-      if (!category) {
-        setAddError("Please select a category.");
         return;
       }
 
