@@ -4041,6 +4041,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                     </TouchableOpacity>
                   ) : null}
                   <Text style={styles.junctionLabel}>{label}</Text>
+                  {/* Show the specific instruction detail (e.g., "Take exit 4", street name, etc.) */}
+                  {nextInstruction && nextInstruction !== label && (
+                    <Text style={styles.junctionInstruction}>{nextInstruction}</Text>
+                  )}
                   {remainingDistanceMeters && remainingDurationSeconds && (
                     <Text style={styles.junctionRemaining}>
                       {formatDistanceImperial(remainingDistanceMeters)} • {(() => {
@@ -4636,6 +4640,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "rgba(245, 245, 240, 0.95)",
     marginTop: 4,
+    flexWrap: "wrap",
+  },
+  junctionInstruction: {
+    fontSize: 12,
+    fontWeight: "400",
+    color: "rgba(245, 245, 240, 0.80)",
+    marginTop: 3,
     flexWrap: "wrap",
   },
   junctionTitle: {
