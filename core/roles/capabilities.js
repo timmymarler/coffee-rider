@@ -51,6 +51,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         // Google photos
         googlePhotoAccess: "full",
         canViewGooglePhotos: true,
+        maxGooglePhotosPerPlace: 999, // Unlimited
 
         // Calendar & Events
         canCreateEvents: true,
@@ -96,6 +97,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         googlePhotoAccess: "full",
         canViewGooglePhotos: true,
+        maxGooglePhotosPerPlace: 5,
 
         // Calendar & Events
         canCreateEvents: true,
@@ -141,6 +143,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         googlePhotoAccess: "limited",
         canViewGooglePhotos: true,
+        maxGooglePhotosPerPlace: 10, // 10 own, 5 others (see PlaceCard logic)
 
         // Calendar & Events
         canCreateEvents: true,
@@ -177,8 +180,9 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canSearchCR: true,
         canSearchGoogle: false,
 
-        googlePhotoAccess: "limited",  // 1–2 photos per place
+        googlePhotoAccess: "limited",
         canViewGooglePhotos: true,
+        maxGooglePhotosPerPlace: 1,
 
         // Calendar & Events
         canCreateEvents: false,
@@ -218,6 +222,7 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
 
         googlePhotoAccess: "none",
         canViewGooglePhotos: false,
+        maxGooglePhotosPerPlace: 0,
 
         // Calendar & Events
         canCreateEvents: false,
