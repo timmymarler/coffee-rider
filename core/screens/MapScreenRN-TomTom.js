@@ -2058,7 +2058,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Only include points the user has actually passed (within 5m - must be close/past the point)
-    const completedIdx = minDistance < 5 ? closestIdx : Math.max(0, closestIdx - 1);
+    // Changed to include the closest point immediately, so gold line expands continuously
+    const completedIdx = closestIdx;
 
     // Split polyline at the current user location
     return {
