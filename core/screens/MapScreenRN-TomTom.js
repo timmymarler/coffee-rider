@@ -689,6 +689,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
   const [routeSteps, setRouteSteps] = useState([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [displayedStepIndex, setDisplayedStepIndex] = useState(0); // Delayed display of next instruction
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
   const [debugMode, setDebugMode] = useState(false); // Toggle with long press on distance display
   const routeFittedRef = useRef(false);
@@ -979,7 +980,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       });
       
       setCurrentStepIndex(0);
-      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity };
+      setDisplayedStepIndex(0);
       stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity };
 
     } catch (error) {
@@ -1876,13 +1877,55 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex]);
 
+  // Delay displaying next instruction when passing a junction
+  // Shows current instruction for 6-7 seconds before showing next one
+  // But override if next junction is close (< 150m away)
+  const pendingDisplayTimeoutRef = useRef(null);
+  const NEXT_INSTRUCTION_DELAY_MS = 6500; // 6.5 seconds
+  const CLOSE_JUNCTION_THRESHOLD_M = 150; // Override delay if next junction is closer than this
+  
+  useEffect(() => {
+    // If step index hasn't actually changed, don't do anything
+    if (currentStepIndex === displayedStepIndex) return;
+    
+    // Check if next junction is close enough to skip the delay
+    const isNextJunctionClose = nextJunctionDistance != null && nextJunctionDistance < CLOSE_JUNCTION_THRESHOLD_M;
+    
+    // Clear any pending update
+    if (pendingDisplayTimeoutRef.current) {
+      clearTimeout(pendingDisplayTimeoutRef.current);
+    }
+    
+    if (isNextJunctionClose) {
+      // Next junction is close - show immediately
+      console.log('[DelayedInstructionDisplay] Next junction is close (' + Math.round(nextJunctionDistance) + 'm), showing immediately');
+      setDisplayedStepIndex(currentStepIndex);
+    } else {
+      // Delay showing the next instruction
+      console.log('[DelayedInstructionDisplay] Delaying next instruction display by ' + NEXT_INSTRUCTION_DELAY_MS + 'ms');
+      pendingDisplayTimeoutRef.current = setTimeout(() => {
+        setDisplayedStepIndex(currentStepIndex);
+        pendingDisplayTimeoutRef.current = null;
+      }, NEXT_INSTRUCTION_DELAY_MS);
+    }
+    
+    return () => {
+      if (pendingDisplayTimeoutRef.current) {
+        clearTimeout(pendingDisplayTimeoutRef.current);
+      }
+    };
+  }, [currentStepIndex, nextJunctionDistance]);
+
   // Auto-reroute when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
   const lastOffRouteCheckPos = useRef(null); // Track last position where we checked for off-route
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
+  const consecutiveOffRouteCountRef = useRef(0); // Track consecutive off-route checks to avoid noise-triggered reroutes
   const OFF_ROUTE_THRESHOLD_METERS = 100; // Reroute if 100m+ off the route
   const REROUTE_COOLDOWN_SECONDS = 30; // Only attempt reroute every 30 seconds max
   const MIN_MOVEMENT_BEFORE_CHECK = 25; // Only check off-route after user moves 25m
+  const CONSECUTIVE_OFF_ROUTE_CHECKS_REQUIRED = 2; // Require 2 consecutive off-route checks to avoid noise-triggered reroutes
+  const MIN_GPS_ACCURACY = 35; // Ignore off-route checks if GPS accuracy is worse than this (meters)
   
   useEffect(() => {
     // Detect Follow Me enable transition
@@ -1907,11 +1950,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
         });
       }
+      consecutiveOffRouteCountRef.current = 0; // Reset off-route counter
       return; // Exit early, don't do off-route checking on first run
     }
 
     // Only check off-route if in Follow Me with an active route
-    if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation || !routeDestination) return;
+    if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation || !routeDestination) {
+      consecutiveOffRouteCountRef.current = 0;
+      return;
+    }
+
+    // Skip off-route check if GPS accuracy is poor
+    if (userLocation.accuracy && userLocation.accuracy > MIN_GPS_ACCURACY) {
+      console.log(`[AutoReroute] GPS accuracy poor (${userLocation.accuracy.toFixed(0)}m), skipping off-route check`);
+      consecutiveOffRouteCountRef.current = 0;
+      return;
+    }
 
     // Only check off-route if user has moved significantly since last check
     if (lastOffRouteCheckPos.current) {
@@ -1934,13 +1988,28 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
     }
 
-    // If significantly off-route and enough time has passed, reroute
+    // Track off-route status
+    const isOffRoute = closestDist >= OFF_ROUTE_THRESHOLD_METERS;
+    
+    if (isOffRoute) {
+      consecutiveOffRouteCountRef.current += 1;
+      console.log(`[AutoReroute] Off-route check (${consecutiveOffRouteCountRef.current}/${CONSECUTIVE_OFF_ROUTE_CHECKS_REQUIRED}): ${closestDist.toFixed(0)}m away from route`);
+    } else {
+      // Back on route, reset counter
+      if (consecutiveOffRouteCountRef.current > 0) {
+        console.log('[AutoReroute] Back on route, resetting off-route counter');
+      }
+      consecutiveOffRouteCountRef.current = 0;
+    }
+
+    // If consistently off-route and enough time has passed, reroute
     const now = Date.now();
     const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
     
-    if (closestDist >= OFF_ROUTE_THRESHOLD_METERS && timeSinceLastReroute >= REROUTE_COOLDOWN_SECONDS) {
-      console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route, rebuilding route...`);
+    if (consecutiveOffRouteCountRef.current >= CONSECUTIVE_OFF_ROUTE_CHECKS_REQUIRED && timeSinceLastReroute >= REROUTE_COOLDOWN_SECONDS) {
+      console.log(`[AutoReroute] User consistently off-route (${closestDist.toFixed(0)}m), rebuilding route...`);
       lastRerouteAttemptRef.current = now;
+      consecutiveOffRouteCountRef.current = 0; // Reset counter after rerouting
       
       // Rebuild route from current location
       const requestId = ++routeRequestId.current;
@@ -2393,8 +2462,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setCurrentLoadedRouteId(null);
     setFollowUser(false);          // Disable Follow Me when clearing route
     setCurrentStepIndex(0);        // Reset step index
+    setDisplayedStepIndex(0);      // Reset displayed step index (for delayed instruction display)
     setNextJunctionDistance(null); // Clear junction distance
     stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity }; // Reset step progress tracker
+    
+    // Cancel any pending instruction display update
+    if (pendingDisplayTimeoutRef.current) {
+      clearTimeout(pendingDisplayTimeoutRef.current);
+      pendingDisplayTimeoutRef.current = null;
+    }
   }
 
   /**
@@ -3059,6 +3135,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     });
     
     setCurrentStepIndex(0);
+    setDisplayedStepIndex(0);
     stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity };
 
     // Auto-fit view if not in Follow Me and not already fitted
@@ -3996,7 +4073,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       {/* Junction panel (top-left) during navigation - helmet visible */}
       {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
         (() => {
-          const step = routeSteps[currentStepIndex];
+          const step = routeSteps[displayedStepIndex];
           
           if (!step) return null;
           
