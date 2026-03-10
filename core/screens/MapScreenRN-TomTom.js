@@ -45,8 +45,6 @@ import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
-import { delayedNotification } from "@core/notifications/delayedNotification";
-import { notifyNextJunction } from "@core/notifications/notificationService";
 
 const mapStyleLight = require("@config/mapStyleLight.json");
 const mapStyleDark = require("@config/mapStyleDark.json");
@@ -1867,22 +1865,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         to: nextStepIdx,
       });
       setCurrentStepIndex(nextStepIdx);
-      
-      // Send delayed next junction notification (2.5 second delay)
-      // This prevents notifications from triggering too early when crossing junction thresholds
-      const nextStep = routeSteps[nextStepIdx];
-      if (nextStep) {
-        delayedNotification(
-          () => notifyNextJunction({
-            direction: nextStep.maneuver || 'Continue',
-            roadName: nextStep.roadName || 'Upcoming',
-            distance: Math.round(nextJunctionDistance || 0),
-            distanceUnit: 'm'
-          }),
-          2500,  // 2.5 second delay
-          `next-junction-step-${nextStepIdx}`
-        );
-      }
     }
     
     // Calculate and display distance to current step's end
