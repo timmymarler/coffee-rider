@@ -174,9 +174,22 @@ function FloatingTabBar({ state }) {
           {/* Follow Me */}
           <LongPressGestureHandler
             onActivated={() => {
-              // Long press: open current route in native maps
-              if (mapActions?.openInMaps) {
-                mapActions.openInMaps();
+              // Long press: if not following, route to home and start follow me
+              // If already following, open current route in native maps
+              if (mapActions?.isFollowing && mapActions.isFollowing()) {
+                // Already in follow me - open in maps
+                if (mapActions?.openInMaps) {
+                  mapActions.openInMaps();
+                }
+              } else {
+                // Not in follow me - route to home and start follow me
+                if (mapActions?.routeToHome && mapActions?.toggleFollow) {
+                  mapActions.routeToHome().then(() => {
+                    setTimeout(() => {
+                      mapActions.toggleFollow();
+                    }, 300);
+                  });
+                }
               }
             }}
             minDurationMs={500}
