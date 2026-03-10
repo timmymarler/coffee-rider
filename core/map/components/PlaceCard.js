@@ -293,10 +293,11 @@ export default function PlaceCard({
     let mounted = true;
 
     async function loadGoogleDetails() {
+      const maxPhotosToFetch = capabilities?.maxGooglePhotosPerPlace || 5; // Fetch based on role limits
       const [refs, ratingInfo] = await Promise.all([
         googlePhotos.length > 0
           ? Promise.resolve(googlePhotos)
-          : fetchGooglePhotoRefs(googlePlaceId, 1),
+          : fetchGooglePhotoRefs(googlePlaceId, maxPhotosToFetch),
         fetchGoogleRating(googlePlaceId),
       ]);
 
@@ -312,7 +313,7 @@ export default function PlaceCard({
 
     loadGoogleDetails();
     return () => (mounted = false);
-  }, [googlePlaceId, capabilities?.canViewGooglePhotos]);
+  }, [googlePlaceId, capabilities?.canViewGooglePhotos, capabilities?.maxGooglePhotosPerPlace]);
 
   useEffect(() => {
     if (!safePlace?.id) return;
