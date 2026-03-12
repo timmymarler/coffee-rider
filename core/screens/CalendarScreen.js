@@ -661,6 +661,7 @@ export default function CalendarScreen() {
                   disabled={!selectedEvent.placeId}
                   onPress={() => {
                     if (selectedEvent.placeId) {
+                      setShowEventModal(false);  // Close modal first
                       router.push({
                         pathname: '/map',
                         params: { placeId: selectedEvent.placeId, openPlaceCard: true }
