@@ -1847,10 +1847,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       if (currentStep?.end?.latitude) {
         const distToCurrentEnd = distanceBetweenMeters(userLocation, currentStep.end);
         
-        // Simple threshold: advance when within 10m of endpoint
-        const advanceThreshold = 10; // meters
-        if (distToCurrentEnd < advanceThreshold && currentStepIndex + 1 < routeSteps.length) {
-          // Approaching the endpoint of current step - advance to next
+        // Detect if we've passed the endpoint and are now 10m+ past it
+        const advanceThreshold = 10; // meters past the endpoint
+        const hasPassedEndpoint = stepProgressRef.current.lastDistToEnd < distToCurrentEnd; // Distance started increasing
+        const isfarEnoughPast = distToCurrentEnd > advanceThreshold; // Now 10m+ past the endpoint
+        
+        if (hasPassedEndpoint && isfarEnoughPast && currentStepIndex + 1 < routeSteps.length) {
+          // User passed the endpoint and is now 10m+ past it - advance to next
           nextStepIdx = currentStepIndex + 1;
           const nextStep = routeSteps[nextStepIdx];
           
@@ -1859,10 +1862,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             distanceForDisplay = distanceBetweenMeters(userLocation, nextStep.end);
           }
           
-          console.log('[Navigation] Advancing step:', {
+          console.log('[Navigation] Advancing step (10m after endpoint):', {
             from: currentStepIndex,
             to: nextStepIdx,
-            distanceToEndpoint: Math.round(distToCurrentEnd),
+            distanceFromEndpoint: Math.round(distToCurrentEnd),
             nextStepManeuver: nextStep?.maneuver,
             nextStepInstruction: nextStep?.instruction?.substring(0, 40),
             nextStepDistance: Math.round(distanceForDisplay || 0),
@@ -1887,8 +1890,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (nextStepIdx < routeSteps.length && routeSteps[nextStepIdx]?.end?.latitude) {
       const distToEnd = distanceBetweenMeters(userLocation, routeSteps[nextStepIdx].end);
       setNextJunctionDistance(distToEnd);
+      // Track for next comparison (to detect passing the endpoint)
+      stepProgressRef.current.lastDistToEnd = distToEnd;
     } else {
       setNextJunctionDistance(null);
+      stepProgressRef.current.lastDistToEnd = Infinity;
     }
   }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex]);
 
