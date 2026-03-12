@@ -1946,6 +1946,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [isNavigationMode, nextJunctionDistance, displayedJunctionDistance]);
 
+  // Update distance in real-time while on same step (between junctions)
+  // This gives real-time distance updates without the 5-second instruction delay
+  useEffect(() => {
+    if (!isNavigationMode || currentStepIndex !== displayedStepIndex) return;
+    
+    // On same step, update distance immediately as user moves
+    if (nextJunctionDistance != null && displayedJunctionDistance !== nextJunctionDistance) {
+      setDisplayedJunctionDistance(nextJunctionDistance);
+    }
+  }, [isNavigationMode, currentStepIndex, displayedStepIndex, nextJunctionDistance, displayedJunctionDistance]);
+
   // Detect when user reaches destination and capture traveled polyline for saving
   useEffect(() => {
     if (!isNavigationMode || !routeSteps || routeSteps.length === 0) return;
