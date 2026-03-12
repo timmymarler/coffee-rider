@@ -7,7 +7,7 @@ import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
 import { collection, doc, getDoc, getDocs, onSnapshot } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme } from "react-native";
+import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -590,6 +590,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Use dynamic theme from context
   const dynamicTheme = useTheme();
   const theme = dynamicTheme;
+
+  // Orientation detection
+  const [dimensions, setDimensions] = useState(Dimensions.get('window'));
+  const isLandscape = dimensions.width > dimensions.height;
+
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setDimensions(window);
+    });
+    return () => subscription?.remove();
+  }, []);
 
   const TAB_BAR_HEIGHT = 56; // matches FloatingTabBar height
   const FLOATING_MARGIN = 1; // sit almost flush with the tab bar
@@ -4264,6 +4275,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           filtersActive={filtersActive}
           onRouteTypePress={() => setShowRouteTypeSelector(true)}
           routeTypeActive={isRouteTypeNonDefault}
+          isLandscape={isLandscape}
         />
       )}
 

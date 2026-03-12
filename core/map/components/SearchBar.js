@@ -2,6 +2,7 @@ import { useTheme } from "@context/ThemeContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import {
     ActivityIndicator,
+    Dimensions,
     StyleSheet,
     TextInput,
     TouchableOpacity,
@@ -18,11 +19,12 @@ export function SearchBar({
   filtersActive = false,
   onRouteTypePress,
   routeTypeActive = false,
+  isLandscape = false,
 }) {
   // Use dynamic theme from context
   const dynamicTheme = useTheme();
   const theme = dynamicTheme;
-  const styles = createStyles(theme);
+  const styles = createStyles(theme, isLandscape);
 
   return (
     <View style={styles.container}>
@@ -114,13 +116,13 @@ export function SearchBar({
   );
 }
 
-function createStyles(theme) {
+function createStyles(theme, isLandscape) {
   return StyleSheet.create({
     container: {
       position: "absolute",
       top: 10,
       left: 12,
-      right: 30, // leaves room for filter button
+      right: isLandscape ? 140 : 30, // leaves room for tab bar in landscape
       zIndex: 10,
       elevation: 10,
     },
