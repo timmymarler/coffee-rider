@@ -714,6 +714,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [displayedStepIndex, setDisplayedStepIndex] = useState(0); // Delayed display of next instruction
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
+  const [displayedJunctionDistance, setDisplayedJunctionDistance] = useState(null); // Delayed distance display
   const [debugMode, setDebugMode] = useState(false); // Toggle with long press on distance display
   const routeFittedRef = useRef(false);
   
@@ -1887,10 +1888,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex]);
 
   // Delay displaying next instruction when passing a junction
-  // Shows current instruction for 6-7 seconds before showing next one
+  // Shows current instruction and distance for 5 seconds before showing next one
   // But override if next junction is close (< 150m away)
   const pendingDisplayTimeoutRef = useRef(null);
-  const NEXT_INSTRUCTION_DELAY_MS = 6500; // 6.5 seconds
+  const NEXT_INSTRUCTION_DELAY_MS = 5000; // 5 seconds
   const CLOSE_JUNCTION_THRESHOLD_M = 150; // Override delay if next junction is closer than this
   
   useEffect(() => {
@@ -1909,11 +1910,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Next junction is close - show immediately
       console.log('[DelayedInstructionDisplay] Next junction is close (' + Math.round(nextJunctionDistance) + 'm), showing immediately');
       setDisplayedStepIndex(currentStepIndex);
+      setDisplayedJunctionDistance(nextJunctionDistance); // Also update distance immediately
     } else {
-      // Delay showing the next instruction
-      console.log('[DelayedInstructionDisplay] Delaying next instruction display by ' + NEXT_INSTRUCTION_DELAY_MS + 'ms');
+      // Delay showing the next instruction and distance
+      console.log('[DelayedInstructionDisplay] Delaying next instruction and distance display by ' + NEXT_INSTRUCTION_DELAY_MS + 'ms');
       pendingDisplayTimeoutRef.current = setTimeout(() => {
         setDisplayedStepIndex(currentStepIndex);
+        setDisplayedJunctionDistance(nextJunctionDistance); // Update distance after same delay
         pendingDisplayTimeoutRef.current = null;
       }, NEXT_INSTRUCTION_DELAY_MS);
     }
@@ -4161,7 +4164,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               : MANEUVER_ICON_MAP.STRAIGHT;
           }
 
-          const distText = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : "";
+          const distText = displayedJunctionDistance != null ? formatDistanceImperial(displayedJunctionDistance) : "";
           
           // Use the maneuver icon map label for consistency, fallback to nextInstruction
           const label = meta?.label || nextInstruction;
@@ -4173,7 +4176,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             nextInstruction,
             displayLabel: label,
             nextRoundaboutExitNumber: step?.nextRoundaboutExitNumber,
-            distance: Math.round(nextJunctionDistance || 0),
+            distance: Math.round(displayedJunctionDistance || 0),
           });
 
           return (
@@ -4215,7 +4218,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   {step?.nextRoundaboutExitNumber !== undefined && (
                     <Text style={styles.debugText}>Exit: {step.nextRoundaboutExitNumber || "n/a"}</Text>
                   )}
-                  <Text style={styles.debugText}>Dist: {Math.round(nextJunctionDistance || 0)}m</Text>
+                  <Text style={styles.debugText}>Dist: {Math.round(displayedJunctionDistance || 0)}m</Text>
                 </View>
               )}
             </>
