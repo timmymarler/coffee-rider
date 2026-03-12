@@ -570,12 +570,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // DEBUG: Log each render
     console.log('[MapScreenRN RENDER] Component rendering - routeCoords.length will be logged in effects');
     
+    // Log props when they change
+    if (placeId) {
+      console.log('[MapScreenRN] Received props:', { placeId, openPlaceCard });
+    }
+    
     // Open PlaceCard and zoom to marker if placeId and openPlaceCard are provided
     useEffect(() => {
       // Handle openPlaceCard as both boolean and string (from route params it might be "true")
       const shouldOpenCard = openPlaceCard === true || openPlaceCard === "true";
       
       if (placeId && shouldOpenCard) {
+        console.log('[MapScreenRN] Setting selectedPlaceId:', placeId);
         setSelectedPlaceId(placeId);
       }
     }, [placeId, openPlaceCard]);
@@ -600,6 +606,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     // Fetch place from Firestore if passed via route params but not found in current lists
     useEffect(() => {
+      console.log('[MAP] Fetch effect running - placeId:', placeId);
+      
       if (!placeId) {
         setLoadedPlaceFromRoute(null);
         return;
@@ -2987,10 +2995,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   const selectedPlace = useMemo(() => {
 
-    if (!selectedPlaceId) return null;
+    if (!selectedPlaceId) {
+      console.log('[MAP] selectedPlace memo: no selectedPlaceId');
+      return null;
+    }
+
+    console.log('[MAP] selectedPlace memo computing for selectedPlaceId:', selectedPlaceId, '- loadedPlaceFromRoute:', loadedPlaceFromRoute?.id);
 
     // 0️⃣ Place loaded via route params (e.g., from Calendar)
     if (loadedPlaceFromRoute && loadedPlaceFromRoute.id === selectedPlaceId) {
+      console.log('[MAP] Returning loadedPlaceFromRoute');
       return loadedPlaceFromRoute;
     }
 
