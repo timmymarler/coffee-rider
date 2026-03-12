@@ -2079,13 +2079,24 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // Only include points the user has actually passed (within 5m - must be close/past the point)
-    // Changed to include the closest point immediately, so gold line expands continuously
-    const completedIdx = closestIdx;
+    // Only mark as completed if within 5m of the point, ensuring you've actually reached/passed it
+    const passedThreshold = 5; // meters
+    let completedIdx = -1;
+    
+    for (let i = 0; i < closestIdx + 1; i++) {
+      const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
+      if (dist < passedThreshold) {
+        completedIdx = i;
+      } else if (dist > passedThreshold && completedIdx >= 0) {
+        // Stop checking once we're past a completed point and the next point is > 5m away
+        break;
+      }
+    }
 
     // Split polyline at the current user location
     return {
-      traveledPolyline: routeCoords.slice(0, completedIdx + 1),
-      remainingPolyline: routeCoords.slice(completedIdx),
+      traveledPolyline: completedIdx >= 0 ? routeCoords.slice(0, completedIdx + 1) : [],
+      remainingPolyline: completedIdx >= 0 ? routeCoords.slice(completedIdx) : routeCoords,
     };
   }, [followUser, routeCoords, userLocation]);
 
