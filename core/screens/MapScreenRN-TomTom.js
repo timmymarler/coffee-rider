@@ -159,12 +159,12 @@ const AMENITY_ICON_MAP = {
     BEAR_RIGHT: { icon: "arrow-top-right-thick", label: "Bear right" },
     STRAIGHT: { icon: "arrow-up-bold", label: "Continue straight" },
     ROUNDABOUT_ENTER: { icon: "rotate-right", label: "Enter roundabout" },
-    ROUNDABOUT_EXIT: { icon: "rotate-right", label: "Exit roundabout" },
+    ROUNDABOUT_EXIT: { icon: "arrow-up-bold-circle", label: "Exit roundabout" },
     ROUNDABOUT_ENTER_LEFT: { icon: "rotate-left", label: "Enter roundabout (left)" },
-    ROUNDABOUT_EXIT_LEFT: { icon: "rotate-left", label: "Exit roundabout (left)" },
+    ROUNDABOUT_EXIT_LEFT: { icon: "arrow-left-bold-circle", label: "Exit left" },
     ROUNDABOUT_ENTER_RIGHT: { icon: "rotate-right", label: "Enter roundabout (right)" },
-    ROUNDABOUT_EXIT_RIGHT: { icon: "rotate-right", label: "Exit roundabout (right)" },
-    ROUNDABOUT_CROSS: { icon: "rotate-right", label: "Proceed through roundabout" },
+    ROUNDABOUT_EXIT_RIGHT: { icon: "arrow-right-bold-circle", label: "Exit right" },
+    ROUNDABOUT_CROSS: { icon: "arrow-up-bold-circle", label: "Continue straight" },
     MERGE_LEFT: { icon: "arrow-left-bottom", label: "Merge left" },
     MERGE_RIGHT: { icon: "arrow-right-bottom", label: "Merge right" },
   };
@@ -4103,9 +4103,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       {/* Junction panel (top-left) during navigation - helmet visible */}
       {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
         (() => {
-          const step = routeSteps[currentStepIndex];
+          let step = routeSteps[currentStepIndex];
+          let displayStepIndex = currentStepIndex;
           
           if (!step) return null;
+
+          // For roundabouts: skip ROUNDABOUT_ENTER and display the EXIT instruction instead
+          if (step.nextManeuver?.includes("ROUNDABOUT_ENTER")) {
+            // Look ahead to find the ROUNDABOUT_EXIT step
+            for (let i = currentStepIndex + 1; i < routeSteps.length; i++) {
+              if (routeSteps[i].nextManeuver?.includes("ROUNDABOUT_EXIT")) {
+                step = routeSteps[i];
+                displayStepIndex = i;
+                break;
+              }
+            }
+          }
 
           // Check if we've reached the destination (at the last step)
           const hasReachedDestination = currentStepIndex >= routeSteps.length - 1;
@@ -4160,8 +4173,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
           const distText = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : "";
           
-          // Use the maneuver icon map label for consistency, fallback to nextInstruction
-          const label = meta?.label || nextInstruction;
+          // Special handling for roundabout exits: show "Exit 3" instead of text instruction
+          let label;
+          if (nextManeuver.includes("ROUNDABOUT_EXIT") && step?.nextRoundaboutExitNumber) {
+            label = `Exit ${step.nextRoundaboutExitNumber}`;
+          } else {
+            // Use the maneuver icon map label for consistency, fallback to nextInstruction
+            label = meta?.label || nextInstruction;
+          }
           
           // DEBUG: Log what we're showing
           console.log('[DirectionsPanel] Step:', {
