@@ -15,7 +15,7 @@ import theme from "@themes";
 import Constants from "expo-constants";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Alert, Animated, TouchableOpacity, View } from "react-native";
+import { Alert, Animated, Dimensions, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -24,9 +24,21 @@ function FloatingTabBar({ state }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(0)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
   const { hidden, mapActions, activeRide } = useContext(TabBarContext);
   const { capabilities, user } = useContext(AuthContext) || {};
   const pathname = usePathname();
+
+  // Track orientation
+  const [dimensions, setDimensions] = useState(Dimensions.get('window'));
+  const isLandscape = dimensions.width > dimensions.height;
+
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setDimensions(window);
+    });
+    return () => subscription?.remove();
+  }, []);
 
   // Get endRide from map actions context - the map screen will provide it
   const endRide = useContext(TabBarContext).mapActions?.endRide;
@@ -65,18 +77,29 @@ function FloatingTabBar({ state }) {
   return (
     <Animated.View
       style={{
-        transform: [{ translateY }],
+        transform: isLandscape ? [{ translateX }] : [{ translateY }],
         position: "absolute",
-        left: 15,
-        right: 15,
-        bottom: insets.bottom,
-        height: 56,
+        ...(isLandscape ? {
+          // Landscape: vertical bar on right side
+          top: 16,
+          right: insets.right,
+          bottom: 16,
+          width: 60,
+          flexDirection: "column",
+        } : {
+          // Portrait: horizontal bar at bottom
+          left: 15,
+          right: 15,
+          bottom: insets.bottom,
+          height: 56,
+          flexDirection: "row",
+        }),
         backgroundColor: theme.colors.primaryDark,
-        borderRadius: 28,
-        flexDirection: "row",
+        borderRadius: isLandscape ? 20 : 28,
         justifyContent: "space-around",
         alignItems: "center",
-        paddingHorizontal: 18,
+        paddingHorizontal: isLandscape ? 8 : 18,
+        paddingVertical: isLandscape ? 12 : 0,
         shadowColor: theme.colors.shadow,
         shadowOpacity: 0.12,
         shadowRadius: 8,
@@ -106,7 +129,8 @@ function FloatingTabBar({ state }) {
               flex: 1,
               alignItems: "center",
               justifyContent: "center",
-              paddingVertical: 6,
+              paddingVertical: isLandscape ? 0 : 6,
+              paddingHorizontal: isLandscape ? 6 : 0,
               opacity: isDisabled ? 0.6 : 1,
             }}
           >
@@ -134,11 +158,12 @@ function FloatingTabBar({ state }) {
           {/* separator */}
           <View
             style={{
-              width: 1,
-              height: 22,
+              width: isLandscape ? 22 : 1,
+              height: isLandscape ? 1 : 22,
               backgroundColor: theme.colors.primaryLight,
               opacity: 0.4,
-              marginHorizontal: 8,
+              marginHorizontal: isLandscape ? 0 : 8,
+              marginVertical: isLandscape ? 8 : 0,
             }}
           />
 
@@ -217,11 +242,12 @@ function FloatingTabBar({ state }) {
           {/* separator */}
           <View
             style={{
-              width: 1,
-              height: 22,
+              width: isLandscape ? 22 : 1,
+              height: isLandscape ? 1 : 22,
               backgroundColor: theme.colors.primaryLight,
               opacity: 0.4,
-              marginHorizontal: 8,
+              marginHorizontal: isLandscape ? 0 : 8,
+              marginVertical: isLandscape ? 8 : 0,
             }}
           />
 
