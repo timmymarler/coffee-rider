@@ -712,9 +712,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
   const [routeSteps, setRouteSteps] = useState([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [displayedStepIndex, setDisplayedStepIndex] = useState(0); // Delayed display of next instruction
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
-  const [displayedJunctionDistance, setDisplayedJunctionDistance] = useState(null); // Delayed distance display
   const [debugMode, setDebugMode] = useState(false); // Toggle with long press on distance display
   const routeFittedRef = useRef(false);
   
@@ -1005,7 +1003,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       });
       
       setCurrentStepIndex(0);
-      setDisplayedStepIndex(0);
+
       stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity };
 
     } catch (error) {
@@ -1897,65 +1895,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Delay displaying next instruction when passing a junction
   // Shows current instruction and distance for 5 seconds before showing next one
   // But override if next junction is close (< 150m away)
-  const pendingDisplayTimeoutRef = useRef(null);
-  const NEXT_INSTRUCTION_DELAY_MS = 5000; // 5 seconds
-  const CLOSE_JUNCTION_THRESHOLD_M = 150; // Override delay if next junction is closer than this
-  
-  useEffect(() => {
-    // If step index hasn't actually changed, don't do anything
-    if (currentStepIndex === displayedStepIndex) return;
-    
-    // Check if next junction is close enough to skip the delay
-    const isNextJunctionClose = nextJunctionDistance != null && nextJunctionDistance < CLOSE_JUNCTION_THRESHOLD_M;
-    
-    // Clear any pending update
-    if (pendingDisplayTimeoutRef.current) {
-      clearTimeout(pendingDisplayTimeoutRef.current);
-    }
-    
-    if (isNextJunctionClose) {
-      // Next junction is close - show immediately
-      console.log('[DelayedInstructionDisplay] Next junction is close (' + Math.round(nextJunctionDistance) + 'm), showing immediately');
-      setDisplayedStepIndex(currentStepIndex);
-      setDisplayedJunctionDistance(nextJunctionDistance); // Also update distance immediately
-    } else {
-      // Delay showing the next instruction and distance
-      console.log('[DelayedInstructionDisplay] Delaying next instruction and distance display by ' + NEXT_INSTRUCTION_DELAY_MS + 'ms');
-      pendingDisplayTimeoutRef.current = setTimeout(() => {
-        setDisplayedStepIndex(currentStepIndex);
-        setDisplayedJunctionDistance(nextJunctionDistance); // Update distance after same delay
-        pendingDisplayTimeoutRef.current = null;
-      }, NEXT_INSTRUCTION_DELAY_MS);
-    }
-    
-    return () => {
-      if (pendingDisplayTimeoutRef.current) {
-        clearTimeout(pendingDisplayTimeoutRef.current);
-      }
-    };
-  }, [currentStepIndex, nextJunctionDistance]);
 
-  // Initialize displayed distance when navigation mode starts
-  useEffect(() => {
-    if (!isNavigationMode) return;
-    
-    // If we have a next junction distance but no displayed distance yet, initialize it
-    if (nextJunctionDistance != null && displayedJunctionDistance === null) {
-      console.log('[Navigation] Initializing displayed distance:', Math.round(nextJunctionDistance) + 'm');
-      setDisplayedJunctionDistance(nextJunctionDistance);
-    }
-  }, [isNavigationMode, nextJunctionDistance, displayedJunctionDistance]);
-
-  // Update distance in real-time while on same step (between junctions)
-  // This gives real-time distance updates without the 5-second instruction delay
-  useEffect(() => {
-    if (!isNavigationMode || currentStepIndex !== displayedStepIndex) return;
-    
-    // On same step, update distance immediately as user moves
-    if (nextJunctionDistance != null && displayedJunctionDistance !== nextJunctionDistance) {
-      setDisplayedJunctionDistance(nextJunctionDistance);
-    }
-  }, [isNavigationMode, currentStepIndex, displayedStepIndex, nextJunctionDistance, displayedJunctionDistance]);
 
   // Detect when user reaches destination and capture traveled polyline for saving
   useEffect(() => {
@@ -2547,8 +2487,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setCurrentLoadedRouteId(null);
     setFollowUser(false);          // Disable Follow Me when clearing route
     setCurrentStepIndex(0);        // Reset step index
-    setDisplayedStepIndex(0);      // Reset displayed step index (for delayed instruction display)
-    setDisplayedJunctionDistance(null); // Reset displayed distance
+
     setNextJunctionDistance(null); // Clear junction distance
     stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity }; // Reset step progress tracker
     
@@ -3221,7 +3160,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     });
     
     setCurrentStepIndex(0);
-    setDisplayedStepIndex(0);
     stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity };
 
     // Auto-fit view if not in Follow Me and not already fitted
@@ -4159,7 +4097,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       {/* Junction panel (top-left) during navigation - helmet visible */}
       {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
         (() => {
-          const step = routeSteps[displayedStepIndex];
+          const step = routeSteps[currentStepIndex];
           
           if (!step) return null;
 
@@ -4214,7 +4152,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               : MANEUVER_ICON_MAP.STRAIGHT;
           }
 
-          const distText = displayedJunctionDistance != null ? formatDistanceImperial(displayedJunctionDistance) : "";
+          const distText = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : "";
           
           // Use the maneuver icon map label for consistency, fallback to nextInstruction
           const label = meta?.label || nextInstruction;
@@ -4226,7 +4164,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             nextInstruction,
             displayLabel: label,
             nextRoundaboutExitNumber: step?.nextRoundaboutExitNumber,
-            distance: Math.round(displayedJunctionDistance || 0),
+            distance: Math.round(nextJunctionDistance || 0),
           });
 
           return (
@@ -4268,7 +4206,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   {step?.nextRoundaboutExitNumber !== undefined && (
                     <Text style={styles.debugText}>Exit: {step.nextRoundaboutExitNumber || "n/a"}</Text>
                   )}
-                  <Text style={styles.debugText}>Dist: {Math.round(displayedJunctionDistance || 0)}m</Text>
+                  <Text style={styles.debugText}>Dist: {Math.round(nextJunctionDistance || 0)}m</Text>
                 </View>
               )}
             </>
