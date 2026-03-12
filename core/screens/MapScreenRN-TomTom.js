@@ -580,9 +580,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Handle openPlaceCard as both boolean and string (from route params it might be "true")
       const shouldOpenCard = openPlaceCard === true || openPlaceCard === "true";
       
+      console.log('[MapScreenRN Effect] placeId:', placeId, 'openPlaceCard:', openPlaceCard, 'shouldOpenCard:', shouldOpenCard);
+      
       if (placeId && shouldOpenCard) {
         console.log('[MapScreenRN] Setting selectedPlaceId:', placeId);
         setSelectedPlaceId(placeId);
+      } else {
+        console.log('[MapScreenRN Effect] Condition not met - placeId:', !!placeId, 'shouldOpenCard:', shouldOpenCard);
       }
     }, [placeId, openPlaceCard]);
 
