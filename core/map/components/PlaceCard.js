@@ -12,36 +12,36 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Constants from 'expo-constants';
 import * as ImagePicker from "expo-image-picker";
 import {
-    addDoc,
-    arrayUnion,
-    collection,
-    deleteDoc,
-    doc,
-    limit as fbLimit,
-    getDoc,
-    onSnapshot,
-    orderBy,
-    query,
-    serverTimestamp,
-    setDoc,
-    Timestamp,
-    updateDoc,
+  addDoc,
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  limit as fbLimit,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  Timestamp,
+  updateDoc,
 } from "firebase/firestore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { RIDER_CATEGORIES } from "../../config/categories/rider";
 
@@ -98,6 +98,7 @@ export default function PlaceCard({
   onClearRoute = null,
   onRoute,
   onNavigate,
+  isLandscape = false,
 }) {
   const [googlePhotos, setGooglePhotos] = useState([]);
   const [googleRatingLive, setGoogleRatingLive] = useState(null);
@@ -150,7 +151,7 @@ export default function PlaceCard({
   // Use dynamic theme from context
   const dynamicTheme = useTheme();
   const theme = dynamicTheme;
-  const styles = createStyles(theme);
+  const styles = createStyles(theme, isLandscape);
   const auth = useContext(AuthContext);
   const user = auth?.user || null;
   const role = auth?.profile?.role || "guest"; // or auth.role if that’s what you store
@@ -1028,22 +1029,23 @@ export default function PlaceCard({
         <View style={styles.photoContainer}>
           <FlatList
             horizontal
+            scrollEnabled={true}
             data={combinedPhotos}
             keyExtractor={(item, i) =>
               typeof item === "string" ? item : item.url || i.toString()
             }
-            snapToInterval={screenWidth}
+            snapToInterval={isLandscape ? screenWidth - 430 : screenWidth - 20}
             decelerationRate="fast"
             showsHorizontalScrollIndicator={false}
             removeClippedSubviews
             initialNumToRender={1}
             maxToRenderPerBatch={2}
             windowSize={3}
-            style={{ width: screenWidth, height: 180 }}
+            style={{ flex: 1, height: isLandscape ? 120 : 180 }}
             onScroll={(e) =>
               setPhotoIndex(
                 Math.round(
-                  e.nativeEvent.contentOffset.x / screenWidth
+                  e.nativeEvent.contentOffset.x / (isLandscape ? screenWidth - 430 : screenWidth - 20)
                 )
               )
             }
@@ -1588,13 +1590,13 @@ export default function PlaceCard({
 /* STYLES                                                             */
 /* ------------------------------------------------------------------ */
 
-function createStyles(theme) {
+function createStyles(theme, isLandscape) {
   return {
     container: {
       position: "absolute",
-      bottom: 100,
-      left: 10,
-      right: 10,
+      bottom: isLandscape ? 16 : 100,
+      left: isLandscape ? 80 : 10,
+      right: isLandscape ? 350 : 10,
       maxHeight: "70%",
       backgroundColor: theme.colors.primaryDark,
       borderRadius: 16,
@@ -1615,10 +1617,14 @@ function createStyles(theme) {
       justifyContent: "center",
       zIndex: 10,
     },
-    photoContainer: { height: 150 },
+    photoContainer: { 
+      width: isLandscape ? (screenWidth - 430) : (screenWidth - 20),
+      height: isLandscape ? 120 : 180,
+    },
     photo: {
-      width: screenWidth,      
-      backgroundColor: "#000", // or theme dark
+      width: isLandscape ? (screenWidth - 430) : (screenWidth - 20),
+      height: isLandscape ? 120 : 180,      
+      backgroundColor: "#000",
       resizeMode: "contain"
     },
     info: { padding: 12 },

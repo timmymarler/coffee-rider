@@ -4285,6 +4285,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           userLocation={userLocation}
           hasRoute={routeCoords.length > 0}
           routeMeta={routeMeta}
+          isLandscape={isLandscape}
           onRoute={(placeArg) => {
             // If somehow a Google place slips through, promote it before routing so it behaves like CR
             if (placeArg?.source === "google") {
