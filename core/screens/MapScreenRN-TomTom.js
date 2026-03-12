@@ -2468,39 +2468,52 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     routeRequestId.current += 1;   // invalidate in-flight requests
     
-    // Hide polylines temporarily for visual clearness (extra failsafe for Android)
-    setHidePolylines(true);
-    
-    // Clear all route state - Polyline components stay mounted and update naturally
-    setRouteCoords([]);
-    setPendingRidePolyline(null);
-    setLastEncodedPolyline(null);
-    setRoutingActive(false);
-    setRouteDestination(null);
-    setIsHomeDestination(false);
-    setRouteDistanceMeters(null);
-    setManualStartPoint(null); 
-    
-    // Restore visibility after giving native layer time to process empty state
-    setTimeout(() => {
-      console.log('[clearRoute] Restoring polyline visibility');
-      setHidePolylines(false);
-    }, 100);
-    
-    clearWaypoints();
-    routeFittedRef.current = false;
-    followUserPrevRef.current = false; // Reset Follow Me transition detector for next route
-    setCurrentLoadedRouteId(null);
-    setFollowUser(false);          // Disable Follow Me when clearing route
-    setCurrentStepIndex(0);        // Reset step index
+    try {
+      // Hide polylines temporarily for visual clearness (extra failsafe for Android)
+      setHidePolylines(true);
+      
+      // Clear all route state - Polyline components stay mounted and update naturally
+      setRouteCoords([]);
+      setPendingRidePolyline(null);
+      setLastEncodedPolyline(null);
+      setRoutingActive(false);
+      setRouteDestination(null);
+      setIsHomeDestination(false);
+      setRouteDistanceMeters(null);
+      setManualStartPoint(null); 
+      
+      // Store timeout ID so we can cancel it if needed
+      const timeoutId = setTimeout(() => {
+        try {
+          console.log('[clearRoute] Restoring polyline visibility');
+          setHidePolylines(false);
+        } catch (error) {
+          console.warn('[clearRoute] Error restoring polylines:', error);
+        }
+      }, 100);
+      
+      // Store timeout ID for potential cancellation
+      if (pendingFlushRef.current) {
+        pendingFlushRef.current.timeoutId = timeoutId;
+      }
+      
+      clearWaypoints();
+      routeFittedRef.current = false;
+      followUserPrevRef.current = false; // Reset Follow Me transition detector for next route
+      setCurrentLoadedRouteId(null);
+      setFollowUser(false);          // Disable Follow Me when clearing route
+      setCurrentStepIndex(0);        // Reset step index
 
-    setNextJunctionDistance(null); // Clear junction distance
-    stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity }; // Reset step progress tracker
-    
-    // Cancel any pending instruction display update
-    if (pendingDisplayTimeoutRef.current) {
-      clearTimeout(pendingDisplayTimeoutRef.current);
-      pendingDisplayTimeoutRef.current = null;
+      setNextJunctionDistance(null); // Clear junction distance
+      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity }; // Reset step progress tracker
+      
+      // Cancel any pending instruction display update
+      if (pendingDisplayTimeoutRef.current) {
+        clearTimeout(pendingDisplayTimeoutRef.current);
+        pendingDisplayTimeoutRef.current = null;
+      }
+    } catch (error) {
+      console.error('[clearRoute] Error during route clearing:', error);
     }
   }
 

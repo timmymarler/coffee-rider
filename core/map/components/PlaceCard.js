@@ -1091,11 +1091,23 @@ export default function PlaceCard({
               /* Route / Clear Route */
               style={styles.photoActionButton}
               onPress={() => {
-                if (hasRoute) 
+                if (hasRoute) {
+                  // Clear existing route
+                  try {
                     onClearRoute?.();
-                else 
+                  } catch (error) {
+                    console.error('[PlaceCard] Error clearing route:', error);
+                  }
+                } else {
+                  // Create new route
+                  try {
                     onRoute?.(safePlace);
-                    onClose();
+                  } catch (error) {
+                    console.error('[PlaceCard] Error creating route:', error);
+                  }
+                }
+                // Close the card after handling the route action
+                onClose();
               }}
             >
               <MaterialCommunityIcons
