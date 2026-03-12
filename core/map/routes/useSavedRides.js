@@ -16,10 +16,10 @@ export function useSavedRides() {
       return;
     }
 
-    // Query user's own rides
+    // Query user's own rides - use ownerId which matches Firestore security rules
     const userRidesQuery = query(
       collection(db, "rides"),
-      where("createdBy", "==", user.uid)
+      where("ownerId", "==", user.uid)
     );
 
     const ridesMap = new Map();
@@ -41,9 +41,7 @@ export function useSavedRides() {
       userRidesLoaded = true;
       updateRides();
     }, (err) => {
-      if (err.code !== "permission-denied") {
-        console.error("Error listening to user rides:", err);
-      }
+      console.error("Error listening to user rides:", err);
       userRidesLoaded = true;
       updateRides();
     });

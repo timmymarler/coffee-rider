@@ -797,6 +797,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [saveRideName, setSaveRideName] = useState("");
   const [pendingRidePolyline, setPendingRidePolyline] = useState(null);
   const [viewedRideId, setViewedRideId] = useState(null); // Track if viewing a saved ride
+  const [savingRide, setSavingRide] = useState(false); // Track if saving is in progress
 
   const {
     pendingSavedRouteId,
@@ -1365,11 +1366,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   async function handleSaveRide(rideName) {
     if (!pendingRidePolyline || !pendingRidePolyline.length || !user) return;
+    if (savingRide) return; // Prevent double submissions
     if (!capabilities.canSaveRoutes) {
       setPostbox({ type: "info", message: "Your account cannot save rides." });
       return;
     }
 
+    setSavingRide(true);
     try {
       // If viewing a saved ride, save it as a route instead
       if (viewedRideId) {
@@ -1405,7 +1408,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         setViewedRideId(null);
       } else {
         // Tracking a ride - save it as a ride
-        await saveRide({
+        const result = await saveRide({
           user,
           capabilities,
           name: rideName || undefined,
@@ -1416,6 +1419,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           },
           completedAt: new Date(),
         });
+        
+        console.log("[handleSaveRide] Ride saved successfully with ID:", result.id);
 
         setPostbox({
           type: "success",
@@ -1429,8 +1434,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       console.error("[handleSaveRide] Error saving ride:", error);
       setPostbox({
         type: "error",
-        message: "Failed to save ride. Please try again.",
+        message: error.message || "Failed to save ride. Please try again.",
       });
+    } finally {
+      setSavingRide(false);
     }
   }
 
@@ -4641,11 +4648,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
             <View style={styles.saveRouteModalButtons}>
               <TouchableOpacity
-                style={[styles.saveRouteModalButton, styles.saveRouteModalButtonSave]}
+                style={[styles.saveRouteModalButton, styles.saveRouteModalButtonSave, savingRide && { opacity: 0.6 }]}
                 onPress={() => handleSaveRide(saveRideName || undefined)}
+                disabled={savingRide}
               >
                 <Text style={styles.saveRouteModalButtonText}>
-                  {viewedRideId ? "Save as Route" : "Save"}
+                  {savingRide ? "Saving..." : (viewedRideId ? "Save as Route" : "Save")}
                 </Text>
               </TouchableOpacity>
 
