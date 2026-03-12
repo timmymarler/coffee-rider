@@ -686,6 +686,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
   const previousFollowUserRef = useRef(false); // Track previous Follow Me state to detect when it turn off
   const pendingFlushRef = useRef(null); // Track pending polyline flush to cancel on clearRoute
+  const pendingDisplayTimeoutRef = useRef(null); // Track pending instruction display timeout
   const {
     waypoints,
     addFromPlace,
@@ -2527,7 +2528,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity }; // Reset step progress tracker
       
       // Cancel any pending instruction display update
-      if (pendingDisplayTimeoutRef.current) {
+      if (pendingDisplayTimeoutRef?.current) {
         clearTimeout(pendingDisplayTimeoutRef.current);
         pendingDisplayTimeoutRef.current = null;
       }
