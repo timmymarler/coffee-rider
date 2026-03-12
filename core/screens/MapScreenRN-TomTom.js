@@ -575,18 +575,28 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Handle openPlaceCard as both boolean and string (from route params it might be "true")
       const shouldOpenCard = openPlaceCard === true || openPlaceCard === "true";
       
-      if (placeId && shouldOpenCard && mapRef.current) {
+      if (placeId && shouldOpenCard) {
         setSelectedPlaceId(placeId);
-        // Find the place in crPlaces or googlePois
-        let place = crPlaces.find(p => p.id === placeId) || googlePois.find(p => p.id === placeId);
-        if (place && place.latitude && place.longitude) {
-          mapRef.current.animateCamera({
-            center: { latitude: place.latitude, longitude: place.longitude },
-            zoom: 16
-          }, { duration: 600 });
-        }
       }
-    }, [placeId, openPlaceCard, crPlaces, googlePois]);
+    }, [placeId, openPlaceCard]);
+
+    // Separate effect to animate camera when place is loaded and ready
+    useEffect(() => {
+      if (!placeId || !mapRef.current) return;
+
+      // Find the place from various sources
+      let place = crPlaces.find(p => p.id === placeId) || 
+                  googlePois.find(p => p.id === placeId) ||
+                  loadedPlaceFromRoute;
+      
+      if (place && place.latitude && place.longitude) {
+        console.log('[MAP] Animating camera to place:', place.name || place.title);
+        mapRef.current.animateCamera({
+          center: { latitude: place.latitude, longitude: place.longitude },
+          zoom: 16
+        }, { duration: 600 });
+      }
+    }, [placeId, crPlaces, googlePois, loadedPlaceFromRoute]);
 
     // Fetch place from Firestore if passed via route params but not found in current lists
     useEffect(() => {
@@ -598,9 +608,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Check if place is already loaded in our lists
       const alreadyLoaded = crPlaces.find(p => p.id === placeId) || googlePois.find(p => p.id === placeId);
       if (alreadyLoaded) {
+        console.log('[MAP] Place already in local lists, skipping fetch:', placeId);
         setLoadedPlaceFromRoute(null); // Clear temp storage if found in lists
         return;
       }
+
+      // Clear previous loaded place while fetching
+      setLoadedPlaceFromRoute(null);
 
       // Place not found locally, fetch from Firestore
       const fetchPlace = async () => {
@@ -611,7 +625,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
           if (placeSnap.exists()) {
             const placeData = { id: placeSnap.id, ...placeSnap.data() };
-            console.log('[MAP] Place fetched successfully:', placeData.name || placeData.title);
+            console.log('[MAP] Place fetched successfully:', placeData.name || placeData.title, '- lat:', placeData.latitude, 'lng:', placeData.longitude);
             setLoadedPlaceFromRoute(placeData);
           } else {
             console.warn('[MAP] Place not found in Firestore:', placeId);
