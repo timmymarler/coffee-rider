@@ -572,7 +572,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // Open PlaceCard and zoom to marker if placeId and openPlaceCard are provided
     useEffect(() => {
-      if (placeId && openPlaceCard && mapRef.current) {
+      // Handle openPlaceCard as both boolean and string (from route params it might be "true")
+      const shouldOpenCard = openPlaceCard === true || openPlaceCard === "true";
+      
+      if (placeId && shouldOpenCard && mapRef.current) {
         setSelectedPlaceId(placeId);
         // Find the place in crPlaces or googlePois
         let place = crPlaces.find(p => p.id === placeId) || googlePois.find(p => p.id === placeId);
@@ -584,6 +587,45 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         }
       }
     }, [placeId, openPlaceCard, crPlaces, googlePois]);
+
+    // Fetch place from Firestore if passed via route params but not found in current lists
+    useEffect(() => {
+      if (!placeId) {
+        setLoadedPlaceFromRoute(null);
+        return;
+      }
+
+      // Check if place is already loaded in our lists
+      const alreadyLoaded = crPlaces.find(p => p.id === placeId) || googlePois.find(p => p.id === placeId);
+      if (alreadyLoaded) {
+        setLoadedPlaceFromRoute(null); // Clear temp storage if found in lists
+        return;
+      }
+
+      // Place not found locally, fetch from Firestore
+      const fetchPlace = async () => {
+        try {
+          console.log('[MAP] Fetching place from Firestore:', placeId);
+          const placeRef = doc(db, 'places', placeId);
+          const placeSnap = await getDoc(placeRef);
+
+          if (placeSnap.exists()) {
+            const placeData = { id: placeSnap.id, ...placeSnap.data() };
+            console.log('[MAP] Place fetched successfully:', placeData.name || placeData.title);
+            setLoadedPlaceFromRoute(placeData);
+          } else {
+            console.warn('[MAP] Place not found in Firestore:', placeId);
+            setLoadedPlaceFromRoute(null);
+          }
+        } catch (error) {
+          console.error('[MAP] Error fetching place:', error);
+          setLoadedPlaceFromRoute(null);
+        }
+      };
+
+      fetchPlace();
+    }, [placeId, crPlaces, googlePois]);
+
   const mapRef = useRef();
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
@@ -631,6 +673,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Selected marker/placecard
   const [selectedPlaceId, setSelectedPlaceId] = useState(null);
+  const [loadedPlaceFromRoute, setLoadedPlaceFromRoute] = useState(null); // For places loaded via route params
 
   // Temporary “promoted” Google place (in-memory only)
   const [tempCrPlace, setTempCrPlace] = useState(null);
@@ -2932,6 +2975,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     if (!selectedPlaceId) return null;
 
+    // 0️⃣ Place loaded via route params (e.g., from Calendar)
+    if (loadedPlaceFromRoute && loadedPlaceFromRoute.id === selectedPlaceId) {
+      return loadedPlaceFromRoute;
+    }
+
     // 1️⃣ Newly created place
     if (newlyCreatedPlace && newlyCreatedPlace.id === selectedPlaceId) {
       return newlyCreatedPlace;
@@ -2966,7 +3014,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     // 4️⃣ Google-only place
     return searchMarkers.find(p => p.id === selectedPlaceId) || null;
-  }, [selectedPlaceId, crMarkers, searchMarkers, tempCrPlace, newlyCreatedPlace]);
+  }, [selectedPlaceId, crMarkers, searchMarkers, tempCrPlace, newlyCreatedPlace, loadedPlaceFromRoute]);
 
 
   /* ------------------------------------------------------------ */
