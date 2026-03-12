@@ -595,6 +595,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const isLandscape = dimensions.width > dimensions.height;
 
+  // Get dynamic styles based on orientation
+  const getJunctionPanelStyle = () => {
+    if (!isLandscape) {
+      return { left: 16, right: 16 };
+    }
+    return {
+      left: 16,
+      right: undefined,
+      width: dimensions.width * 0.30,
+    };
+  };
+
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       setDimensions(window);
@@ -4107,7 +4119,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           if (hasReachedDestination) {
             // Show destination reached message with Save Ride button
             return (
-              <View style={styles.junctionPanel}>
+              <View style={[styles.junctionPanel, getJunctionPanelStyle()]}>
                 <MaterialCommunityIcons name="check-circle" size={80} color="rgba(76, 175, 80, 0.95)" style={styles.junctionIcon} />
                 <View style={styles.junctionContent}>
                   <Text style={styles.junctionLabel}>You have</Text>
@@ -4169,7 +4181,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
           return (
             <>
-              <View style={styles.junctionPanel}>
+              <View style={[styles.junctionPanel, getJunctionPanelStyle()]}>
                 {/* Large direction icon */}
                 <MaterialCommunityIcons name={meta.icon} size={80} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
                 {/* Distance and label section */}
