@@ -1935,6 +1935,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     };
   }, [currentStepIndex, nextJunctionDistance]);
 
+  // Initialize displayed distance when navigation mode starts
+  useEffect(() => {
+    if (!isNavigationMode) return;
+    
+    // If we have a next junction distance but no displayed distance yet, initialize it
+    if (nextJunctionDistance != null && displayedJunctionDistance === null) {
+      console.log('[Navigation] Initializing displayed distance:', Math.round(nextJunctionDistance) + 'm');
+      setDisplayedJunctionDistance(nextJunctionDistance);
+    }
+  }, [isNavigationMode, nextJunctionDistance, displayedJunctionDistance]);
+
   // Detect when user reaches destination and capture traveled polyline for saving
   useEffect(() => {
     if (!isNavigationMode || !routeSteps || routeSteps.length === 0) return;
@@ -2526,6 +2537,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setFollowUser(false);          // Disable Follow Me when clearing route
     setCurrentStepIndex(0);        // Reset step index
     setDisplayedStepIndex(0);      // Reset displayed step index (for delayed instruction display)
+    setDisplayedJunctionDistance(null); // Reset displayed distance
     setNextJunctionDistance(null); // Clear junction distance
     stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity }; // Reset step progress tracker
     
