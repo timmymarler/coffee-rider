@@ -2031,24 +2031,44 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
     
     if (consecutiveOffRouteCountRef.current >= CONSECUTIVE_OFF_ROUTE_CHECKS_REQUIRED && timeSinceLastReroute >= REROUTE_COOLDOWN_SECONDS) {
-      console.log(`[AutoReroute] User consistently off-route (${closestDist.toFixed(0)}m), rebuilding route...`);
-      lastRerouteAttemptRef.current = now;
-      consecutiveOffRouteCountRef.current = 0; // Reset counter after rerouting
+      // Before rerouting, verify user is STILL off-route (not back on polyline due to GPS noise)
+      let verifyClosestDist = Infinity;
+      for (let i = 0; i < routeCoords.length; i++) {
+        const coord = routeCoords[i];
+        if (!coord || coord.latitude === undefined || coord.longitude === undefined) continue;
+        
+        const dist = distanceBetweenMeters(userLocation, coord);
+        if (dist < verifyClosestDist) {
+          verifyClosestDist = dist;
+        }
+      }
       
-      // Rebuild route from current location
-      const requestId = ++routeRequestId.current;
-      mapRoute({
-        origin: userLocation,
-        waypoints: waypoints,
-        destination: routeDestination,
-        travelMode: userTravelMode,
-        routeType: userRouteType,
-        requestId,
-        skipFitToView: true,
-        vehicleHeading: userLocation?.heading || null,
-      }).catch(error => {
-        console.warn('[AutoReroute] mapRoute error:', error);
-      });
+      const stillOffRoute = verifyClosestDist >= OFF_ROUTE_THRESHOLD_METERS;
+      
+      if (stillOffRoute) {
+        console.log(`[AutoReroute] User consistently off-route (${verifyClosestDist.toFixed(0)}m), rebuilding route...`);
+        lastRerouteAttemptRef.current = now;
+        consecutiveOffRouteCountRef.current = 0; // Reset counter after rerouting
+        
+        // Rebuild route from current location
+        const requestId = ++routeRequestId.current;
+        mapRoute({
+          origin: userLocation,
+          waypoints: waypoints,
+          destination: routeDestination,
+          travelMode: userTravelMode,
+          routeType: userRouteType,
+          requestId,
+          skipFitToView: true,
+          vehicleHeading: userLocation?.heading || null,
+        }).catch(error => {
+          console.warn('[AutoReroute] mapRoute error:', error);
+        });
+      } else {
+        // Back on polyline - cancel reroute, reset counter
+        console.log(`[AutoReroute] Was off-route but back on polyline (${verifyClosestDist.toFixed(0)}m), canceling reroute`);
+        consecutiveOffRouteCountRef.current = 0;
+      }
     }
   }, [userLocation, followUser, routeCoords, routeDestination, waypoints, userTravelMode, userRouteType]);
 
