@@ -567,8 +567,6 @@ function normalizeCoord(obj) {
 /* ------------------------------------------------------------------ */
 
 export default function MapScreenRN({ placeId, openPlaceCard }) {
-    // DEBUG: Log each render
-    console.log('[MapScreenRN RENDER] Component rendering - routeCoords.length will be logged in effects');
     
     // Log props when they change
     if (placeId) {
@@ -621,7 +619,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       const alreadyLoaded = crPlaces.find(p => p.id === placeId) || googlePois.find(p => p.id === placeId);
       if (alreadyLoaded) {
         console.log('[MAP] Place already in local lists, skipping fetch:', placeId);
-        setLoadedPlaceFromRoute(null); // Clear temp storage if found in lists
+        setLoadedPlaceFromRoute(alreadyLoaded); // Store in loadedPlaceFromRoute so selectedPlace memo can find it
         return;
       }
 
@@ -3915,7 +3913,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             {/* Base route - outline layer for pedestrians and cyclists */}
               {(() => {
                 const shouldRender = shouldRenderOutline(userTravelMode);
-                console.log('[RENDER] Base outline check - routeCoords.length:', routeCoords.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
                 if (shouldRender && routeCoords.length > 0) {
                   console.log('[POLYLINE MOUNT] base-outline- 0');
                 }
@@ -3932,7 +3929,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               {/* Base route */}
               {(() => {
                 const shouldRender = true;  // Always render, vary strokeWidth
-                console.log('[RENDER] Base route check - routeCoords.length:', routeCoords.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
                 if (routeCoords.length > 0) {
                   console.log('[POLYLINE MOUNT] base- 0');
                 }
@@ -3950,7 +3946,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             {/* Traveled route (during Follow Me) - outline layer */}
               {(() => {
                 const shouldRender = true;  // Always render, vary strokeWidth
-                console.log('[RENDER] Traveled outline check - followUser:', followUser, 'traveledPolyline.length:', traveledPolyline.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
                 if (followUser && traveledPolyline.length > 1) {
                   console.log('[POLYLINE MOUNT] traveled-outline- 0');
                 }
@@ -3967,7 +3962,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               {/* Traveled route (during Follow Me) - always accentMid regardless of vehicle type */}
               {(() => {
                 const shouldRender = true;  // Always render, vary strokeWidth
-                console.log('[RENDER] Traveled route check - followUser:', followUser, 'traveledPolyline.length:', traveledPolyline.length, 'shouldRender:', shouldRender, 'routeVersion:', routeVersion);
                 if (followUser && traveledPolyline.length > 1) {
                   console.log('[POLYLINE MOUNT] traveled- 0');
                 }
