@@ -4231,6 +4231,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           waypoints={displayWaypoints}
           onClearAll={clearNavigationIntent}
           routeOrigin={manualStartPoint || userLocation}
+          isLandscape={isLandscape}
           // Always pass routedTotalMeters from state, fallback to routeMeta if needed
           routedTotalMeters={
             typeof routeDistanceMeters === 'number' && routeDistanceMeters > 0

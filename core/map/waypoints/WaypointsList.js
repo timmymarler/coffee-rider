@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import { useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import DraggableFlatList from "react-native-draggable-flatlist";
 import useWaypoints from "./useWaypoints";
 
@@ -10,9 +10,10 @@ import useWaypoints from "./useWaypoints";
 // It receives `waypoints` as a prop (which may include destination).
 // It may still call useWaypoints() ONLY for mutations during transition.
 
-export default function WaypointsList({ waypoints, onClearAll, routeOrigin, routedTotalMeters, routedTotalDurationSeconds }) {
+export default function WaypointsList({ waypoints, onClearAll, routeOrigin, routedTotalMeters, routedTotalDurationSeconds, isLandscape = false }) {
   // ⚠️ DO NOT destructure `waypoints` from context here
   const [collapsed, setCollapsed] = useState(true);
+  const styles = createStyles(isLandscape);
   const reorderableWaypoints = waypoints.filter(wp => !wp.isTerminal);
   const destination = waypoints.find(wp => wp.isTerminal);
   const {
@@ -129,68 +130,73 @@ export default function WaypointsList({ waypoints, onClearAll, routeOrigin, rout
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    position: "absolute",
-    top: 60,
-    left: 12,
-    right: 12,
-    backgroundColor: theme.colors.surfaceOverlay || "rgba(15,23,42,0.9)",
-    borderRadius: 14,
-    padding: 10,
-    zIndex: 2500,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  title: {
-    color: theme.colors.accentMid,
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  clear: {
-    color: theme.colors.accentMid,
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  list: {
-    marginTop: 4,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  destinationRow: {
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    marginTop: theme.spacing.sm,
-    paddingTop: theme.spacing.sm,
-  },
-  index: {
-    width: 20,
-    color: theme.colors.accentMid,
-    fontSize: 12,
-  },
-  label: {
-    flex: 1,
-    color: theme.colors.text,
-    fontSize: 14,
-    marginRight: 8,
-  },
-  remove: {
-    color: theme.colors.danger,
-    fontSize: 20,
-    fontWeight: "600",
-  },
-  distance: {
-    color: theme.colors.accentMid,
-    fontSize: 12,
-    marginLeft: 8,
-    minWidth: 48,
-    textAlign: "right",
-  },
-});
+function createStyles(isLandscape) {
+  const screenWidth = Dimensions.get("window").width;
+  
+  return StyleSheet.create({
+    container: {
+      position: "absolute",
+      top: 60,
+      left: 12,
+      ...(isLandscape ? { width: screenWidth * 0.35 } : { right: 12 }),
+      backgroundColor: theme.colors.surfaceOverlay || "rgba(15,23,42,0.9)",
+      borderRadius: 14,
+      padding: 10,
+      zIndex: 2500,
+    },
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 6,
+    },
+    title: {
+      color: theme.colors.accentMid,
+      fontWeight: "600",
+      fontSize: 14,
+    },
+    clear: {
+      color: theme.colors.accentMid,
+      fontSize: 12,
+      marginBottom: 4,
+    },
+    list: {
+      marginTop: 4,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 10,
+    },
+    destinationRow: {
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+      marginTop: theme.spacing.sm,
+      paddingTop: theme.spacing.sm,
+    },
+    index: {
+      width: 20,
+      color: theme.colors.accentMid,
+      fontSize: 12,
+    },
+    label: {
+      flex: 1,
+      color: theme.colors.text,
+      fontSize: 14,
+      marginRight: 8,
+    },
+    remove: {
+      color: theme.colors.danger,
+      fontSize: 20,
+      fontWeight: "600",
+    },
+    distance: {
+      color: theme.colors.accentMid,
+      fontSize: 12,
+      marginLeft: 8,
+      minWidth: 48,
+      textAlign: "right",
+    },
+  });
+}
+
