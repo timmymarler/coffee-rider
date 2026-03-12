@@ -1847,10 +1847,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       if (currentStep?.end?.latitude) {
         const distToCurrentEnd = distanceBetweenMeters(userLocation, currentStep.end);
         
-        // Detect if we've passed the endpoint and are now 10m+ past it
-        const advanceThreshold = 10; // meters past the endpoint
+        // Detect if we've passed the endpoint and are now 5m+ past it
+        const advanceThreshold = 5; // meters past the endpoint
         const hasPassedEndpoint = stepProgressRef.current.lastDistToEnd < distToCurrentEnd; // Distance started increasing
-        const isfarEnoughPast = distToCurrentEnd > advanceThreshold; // Now 10m+ past the endpoint
+        const isfarEnoughPast = distToCurrentEnd > advanceThreshold; // Now 5m+ past the endpoint
         
         if (hasPassedEndpoint && isfarEnoughPast && currentStepIndex + 1 < routeSteps.length) {
           // User passed the endpoint and is now 10m+ past it - advance to next
@@ -1862,7 +1862,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             distanceForDisplay = distanceBetweenMeters(userLocation, nextStep.end);
           }
           
-          console.log('[Navigation] Advancing step (10m after endpoint):', {
+          console.log('[Navigation] Advancing step (5m after endpoint):', {
             from: currentStepIndex,
             to: nextStepIdx,
             distanceFromEndpoint: Math.round(distToCurrentEnd),
