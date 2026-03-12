@@ -780,7 +780,26 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Update ref for next comparison
     previousActiveRideRef.current = activeRide;
   }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType]);
-  
+
+  // Load the shared route polyline when joining a ride
+  // This is separate from the above effect because we need to load the route first,
+  // then the above effect will rebuild if needed
+  useEffect(() => {
+    if (!activeRide?.rideId) {
+      return;
+    }
+
+    // Only load if we don't already have a route loaded
+    // (avoid reloading unnecessarily)
+    if (routeDestination && routeCoords.length > 0) {
+      console.log('[ACTIVE_RIDE_POLYLINE] Route already loaded, skipping reload');
+      return;
+    }
+
+    console.log('[ACTIVE_RIDE_POLYLINE] Loading shared route polyline:', activeRide.rideId);
+    loadSavedRouteById(activeRide.rideId);
+  }, [activeRide?.rideId, routeDestination, routeCoords.length]);
+
   const canSaveRoute = 
     capabilities.canSaveRoutes &&
     routeMeta &&
