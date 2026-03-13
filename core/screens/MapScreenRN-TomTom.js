@@ -2850,6 +2850,30 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // If manual start point was cleared (Follow Me transition), always rebuild
     const manualStartPointCleared = lastManualStartPointRef.current !== null && manualStartPoint === null;
     
+    // GUARD: If user is still on the existing polyline heading the correct direction, don't rebuild
+    // This prevents unnecessary reroutes when GPS accuracy changes slightly but user is still on track
+    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && routeCoords.length > 0) {
+      // Check if user is within 50m of any point on the polyline and heading forward
+      let nearestDistance = Infinity;
+      let nearestIndex = -1;
+      
+      // Find nearest point on polyline to user
+      for (let i = 0; i < routeCoords.length; i++) {
+        const dist = distanceBetween(userLocation, routeCoords[i]);
+        if (dist < nearestDistance) {
+          nearestDistance = dist;
+          nearestIndex = i;
+        }
+      }
+      
+      // If user is within 50m of the polyline and we've already traveled some of it
+      if (nearestDistance < 50 && nearestIndex > 0) {
+        // User is still on the polyline, likely just GPS noise or slight jitter
+        // Don't rebuild - prevents yellow flash and unnecessary route recalculation
+        return;
+      }
+    }
+    
     // Check if user has moved far enough to warrant a route rebuild
     // This prevents excessive API calls from GPS noise (small accuracy variations)
     // But we skip this check if the route type, waypoints, or manual start point have changed
