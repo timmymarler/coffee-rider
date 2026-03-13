@@ -669,7 +669,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     return {
       left: 16,
       right: undefined,
-      width: dimensions.width * 0.30,
+      width: dimensions.width * 0.32,
     };
   };
 
