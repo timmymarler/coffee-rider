@@ -1435,17 +1435,46 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }
 
   async function handleSaveRide(rideName) {
-    if (!pendingRidePolyline || !pendingRidePolyline.length || !user) return;
-    if (savingRide) return; // Prevent double submissions
-    if (!capabilities.canSaveRoutes) {
+    console.log("[handleSaveRide] Called with name:", rideName);
+    console.log("[handleSaveRide] pendingRidePolyline:", pendingRidePolyline ? `array with ${pendingRidePolyline.length} points` : "null");
+    console.log("[handleSaveRide] user:", !!user);
+    console.log("[handleSaveRide] capabilities.canSaveRoutes:", capabilities?.canSaveRoutes);
+    
+    if (!pendingRidePolyline) {
+      console.warn("[handleSaveRide] No pendingRidePolyline");
+      setPostbox({ type: "error", message: "No ride data to save. Please complete a navigation first." });
+      return;
+    }
+    
+    if (!Array.isArray(pendingRidePolyline) || pendingRidePolyline.length === 0) {
+      console.warn("[handleSaveRide] pendingRidePolyline is empty or not an array");
+      setPostbox({ type: "error", message: "Ride polyline is empty. Cannot save." });
+      return;
+    }
+    
+    if (!user) {
+      console.warn("[handleSaveRide] No user");
+      setPostbox({ type: "error", message: "You must be signed in to save rides." });
+      return;
+    }
+    
+    if (savingRide) {
+      console.warn("[handleSaveRide] Already saving");
+      return;
+    }
+    
+    if (!capabilities?.canSaveRoutes) {
       setPostbox({ type: "info", message: "Your account cannot save rides." });
       return;
     }
 
     setSavingRide(true);
     try {
+      console.log("[handleSaveRide] Starting save process...");
+      
       // If viewing a saved ride, save it as a route instead
       if (viewedRideId) {
+        console.log("[handleSaveRide] Saving as route (viewedRideId:", viewedRideId, ")");
         // Convert ride polyline to route format and save as route
         const firstPoint = pendingRidePolyline[0];
         const lastPoint = pendingRidePolyline[pendingRidePolyline.length - 1];
@@ -1478,6 +1507,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         setViewedRideId(null);
       } else {
         // Tracking a ride - save it as a ride
+        console.log("[handleSaveRide] Saving as ride");
         const result = await saveRide({
           user,
           capabilities,
@@ -1494,12 +1524,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
         setPostbox({
           type: "success",
-          message: "Ride saved successfully!",
+          message: `Ride saved successfully! Distance: ${routeDistanceMeters ? (routeDistanceMeters / 1000).toFixed(1) : '?'} km`,
         });
       }
+      
+      // Clear modal
       setShowSaveRideModal(false);
       setSaveRideName("");
       setPendingRidePolyline(null);
+      
     } catch (error) {
       console.error("[handleSaveRide] Error saving ride:", error);
       setPostbox({
