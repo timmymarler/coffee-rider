@@ -729,6 +729,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [mapKey, setMapKey] = useState(0);
   const isLoadingSavedRouteRef = useRef(false);
 
+  // Auto-clear postbox notifications after timeout
+  useEffect(() => {
+    if (!postbox) return;
+    
+    // Error messages stay longer (5 seconds), success/info shorter (3 seconds)
+    const duration = postbox.type === 'error' ? 5000 : 3000;
+    
+    const timeout = setTimeout(() => {
+      setPostbox(null);
+    }, duration);
+    
+    return () => clearTimeout(timeout);
+  }, [postbox]);
+
   const skipNextFollowTickRef = useRef(false);
   const skipNextRegionChangeRef = useRef(false);
   const skipRegionChangeUntilRef = useRef(0);
@@ -1469,6 +1483,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     setSavingRide(true);
+    
+    // Close modal immediately so user sees postbox message
+    setShowSaveRideModal(false);
+    
+    // Show "saving" message while processing
+    setPostbox({
+      type: "info",
+      message: "Saving ride...",
+    });
+    
     try {
       console.log("[handleSaveRide] Starting save process...");
       
@@ -1528,8 +1552,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         });
       }
       
-      // Clear modal
-      setShowSaveRideModal(false);
+      // Clear modal data after successful save
       setSaveRideName("");
       setPendingRidePolyline(null);
       
@@ -4863,18 +4886,36 @@ const styles = StyleSheet.create({
   },
   postbox: {
     position: "absolute",
-    bottom: 70,
+    bottom: 100,
     left: 16,
     right: 16,
-    padding: 12,
-    borderRadius: 10,
+    padding: 16,
+    borderRadius: 12,
     backgroundColor: theme.colors.accentMid, // default blue
-    zIndex: 9999,
-    elevation: 6,
+    zIndex: 10000,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+
+  postboxText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+
+  postboxTitle: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 4,
   },
 
   postboxError: {
-    backgroundColor: theme.colors.danger, // red
+    backgroundColor: "#ef4444", // bright red
   },
 
   postboxWarning: {
@@ -4882,7 +4923,7 @@ const styles = StyleSheet.create({
   },
 
   postboxSuccess: {
-    backgroundColor: theme.colors.success, // green
+    backgroundColor: "#10b981", // bright green
   },
 
   postboxInfo: {
