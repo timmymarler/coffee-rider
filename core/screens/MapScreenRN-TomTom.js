@@ -568,23 +568,14 @@ function normalizeCoord(obj) {
 
 export default function MapScreenRN({ placeId, openPlaceCard }) {
     
-    // Log props when they change
-    if (placeId) {
-      console.log('[MapScreenRN] Received props:', { placeId, openPlaceCard });
-    }
+    // Props received from route params
     
     // Open PlaceCard and zoom to marker if placeId and openPlaceCard are provided
     useEffect(() => {
       // Handle openPlaceCard as both boolean and string (from route params it might be "true")
       const shouldOpenCard = openPlaceCard === true || openPlaceCard === "true";
-      
-      console.log('[MapScreenRN Effect] placeId:', placeId, 'openPlaceCard:', openPlaceCard, 'shouldOpenCard:', shouldOpenCard);
-      
       if (placeId && shouldOpenCard) {
-        console.log('[MapScreenRN] Setting selectedPlaceId:', placeId);
         setSelectedPlaceId(placeId);
-      } else {
-        console.log('[MapScreenRN Effect] Condition not met - placeId:', !!placeId, 'shouldOpenCard:', shouldOpenCard);
       }
     }, [placeId, openPlaceCard]);
 
@@ -598,7 +589,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   loadedPlaceFromRoute;
       
       if (place && place.latitude && place.longitude) {
-        console.log('[MAP] Animating camera to place:', place.name || place.title);
         mapRef.current.animateCamera({
           center: { latitude: place.latitude, longitude: place.longitude },
           zoom: 16
@@ -608,8 +598,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     // Fetch place from Firestore if passed via route params but not found in current lists
     useEffect(() => {
-      console.log('[MAP] Fetch effect running - placeId:', placeId);
-      
       if (!placeId) {
         setLoadedPlaceFromRoute(null);
         return;
@@ -618,7 +606,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Check if place is already loaded in our lists
       const alreadyLoaded = crPlaces.find(p => p.id === placeId) || googlePois.find(p => p.id === placeId);
       if (alreadyLoaded) {
-        console.log('[MAP] Place already in local lists, skipping fetch:', placeId);
         setLoadedPlaceFromRoute(alreadyLoaded); // Store in loadedPlaceFromRoute so selectedPlace memo can find it
         return;
       }
@@ -629,13 +616,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // Place not found locally, fetch from Firestore
       const fetchPlace = async () => {
         try {
-          console.log('[MAP] Fetching place from Firestore:', placeId);
           const placeRef = doc(db, 'places', placeId);
           const placeSnap = await getDoc(placeRef);
 
           if (placeSnap.exists()) {
             const placeData = { id: placeSnap.id, ...placeSnap.data() };
-            console.log('[MAP] Place fetched successfully:', placeData.name || placeData.title, '- lat:', placeData.latitude, 'lng:', placeData.longitude);
             setLoadedPlaceFromRoute(placeData);
           } else {
             console.warn('[MAP] Place not found in Firestore:', placeId);
@@ -1557,23 +1542,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         };
       });
 
-      // 🔄 Log place updates for debugging
-      if (newlyCreatedPlace) {
-        const isNewPlaceInList = places.find(p => p.id === newlyCreatedPlace.id);
-      }
-      
-      if (selectedPlaceId) {
-        const updatedPlace = places.find(p => p.id === selectedPlaceId);
-        if (updatedPlace) {
-          console.log("[MapScreenRN] 🔄 Updated selected place from listener:", {
-            placeId: updatedPlace.id,
-            name: updatedPlace.title,
-            category: updatedPlace.category,
-            amenities: updatedPlace.amenities,
-            suitability: updatedPlace.suitability,
-          });
-        }
-      }
+      // Update crPlaces when crPlaces listener changes
 
       setCrPlaces(places);
     }, (err) => {
@@ -1650,9 +1619,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             };
           });
           setCrPlaces(refreshedPlaces);
-          console.log("[MapScreenRN] ✓ Refreshed crPlaces, total:", refreshedPlaces.length);
-        } else {
-          console.log("[MapScreenRN] ✓ Newly created place found in crPlaces");
         }
       } catch (err) {
         console.error("[MapScreenRN] Error checking new place:", err);
@@ -2472,7 +2438,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         }
       } catch (error) {
         // If ride check fails (permissions, not found, etc.), just try as route
-        console.log('[MAP] Ride check failed, trying as route:', error.message);
       }
       
       // Try as a route (either ride doesn't exist or failed to check)
@@ -2996,17 +2961,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
 
   const selectedPlace = useMemo(() => {
-
     if (!selectedPlaceId) {
-      console.log('[MAP] selectedPlace memo: no selectedPlaceId');
       return null;
     }
 
-    console.log('[MAP] selectedPlace memo computing for selectedPlaceId:', selectedPlaceId, '- loadedPlaceFromRoute:', loadedPlaceFromRoute?.id);
-
     // 0️⃣ Place loaded via route params (e.g., from Calendar)
     if (loadedPlaceFromRoute && loadedPlaceFromRoute.id === selectedPlaceId) {
-      console.log('[MAP] Returning loadedPlaceFromRoute');
       return loadedPlaceFromRoute;
     }
 
@@ -3800,7 +3760,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           onPress={() => {
             // Don't clear selectedPlace if a marker was just pressed
             if (markerPressedRef.current) {
-              console.log("[MAP] Marker press detected, not clearing selectedPlaceId");
               return;
             }
             

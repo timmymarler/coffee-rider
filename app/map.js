@@ -10,11 +10,8 @@ export default function Map() {
   const [mapKey, setMapKey] = useState(0);
   const params = useLocalSearchParams();
 
-  // Log params when they change
   useEffect(() => {
-    if (params.placeId) {
-      console.log('[Map.js] Route params received:', { placeId: params.placeId, openPlaceCard: params.openPlaceCard });
-    }
+    // Route params received via useLocalSearchParams
   }, [params.placeId, params.openPlaceCard]);
 
   useEffect(() => {
