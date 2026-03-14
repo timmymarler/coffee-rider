@@ -130,7 +130,7 @@ export function getRouteStyle(travelMode, theme, isNavigationMode = false) {
       outlineWidth: isNavigationMode ? 12 : 8,
     },
     motorcycle: {
-      mainColor: '#42A5F5',      // Light blue
+      mainColor: '#BBDEFB',      // Very light blue
       outlineColor: '#1565C0',   // Dark blue
       mainWidth: isNavigationMode ? 10 : 6,
       outlineWidth: isNavigationMode ? 12 : 8,
