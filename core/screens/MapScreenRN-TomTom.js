@@ -158,6 +158,7 @@ const AMENITY_ICON_MAP = {
     BEAR_LEFT: { icon: "arrow-top-left-thick", label: "Bear left" },
     BEAR_RIGHT: { icon: "arrow-top-right-thick", label: "Bear right" },
     STRAIGHT: { icon: "arrow-up-bold", label: "Continue straight" },
+    TAKE_EXIT: { icon: "arrow-top-left-thick", label: "Take the exit" },
     ROUNDABOUT_ENTER: { icon: "rotate-right", label: "Enter roundabout" },
     ROUNDABOUT_EXIT: { icon: "rotate-right", label: "Exit roundabout" },
     ROUNDABOUT_ENTER_LEFT: { icon: "rotate-right", label: "Enter roundabout (left)" },
