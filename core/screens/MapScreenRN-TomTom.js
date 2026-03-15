@@ -1544,6 +1544,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             durationSeconds: routeMeta?.durationSeconds,
           },
           completedAt: new Date(),
+          travelMode: userTravelMode,
         });
         
         console.log("[handleSaveRide] Ride saved successfully with ID:", result.id);
@@ -3607,6 +3608,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setViewedRideId(rideId);
       setPendingRidePolyline(decoded);
 
+      // Restore the travel mode used when the ride was recorded
+      if (ride.travelMode) {
+        setUserTravelMode(ride.travelMode);
+      }
+
       // Show save modal for converting to route
       setShowSaveRideModal(true);
     }
@@ -4022,7 +4028,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 );
               })()}
 
-            {/* Traveled route (during Follow Me) - outline layer */}
+            {/* Traveled route (during Follow Me) - outline layer with travel mode colors */}
               {(() => {
                 const shouldRender = true;  // Always render, vary strokeWidth
                 if (followUser && persistentTravelledPath.length > 1) {
@@ -4033,12 +4039,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                     key="traveled-outline"
                     coordinates={persistentTravelledPath}
                     strokeWidth={hidePolylines ? 0 : (followUser && persistentTravelledPath.length > 1 ? (isNavigationMode && followUser ? 9 : 7) : 0)}
-                    strokeColor={theme.colors.accentDark}
+                    strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                     zIndex={1000}
                   />
                 );
               })()}
-              {/* Traveled route (during Follow Me) - always accentMid regardless of vehicle type */}
+              {/* Traveled route (during Follow Me) - uses travel mode color scheme */}
               {(() => {
                 const shouldRender = true;  // Always render, vary strokeWidth
                 if (followUser && persistentTravelledPath.length > 1) {
@@ -4049,7 +4055,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                     key="traveled-route"
                     coordinates={persistentTravelledPath}
                     strokeWidth={hidePolylines ? 0 : (followUser && persistentTravelledPath.length > 1 ? (isNavigationMode && followUser ? 7 : 5) : 0)}
-                    strokeColor={theme.colors.accentMid}
+                    strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                     zIndex={1001}
                   />
                 );

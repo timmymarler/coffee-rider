@@ -8,6 +8,7 @@ export async function saveRide({
   polyline,
   routeMeta,
   completedAt,
+  travelMode,
 }) {
   if (!user) throw new Error("User required to save ride");
   if (!capabilities?.canSaveRoutes) {
@@ -21,6 +22,11 @@ export async function saveRide({
     completedAt: completedAt || serverTimestamp(),
     createdAt: serverTimestamp(),
   };
+
+  // If travel mode is provided, include it (used for color scheme when displaying)
+  if (travelMode !== undefined) {
+    rideData.travelMode = travelMode;
+  }
 
   // If name is provided, include it
   if (name !== undefined) {
