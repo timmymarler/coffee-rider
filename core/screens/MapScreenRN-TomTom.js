@@ -4312,27 +4312,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   <Text style={styles.junctionLabel}>You have</Text>
                   <Text style={styles.junctionLabel}>reached your</Text>
                   <Text style={styles.junctionLabel}>destination</Text>
-                  
-                  {/* Save Ride button */}
-                  <TouchableOpacity
-                    onPress={() => setShowSaveRideModal(true)}
-                    style={{
-                      marginTop: 16,
-                      paddingVertical: 12,
-                      paddingHorizontal: 16,
-                      backgroundColor: theme.colors.primary,
-                      borderRadius: 8,
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Text style={{
-                      color: 'white',
-                      fontSize: 16,
-                      fontWeight: 'bold',
-                    }}>
-                      Save Ride
-                    </Text>
-                  </TouchableOpacity>
                 </View>
               </View>
             );
