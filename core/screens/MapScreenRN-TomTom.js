@@ -2016,15 +2016,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Detect when user reaches destination and capture traveled polyline for saving
   useEffect(() => {
+    // Only check destination reached if we have an actual route destination or waypoints
+    const hasRouteIntent = routeDestination || waypoints.length > 0;
+    if (!hasRouteIntent) return;
+    
     if (!isNavigationMode || !routeSteps || routeSteps.length === 0) return;
     
-    const hasReachedDestination = currentStepIndex >= routeSteps.length - 1;
+    // Only consider arrival if we have actual steps and have reached the final one
+    const hasReachedDestination = routeSteps.length >= 2 && currentStepIndex >= routeSteps.length - 1;
     
     if (hasReachedDestination && !pendingRidePolyline && traveledPolyline && traveledPolyline.length > 1) {
       console.log('[DestinationReached] Capturing traveled polyline for save - length:', traveledPolyline.length);
       setPendingRidePolyline(traveledPolyline);
     }
-  }, [currentStepIndex, routeSteps, isNavigationMode, traveledPolyline, pendingRidePolyline]);
+  }, [currentStepIndex, routeSteps, isNavigationMode, traveledPolyline, pendingRidePolyline, routeDestination, waypoints.length]);
 
   // Auto-reroute when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
