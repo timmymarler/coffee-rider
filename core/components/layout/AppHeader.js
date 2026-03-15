@@ -23,7 +23,7 @@ export default function AppHeader() {
   const title = getTitleFromPath(pathname);
 
   // Hide title for these screens to save space
-  const hideTitle = ["Map", "Saved Routes", "Groups", "Calendar", "Profile", "Help"].includes(title);
+  const hideTitle = ["Map", "Saved Routes", "Groups", "Calendar", "Profile", "Help"].includes(title) || pathname.startsWith('/subscriptions');
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

@@ -1024,6 +1024,26 @@ export default function ProfileScreen() {
       </CRCard>
       </View>
 
+      {/* Subscription Section */}
+      <View style={styles.cardWrap}>
+      <CRCard>
+        <CRButton
+          title="Pro Subscription"
+          variant="accentMid"
+          onPress={() => router.push('/subscriptions')}
+          style={{ width: '100%' }}
+        />
+        <Text style={{ 
+          color: theme.colors.textMuted, 
+          fontSize: 12, 
+          marginTop: theme.spacing.sm,
+          textAlign: 'center'
+        }}>
+          Manage your subscription and upgrade to Pro
+        </Text>
+      </CRCard>
+      </View>
+
       {/* Delete Account Section */}
       <View style={styles.cardWrap}>
       <CRCard>

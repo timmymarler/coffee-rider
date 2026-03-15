@@ -697,6 +697,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const hasRoute = routeCoords.length > 0;
   const [routeMeta, setRouteMeta] = useState(null);
   const [followUser, setFollowUser] = useState(false);
+  const [persistentTravelledPath, setPersistentTravelledPath] = useState([]); // Separate accumulated travelled path for Follow Me
   const { setMapActions, setActiveRide } = useContext(TabBarContext);
   const [showFilters, setShowFilters] = useState(false);
   const [searchInput, setSearchInput] = useState("");   // what user is typing
@@ -2156,6 +2157,54 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [userLocation, followUser, routeCoords, routeDestination, waypoints, userTravelMode, userRouteType]);
 
+  // Accumulate persistent travelled path during Follow Me
+  // This path persists across reroutes and is only updated on real user movement
+  const lastTravelledWaypointRef = useRef(null);
+  useEffect(() => {
+    if (!followUser || !userLocation) {
+      return;
+    }
+
+    // Check if we've moved enough to add a new waypoint
+    const lastWaypoint = lastTravelledWaypointRef.current;
+    const hasMovedEnough = !lastWaypoint || 
+      distanceBetweenMeters(userLocation, lastWaypoint) >= MIN_LOCATION_MOVE_DISTANCE;
+
+    if (hasMovedEnough) {
+      setPersistentTravelledPath(prev => {
+        // Avoid duplicate consecutive points
+        if (prev.length > 0 && 
+            prev[prev.length - 1].latitude === userLocation.latitude &&
+            prev[prev.length - 1].longitude === userLocation.longitude) {
+          return prev;
+        }
+        return [...prev, userLocation];
+      });
+      lastTravelledWaypointRef.current = userLocation;
+    }
+  }, [followUser, userLocation]);
+
+  // When Follow Me turns off, use persistent path for save (not recalculated one)
+  // Clear persistent path when Follow Me re-enables or ride is saved
+  useEffect(() => {
+    if (!followUser && persistentTravelledPath.length > 0) {
+      // Follow Me just turned off, save the accumulated path
+      if (persistentTravelledPath.length > 1) {
+        setPendingRidePolyline(persistentTravelledPath);
+        setShowSaveRideModal(true);
+        setSaveRideName("");
+      }
+    }
+  }, [followUser, persistentTravelledPath]);
+
+  // Clear persistent travelled path when Follow Me starts (fresh start)
+  useEffect(() => {
+    if (followUser) {
+      setPersistentTravelledPath([]);
+      lastTravelledWaypointRef.current = null;
+    }
+  }, [followUser]);
+
   // Compute traveled and remaining polyline portions for Follow Me mode
   const { traveledPolyline, remainingPolyline } = useMemo(() => {
     if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation) {
@@ -2234,24 +2283,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Detect when Follow Me is turned off with a tracked ride
   useEffect(() => {
-    // Only show save ride if:
-    // 1. Follow Me was previously on but is now off
-    // 2. There's a traveled polyline (accentDark line)
-    // 3. The traveled polyline has meaningful distance (more than just starting point)
-    
-    // Check if we just turned OFF Follow Me
-    if (previousFollowUserRef.current === true && followUser === false) {
-      if (traveledPolyline && traveledPolyline.length > 1) {
-        // Save the traveled polyline and show the modal
-        setPendingRidePolyline(traveledPolyline);
-        setShowSaveRideModal(true);
-        setSaveRideName("");
-      }
-    }
-    
-    // Update the ref for next time
+    // Update the ref for tracking state changes
     previousFollowUserRef.current = followUser;
-  }, [followUser, traveledPolyline]);
+  }, [followUser]);
 
   // Keep screen awake during Follow Me or active ride
   useEffect(() => {
@@ -3985,14 +4019,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             {/* Traveled route (during Follow Me) - outline layer */}
               {(() => {
                 const shouldRender = true;  // Always render, vary strokeWidth
-                if (followUser && traveledPolyline.length > 1) {
+                if (followUser && persistentTravelledPath.length > 1) {
                   console.log('[POLYLINE MOUNT] traveled-outline- 0');
                 }
                 return (
                   <Polyline
                     key="traveled-outline"
-                    coordinates={traveledPolyline}
-                    strokeWidth={hidePolylines ? 0 : (followUser && traveledPolyline.length > 1 ? (isNavigationMode && followUser ? 9 : 7) : 0)}
+                    coordinates={persistentTravelledPath}
+                    strokeWidth={hidePolylines ? 0 : (followUser && persistentTravelledPath.length > 1 ? (isNavigationMode && followUser ? 9 : 7) : 0)}
                     strokeColor={theme.colors.accentDark}
                     zIndex={1000}
                   />
@@ -4001,14 +4035,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               {/* Traveled route (during Follow Me) - always accentMid regardless of vehicle type */}
               {(() => {
                 const shouldRender = true;  // Always render, vary strokeWidth
-                if (followUser && traveledPolyline.length > 1) {
+                if (followUser && persistentTravelledPath.length > 1) {
                   console.log('[POLYLINE MOUNT] traveled- 0');
                 }
                 return (
                   <Polyline
                     key="traveled-route"
-                    coordinates={traveledPolyline}
-                    strokeWidth={hidePolylines ? 0 : (followUser && traveledPolyline.length > 1 ? (isNavigationMode && followUser ? 7 : 5) : 0)}
+                    coordinates={persistentTravelledPath}
+                    strokeWidth={hidePolylines ? 0 : (followUser && persistentTravelledPath.length > 1 ? (isNavigationMode && followUser ? 7 : 5) : 0)}
                     strokeColor={theme.colors.accentMid}
                     zIndex={1001}
                   />

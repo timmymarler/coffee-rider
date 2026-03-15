@@ -4,6 +4,7 @@ import AuthProvider, { AuthContext } from "@context/AuthContext";
 import { RoutingPreferencesProvider } from "@context/RoutingPreferencesContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import { ThemeProvider } from "@context/ThemeContext";
+import { SubscriptionProvider } from "@core/context/SubscriptionContext";
 import AppHeader from "@core/components/layout/AppHeader";
 import SplashScreen from "@core/components/ui/SplashScreen";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
@@ -286,14 +287,16 @@ function ThemeAwareLayoutContent() {
 
   return (
     <ThemeProvider userProfile={profile} userId={user?.uid}>
-      <RoutingPreferencesProvider brand="rider">
-        <TabBarProvider>
-          <WaypointsProvider>
-            <AppHeader />
-            <LayoutContent />
-          </WaypointsProvider>
-        </TabBarProvider>
-      </RoutingPreferencesProvider>
+      <SubscriptionProvider userId={user?.uid}>
+        <RoutingPreferencesProvider brand="rider">
+          <TabBarProvider>
+            <WaypointsProvider>
+              <AppHeader />
+              <LayoutContent />
+            </WaypointsProvider>
+          </TabBarProvider>
+        </RoutingPreferencesProvider>
+      </SubscriptionProvider>
     </ThemeProvider>
   );
 }
