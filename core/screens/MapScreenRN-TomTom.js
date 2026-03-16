@@ -3324,7 +3324,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     // Simplify polyline for rendering
     const decoded = result.polyline;
-    const simplified = simplifyPolyline(decoded, 0.00005); // ~5m tolerance
+    const simplified = simplifyPolyline(decoded, 0.00001); // ~1m tolerance for detailed road tracing
     console.log("[mapRoute] Decoded", decoded.length, "points, simplified to", simplified.length, "points");
     
     // DEBUG: Log the start and end points of the polyline
