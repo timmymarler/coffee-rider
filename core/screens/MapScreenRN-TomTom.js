@@ -3608,10 +3608,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setViewedRideId(rideId);
       setPendingRidePolyline(decoded);
 
-      // Restore the travel mode used when the ride was recorded
-      if (ride.travelMode) {
-        setUserTravelMode(ride.travelMode);
-      }
+      // Display saved ride with current travel mode selected by user
+      // (not the mode it was recorded with)
 
       // Show save modal for converting to route
       setShowSaveRideModal(true);
@@ -4028,7 +4026,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                 );
               })()}
 
-            {/* Traveled route (during Follow Me) - outline layer with travel mode colors */}
+            {/* Traveled route (during Follow Me) - outline layer */}
               {(() => {
                 const shouldRender = true;  // Always render, vary strokeWidth
                 if (followUser && persistentTravelledPath.length > 1) {
@@ -4039,12 +4037,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                     key="traveled-outline"
                     coordinates={persistentTravelledPath}
                     strokeWidth={hidePolylines ? 0 : (followUser && persistentTravelledPath.length > 1 ? (isNavigationMode && followUser ? 9 : 7) : 0)}
-                    strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
+                    strokeColor={theme.colors.accentDark}
                     zIndex={1000}
                   />
                 );
               })()}
-              {/* Traveled route (during Follow Me) - uses travel mode color scheme */}
+              {/* Traveled route (during Follow Me) - always accentMid */}
               {(() => {
                 const shouldRender = true;  // Always render, vary strokeWidth
                 if (followUser && persistentTravelledPath.length > 1) {
@@ -4055,7 +4053,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                     key="traveled-route"
                     coordinates={persistentTravelledPath}
                     strokeWidth={hidePolylines ? 0 : (followUser && persistentTravelledPath.length > 1 ? (isNavigationMode && followUser ? 7 : 5) : 0)}
-                    strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
+                    strokeColor={theme.colors.accentMid}
                     zIndex={1001}
                   />
                 );
