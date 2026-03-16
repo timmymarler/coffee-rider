@@ -4312,7 +4312,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           }
 
           // Check if we've reached the destination (at the last step)
-          const hasReachedDestination = currentStepIndex >= routeSteps.length - 1;
+          // Only show if we have an actual route and have reached final step with proximity check
+          const hasRouteIntent = routeDestination || waypoints.length > 0;
+          const hasValidRouteSteps = routeSteps && routeSteps.length >= 2;
+          const isAtFinalStep = currentStepIndex >= routeSteps.length - 1;
+          
+          // Additional proximity check: only show arrival if reasonably close to destination (within 50m)
+          let isCloseToDestination = true;
+          if (routeDestination && routeCoords.length > 0 && userLocation) {
+            const lastCoord = routeCoords[routeCoords.length - 1];
+            const distToDestinationMeters = distanceBetweenMeters(userLocation, lastCoord);
+            isCloseToDestination = distToDestinationMeters <= 50; // Only show within 50m of actual destination
+          }
+          
+          const hasReachedDestination = hasRouteIntent && hasValidRouteSteps && isAtFinalStep && isCloseToDestination;
           
           if (hasReachedDestination) {
             // Show destination reached message with Save Ride button
