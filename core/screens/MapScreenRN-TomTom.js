@@ -1534,11 +1534,25 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       } else {
         // Tracking a ride - save it as a ride
         console.log("[handleSaveRide] Saving as ride");
+        
+        // Extract origin and destination from polyline for marker display
+        const rideOrigin = pendingRidePolyline[0];
+        const rideDestination = pendingRidePolyline[pendingRidePolyline.length - 1];
+        
         const result = await saveRide({
           user,
           capabilities,
           name: rideName || undefined,
           polyline: pendingRidePolyline,
+          origin: {
+            latitude: rideOrigin.latitude,
+            longitude: rideOrigin.longitude,
+          },
+          destination: {
+            latitude: rideDestination.latitude,
+            longitude: rideDestination.longitude,
+            title: rideName || "Ride End",
+          },
           routeMeta: {
             distanceMeters: routeDistanceMeters,
             durationSeconds: routeMeta?.durationSeconds,
@@ -2629,7 +2643,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setRouteDestination(null);
       setIsHomeDestination(false);
       setRouteDistanceMeters(null);
-      setManualStartPoint(null); 
+      setManualStartPoint(null);
+      setPersistentTravelledPath([]);  // Clear tracked ride polyline
+      lastTravelledWaypointRef.current = null;  // Reset last waypoint tracker
       
       // Store timeout ID so we can cancel it if needed
       const timeoutId = setTimeout(() => {
@@ -3596,12 +3612,26 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       pendingFitRef.current = decoded;
       attemptRouteFit();
 
+      // Use stored destination if available, otherwise fallback to last polyline point
+      const destPoint = ride.destination || {
+        latitude: decoded[decoded.length - 1]?.latitude || 0,
+        longitude: decoded[decoded.length - 1]?.longitude || 0,
+      };
+
       // Set title to show this is a completed ride
       setRouteDestination({
         title: ride.name || "Completed Ride",
-        latitude: decoded[decoded.length - 1]?.latitude || 0,
-        longitude: decoded[decoded.length - 1]?.longitude || 0,
+        latitude: destPoint.latitude,
+        longitude: destPoint.longitude,
       });
+
+      // If ride has stored origin, set manual start point for proper marker display
+      if (ride.origin) {
+        setManualStartPoint({
+          latitude: ride.origin.latitude,
+          longitude: ride.origin.longitude,
+        });
+      }
 
       setRoutingActive(true);
 

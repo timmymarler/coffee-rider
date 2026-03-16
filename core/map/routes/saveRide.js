@@ -6,6 +6,8 @@ export async function saveRide({
   capabilities,
   name,
   polyline,
+  origin,
+  destination,
   routeMeta,
   completedAt,
   travelMode,
@@ -18,6 +20,9 @@ export async function saveRide({
   const rideData = {
     // Use routePolyline for unified structure with routes
     routePolyline: polyline,
+    // Include origin and destination for marker display when viewing
+    origin: origin || null,
+    destination: destination || null,
     distanceMeters: routeMeta?.distanceMeters ?? null,
     durationSeconds: routeMeta?.durationSeconds ?? null,
     completedAt: completedAt || serverTimestamp(),
