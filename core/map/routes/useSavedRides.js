@@ -16,39 +16,74 @@ export function useSavedRides() {
       return;
     }
 
-    // Query user's own rides from routes collection where type === "ride"
-    const userRidesQuery = query(
+    // Query 1: Old rides from legacy "rides" collection (for backward compatibility)
+    const oldRidesQuery = query(
+      collection(db, "rides"),
+      where("ownerId", "==", user.uid)
+    );
+
+    // Query 2: New rides from "routes" collection where type === "ride"
+    const newRidesQuery = query(
       collection(db, "routes"),
       where("ownerId", "==", user.uid),
       where("type", "==", "ride")
     );
 
     const ridesMap = new Map();
-    let userRidesLoaded = false;
+    let oldRidesLoaded = false;
+    let newRidesLoaded = false;
 
     const updateRides = () => {
-      if (userRidesLoaded) {
+      if (oldRidesLoaded && newRidesLoaded) {
         setRides(Array.from(ridesMap.values()));
         setLoading(false);
       }
     };
 
-    const unsubUser = onSnapshot(userRidesQuery, (snap) => {
-      incMetric("useSavedRides:userSnapshot");
-      incMetric("useSavedRides:userDocs", snap.docs.length, 25);
+    // Subscribe to old rides
+    const unsubOld = onSnapshot(oldRidesQuery, (snap) => {
+      incMetric("useSavedRides:oldSnapshot");
+      incMetric("useSavedRides:oldDocs", snap.docs.length, 25);
       snap.docs.forEach((doc) => {
-        ridesMap.set(doc.id, { id: doc.id, ...doc.data() });
+        // Store with "old_" prefix to avoid conflicts with new rides
+        const rideId = doc.id;
+        const rideData = doc.data();
+        // Normalize old rides to use routePolyline if it has ridePolyline
+        if (rideData.ridePolyline && !rideData.routePolyline) {
+          rideData.routePolyline = rideData.ridePolyline;
+        }
+        ridesMap.set(rideId, { id: rideId, ...rideData, _source: "old" });
       });
-      userRidesLoaded = true;
+      oldRidesLoaded = true;
       updateRides();
     }, (err) => {
-      console.error("Error listening to user rides:", err);
-      userRidesLoaded = true;
+      if (err.code !== 'permission-denied') {
+        console.error("Error listening to old rides:", err);
+      }
+      oldRidesLoaded = true;
+      updateRides();
+    });
+
+    // Subscribe to new rides
+    const unsubNew = onSnapshot(newRidesQuery, (snap) => {
+      incMetric("useSavedRides:newSnapshot");
+      incMetric("useSavedRides:newDocs", snap.docs.length, 25);
+      snap.docs.forEach((doc) => {
+        ridesMap.set(doc.id, { id: doc.id, ...doc.data(), _source: "new" });
+      });
+      newRidesLoaded = true;
+      updateRides();
+    }, (err) => {
+      if (err.code !== 'permission-denied') {
+        console.error("Error listening to new rides:", err);
+      }
+      newRidesLoaded = true;
       updateRides();
     });
 
     return () => {
-      unsubUser();
+      unsubOld();
+      unsubNew();
     };
   }, [user]);
 
