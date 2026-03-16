@@ -4317,12 +4317,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           const hasValidRouteSteps = routeSteps && routeSteps.length >= 2;
           const isAtFinalStep = currentStepIndex >= routeSteps.length - 1;
           
-          // Additional proximity check: only show arrival if reasonably close to destination (within 50m)
+          // Additional proximity check: only show arrival if reasonably close to destination (within 10m)
           let isCloseToDestination = true;
           if (routeDestination && routeCoords.length > 0 && userLocation) {
             const lastCoord = routeCoords[routeCoords.length - 1];
             const distToDestinationMeters = distanceBetweenMeters(userLocation, lastCoord);
-            isCloseToDestination = distToDestinationMeters <= 50; // Only show within 50m of actual destination
+            isCloseToDestination = distToDestinationMeters <= 10; // Only show within 10m of actual destination
           }
           
           const hasReachedDestination = hasRouteIntent && hasValidRouteSteps && isAtFinalStep && isCloseToDestination;
