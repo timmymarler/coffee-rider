@@ -520,31 +520,8 @@ export default function ProfileScreen() {
   }
 
   async function handleUpgrade() {
-    if (!user) return;
-
-    try {
-      const userRef = doc(db, "users", user.uid);
-
-      // Upgrade role
-      await updateDoc(userRef, {
-        role: "pro",
-        upgradedAt: Date.now(),
-      });
-
-      // Log upgrade request
-      await addDoc(collection(db, "upgradeRequests"), {
-        uid: user.uid,
-        email: user.email,
-        displayName: displayName || "",
-        requestedAt: Date.now(),
-        status: "pending",
-      });
-
-      await refreshProfile();
-
-    } catch (err) {
-      console.error("Upgrade failed:", err);
-    }
+    // Navigate to subscriptions screen to let user choose their plan
+    router.push("/subscriptions");
   }
 
   async function handleRenewSponsorship() {
