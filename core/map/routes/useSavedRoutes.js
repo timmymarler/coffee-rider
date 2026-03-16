@@ -23,17 +23,19 @@ export function useSavedRoutes(includePublic = false, includeDeleted = false) {
       return;
     }
 
-    // Query 1: User's own routes
+    // Query 1: User's own routes (excluding rides which have type: "ride")
     const userRoutesQuery = query(
       collection(db, "routes"),
-      where("createdBy", "==", user.uid)
+      where("createdBy", "==", user.uid),
+      where("type", "!=", "ride")
     );
 
-    // Query 2: Public routes from all users (optional)
+    // Query 2: Public routes from all users (optional, also excluding rides)
     const publicRoutesQuery = includePublic
       ? query(
           collection(db, "routes"),
-          where("visibility", "==", "public")
+          where("visibility", "==", "public"),
+          where("type", "!=", "ride")
         )
       : null;
 

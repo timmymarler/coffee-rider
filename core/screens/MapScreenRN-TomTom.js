@@ -3588,8 +3588,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     clearRoute();
     clearWaypoints();
 
-    if (ride.ridePolyline && Array.isArray(ride.ridePolyline)) {
-      const decoded = ride.ridePolyline;
+    // Check for routePolyline (unified structure - both routes and rides use this)
+    if (ride.routePolyline && Array.isArray(ride.routePolyline)) {
+      const decoded = ride.routePolyline;
       
       // Set the polyline so it's visible on map
       pendingFitRef.current = decoded;

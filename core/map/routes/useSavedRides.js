@@ -16,10 +16,11 @@ export function useSavedRides() {
       return;
     }
 
-    // Query user's own rides - use ownerId which matches Firestore security rules
+    // Query user's own rides from routes collection where type === "ride"
     const userRidesQuery = query(
-      collection(db, "rides"),
-      where("ownerId", "==", user.uid)
+      collection(db, "routes"),
+      where("ownerId", "==", user.uid),
+      where("type", "==", "ride")
     );
 
     const ridesMap = new Map();

@@ -16,28 +16,30 @@ export async function saveRide({
   }
 
   const rideData = {
-    ridePolyline: polyline,
+    // Use routePolyline for unified structure with routes
+    routePolyline: polyline,
     distanceMeters: routeMeta?.distanceMeters ?? null,
     durationSeconds: routeMeta?.durationSeconds ?? null,
     completedAt: completedAt || serverTimestamp(),
     createdAt: serverTimestamp(),
+    // Type identifier: 'ride' for tracked rides, 'route' for planned routes
+    type: "ride",
+    // Travel mode stored for metadata/analytics
+    travelMode: travelMode || null,
   };
-
-  // If travel mode is provided, include it (used for color scheme when displaying)
-  if (travelMode !== undefined) {
-    rideData.travelMode = travelMode;
-  }
 
   // If name is provided, include it
   if (name !== undefined) {
     rideData.name = name || null;
   }
 
-  // Create new ride
-  return addDoc(collection(db, "rides"), {
+  // Save to 'routes' collection (unified storage for routes and rides)
+  return addDoc(collection(db, "routes"), {
     ownerId: user.uid,
     name: name || null,
     createdBy: user.uid,
+    visibility: "private", // Rides are always private by default
+    deleted: false,
     ...rideData,
   });
 }

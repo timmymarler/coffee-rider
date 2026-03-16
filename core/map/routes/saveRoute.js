@@ -29,6 +29,8 @@ export async function saveRoute({
     distanceMeters: routeMeta?.distanceMeters ?? null,
     durationSeconds: routeMeta?.durationSeconds ?? null,
     updatedAt: serverTimestamp(),
+    // Type identifier: 'route' for planned routes, 'ride' for tracked rides
+    type: "route",
     // Debug fields for TomTom
     tomtomSteps: tomtomSteps ?? null,
     tomtomGuidance: tomtomGuidance ?? null,
