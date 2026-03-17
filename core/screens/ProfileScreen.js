@@ -9,11 +9,13 @@ import { CRLabel } from "@components-ui/CRLabel";
 import { CRScreen } from "@components-ui/CRScreen";
 import { AuthContext } from "@context/AuthContext";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
+import { SubscriptionContext } from "@context/SubscriptionContext";
 import { useThemeControls } from "@context/ThemeContext";
 import { deleteUser } from "@core/auth/deleteUser";
 import { RIDER_AMENITIES } from "@core/config/amenities/rider";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
 import { RIDER_SUITABILITY } from "@core/config/suitability/rider";
+import { cancelSubscription } from "@core/payments/stripeService";
 import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";
@@ -35,6 +37,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile, loading, logout, refreshProfile, isGuest, exitGuestMode } = useContext(AuthContext);
   const { theme: userTheme, setTheme: setUserTheme } = useContext(RoutingPreferencesContext);
+  const { subscription } = useContext(SubscriptionContext);
   const [showRegisterScreen, setShowRegisterScreen] = useState(false);
   const { theme: dynamicTheme } = useThemeControls();
   // Use dynamic theme for all rendering (colors, spacing) while keeping static import for StyleSheet
@@ -72,6 +75,10 @@ export default function ProfileScreen() {
   // Delete account
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Unsubscribe
+  const [unsubscribeConfirmVisible, setUnsubscribeConfirmVisible] = useState(false);
+  const [unsubscribing, setUnsubscribing] = useState(false);
 
   // Track changes for Save button
   const [initialValues, setInitialValues] = useState({});
@@ -520,31 +527,8 @@ export default function ProfileScreen() {
   }
 
   async function handleUpgrade() {
-    if (!user) return;
-
-    try {
-      const userRef = doc(db, "users", user.uid);
-
-      // Upgrade role
-      await updateDoc(userRef, {
-        role: "pro",
-        upgradedAt: Date.now(),
-      });
-
-      // Log upgrade request
-      await addDoc(collection(db, "upgradeRequests"), {
-        uid: user.uid,
-        email: user.email,
-        displayName: displayName || "",
-        requestedAt: Date.now(),
-        status: "pending",
-      });
-
-      await refreshProfile();
-
-    } catch (err) {
-      console.error("Upgrade failed:", err);
-    }
+    // Navigate to subscriptions screen to let user choose their plan
+    router.push("/subscriptions");
   }
 
   async function handleRenewSponsorship() {
@@ -578,6 +562,30 @@ export default function ProfileScreen() {
       Alert.alert("Error", "Failed to renew sponsorship");
     } finally {
       setRenewingSponsorship(false);
+    }
+  }
+
+  async function handleUnsubscribe() {
+    if (!user || !subscription) return;
+
+    setUnsubscribing(true);
+    try {
+      await cancelSubscription({
+        userId: user.uid,
+        stripeSubscriptionId: subscription.stripeSubscriptionId || null, // Pass null for trials (no Stripe ID)
+      });
+
+      // Refresh profile to reflect cancelled subscription
+      await refreshProfile();
+      
+      Alert.alert("Unsubscribed", "Your subscription has been cancelled.");
+      setUnsubscribeConfirmVisible(false);
+      setUnsubscribing(false);
+    } catch (error) {
+      console.error("[ProfileScreen] Unsubscribe error:", error);
+      Alert.alert("Unsubscribe Failed", error.message || "Failed to cancel subscription");
+      setUnsubscribing(false);
+      setUnsubscribeConfirmVisible(false);
     }
   }
 
@@ -1024,13 +1032,14 @@ export default function ProfileScreen() {
       </CRCard>
       </View>
 
-      {/* Subscription Section */}
+      {/* Unsubscribe Section - Only show if user has active subscription */}
+      {subscription && profile?.role === 'pro' && (
       <View style={styles.cardWrap}>
       <CRCard>
         <CRButton
-          title="Pro Subscription"
+          title="Unsubscribe"
           variant="accentMid"
-          onPress={() => router.push('/subscriptions')}
+          onPress={() => setUnsubscribeConfirmVisible(true)}
           style={{ width: '100%' }}
         />
         <Text style={{ 
@@ -1039,10 +1048,11 @@ export default function ProfileScreen() {
           marginTop: theme.spacing.sm,
           textAlign: 'center'
         }}>
-          Manage your subscription and upgrade to Pro
+          Cancel your Pro subscription
         </Text>
       </CRCard>
       </View>
+      )}
 
       {/* Delete Account Section */}
       <View style={styles.cardWrap}>
@@ -1118,6 +1128,67 @@ export default function ProfileScreen() {
                 variant="accentMid"
                 disabled={deleting}
                 onPress={() => setDeleteConfirmVisible(false)}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Unsubscribe Confirmation Modal */}
+      {unsubscribeConfirmVisible && (
+        <View style={{ 
+          position: 'absolute', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+        }}>
+          <View style={{
+            backgroundColor: theme.colors.background,
+            borderRadius: 12,
+            paddingHorizontal: theme.spacing.lg,
+            paddingVertical: theme.spacing.lg,
+            marginHorizontal: 20,
+            maxWidth: 400,
+          }}>
+            <Text style={{ 
+              fontSize: 18, 
+              fontWeight: '700', 
+              color: theme.colors.text,
+              marginBottom: theme.spacing.md,
+              textAlign: 'center'
+            }}>
+              Cancel Subscription?
+            </Text>
+
+            <Text style={{ 
+              fontSize: 14, 
+              color: theme.colors.textMuted,
+              marginBottom: theme.spacing.md,
+              lineHeight: 20,
+            }}>
+              Your subscription will be cancelled. You'll retain access to Pro features until {subscription?.renewalDate ? new Date(subscription.renewalDate).toLocaleDateString() : 'the renewal date'}.
+            </Text>
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <CRButton
+                title={unsubscribing ? "Cancelling…" : "Cancel Subscription"}
+                variant="accentMid"
+                loading={unsubscribing}
+                disabled={unsubscribing}
+                onPress={handleUnsubscribe}
+                style={{ flex: 1 }}
+              />
+              <CRButton
+                title="Keep It"
+                variant="primary"
+                disabled={unsubscribing}
+                onPress={() => setUnsubscribeConfirmVisible(false)}
                 style={{ flex: 1 }}
               />
             </View>

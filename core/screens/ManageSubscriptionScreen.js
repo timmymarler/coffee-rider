@@ -1,19 +1,19 @@
-import React, { useContext, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
 import { cancelSubscription } from '@core/payments/stripeService';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useContext, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+} from 'react-native';
 
 export default function ManageSubscriptionScreen() {
   const router = useRouter();

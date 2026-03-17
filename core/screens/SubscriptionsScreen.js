@@ -1,23 +1,23 @@
-import React, { useState, useContext } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
 import { SUBSCRIPTION_PLANS, startFreeTrial } from '@core/payments/stripeService';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useContext, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+} from 'react-native';
 
 export default function SubscriptionsScreen() {
   const router = useRouter();
-  const { user } = useContext(AuthContext);
+  const { user, refreshProfile } = useContext(AuthContext);
   const { subscription, isSubscribed, isInTrial, getTrialDaysRemaining, loading } = useContext(SubscriptionContext);
   const theme = useTheme();
   const [selectedPlan, setSelectedPlan] = useState(null);
@@ -32,7 +32,13 @@ export default function SubscriptionsScreen() {
     try {
       setProcessing(true);
       await startFreeTrial({ userId: user.uid, email: user.email });
-      Alert.alert('Success!', 'You now have 30 days of Pro access');
+      
+      // Refresh user profile to reflect new 'pro' role
+      await refreshProfile();
+      
+      Alert.alert('Success!', 'You now have 7 days of Pro access', [
+        { text: 'OK', onPress: () => router.push('/map') }
+      ]);
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to start trial');
     } finally {
@@ -108,13 +114,11 @@ export default function SubscriptionsScreen() {
               {trialDaysLeft} days remaining
             </Text>
           </View>
-          <Pressable onPress={() => router.push('/subscriptions/manage')}>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={24}
-              color={theme.colors.text}
-            />
-          </Pressable>
+          <MaterialCommunityIcons
+            name="check-circle"
+            size={24}
+            color={theme.colors.text}
+          />
         </View>
       )}
 
@@ -133,13 +137,11 @@ export default function SubscriptionsScreen() {
               Renews {subscription?.renewalDate}
             </Text>
           </View>
-          <Pressable onPress={() => router.push('/subscriptions/manage')}>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={24}
-              color={theme.colors.text}
-            />
-          </Pressable>
+          <MaterialCommunityIcons
+            name="check-circle"
+            size={24}
+            color={theme.colors.text}
+          />
         </View>
       )}
 
