@@ -1,6 +1,6 @@
 // core/payments/stripeService.js
 import { db } from '@config/firebase';
-import { addDoc, collection, doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 
 /**
  * Stripe subscription products
@@ -74,6 +74,18 @@ export async function startFreeTrial({ userId, email }) {
   }
 
   try {
+    // Check if user has already had a trial or been subscribed before
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      // If user has trialStartedAt or subscriptionStatus that's not null/empty, they've already used a trial
+      if (userData.trialStartedAt || (userData.subscriptionStatus && userData.subscriptionStatus !== 'free')) {
+        throw new Error('You have already used a free trial. Please subscribe to continue using Pro features.');
+      }
+    }
+
     const trialStartDate = new Date();
     const trialEndDate = new Date();
     trialEndDate.setDate(trialEndDate.getDate() + 7); // 7-day free trial
@@ -84,18 +96,29 @@ export async function startFreeTrial({ userId, email }) {
         status: 'trial',
         plan: 'free-trial',
         trialStartsAt: serverTimestamp(),
-        trialEndsAt: trialEndDate,
+        trialEndsAt: trialEndDate.getTime(), // Store as milliseconds timestamp (numeric)
         email,
         createdAt: serverTimestamp(),
       }
     );
+
+    // Update user profile with trial info
+    await updateDoc(doc(db, 'users', userId), {
+      role: 'pro',
+      subscriptionStatus: 'trial',
+      subscriptionExpiresAt: trialEndDate.getTime(), // Store as milliseconds
+      trialStartedAt: serverTimestamp(),
+    });
 
     return {
       status: 'trial',
       trialEndsAt: trialEndDate,
     };
   } catch (err) {
-    console.error('[Stripe] Error starting trial:', err);
+    // Only log as error if it's an unexpected error (not a validation message)
+    if (!err.message.includes('already used a free trial')) {
+      console.error('[Stripe] Error starting trial:', err);
+    }
     throw err;
   }
 }
@@ -122,7 +145,7 @@ export async function activateSubscription({
       status: 'active',
       plan: plan.id,
       stripeSubscriptionId,
-      renewalDate,
+      renewalDate: renewalDate.getTime(), // Store as milliseconds timestamp
       email,
       createdAt: serverTimestamp(),
       lastRenewal: serverTimestamp(),
@@ -133,7 +156,7 @@ export async function activateSubscription({
     if (!isFromTrial && plan.id === 'monthly') {
       const trialEndsAt = new Date();
       trialEndsAt.setDate(trialEndsAt.getDate() + 30); // 30-day free trial for new monthly subscribers
-      subscriptionData.trialEndsAt = trialEndsAt;
+      subscriptionData.trialEndsAt = trialEndsAt.getTime(); // Store as milliseconds
     }
     
     // Calculate renewal date based on plan
@@ -147,6 +170,14 @@ export async function activateSubscription({
       doc(db, 'users', userId, 'subscription', 'current'),
       subscriptionData
     );
+
+    // Update user profile with subscription info
+    await updateDoc(doc(db, 'users', userId), {
+      role: 'pro',
+      subscriptionStatus: 'active',
+      subscriptionExpiresAt: renewalDate.getTime(), // Store as milliseconds
+      subscriptionPlan: plan.id,
+    });
 
     return {
       status: 'active',
@@ -164,26 +195,34 @@ export async function activateSubscription({
  * Called when user wants to cancel their active subscription
  */
 export async function cancelSubscription({ userId, stripeSubscriptionId }) {
-  if (!userId || !stripeSubscriptionId) {
-    throw new Error('userId and stripeSubscriptionId are required');
+  if (!userId) {
+    throw new Error('userId is required');
   }
 
   try {
     // Update subscription status to cancelled
-    // The user will retain access until the renewal date
     await setDoc(
       doc(db, 'users', userId, 'subscription', 'current'),
       {
         status: 'cancelled',
-        stripeSubscriptionId,
+        stripeSubscriptionId: stripeSubscriptionId || null,
         cancelledAt: serverTimestamp(),
       },
       { merge: true }
     );
 
-    // Call Cloud Function to cancel Stripe subscription
-    // TODO: Implement Cloud Function to handle Stripe cancellation
-    // POST /cancelSubscription with { userId, stripeSubscriptionId }
+    // Update user profile to reflect cancellation (back to 'user' role)
+    await updateDoc(doc(db, 'users', userId), {
+      role: 'user',
+      subscriptionStatus: 'cancelled',
+      subscriptionExpiresAt: null,
+    });
+
+    // If this is a paid subscription (has stripeSubscriptionId), call Cloud Function to cancel with Stripe
+    if (stripeSubscriptionId) {
+      // TODO: Implement Cloud Function to handle Stripe cancellation
+      // POST /cancelSubscription with { userId, stripeSubscriptionId }
+    }
 
     return {
       status: 'cancelled',

@@ -289,6 +289,12 @@ service cloud.firestore {
       
       allow list: if isAuthed();
     }
+
+    /* SUBSCRIPTIONS - USER SUBSCRIPTION DATA */
+    match /users/{userId}/subscription/{document=**} {
+      allow read: if isAuthed() && request.auth.uid == userId;
+      allow write: if isAuthed() && request.auth.uid == userId;
+    }
     
   }
 }

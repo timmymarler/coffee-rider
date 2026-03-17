@@ -2,6 +2,7 @@
 
 import AuthProvider, { AuthContext } from "@context/AuthContext";
 import { RoutingPreferencesProvider } from "@context/RoutingPreferencesContext";
+import { SubscriptionProvider } from "@context/SubscriptionContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import { ThemeProvider } from "@context/ThemeContext";
 import AppHeader from "@core/components/layout/AppHeader";
@@ -13,7 +14,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import theme from "@themes";
 import Constants from "expo-constants";
-import { Tabs, usePathname, useRouter } from "expo-router";
+import { Stack, Tabs, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Alert, Animated, Dimensions, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
@@ -286,14 +287,16 @@ function ThemeAwareLayoutContent() {
 
   return (
     <ThemeProvider userProfile={profile} userId={user?.uid}>
-      <RoutingPreferencesProvider brand="rider">
-        <TabBarProvider>
-          <WaypointsProvider>
-            <AppHeader />
-            <LayoutContent />
-          </WaypointsProvider>
-        </TabBarProvider>
-      </RoutingPreferencesProvider>
+      <SubscriptionProvider userId={user?.uid}>
+        <RoutingPreferencesProvider brand="rider">
+          <TabBarProvider>
+            <WaypointsProvider>
+              <AppHeader />
+              <LayoutContent />
+            </WaypointsProvider>
+          </TabBarProvider>
+        </RoutingPreferencesProvider>
+      </SubscriptionProvider>
     </ThemeProvider>
   );
 }

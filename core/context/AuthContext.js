@@ -9,8 +9,8 @@ import {
     signOut,
     updateProfile
 } from "firebase/auth";
-import { deleteDoc, doc } from "firebase/firestore";
-import { createContext, useEffect, useState } from "react";
+import { deleteDoc, doc, onSnapshot } from "firebase/firestore";
+import { createContext, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { getCapabilities } from "@core/roles/capabilities";
@@ -39,6 +39,7 @@ export default function AuthProvider({ children }) {
     isRequired: false,
     versionInfo: null,
   });
+  const profileUnsubscribeRef = useRef(null); // Real-time listener for profile changes
 
   // ----------------------------------------
   // SESSION PERSISTENCE
@@ -226,6 +227,13 @@ export default function AuthProvider({ children }) {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log('[AuthContext] onAuthStateChanged fired. firebaseUser:', firebaseUser ? firebaseUser.email : null);
+      
+      // Clean up previous profile listener if any
+      if (profileUnsubscribeRef.current) {
+        profileUnsubscribeRef.current();
+        profileUnsubscribeRef.current = null;
+      }
+
       try {
         if (!firebaseUser) {
           console.log('[AuthContext] No firebaseUser. Setting user to null.');
@@ -248,8 +256,21 @@ export default function AuthProvider({ children }) {
         await saveSession(firebaseUser);
 
         await ensureUserDocument(firebaseUser.uid, firebaseUser);
-        const profileData = await getUserProfile(firebaseUser.uid);
-        setProfile(profileData || null);
+        
+        // Set up real-time listener for profile changes (e.g., when subscription expires and role changes)
+        const profileRef = doc(db, 'users', firebaseUser.uid);
+        profileUnsubscribeRef.current = onSnapshot(
+          profileRef,
+          (docSnap) => {
+            if (docSnap.exists()) {
+              console.log('[AuthContext] Profile updated in real-time. New role:', docSnap.data().role);
+              setProfile(docSnap.data());
+            }
+          },
+          (err) => {
+            console.error('[AuthContext] Error listening to profile:', err);
+          }
+        );
       } catch (err) {
         console.error("AuthContext error:", err);
       } finally {
@@ -257,7 +278,13 @@ export default function AuthProvider({ children }) {
       }
     });
 
-    return () => unsub();
+    return () => {
+      unsub();
+      // Clean up profile listener when component unmounts
+      if (profileUnsubscribeRef.current) {
+        profileUnsubscribeRef.current();
+      }
+    };
   }, [isGuest]);
 
   // Track app foreground/background to update session activity

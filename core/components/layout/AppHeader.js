@@ -12,6 +12,7 @@ function getTitleFromPath(pathname) {
   if (pathname === "/help") return "Help";
   if (pathname === "/calendar") return "Calendar";
   if (pathname.includes("create-event")) return "Event";
+  if (pathname === "/subscriptions") return "Subscriptions";
   return "Coffee Rider";
 }
 
@@ -23,7 +24,7 @@ export default function AppHeader() {
   const title = getTitleFromPath(pathname);
 
   // Hide title for these screens to save space
-  const hideTitle = ["Map", "Saved Routes", "Groups", "Calendar", "Profile", "Help"].includes(title);
+  const hideTitle = ["Map", "Saved Routes", "Groups", "Calendar", "Profile", "Help", "Subscriptions"].includes(title);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
