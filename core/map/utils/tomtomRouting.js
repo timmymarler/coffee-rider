@@ -461,16 +461,9 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
           }
         }
         
+        // Only show instruction if we have an exit number - otherwise skip display
         if (exitNumber && exitNumber > 0) {
           instruction = `Take exit ${exitNumber}`;
-        } else if (maneuver.includes("STRAIGHT")) {
-          instruction = "Go straight through roundabout";
-        } else if (maneuver.includes("LEFT")) {
-          instruction = "Exit left from roundabout";
-        } else if (maneuver.includes("RIGHT")) {
-          instruction = "Exit right from roundabout";
-        } else {
-          instruction = "Enter roundabout";
         }
         
         extra.roundaboutExitNumber = exitNumber;
@@ -513,14 +506,9 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
           if (typeof nextInstr.roundaboutExitNumber === "number" && nextInstr.roundaboutExitNumber > 0) {
             nextRoundaboutExitNumber = nextInstr.roundaboutExitNumber;
             nextInstruction = `Take exit ${nextRoundaboutExitNumber}`;
-          } else if (nextManeuver.includes("STRAIGHT")) {
-            nextInstruction = "Go straight through roundabout";
-          } else if (nextManeuver.includes("LEFT")) {
-            nextInstruction = "Exit left from roundabout";
-          } else if (nextManeuver.includes("RIGHT")) {
-            nextInstruction = "Exit right from roundabout";
           } else {
-            nextInstruction = "Enter roundabout";
+            // Only show next instruction if it has an exit number - skip generic roundabout message
+            nextInstruction = "Approaching roundabout";
           }
         } else if (nextManeuver.includes("TURN_LEFT") || nextManeuver === "LEFT") {
           nextInstruction = "Turn left";

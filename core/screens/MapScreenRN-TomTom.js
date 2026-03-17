@@ -908,7 +908,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastWaypoints = useRef([]); // Track waypoints from last route build to rebuild when they change
   const lastManualStartPointRef = useRef(null); // Track manual start point to detect Follow Me transitions
   const lastExplicitBuildRef = useRef({ waypointsId: null, destinationId: null }); // Track last explicit build to prevent duplicate rebuilds
-  const MIN_ROUTE_REBUILD_DISTANCE_METERS = 10; // Only rebuild routes if user moves more than 10 meters
+  const MIN_ROUTE_REBUILD_DISTANCE_METERS = 10; // Only rebuild routes if user moves more than threshold (speed-aware)
   const displayWaypoints = useMemo(() => {
     if (!routeDestination) return waypoints;
     return [
@@ -2989,10 +2989,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // Check if user has moved far enough to warrant a route rebuild
     // This prevents excessive API calls from GPS noise (small accuracy variations)
+    // At higher speeds, require larger movement to avoid rebuilds from normal GPS jitter
     // But we skip this check if the route type, waypoints, or manual start point have changed
     if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && lastRouteBuildLocationRef.current) {
       const distanceMoved = distanceBetween(lastRouteBuildLocationRef.current, userLocation);
-      if (distanceMoved < MIN_ROUTE_REBUILD_DISTANCE_METERS) {
+      
+      // Speed-aware threshold: at high speeds, allow larger GPS jitter before rebuilding
+      // At 50mph+, GPS updates can naturally be 20+ meters apart, so increase threshold
+      const currentSpeed = estimatedSpeedRef.current || 0; // meters per second
+      const speedMph = currentSpeed * 2.237; // convert m/s to mph
+      const speedBasedThreshold = speedMph > 30 ? 30 : MIN_ROUTE_REBUILD_DISTANCE_METERS;
+      
+      if (distanceMoved < speedBasedThreshold) {
         return; // Skip rebuild if movement is less than threshold
       }
     }
@@ -4391,8 +4399,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           
           // Special handling for roundabout exits: show "Exit 3" instead of text instruction
           let label;
+          let isRoundaboutExit = false;
           if (nextManeuver.includes("ROUNDABOUT_EXIT") && step?.nextRoundaboutExitNumber) {
             label = `Exit ${step.nextRoundaboutExitNumber}`;
+            isRoundaboutExit = true;
+          } else if (nextManeuver.includes("ROUNDABOUT") && step?.nextRoundaboutExitNumber) {
+            label = `Exit ${step.nextRoundaboutExitNumber}`;
+            isRoundaboutExit = true;
           } else {
             // Use the maneuver icon map label for consistency, fallback to nextInstruction
             label = meta?.label || nextInstruction;
@@ -4404,6 +4417,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             nextManeuver,
             nextInstruction,
             displayLabel: label,
+            isRoundaboutExit,
             nextRoundaboutExitNumber: step?.nextRoundaboutExitNumber,
             distance: Math.round(nextJunctionDistance || 0),
           });
@@ -4420,7 +4434,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                       <Text style={styles.junctionDistance}>{distText}</Text>
                     </TouchableOpacity>
                   ) : null}
-                  <Text style={styles.junctionLabel}>{label}</Text>
+                  <Text style={[styles.junctionLabel, isRoundaboutExit && styles.junctionLabelLarge]}>{label}</Text>
                   {/* Show the specific instruction detail (e.g., "Take exit 4", street name, etc.) */}
                   {nextInstruction && nextInstruction !== label && (
                     <Text style={styles.junctionInstruction}>{nextInstruction}</Text>
@@ -5043,6 +5057,10 @@ const styles = StyleSheet.create({
     color: "rgba(245, 245, 240, 0.95)",
     marginTop: 4,
     flexWrap: "wrap",
+  },
+  junctionLabelLarge: {
+    fontSize: 20,
+    fontWeight: "700",
   },
   junctionInstruction: {
     fontSize: 12,
