@@ -790,6 +790,20 @@ export default function SavedRoutesScreen() {
   const isLoading = viewMode === "routes" ? loadingRoutes : loadingRides;
   const displayData = viewMode === "routes" ? sortedRoutes : sortedRides;
 
+  // Debug logging for rides
+  if (viewMode === "rides") {
+    console.log('[SavedRoutesScreen] Rides view:', {
+      loading: loadingRides,
+      ridesToDisplay: displayData.length,
+      firstRide: displayData[0] ? {
+        id: displayData[0].id,
+        name: displayData[0].name,
+        polylineLength: displayData[0].routePolyline?.length || 0,
+        completedAt: displayData[0].completedAt,
+      } : null,
+    });
+  }
+
   if (isLoading) {
     return (
       <CRScreen>

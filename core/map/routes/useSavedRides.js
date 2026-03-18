@@ -68,8 +68,21 @@ export function useSavedRides() {
     const unsubNew = onSnapshot(newRidesQuery, (snap) => {
       incMetric("useSavedRides:newSnapshot");
       incMetric("useSavedRides:newDocs", snap.docs.length, 25);
+      console.log('[useSavedRides] New rides query returned', snap.docs.length, 'documents from "routes" collection');
       snap.docs.forEach((doc) => {
-        ridesMap.set(doc.id, { id: doc.id, ...doc.data(), _source: "new" });
+        const rideData = doc.data();
+        console.log('[useSavedRides] Ride doc:', {
+          id: doc.id,
+          type: rideData.type,
+          deleted: rideData.deleted,
+          name: rideData.name,
+          createdAt: rideData.createdAt,
+          completedAt: rideData.completedAt,
+          polylineLength: rideData.routePolyline?.length || 0,
+          hasPolyline: !!rideData.routePolyline,
+          docSize: new Blob([JSON.stringify(rideData)]).size,
+        });
+        ridesMap.set(doc.id, { id: doc.id, ...rideData, _source: "new" });
       });
       newRidesLoaded = true;
       updateRides();

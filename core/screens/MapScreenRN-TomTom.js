@@ -2046,15 +2046,76 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [currentStepIndex, routeSteps, isNavigationMode, traveledPolyline, pendingRidePolyline, routeDestination, waypoints.length]);
 
+  /**
+   * Calculate bearing from one point to another (in degrees)
+   * Returns 0-360 where 0 = North, 90 = East, 180 = South, 270 = West
+   */
+  const calculateBearing = (from, to) => {
+    const lat1 = from.latitude * Math.PI / 180;
+    const lat2 = to.latitude * Math.PI / 180;
+    const dLng = (to.longitude - from.longitude) * Math.PI / 180;
+    
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    const bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    
+    return bearing;
+  };
+
+  /**
+   * Check if current heading is pointing away from the polyline
+   * Returns true if user is heading away (off-course heading detected)
+   */
+  const isHeadingAwayFromPolyline = (userLoc, polylineCoords) => {
+    if (!userLoc || polylineCoords.length === 0) return false;
+    
+    // Get heading: prefer vehicle heading, fall back to GPS bearing
+    let heading = userLoc.heading;
+    if (heading === undefined || heading === -1) {
+      heading = userLoc.bearing; // Some GPS modules use 'bearing' instead
+    }
+    if (heading === undefined || heading === -1) {
+      return false; // No heading data available
+    }
+    
+    // Find nearest point and next point on polyline
+    let nearestIdx = -1;
+    let nearestDist = Infinity;
+    
+    for (let i = 0; i < polylineCoords.length; i++) {
+      const dist = distanceBetween(userLoc, polylineCoords[i]);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestIdx = i;
+      }
+    }
+    
+    if (nearestIdx === -1) return false;
+    
+    // If we're at the end of the polyline, use the end point
+    const nextIdx = Math.min(nearestIdx + 2, polylineCoords.length - 1);
+    if (nextIdx === nearestIdx) return false;
+    
+    // Get the direction the polyline is going at this point
+    const polylineBearing = calculateBearing(polylineCoords[nearestIdx], polylineCoords[nextIdx]);
+    
+    // Calculate angle difference between user heading and polyline direction
+    let angleDiff = Math.abs(heading - polylineBearing);
+    if (angleDiff > 180) {
+      angleDiff = 360 - angleDiff; // Get the smaller angle
+    }
+    
+    // If heading is 90+ degrees off from polyline direction, user is heading away
+    return angleDiff >= 90;
+  };
+
   // Auto-reroute when significantly off-route during Follow Me
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
   const lastOffRouteCheckPos = useRef(null); // Track last position where we checked for off-route
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
-  const consecutiveOffRouteCountRef = useRef(0); // Track consecutive off-route checks to avoid noise-triggered reroutes
-  const OFF_ROUTE_THRESHOLD_METERS = 100; // Reroute if 100m+ off the route
+  const OFF_ROUTE_THRESHOLD_METERS = 100; // Reroute if 100m+ off the route and heading away
   const REROUTE_COOLDOWN_SECONDS = 30; // Only attempt reroute every 30 seconds max
   const MIN_MOVEMENT_BEFORE_CHECK = 25; // Only check off-route after user moves 25m
-  const CONSECUTIVE_OFF_ROUTE_CHECKS_REQUIRED = 2; // Require 2 consecutive off-route checks to avoid noise-triggered reroutes
   const MIN_GPS_ACCURACY = 35; // Ignore off-route checks if GPS accuracy is worse than this (meters)
   
   useEffect(() => {
@@ -2080,20 +2141,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
         });
       }
-      consecutiveOffRouteCountRef.current = 0; // Reset off-route counter
       return; // Exit early, don't do off-route checking on first run
     }
 
     // Only check off-route if in Follow Me with an active route
     if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation || !routeDestination) {
-      consecutiveOffRouteCountRef.current = 0;
       return;
     }
 
     // Skip off-route check if GPS accuracy is poor
     if (userLocation.accuracy && userLocation.accuracy > MIN_GPS_ACCURACY) {
       console.log(`[AutoReroute] GPS accuracy poor (${userLocation.accuracy.toFixed(0)}m), skipping off-route check`);
-      consecutiveOffRouteCountRef.current = 0;
       return;
     }
 
@@ -2118,64 +2176,58 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
     }
 
-    // Track off-route status
-    const isOffRoute = closestDist >= OFF_ROUTE_THRESHOLD_METERS;
-    
-    if (isOffRoute) {
-      consecutiveOffRouteCountRef.current += 1;
-      console.log(`[AutoReroute] Off-route check (${consecutiveOffRouteCountRef.current}/${CONSECUTIVE_OFF_ROUTE_CHECKS_REQUIRED}): ${closestDist.toFixed(0)}m away from route`);
-    } else {
-      // Back on route, reset counter
-      if (consecutiveOffRouteCountRef.current > 0) {
-        console.log('[AutoReroute] Back on route, resetting off-route counter');
-      }
-      consecutiveOffRouteCountRef.current = 0;
+    // Check if user is on polyline (within 50m)
+    if (closestDist < 50) {
+      console.log(`[AutoReroute] User on route (${closestDist.toFixed(0)}m away), no reroute needed`);
+      return; // User is on the polyline, don't reroute
     }
 
-    // If consistently off-route and enough time has passed, reroute
+    // Check if user is significantly off-route (100m+)
+    if (closestDist < OFF_ROUTE_THRESHOLD_METERS) {
+      console.log(`[AutoReroute] User slightly off-route (${closestDist.toFixed(0)}m away), monitoring...`);
+      return; // Not far enough off to reroute yet
+    }
+
+    // User is 100m+ off route - check if heading away
+    const headingAway = isHeadingAwayFromPolyline(userLocation, routeCoords);
+    
+    if (!headingAway) {
+      console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route but heading back towards route, no reroute`);
+      return; // User is heading back towards the route, don't reroute
+    }
+
+    // User is off-route AND heading away - check cooldown before rerouting
     const now = Date.now();
     const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
     
-    if (consecutiveOffRouteCountRef.current >= CONSECUTIVE_OFF_ROUTE_CHECKS_REQUIRED && timeSinceLastReroute >= REROUTE_COOLDOWN_SECONDS) {
-      // Before rerouting, verify user is STILL off-route (not back on polyline due to GPS noise)
-      let verifyClosestDist = Infinity;
-      for (let i = 0; i < routeCoords.length; i++) {
-        const coord = routeCoords[i];
-        if (!coord || coord.latitude === undefined || coord.longitude === undefined) continue;
-        
-        const dist = distanceBetweenMeters(userLocation, coord);
-        if (dist < verifyClosestDist) {
-          verifyClosestDist = dist;
-        }
-      }
-      
-      const stillOffRoute = verifyClosestDist >= OFF_ROUTE_THRESHOLD_METERS;
-      
-      if (stillOffRoute) {
-        console.log(`[AutoReroute] User consistently off-route (${verifyClosestDist.toFixed(0)}m), rebuilding route...`);
-        lastRerouteAttemptRef.current = now;
-        consecutiveOffRouteCountRef.current = 0; // Reset counter after rerouting
-        
-        // Rebuild route from current location
-        const requestId = ++routeRequestId.current;
-        mapRoute({
-          origin: userLocation,
-          waypoints: waypoints,
-          destination: routeDestination,
-          travelMode: userTravelMode,
-          routeType: userRouteType,
-          requestId,
-          skipFitToView: true,
-          vehicleHeading: userLocation?.heading || null,
-        }).catch(error => {
-          console.warn('[AutoReroute] mapRoute error:', error);
-        });
-      } else {
-        // Back on polyline - cancel reroute, reset counter
-        console.log(`[AutoReroute] Was off-route but back on polyline (${verifyClosestDist.toFixed(0)}m), canceling reroute`);
-        consecutiveOffRouteCountRef.current = 0;
-      }
+    if (timeSinceLastReroute < REROUTE_COOLDOWN_SECONDS) {
+      console.log(`[AutoReroute] Cooldown active (${timeSinceLastReroute.toFixed(0)}s/${REROUTE_COOLDOWN_SECONDS}s), skipping reroute`);
+      return; // Still in cooldown period
     }
+
+    // All conditions met: off-route, heading away, and enough time elapsed
+    console.log(`[AutoReroute] User off-route (${closestDist.toFixed(0)}m) and heading away, rerouting via next waypoint...`);
+    lastRerouteAttemptRef.current = now;
+    
+    // Determine reroute destination: next waypoint or final destination
+    const nextWaypoint = waypoints && waypoints.length > 0 ? waypoints[0] : null;
+    const rerouteDestination = nextWaypoint || routeDestination;
+    const remainingWaypoints = nextWaypoint && waypoints.length > 1 ? waypoints.slice(1) : [];
+    
+    // Rebuild route from current location to next waypoint (or destination if no waypoints)
+    const requestId = ++routeRequestId.current;
+    mapRoute({
+      origin: userLocation,
+      waypoints: remainingWaypoints,
+      destination: rerouteDestination,
+      travelMode: userTravelMode,
+      routeType: userRouteType,
+      requestId,
+      skipFitToView: true,
+      vehicleHeading: userLocation?.heading || null,
+    }).catch(error => {
+      console.warn('[AutoReroute] mapRoute reroute error:', error);
+    });
   }, [userLocation, followUser, routeCoords, routeDestination, waypoints, userTravelMode, userRouteType]);
 
   // Accumulate persistent travelled path during Follow Me
@@ -4389,13 +4441,63 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
           const distText = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : "";
           
-          // Special handling for roundabout exits: show "Exit 3" instead of text instruction
+          // Special handling for roundabouts: skip "Enter" and show the exit instead
           let label;
-          if (nextManeuver.includes("ROUNDABOUT_EXIT") && step?.nextRoundaboutExitNumber) {
-            label = `Exit ${step.nextRoundaboutExitNumber}`;
-          } else {
-            // Use the maneuver icon map label for consistency, fallback to nextInstruction
-            label = meta?.label || nextInstruction;
+          let displayMeta = meta;
+          
+          if (nextManeuver.includes("ROUNDABOUT_ENTER")) {
+            // Look ahead to find the corresponding exit
+            if (routeSteps && currentStepIndex + 1 < routeSteps.length) {
+              const nextStep = routeSteps[currentStepIndex + 1];
+              if (nextStep?.nextManeuver?.includes("ROUNDABOUT_EXIT") && nextStep?.nextRoundaboutExitNumber) {
+                // Use the exit information instead
+                label = `Take Exit ${nextStep.nextRoundaboutExitNumber}`;
+                // Pick the right exit icon based on exit direction
+                if (nextStep.nextManeuver.includes("ROUNDABOUT_EXIT_LEFT")) {
+                  displayMeta = MANEUVER_ICON_MAP.ROUNDABOUT_EXIT_LEFT;
+                } else if (nextStep.nextManeuver.includes("ROUNDABOUT_EXIT_RIGHT")) {
+                  displayMeta = MANEUVER_ICON_MAP.ROUNDABOUT_EXIT_RIGHT;
+                } else {
+                  displayMeta = MANEUVER_ICON_MAP.ROUNDABOUT_EXIT;
+                }
+              }
+            }
+          }
+          
+          // If we didn't handle it as a roundabout enter, check for regular exits
+          if (!label) {
+            if (nextManeuver.includes("ROUNDABOUT_EXIT") && step?.nextRoundaboutExitNumber) {
+              label = `Take Exit ${step.nextRoundaboutExitNumber}`;
+            } else {
+              // Use the maneuver icon map label for consistency, fallback to nextInstruction
+              label = displayMeta?.label || nextInstruction;
+            }
+          }
+          
+          // Adjust STRAIGHT instructions if the road actually curves significantly
+          if (nextManeuver === "STRAIGHT" && step?.start && step?.end && currentStepIndex > 0) {
+            const prevStep = routeSteps[currentStepIndex - 1];
+            if (prevStep?.end) {
+              const arrivalBearing = calculateBearing(prevStep.end, step.start);
+              const courseHeading = calculateBearing(step.start, step.end);
+              
+              // Calculate the difference (-180 to 180)
+              let diff = courseHeading - arrivalBearing;
+              const normalizedDiff = diff > 180 ? diff - 360 : (diff < -180 ? diff + 360 : diff);
+              
+              // If the road curves significantly (>20 degrees), adjust the instruction
+              if (Math.abs(normalizedDiff) > 20) {
+                if (normalizedDiff > 0) {
+                  // Road curves right, we need to bear left to follow it
+                  displayMeta = MANEUVER_ICON_MAP.BEAR_LEFT;
+                  label = "Bear left";
+                } else {
+                  // Road curves left, we need to bear right to follow it
+                  displayMeta = MANEUVER_ICON_MAP.BEAR_RIGHT;
+                  label = "Bear right";
+                }
+              }
+            }
           }
           
           // DEBUG: Log what we're showing
@@ -4412,7 +4514,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             <>
               <View style={[styles.junctionPanel, getJunctionPanelStyle()]}>
                 {/* Large direction icon */}
-                <MaterialCommunityIcons name={meta.icon} size={80} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
+                <MaterialCommunityIcons name={displayMeta.icon} size={80} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
                 {/* Distance and label section */}
                 <View style={styles.junctionContent}>
                   {distText ? (
