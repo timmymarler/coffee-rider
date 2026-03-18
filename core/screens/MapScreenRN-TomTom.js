@@ -4441,30 +4441,23 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
           const distText = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : "";
           
-          // Special handling for roundabouts: skip "Enter" and show the exit instead
+          // Special handling for roundabouts: if instruction already says "Take exit X", use it directly
           let label;
           let displayMeta = meta;
+          let suppressInstruction = false; // Track if we've fully handled the instruction
           
-          if (nextManeuver.includes("ROUNDABOUT_ENTER")) {
-            // Look ahead to find the corresponding exit
-            if (routeSteps && currentStepIndex + 1 < routeSteps.length) {
-              const nextStep = routeSteps[currentStepIndex + 1];
-              if (nextStep?.nextManeuver?.includes("ROUNDABOUT_EXIT") && nextStep?.nextRoundaboutExitNumber) {
-                // Use the exit information instead
-                label = `Take Exit ${nextStep.nextRoundaboutExitNumber}`;
-                // Pick the right exit icon based on exit direction
-                if (nextStep.nextManeuver.includes("ROUNDABOUT_EXIT_LEFT")) {
-                  displayMeta = MANEUVER_ICON_MAP.ROUNDABOUT_EXIT_LEFT;
-                } else if (nextStep.nextManeuver.includes("ROUNDABOUT_EXIT_RIGHT")) {
-                  displayMeta = MANEUVER_ICON_MAP.ROUNDABOUT_EXIT_RIGHT;
-                } else {
-                  displayMeta = MANEUVER_ICON_MAP.ROUNDABOUT_EXIT;
-                }
-              }
+          // Check if this is any roundabout maneuver with exit info in the instruction
+          if (nextManeuver.includes("ROUNDABOUT")) {
+            if (nextInstruction && nextInstruction.toLowerCase().includes("exit")) {
+              // The instruction already has the exit info (e.g., "Take exit 1")
+              label = nextInstruction;
+              suppressInstruction = true;
+              displayMeta = MANEUVER_ICON_MAP.ROUNDABOUT_EXIT;
+              console.log('[Roundabout] Using nextInstruction as label:', label);
             }
           }
           
-          // If we didn't handle it as a roundabout enter, check for regular exits
+          // If we didn't handle it as a roundabout with exit, use normal logic
           if (!label) {
             if (nextManeuver.includes("ROUNDABOUT_EXIT") && step?.nextRoundaboutExitNumber) {
               label = `Take Exit ${step.nextRoundaboutExitNumber}`;
@@ -4524,7 +4517,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                   ) : null}
                   <Text style={styles.junctionLabel}>{label}</Text>
                   {/* Show the specific instruction detail (e.g., "Take exit 4", street name, etc.) */}
-                  {nextInstruction && nextInstruction !== label && (
+                  {!suppressInstruction && nextInstruction && nextInstruction !== label && (
                     <Text style={styles.junctionInstruction}>{nextInstruction}</Text>
                   )}
                   {remainingDistanceMeters && remainingDurationSeconds && (
@@ -5140,7 +5133,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   junctionLabel: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: "600",
     color: "rgba(245, 245, 240, 0.95)",
     marginTop: 4,
