@@ -3762,9 +3762,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (polyline && Array.isArray(polyline)) {
       const decoded = polyline;
       
-      // Set the polyline so it's visible on map
-      pendingFitRef.current = decoded;
-      attemptRouteFit();
+      // Set the exact polyline from the ride - don't recalculate
+      // This is the key difference from handleNavigate - we use the stored polyline exactly
+      setRouteCoordsWithFlush(decoded, {
+        distance: ride.distanceMeters,
+      });
 
       // Use stored destination if available, otherwise fallback to last polyline point
       const destPoint = ride.destination || {
@@ -3793,8 +3795,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setViewedRideId(rideId);
       setPendingRidePolyline(decoded);
 
-      // Display saved ride with current travel mode selected by user
-      // (not the mode it was recorded with)
+      // Use pending-fit system to zoom to the route
+      pendingFitRef.current = decoded;
+      attemptRouteFit();
 
       // Show save modal for converting to route
       setShowSaveRideModal(true);
