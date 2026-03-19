@@ -757,10 +757,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const pendingDisplayTimeoutRef = useRef(null); // Track pending instruction display timeout
   const {
     waypoints,
+    visitedWaypointIndices,
     addFromPlace,
     addFromMapPress,
     formatPoint,
     clearWaypoints,
+    markWaypointVisited,
+    getNextUnvisitedWaypointIndex,
   } = useWaypoints();
   
   // Get direct access to context for addWaypointAtStart
@@ -1557,7 +1560,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             distanceMeters: routeDistanceMeters,
             durationSeconds: routeMeta?.durationSeconds,
           },
-          completedAt: new Date(),
+          // Don't pass completedAt - let saveRide use serverTimestamp() for consistency
           travelMode: userTravelMode,
         });
         
@@ -1993,8 +1996,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             to: nextStepIdx,
             distanceFromEndpoint: Math.round(distToCurrentEnd),
             nextStepManeuver: nextStep?.maneuver,
+            nextStepNextManeuver: nextStep?.nextManeuver,
             nextStepInstruction: nextStep?.instruction?.substring(0, 40),
             nextStepDistance: Math.round(distanceForDisplay || 0),
+            isRoundabout: nextStep?.nextManeuver?.includes('ROUNDABOUT'),
           });
         } else {
           nextStepIdx = currentStepIndex;
@@ -2028,6 +2033,30 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Shows current instruction and distance for 5 seconds before showing next one
   // But override if next junction is close (< 150m away)
 
+  // Track waypoint arrivals and mark them as visited
+  useEffect(() => {
+    if (!isNavigationMode || !userLocation || waypoints.length === 0) return;
+    
+    // Check each unvisited waypoint to see if we've reached it
+    waypoints.forEach((waypoint, idx) => {
+      // Skip if already visited
+      if (visitedWaypointIndices.includes(idx)) return;
+      
+      // Check distance to waypoint
+      if (waypoint.lat && waypoint.lng) {
+        const distToWaypoint = distanceBetweenMeters(
+          userLocation,
+          { latitude: waypoint.lat, longitude: waypoint.lng }
+        );
+        
+        // Mark as visited if within 20m (generous radius for GPS accuracy)
+        if (distToWaypoint < 20) {
+          console.log(`[Waypoints] Reached waypoint ${idx}: ${waypoint.title} (${distToWaypoint.toFixed(0)}m away)`);
+          markWaypointVisited(idx);
+        }
+      }
+    });
+  }, [isNavigationMode, userLocation, waypoints, visitedWaypointIndices, markWaypointVisited]);
 
   // Detect when user reaches destination and capture traveled polyline for saving
   useEffect(() => {
@@ -2114,7 +2143,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastOffRouteCheckPos = useRef(null); // Track last position where we checked for off-route
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
   const OFF_ROUTE_THRESHOLD_METERS = 100; // Reroute if 100m+ off the route and heading away
-  const REROUTE_COOLDOWN_SECONDS = 30; // Only attempt reroute every 30 seconds max
+  const REROUTE_COOLDOWN_SECONDS = 10; // Only attempt reroute every 10 seconds max (faster response to off-route)
   const MIN_MOVEMENT_BEFORE_CHECK = 25; // Only check off-route after user moves 25m
   const MIN_GPS_ACCURACY = 35; // Ignore off-route checks if GPS accuracy is worse than this (meters)
   
@@ -2206,13 +2235,58 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     // All conditions met: off-route, heading away, and enough time elapsed
-    console.log(`[AutoReroute] User off-route (${closestDist.toFixed(0)}m) and heading away, rerouting via next waypoint...`);
+    console.log(`[AutoReroute] User off-route (${closestDist.toFixed(0)}m) and heading away, rerouting...`);
     lastRerouteAttemptRef.current = now;
     
-    // Determine reroute destination: next waypoint or final destination
-    const nextWaypoint = waypoints && waypoints.length > 0 ? waypoints[0] : null;
+    // Find next unvisited waypoint, but also skip waypoints that are behind the user
+    // when off-route. A waypoint is considered "behind" if it's in the opposite direction
+    // of where the user is heading.
+    let nextWaypoint = null;
+    let remainingWaypoints = [];
+    let nextWaypointIdx = getNextUnvisitedWaypointIndex();
+    
+    // If off-route, also check if the next waypoint is actually ahead of us
+    // Skip waypoints that are very far away or in the opposite direction
+    if (nextWaypointIdx >= 0 && waypoints[nextWaypointIdx]?.lat && waypoints[nextWaypointIdx]?.lng) {
+      const nextWp = waypoints[nextWaypointIdx];
+      const distToNextWaypoint = distanceBetweenMeters(
+        userLocation,
+        { latitude: nextWp.lat, longitude: nextWp.lng }
+      );
+      
+      // If next waypoint is extremely far away (200m+) while off-route, likely already passed
+      // Also check heading direction - if we're heading away from it, skip it
+      if (distToNextWaypoint > 200) {
+        // Check if user is heading away from this waypoint
+        const headingTowardWp = !isHeadingAwayFromPolyline(
+          userLocation,
+          [{ latitude: nextWp.lat, longitude: nextWp.lng }]
+        );
+        
+        if (!headingTowardWp) {
+          console.log(`[AutoReroute] Waypoint ${nextWaypointIdx} is ${distToNextWaypoint.toFixed(0)}m away and we're heading away - skipping it`);
+          // Skip to next waypoint
+          nextWaypointIdx = nextWaypointIdx + 1;
+        }
+      }
+    }
+    
+    if (nextWaypointIdx >= 0 && nextWaypointIdx < waypoints.length) {
+      // Found unvisited waypoint - route to it
+      nextWaypoint = waypoints[nextWaypointIdx];
+      remainingWaypoints = waypoints.slice(nextWaypointIdx + 1);
+      console.log(`[AutoReroute] Routing to unvisited waypoint ${nextWaypointIdx}: ${nextWaypoint.title}, remaining: ${remainingWaypoints.length}`);
+    } else if (waypoints.length > 0) {
+      // All waypoints visited, route to final destination
+      console.log(`[AutoReroute] All waypoints visited, routing to final destination`);
+    } else {
+      // No waypoints, route to destination
+      console.log(`[AutoReroute] No waypoints, routing to final destination`);
+    }
+    
     const rerouteDestination = nextWaypoint || routeDestination;
-    const remainingWaypoints = nextWaypoint && waypoints.length > 1 ? waypoints.slice(1) : [];
+    
+    console.log(`[AutoReroute] Rerouting to: ${rerouteDestination?.title || 'destination'}, remaining waypoints: ${remainingWaypoints.length}`);
     
     // Rebuild route from current location to next waypoint (or destination if no waypoints)
     const requestId = ++routeRequestId.current;
@@ -2228,7 +2302,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }).catch(error => {
       console.warn('[AutoReroute] mapRoute reroute error:', error);
     });
-  }, [userLocation, followUser, routeCoords, routeDestination, waypoints, userTravelMode, userRouteType]);
+  }, [userLocation, followUser, routeCoords, routeDestination, waypoints, visitedWaypointIndices, getNextUnvisitedWaypointIndex, userTravelMode, userRouteType]);
 
   // Accumulate persistent travelled path during Follow Me
   // This path persists across reroutes and is only updated on real user movement
@@ -2307,19 +2381,25 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
     }
 
-    // Only include points the user has actually passed (within 5m - must be close/past the point)
-    // Only mark as completed if within 5m of the point, ensuring you've actually reached/passed it
-    const passedThreshold = 5; // meters
+    // Mark points as completed: find all consecutive points leading up to the closest point
+    // that are reasonably close (within 50m). This handles sparse polylines better.
+    const proximityThreshold = 50; // meters - higher than passedThreshold to handle sparse points
     let completedIdx = -1;
     
-    for (let i = 0; i < closestIdx + 1; i++) {
+    // Start from closest point and work forward to find the furthest point we're still close to
+    for (let i = closestIdx; i < routeCoords.length; i++) {
       const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
-      if (dist < passedThreshold) {
+      if (dist < proximityThreshold) {
         completedIdx = i;
-      } else if (dist > passedThreshold && completedIdx >= 0) {
-        // Stop checking once we're past a completed point and the next point is > 5m away
+      } else {
+        // Once we're far from a point, stop - we haven't reached points further ahead
         break;
       }
+    }
+    
+    // If closest point is very far away (>50m), user might be off-route; mark nothing as completed
+    if (minDistance > proximityThreshold) {
+      completedIdx = -1;
     }
 
     // Split polyline at the current user location
@@ -2332,7 +2412,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Calculate remaining distance and time during Follow Me
   const { remainingDistanceMeters, remainingDurationSeconds } = useMemo(() => {
     if (!followUser || !remainingPolyline || remainingPolyline.length === 0 || !routeDistanceMeters || !routeMeta?.durationSeconds) {
-      return { remainingDistanceMeters: routeDistanceMeters, remainingDurationSeconds: routeMeta?.durationSeconds };
+      if (!followUser) {
+        return { remainingDistanceMeters: routeDistanceMeters, remainingDurationSeconds: routeMeta?.durationSeconds };
+      }
+      if (!remainingPolyline || remainingPolyline.length === 0) {
+        console.warn('[RemainingDistance] Polyline issue:', { hasRemainingPolyline: !!remainingPolyline, length: remainingPolyline?.length });
+        return { remainingDistanceMeters: routeDistanceMeters, remainingDurationSeconds: routeMeta?.durationSeconds };
+      }
+      if (!routeDistanceMeters || !routeMeta?.durationSeconds) {
+        console.warn('[RemainingDistance] Missing route metadata:', { routeDistanceMeters, durationSeconds: routeMeta?.durationSeconds });
+        return { remainingDistanceMeters: routeDistanceMeters, remainingDurationSeconds: routeMeta?.durationSeconds };
+      }
     }
 
     // Calculate remaining polyline distance
@@ -2347,6 +2437,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Scale remaining time proportionally based on distance ratio
     const timeRatio = routeDistanceMeters > 0 ? remainingDist / routeDistanceMeters : 0;
     const remainingTime = Math.round(routeMeta.durationSeconds * timeRatio);
+
+    console.log('[RemainingDistance] Calculated:', { 
+      remainingDist: Math.round(remainingDist),
+      traveledDist: Math.round(traveledDist),
+      totalDist: routeDistanceMeters,
+      polylinePointsRemaining: remainingPolyline.length,
+      timeRatios: timeRatio.toFixed(2),
+      remainingTime,
+    });
 
     return {
       remainingDistanceMeters: remainingDist,
@@ -4385,14 +4484,37 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           if (!step) return null;
 
           // For roundabouts: skip ROUNDABOUT_ENTER and display the EXIT instruction instead
+          // Improved logic: count nested roundabouts to properly handle consecutive roundabouts
           if (step.nextManeuver?.includes("ROUNDABOUT_ENTER")) {
-            // Look ahead to find the ROUNDABOUT_EXIT step
-            for (let i = currentStepIndex + 1; i < routeSteps.length; i++) {
-              if (routeSteps[i].nextManeuver?.includes("ROUNDABOUT_EXIT")) {
-                step = routeSteps[i];
-                displayStepIndex = i;
-                break;
+            let roundaboutDepth = 1; // We're entering our first roundabout
+            let foundExit = false;
+            
+            // Look ahead to find the matching ROUNDABOUT_EXIT
+            for (let i = currentStepIndex + 1; i < routeSteps.length && !foundExit; i++) {
+              const nextStep = routeSteps[i];
+              const nextManeuver = nextStep?.nextManeuver || "";
+              
+              // Track nested roundabouts (consecutive ENTER statements increase depth)
+              if (nextManeuver.includes("ROUNDABOUT_ENTER")) {
+                roundaboutDepth++;
+                console.log(`[Roundabout] Found nested ENTER at step ${i}, depth now: ${roundaboutDepth}`);
               }
+              // When we find an EXIT, decrease depth
+              else if (nextManeuver.includes("ROUNDABOUT_EXIT")) {
+                roundaboutDepth--;
+                console.log(`[Roundabout] Found EXIT at step ${i}, depth now: ${roundaboutDepth}`);
+                
+                // If depth reaches 0, this is our exit
+                if (roundaboutDepth === 0) {
+                  step = nextStep;
+                  displayStepIndex = i;
+                  foundExit = true;
+                }
+              }
+            }
+            
+            if (!foundExit) {
+              console.warn(`[Roundabout] No matching EXIT found for ENTER at step ${currentStepIndex}`);
             }
           }
 

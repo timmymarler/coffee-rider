@@ -3,10 +3,13 @@ import { useWaypointsContext } from "./WaypointsContext";
 export default function useWaypoints() {
   const {
     waypoints,
+    visitedWaypointIndices,
     addWaypoint,
     removeWaypoint,
     clearWaypoints,
     reorderWaypoints,
+    markWaypointVisited,
+    getNextUnvisitedWaypointIndex,
   } = useWaypointsContext();
 
   function deriveWaypointTitle(label) {
@@ -49,6 +52,7 @@ export default function useWaypoints() {
 
   return {
     waypoints,
+    visitedWaypointIndices,
     addWaypoint,
     addFromPlace,
     addFromMapPress,
@@ -56,5 +60,7 @@ export default function useWaypoints() {
     removeWaypoint,
     reorderWaypoints,
     clearWaypoints,
+    markWaypointVisited,
+    getNextUnvisitedWaypointIndex,
   };
 }
