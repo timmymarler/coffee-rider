@@ -46,9 +46,6 @@ import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 
-const mapStyleLight = require("@config/mapStyleLight.json");
-const mapStyleDark = require("@config/mapStyleDark.json");
-
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
 const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17; // Android: 17, iOS: 7 - More zoomed in for better detail
 const ENABLE_GOOGLE_AUTO_FETCH = true;
@@ -4062,7 +4059,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           ref={mapRef}
           key={mapKey}
           style={StyleSheet.absoluteFill}
-          customMapStyle={colorScheme === 'dark' ? mapStyleDark : mapStyleLight}
+          customMapStyle={null}
           showsUserLocation={true}
           pitchEnabled
           showsMyLocationButton={false}
@@ -4283,8 +4280,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             riderLocations={riderLocations}
             userLocation={userLocation}
             routeCoords={routeCoords}
-            mapStyleDark={mapStyleDark}
-            mapStyleLight={mapStyleLight}
             colorScheme={colorScheme}
           />
         </View>

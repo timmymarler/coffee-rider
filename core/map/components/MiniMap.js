@@ -41,8 +41,6 @@ export default function MiniMap({
   userLocation = null,
   routeCoords = [],
   styles: containerStyles = {},
-  mapStyleDark = null,
-  mapStyleLight = null,
   colorScheme = 'light',
   isModal = false,
 }) {
@@ -89,7 +87,7 @@ export default function MiniMap({
       <MapView
         style={styles.map}
         initialRegion={initialRegion}
-        customMapStyle={colorScheme === 'dark' ? mapStyleDark : mapStyleLight}
+        customMapStyle={null}
         zoomEnabled={false}
         scrollEnabled={false}
         pitchEnabled={false}
