@@ -2141,7 +2141,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
   const OFF_ROUTE_THRESHOLD_METERS = 50; // Reroute if 50m+ off the route
   const REROUTE_COOLDOWN_SECONDS = 10; // Only attempt reroute every 10 seconds max (faster response to off-route)
-  const MIN_MOVEMENT_BEFORE_CHECK = 25; // Only check off-route after user moves 25m
+  const MIN_MOVEMENT_BEFORE_CHECK = 75; // Only check off-route after user moves 75m (reduces check frequency on faster movement like bikes)
   const MIN_GPS_ACCURACY = 35; // Ignore off-route checks if GPS accuracy is worse than this (meters)
   
   useEffect(() => {
