@@ -4481,41 +4481,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           
           if (!step) return null;
 
-          // For roundabouts: skip ROUNDABOUT_ENTER and display the EXIT instruction instead
-          // Improved logic: count nested roundabouts to properly handle consecutive roundabouts
-          if (step.nextManeuver?.includes("ROUNDABOUT_ENTER")) {
-            let roundaboutDepth = 1; // We're entering our first roundabout
-            let foundExit = false;
-            
-            // Look ahead to find the matching ROUNDABOUT_EXIT
-            for (let i = currentStepIndex + 1; i < routeSteps.length && !foundExit; i++) {
-              const nextStep = routeSteps[i];
-              const nextManeuver = nextStep?.nextManeuver || "";
-              
-              // Track nested roundabouts (consecutive ENTER statements increase depth)
-              if (nextManeuver.includes("ROUNDABOUT_ENTER")) {
-                roundaboutDepth++;
-                console.log(`[Roundabout] Found nested ENTER at step ${i}, depth now: ${roundaboutDepth}`);
-              }
-              // When we find an EXIT, decrease depth
-              else if (nextManeuver.includes("ROUNDABOUT_EXIT")) {
-                roundaboutDepth--;
-                console.log(`[Roundabout] Found EXIT at step ${i}, depth now: ${roundaboutDepth}`);
-                
-                // If depth reaches 0, this is our exit
-                if (roundaboutDepth === 0) {
-                  step = nextStep;
-                  displayStepIndex = i;
-                  foundExit = true;
-                }
-              }
-            }
-            
-            if (!foundExit) {
-              console.warn(`[Roundabout] No matching EXIT found for ENTER at step ${currentStepIndex}`);
-            }
-          }
-
           // Check if we've reached the destination (at the last step)
           // Only show if we have an actual route and have reached final step with proximity check
           const hasRouteIntent = routeDestination || waypoints.length > 0;
