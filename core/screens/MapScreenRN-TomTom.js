@@ -2139,7 +2139,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
   const lastOffRouteCheckPos = useRef(null); // Track last position where we checked for off-route
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
-  const OFF_ROUTE_THRESHOLD_METERS = 100; // Reroute if 100m+ off the route and heading away
+  const OFF_ROUTE_THRESHOLD_METERS = 50; // Reroute if 50m+ off the route
   const REROUTE_COOLDOWN_SECONDS = 10; // Only attempt reroute every 10 seconds max (faster response to off-route)
   const MIN_MOVEMENT_BEFORE_CHECK = 25; // Only check off-route after user moves 25m
   const MIN_GPS_ACCURACY = 35; // Ignore off-route checks if GPS accuracy is worse than this (meters)
@@ -2208,21 +2208,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return; // User is on the polyline, don't reroute
     }
 
-    // Check if user is significantly off-route (100m+)
+    // Check if user is significantly off-route (50m+)
     if (closestDist < OFF_ROUTE_THRESHOLD_METERS) {
       console.log(`[AutoReroute] User slightly off-route (${closestDist.toFixed(0)}m away), monitoring...`);
       return; // Not far enough off to reroute yet
     }
 
-    // User is 100m+ off route - check if heading away
-    const headingAway = isHeadingAwayFromPolyline(userLocation, routeCoords);
-    
-    if (!headingAway) {
-      console.log(`[AutoReroute] User is ${closestDist.toFixed(0)}m off-route but heading back towards route, no reroute`);
-      return; // User is heading back towards the route, don't reroute
-    }
-
-    // User is off-route AND heading away - check cooldown before rerouting
+    // User is 50m+ off route - initiate reroute
     const now = Date.now();
     const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
     
@@ -2231,42 +2223,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return; // Still in cooldown period
     }
 
-    // All conditions met: off-route, heading away, and enough time elapsed
-    console.log(`[AutoReroute] User off-route (${closestDist.toFixed(0)}m) and heading away, rerouting...`);
+    // All conditions met: off-route 50m+ and enough time elapsed
+    console.log(`[AutoReroute] User off-route (${closestDist.toFixed(0)}m), rerouting...`);
     lastRerouteAttemptRef.current = now;
     
-    // Find next unvisited waypoint, but also skip waypoints that are behind the user
-    // when off-route. A waypoint is considered "behind" if it's in the opposite direction
-    // of where the user is heading.
+    // Find next unvisited waypoint
     let nextWaypoint = null;
     let remainingWaypoints = [];
     let nextWaypointIdx = getNextUnvisitedWaypointIndex();
-    
-    // If off-route, also check if the next waypoint is actually ahead of us
-    // Skip waypoints that are very far away or in the opposite direction
-    if (nextWaypointIdx >= 0 && waypoints[nextWaypointIdx]?.lat && waypoints[nextWaypointIdx]?.lng) {
-      const nextWp = waypoints[nextWaypointIdx];
-      const distToNextWaypoint = distanceBetweenMeters(
-        userLocation,
-        { latitude: nextWp.lat, longitude: nextWp.lng }
-      );
-      
-      // If next waypoint is extremely far away (200m+) while off-route, likely already passed
-      // Also check heading direction - if we're heading away from it, skip it
-      if (distToNextWaypoint > 200) {
-        // Check if user is heading away from this waypoint
-        const headingTowardWp = !isHeadingAwayFromPolyline(
-          userLocation,
-          [{ latitude: nextWp.lat, longitude: nextWp.lng }]
-        );
-        
-        if (!headingTowardWp) {
-          console.log(`[AutoReroute] Waypoint ${nextWaypointIdx} is ${distToNextWaypoint.toFixed(0)}m away and we're heading away - skipping it`);
-          // Skip to next waypoint
-          nextWaypointIdx = nextWaypointIdx + 1;
-        }
-      }
-    }
     
     if (nextWaypointIdx >= 0 && nextWaypointIdx < waypoints.length) {
       // Found unvisited waypoint - route to it
