@@ -2192,6 +2192,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
     // Find closest point on route to user
     let closestDist = Infinity;
+    let closestIndex = -1;
     for (let i = 0; i < routeCoords.length; i++) {
       const coord = routeCoords[i];
       if (!coord || coord.latitude === undefined || coord.longitude === undefined) continue;
@@ -2199,13 +2200,46 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       const dist = distanceBetweenMeters(userLocation, coord);
       if (dist < closestDist) {
         closestDist = dist;
+        closestIndex = i;
       }
     }
 
     // Check if user is on polyline (within 50m)
     if (closestDist < 50) {
-      console.log(`[AutoReroute] User on route (${closestDist.toFixed(0)}m away), no reroute needed`);
-      return; // User is on the polyline, don't reroute
+      // User is physically close to the polyline - check if heading in right direction
+      // Get the forward direction of polyline at closest point
+      if (closestIndex >= 0 && closestIndex < routeCoords.length - 1) {
+        const forwardBearing = calculateBearing(
+          routeCoords[closestIndex],
+          routeCoords[closestIndex + 1]
+        );
+        
+        // Get user's heading - use GPS heading if available, otherwise use movement direction
+        let userHeading = userLocation.heading;
+        
+        if (userHeading != null) {
+          // Compare heading to forward direction
+          const headingDiff = getBearingDifference(userHeading, forwardBearing);
+          console.log(`[AutoReroute] On polyline, heading diff: ${headingDiff.toFixed(0)}° (user: ${userHeading.toFixed(0)}°, forward: ${forwardBearing.toFixed(0)}°)`);
+          
+          // If heading is roughly in the right direction (within 90°), we're good
+          if (headingDiff < 90) {
+            console.log(`[AutoReroute] User on route and heading correctly, no reroute needed`);
+            return; // User is on the polyline AND heading in right direction
+          } else {
+            console.log(`[AutoReroute] User on route but heading wrong direction (${headingDiff.toFixed(0)}° off), rerouting...`);
+            // Fall through to reroute logic below
+          }
+        } else {
+          // No heading data available - just check proximity
+          console.log(`[AutoReroute] User on route (${closestDist.toFixed(0)}m away), no heading data to verify direction`);
+          return;
+        }
+      } else {
+        // Last point on polyline
+        console.log(`[AutoReroute] User on route (${closestDist.toFixed(0)}m away), near end of polyline`);
+        return;
+      }
     }
 
     // Check if user is significantly off-route (50m+)
