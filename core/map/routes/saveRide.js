@@ -1,6 +1,12 @@
 import { db } from "@config/firebase";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
+/**
+ * Firestore document size limit: 1MB per document
+ * Large polylines (1000+ points) can easily exceed this, causing silent query failures.
+ * This module implements progressive polyline simplification to stay well below the limit.
+ */
+
 // Simplify polyline using Douglas-Peucker algorithm to reduce size for storage
 // tolerance is in meters, higher tolerance = more aggressive simplification
 function simplifyPolyline(polyline, tolerance = 10) {
@@ -80,11 +86,41 @@ export async function saveRide({
   }
 
   // Simplify polyline if it's too large to reduce storage size
+  // Firestore has a 1MB document limit, and large polylines can exceed this
   let processedPolyline = polyline;
-  if (polyline && polyline.length > 500) {
-    console.log('[saveRide] Simplifying large polyline:', polyline.length, 'points');
+  if (polyline && polyline.length > 300) {
+    console.log('[saveRide] Polyline has', polyline.length, 'points, simplifying...');
+    
+    // Progressive simplification with increasing tolerance
     processedPolyline = simplifyPolyline(polyline, 10); // 10 meter tolerance
-    console.log('[saveRide] Simplified to:', processedPolyline.length, 'points');
+    console.log('[saveRide] Pass 1 (10m): simplified to', processedPolyline.length, 'points');
+    
+    if (processedPolyline.length > 1000) {
+      // Still too many points, be more aggressive
+      processedPolyline = simplifyPolyline(processedPolyline, 25); // 25 meter tolerance
+      console.log('[saveRide] Pass 2 (25m): simplified to', processedPolyline.length, 'points');
+    }
+    
+    if (processedPolyline.length > 1500) {
+      // Extremely large ride, very aggressive simplification
+      processedPolyline = simplifyPolyline(processedPolyline, 50); // 50 meter tolerance
+      console.log('[saveRide] Pass 3 (50m): simplified to', processedPolyline.length, 'points');
+    }
+    
+    // Hard cap at 2000 points to ensure document stays under Firestore limits
+    if (processedPolyline.length > 2000) {
+      const reduced = [];
+      const step = Math.ceil(processedPolyline.length / 2000);
+      for (let i = 0; i < processedPolyline.length; i += step) {
+        reduced.push(processedPolyline[i]);
+      }
+      // Ensure we always include the last point
+      if (reduced[reduced.length - 1] !== processedPolyline[processedPolyline.length - 1]) {
+        reduced.push(processedPolyline[processedPolyline.length - 1]);
+      }
+      processedPolyline = reduced;
+      console.log('[saveRide] Hard cap applied: reduced to', processedPolyline.length, 'points');
+    }
   }
 
   const rideData = {
@@ -126,6 +162,14 @@ export async function saveRide({
     visibility: documentData.visibility,
     routePolylineLength: documentData.routePolyline?.length,
   });
+  
+  // Validate document size before saving
+  const estimatedSize = new Blob([JSON.stringify(documentData)]).size;
+  console.log('[saveRide] Estimated document size:', (estimatedSize / 1024).toFixed(2), 'KB');
+  
+  if (estimatedSize > 900000) { // 900KB warning threshold
+    console.warn('[saveRide] ⚠️  Document is large (>', (estimatedSize / 1024 / 1024).toFixed(2), 'MB). Consider simplifying further.');
+  }
   
   return addDoc(collection(db, "routes"), documentData);
 }
