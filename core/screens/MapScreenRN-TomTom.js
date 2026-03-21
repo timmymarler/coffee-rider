@@ -763,8 +763,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     getNextUnvisitedWaypointIndex,
   } = useWaypoints();
   
-  // Get direct access to context for addWaypointAtStart
-  const { addWaypointAtStart } = useContext(WaypointsContext);
+  // Get direct access to context for waypoint manipulation
+  const { addWaypointAtStart, addWaypoint } = useContext(WaypointsContext);
   
   const [routingActive, setRoutingActive] = useState(false);
   const [routeDestination, setRouteDestination] = useState(null);
@@ -1559,6 +1559,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           },
           // Don't pass completedAt - let saveRide use serverTimestamp() for consistency
           travelMode: userTravelMode,
+          // Save waypoints so they're displayed when viewing the ride
+          waypoints: waypoints,
         });
         
         console.log("[handleSaveRide] Ride saved successfully with ID:", result.id);
@@ -3718,6 +3720,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   async function loadSavedRide(ride, rideId) {
     clearRoute();
     clearWaypoints();
+
+    // Restore waypoints if they were saved with this ride
+    if (ride.waypoints && Array.isArray(ride.waypoints) && ride.waypoints.length > 0) {
+      console.log('[loadSavedRide] Restoring', ride.waypoints.length, 'waypoints from saved ride');
+      // Add waypoints in order
+      ride.waypoints.forEach((wp) => {
+        addWaypoint(wp);
+      });
+    }
 
     // Check for routePolyline (unified structure - both routes and rides use this)
     // Also fallback to ridePolyline for old rides that haven't been normalized yet

@@ -79,6 +79,7 @@ export async function saveRide({
   routeMeta,
   completedAt,
   travelMode,
+  waypoints = [],
 }) {
   if (!user) throw new Error("User required to save ride");
   if (!capabilities?.canSaveRoutes) {
@@ -137,6 +138,8 @@ export async function saveRide({
     type: "ride",
     // Travel mode stored for metadata/analytics
     travelMode: travelMode || null,
+    // Store waypoints so they can be displayed when viewing the ride
+    waypoints: Array.isArray(waypoints) && waypoints.length > 0 ? waypoints : null,
   };
 
   // If name is provided, include it
