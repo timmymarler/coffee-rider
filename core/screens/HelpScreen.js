@@ -134,17 +134,6 @@ export default function HelpScreen() {
         </View>
         <View style={styles.controlRow}>
           <MaterialCommunityIcons
-            name="refresh"
-            size={22}
-            color={theme.colors.accentMid}
-            style={styles.controlIcon}
-          />
-          <Text style={styles.controlText}>
-            <Text style={styles.controlLabel}>Refresh Route</Text> — when in Follow Me mode with an active route, long press the Follow Me icon to refresh your route from your current location. Perfect for getting back on track if you've gone off route.
-          </Text>
-        </View>
-        <View style={styles.controlRow}>
-          <MaterialCommunityIcons
             name="home"
             size={22}
             color={theme.colors.primary}
@@ -197,54 +186,15 @@ export default function HelpScreen() {
         </View>
 
         <Text style={styles.subText}>
-          <Text style={styles.controlLabel}>Search Results:</Text> When you search for a place, markers appear with colors indicating both the source and match quality.
+          <Text style={styles.controlLabel}>Search Results:</Text> When you search for a place, Google results appear with a different marker style.
         </Text>
-
-        <View style={styles.legendRow}>
-          <SvgPin {...markerStyles.searchCRExact} size={34} />
-          <Text style={styles.legendText}>
-            <Text style={styles.controlLabel}>Exact CR match</Text> — Gold fill, red outline. Coffee Rider place where the name starts with your search term.
-          </Text>
-        </View>
-
-        <View style={styles.legendRow}>
-          <SvgPin {...markerStyles.searchCRPartial} size={34} />
-          <Text style={styles.legendText}>
-            <Text style={styles.controlLabel}>Partial CR match</Text> — Accent fill, dark outline. Coffee Rider place found in your search.
-          </Text>
-        </View>
-
-        <View style={styles.legendRow}>
-          <SvgPin {...markerStyles.searchGoogleExact} size={34} />
-          <Text style={styles.legendText}>
-            <Text style={styles.controlLabel}>Exact Google match</Text> — Blue fill, red outline. Google place where the name starts with your search term.
-          </Text>
-        </View>
 
         <View style={styles.legendRow}>
           <SvgPin {...markerStyles.searchGooglePartial} size={34} />
           <Text style={styles.legendText}>
-            <Text style={styles.controlLabel}>Partial Google match</Text> — Blue fill, dark outline. Google place found in your search.
+            <Text style={styles.controlLabel}>Google search results</Text> — Google Places found in your search.
           </Text>
         </View>
-
-        <View style={styles.legendRow}>
-          <SvgPin {...markerStyles.destination} size={34} />
-          <Text style={styles.legendText}>
-            <Text style={styles.controlLabel}>Destination</Text> — Blue fill, red outline. The place you are navigating to or routing towards.
-          </Text>
-        </View>
-
-        <View style={styles.legendRow}>
-          <SvgPin {...markerStyles.sponsor} size={34} />
-          <Text style={styles.legendText}>
-            <Text style={styles.controlLabel}>Sponsored places</Text> — Purple outline indicates places with active sponsorships. These are Coffee Rider places deserving special recognition.
-          </Text>
-        </View>
-
-        <Text style={[styles.subText, { marginTop: 12 }]}>
-          <Text style={styles.controlLabel}>Offline Search:</Text> When offline, you can still search Coffee Rider places. Network errors are handled gracefully and won't interrupt your search experience.
-        </Text>
       </View>
 
       {/* -------------------------------------------------- */}
@@ -340,37 +290,37 @@ export default function HelpScreen() {
             to identify the various different amenities that are available at the place you are viewing.
           </Text>
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="parking" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="parking" size={22} color={theme.colors.accentMid} />
           <Text style={styles.legendText}>Has its own car park</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="motorbike" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="motorbike" size={22} color={theme.colors.accentMid} />
           <Text style={styles.legendText}>Parking suitable for bikes and scooters</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="ev-station" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="ev-station" size={22} color={theme.colors.accentMid} />
           <Text style={styles.legendText}>Has EV charging points</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="toilet" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="toilet" size={22} color={theme.colors.accentMid} />
           <Text style={styles.legendText}>Has toilets on site</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="dog-side" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="dog-side" size={22} color={theme.colors.accentMid} />
           <Text style={styles.legendText}>Pet Friendly</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="wheelchair" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="wheelchair" size={22} color={theme.colors.accentMid} />
           <Text style={styles.legendText}>Wheelchar accessible</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="table-picnic" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="table-picnic" size={22} color={theme.colors.accentMid} />
           <Text style={styles.legendText}>Has outside seating</Text>
         </View>
       </View>
@@ -554,6 +504,39 @@ export default function HelpScreen() {
           </>
         )}
       </View>
+
+      {/* -------------------------------------------------- */}
+      {/* CALENDAR & EVENTS                                  */}
+      {/* -------------------------------------------------- */}
+      {capabilities.canCreateEvents && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Calendar & events</Text>
+
+          <Text style={styles.subText}>
+            Create and organize events for your group rides and gatherings.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Create an Event</Text> — Use the Calendar tab to create a new event. Add a title, date, time, location, and description. Events can be private, visible to your group, or public.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Event Visibility</Text> — Choose who can see your event: Private (only you), Group (group members), or Public (all Coffee Rider users).
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Group Events</Text> — When creating an event, you can link it to one or more groups. All group members will see the event and can indicate interest or join.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>View Your Events</Text> — Check the Calendar tab to see all your upcoming events and any group events you're invited to. Tap an event to see details and who's attending.
+          </Text>
+
+          <Text style={styles.bullet}>
+            <Text style={styles.controlLabel}>Event Reminders</Text> — Get notified about upcoming events from your groups and personal calendar.
+          </Text>
+        </View>
+      )}
 
       {/* -------------------------------------------------- */}
       {/* FEEDBACK / SUPPORT                                 */}
