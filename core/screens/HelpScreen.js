@@ -21,6 +21,127 @@ export default function HelpScreen() {
   // Use dynamic theme from context
   const dynamicTheme = useTheme();
   const theme = dynamicTheme;
+  
+  const styles = StyleSheet.create({
+    container: {
+      alignItems: "center",
+      paddingBottom: 140, // Further increased for extra space above Tab Bar
+      backgroundColor: theme.colors.primaryLight,
+    },
+
+    header: {
+      width: screenWidth * 0.9,
+      paddingTop: 24,
+    },
+
+    title: {
+      fontSize: 22,
+      fontWeight: "700",
+      color: theme.colors.accentMid,
+      marginBottom: 6,
+    },
+
+    subTitle: {
+      fontSize: 14,
+      color: theme.colors.accentDark,
+      marginBottom: 12,
+    },
+
+    role: {
+      fontWeight: "600",
+      color: theme.colors.accentMid,
+    },
+
+    text: {
+      fontSize: 14,
+      color: theme.colors.accentMid,
+      lineHeight: 20,
+    },
+
+    section: {
+      width: screenWidth * 0.9,
+      marginTop: 28,
+    },
+
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.accentMid,
+      marginBottom: 10,
+    },
+
+    bullet: {
+      fontSize: 14,
+      color: theme.colors.accentDark,
+      marginBottom: 6,
+    },
+
+    subText: {
+      fontSize: 13,
+      color: theme.colors.accentDark,
+      marginBottom: 6,
+    },
+
+    controlRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      marginBottom: 10,
+    },
+
+    controlIcon: {
+      marginRight: 10,
+      marginTop: 2,
+    },
+
+    controlText: {
+      flex: 1,
+      fontSize: 14,
+      color: theme.colors.accentDark,
+      lineHeight: 20,
+    },
+
+    controlLabel: {
+      fontWeight: "600",
+    },
+
+    link: {
+      marginTop: 8,
+      fontSize: 14,
+      color: theme.colors.accentMid,
+      fontWeight: "600",
+    },
+
+    footer: {
+      marginTop: 40,
+    },
+
+    footerText: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+
+    legendRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+
+    legendText: {
+      flex: 1,
+      marginLeft: 12,
+      fontSize: 14,
+      color: theme.colors.accentDark,
+      lineHeight: 20,
+    },
+    waypointPin: {
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      backgroundColor: theme.colors.primary,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+  });
   const markerStyles = {
     destination: {
       fill: theme.colors.primary,
@@ -569,125 +690,3 @@ export default function HelpScreen() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: "center",
-    paddingBottom: 140, // Further increased for extra space above Tab Bar
-    backgroundColor: theme.colors.primaryLight,
-  },
-
-  header: {
-    width: screenWidth * 0.9,
-    paddingTop: 24,
-  },
-
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: theme.colors.accentMid,
-    marginBottom: 6,
-  },
-
-  subTitle: {
-    fontSize: 14,
-    color: theme.colors.accentDark,
-    marginBottom: 12,
-  },
-
-  role: {
-    fontWeight: "600",
-    color: theme.colors.accentMid,
-  },
-
-  text: {
-    fontSize: 14,
-    color: theme.colors.accentMid,
-    lineHeight: 20,
-  },
-
-  section: {
-    width: screenWidth * 0.9,
-    marginTop: 28,
-  },
-
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: theme.colors.accentMid,
-    marginBottom: 10,
-  },
-
-  bullet: {
-    fontSize: 14,
-    color: theme.colors.accentDark,
-    marginBottom: 6,
-  },
-
-  subText: {
-    fontSize: 13,
-    color: theme.colors.accentDark,
-    marginBottom: 6,
-  },
-
-  controlRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 10,
-  },
-
-  controlIcon: {
-    marginRight: 10,
-    marginTop: 2,
-  },
-
-  controlText: {
-    flex: 1,
-    fontSize: 14,
-    color: theme.colors.accentDark,
-    lineHeight: 20,
-  },
-
-  controlLabel: {
-    fontWeight: "600",
-  },
-
-  link: {
-    marginTop: 8,
-    fontSize: 14,
-    color: theme.colors.accentMid,
-    fontWeight: "600",
-  },
-
-  footer: {
-    marginTop: 40,
-  },
-
-  footerText: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-  },
-
-  legendRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-
-  legendText: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 14,
-    color: theme.colors.accentDark,
-    lineHeight: 20,
-  },
-  waypointPin: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: theme.colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-});
