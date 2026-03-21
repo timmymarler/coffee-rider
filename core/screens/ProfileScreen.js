@@ -899,7 +899,7 @@ export default function ProfileScreen() {
               placeholder="123 Main St, City, Postcode"
             />
 
-            <CRLabel style={{ marginTop: theme.spacing.md }}>Default Vehicle Type</CRLabel>
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Routing Type</CRLabel>
             <View style={{ flexDirection: "row", gap: theme.spacing.lg, marginVertical: theme.spacing.sm, paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.md, backgroundColor: theme.colors.primaryDark, borderRadius: theme.radius.md }}>
               {[
                 { id: "motorcycle", icon: "motorbike", theme: "rider" },
@@ -914,7 +914,7 @@ export default function ProfileScreen() {
                   <MaterialCommunityIcons
                     name={vehicle.icon}
                     size={24}
-                    color={userTheme === vehicle.theme ? theme.colors.accentMid : theme.colors.primaryMid}
+                    color={userTheme === vehicle.theme ? theme.colors.accentMid : '#635021'}
                   />
                 </TouchableOpacity>
               ))}
