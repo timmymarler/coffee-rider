@@ -137,14 +137,14 @@ export default function HelpScreen() {
       width: 18,
       height: 18,
       borderRadius: 9,
-      backgroundColor: theme.colors.primary,
+      backgroundColor: theme.colors.accentMid,
       justifyContent: "center",
       alignItems: "center",
     },
   });
   const markerStyles = {
     destination: {
-      fill: theme.colors.primary,
+      fill: theme.colors.accentMid,
       circle: theme.colors.accentMid,
       stroke: theme.colors.danger,
     },
@@ -211,7 +211,7 @@ export default function HelpScreen() {
           <MaterialCommunityIcons
             name="crosshairs-gps"
             size={22}
-            color={theme.colors.primary}
+            color={theme.colors.accentMid}
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
@@ -234,7 +234,7 @@ export default function HelpScreen() {
           <MaterialCommunityIcons
             name="navigation"
             size={22}
-            color={theme.colors.primary}
+            color={theme.colors.accentMid}
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
@@ -257,7 +257,7 @@ export default function HelpScreen() {
           <MaterialCommunityIcons
             name="home"
             size={22}
-            color={theme.colors.primary}
+            color={theme.colors.accentMid}
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
@@ -268,7 +268,7 @@ export default function HelpScreen() {
           <MaterialCommunityIcons
             name="map-marker-path"
             size={22}
-            color={theme.colors.primary}
+            color={theme.colors.accentMid}
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
