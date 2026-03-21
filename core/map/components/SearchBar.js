@@ -91,7 +91,7 @@ export function SearchBar({
           <Ionicons
             name="options"
             size={28}
-            color={filtersActive ? theme.colors.accentMid : theme.colors.primaryLight}
+            color={filtersActive ? theme.colors.accentMid : theme.colors.accentDark}
           />
         </TouchableOpacity>
 
@@ -105,7 +105,7 @@ export function SearchBar({
             <MaterialCommunityIcons
               name="shuffle-variant"
               size={28}
-              color={routeTypeActive ? theme.colors.accentMid : theme.colors.primaryLight}
+              color={routeTypeActive ? theme.colors.accentMid : theme.colors.accentDark}
             />
           </TouchableOpacity>
         )}
