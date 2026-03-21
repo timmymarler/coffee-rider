@@ -117,7 +117,7 @@ function FloatingTabBar({ state }) {
           : isFocused
             ? activeColor
             : inactiveColor;
-        const color = isProfileTab && user ? theme.colors.accentDark : baseColor;
+        const color = isProfileTab && user && isFocused ? theme.colors.accentDark : baseColor;
 
         return (
           <TouchableOpacity
