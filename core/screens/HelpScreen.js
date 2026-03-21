@@ -366,37 +366,37 @@ export default function HelpScreen() {
             <Text style={styles.controlLabel}>Place Icons</Text> — different icons will appear in the markers to identify the category of each place.
           </Text>
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="coffee" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="coffee" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Cafés and coffee stops</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="silverware-fork-knife" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="silverware-fork-knife" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Restaurants and food venues</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="beer" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="beer" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Pubs and bars</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="motorbike" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="motorbike" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Bike/Scooter garages and service centres</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="gas-station" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="gas-station" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Fuel stations</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="parking" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="parking" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Parking areas</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="forest" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="forest" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Scenic viewpoints and stops</Text>
         </View>
       </View>
