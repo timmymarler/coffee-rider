@@ -4322,8 +4322,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
                     <SvgPin
                       icon={c.icon}
                       size={32}
-                      fill={active ? theme.colors.accentMid : '#CCCCCC'}
-                      circle={active ? theme.colors.accentMid : '#CCCCCC'}
+                      fill={active ? theme.colors.accentMid : '#635021'}
+                      circle={active ? theme.colors.accentMid : '#635021'}
                       stroke={active ? theme.colors.primaryDark : theme.colors.primaryDark}
                     />
 
