@@ -65,7 +65,7 @@ function FloatingTabBar({ state }) {
   }, [hidden]);
 
   const activeColor = theme.colors.accentDark;
-  const inactiveColor = theme.colors.primaryLight;
+  const inactiveColor = '#635021';
 
   const tabs = [
     { name: "map", icon: "map", disabled: !canAccessMap },

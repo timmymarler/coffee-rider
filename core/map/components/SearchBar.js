@@ -57,7 +57,7 @@ export function SearchBar({
               }
             }}
             placeholder="Search places…"
-            placeholderTextColor={theme.colors.primaryLight}
+            placeholderTextColor={'#635021'}
             style={[styles.searchInput, { color: theme.colors.accentMid }]}
             returnKeyType="search"
             clearButtonMode="while-editing"
