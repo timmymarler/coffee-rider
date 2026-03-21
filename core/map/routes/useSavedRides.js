@@ -13,8 +13,11 @@ export function useSavedRides() {
     if (!user) {
       setRides([]);
       setLoading(false);
+      console.log('[useSavedRides] No user logged in, clearing rides');
       return;
     }
+
+    console.log('[useSavedRides] User logged in, initializing ride queries for:', user.uid);
 
     // Query 1: Old rides from legacy "rides" collection (for backward compatibility)
     const oldRidesQuery = query(
@@ -35,7 +38,13 @@ export function useSavedRides() {
 
     const updateRides = () => {
       if (oldRidesLoaded && newRidesLoaded) {
-        setRides(Array.from(ridesMap.values()));
+        const rides = Array.from(ridesMap.values());
+        console.log('[useSavedRides] Both queries complete. Final rides count:', rides.length, {
+          oldLoaded: oldRidesLoaded,
+          newLoaded: newRidesLoaded,
+          ridesMap: ridesMap.size,
+        });
+        setRides(rides);
         setLoading(false);
       }
     };
@@ -44,6 +53,7 @@ export function useSavedRides() {
     const unsubOld = onSnapshot(oldRidesQuery, (snap) => {
       incMetric("useSavedRides:oldSnapshot");
       incMetric("useSavedRides:oldDocs", snap.docs.length, 25);
+      console.log('[useSavedRides] Old rides query returned', snap.docs.length, 'documents from "rides" collection');
       snap.docs.forEach((doc) => {
         // Store with "old_" prefix to avoid conflicts with new rides
         const rideId = doc.id;
@@ -57,9 +67,11 @@ export function useSavedRides() {
       oldRidesLoaded = true;
       updateRides();
     }, (err) => {
-      if (err.code !== 'permission-denied') {
-        console.error("Error listening to old rides:", err);
-      }
+      console.error('[useSavedRides] Error listening to old rides:', {
+        code: err.code,
+        message: err.message,
+        user: user.uid,
+      });
       oldRidesLoaded = true;
       updateRides();
     });
@@ -87,14 +99,17 @@ export function useSavedRides() {
       newRidesLoaded = true;
       updateRides();
     }, (err) => {
-      if (err.code !== 'permission-denied') {
-        console.error("Error listening to new rides:", err);
-      }
+      console.error('[useSavedRides] Error listening to new rides:', {
+        code: err.code,
+        message: err.message,
+        user: user.uid,
+      });
       newRidesLoaded = true;
       updateRides();
     });
 
     return () => {
+      console.log('[useSavedRides] Cleaning up ride subscriptions');
       unsubOld();
       unsubNew();
     };
