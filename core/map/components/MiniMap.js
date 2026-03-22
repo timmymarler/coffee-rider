@@ -68,30 +68,30 @@ export default function MiniMap({
     };
   }, [userLocation]);
 
-  // Effect: every 30s, fit all riders in view (with user centered)
+  // Effect: fit all markers (user + riders) with padding for name bubbles every 30s, not on every update
   useEffect(() => {
-    if (!mapRef.current || !userLocation) return;
-    const interval = setInterval(() => {
-      if (!mapRef.current) return;
-      const allPoints = [userLocation, ...riderLocations.map(r => ({ latitude: r.latitude, longitude: r.longitude }))];
-      if (allPoints.length < 2) return;
-      // Calculate bounds
-      const lats = allPoints.map(p => p.latitude);
-      const lngs = allPoints.map(p => p.longitude);
-      const minLat = Math.min(...lats);
-      const maxLat = Math.max(...lats);
-      const minLng = Math.min(...lngs);
-      const maxLng = Math.max(...lngs);
-      mapRef.current.animateToRegion({
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        latitudeDelta: Math.max((maxLat - minLat) * 1.3, 0.02),
-        longitudeDelta: Math.max((maxLng - minLng) * 1.3, 0.02),
-      }, 1000);
-      lastFitRef.current = Date.now();
-    }, 30000);
+    if (!mapRef.current) return;
+    const fitAll = () => {
+      const coords = [];
+      if (userLocation) {
+        coords.push({ latitude: userLocation.latitude, longitude: userLocation.longitude });
+      }
+      riderLocations.forEach(rider => {
+        coords.push({ latitude: rider.latitude, longitude: rider.longitude });
+      });
+      if (coords.length > 1 && mapRef.current) {
+        mapRef.current.fitToCoordinates(coords, {
+          edgePadding: { top: 40, right: 80, bottom: 40, left: 80 },
+          animated: true,
+        });
+      }
+    };
+    // Initial fit on mount
+    fitAll();
+    // Refit every 30s
+    const interval = setInterval(fitAll, 30000);
     return () => clearInterval(interval);
-  }, [userLocation, riderLocations]);
+  }, [userLocation, riderLocations.length]);
 
 
   return (
@@ -107,6 +107,7 @@ export default function MiniMap({
         rotateEnabled={false}
         showsMyLocationButton={false}
         showsUserLocation={false}
+        // No onMapReady fit; handled by effect above
       >
         {/* Route polyline - background */}
         {routeCoords.length > 1 && (
