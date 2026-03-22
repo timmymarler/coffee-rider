@@ -1,3 +1,23 @@
+import { useWindowDimensions } from "react-native";
+
+function MiniMapWithResponsivePosition({ riderLocations, userLocation, routeCoords, colorScheme }) {
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+  const miniMapDynamicStyle = [
+    styles.miniMapContainer,
+    isLandscape ? { right: 140 } : {}, // Move left in landscape
+  ];
+  return (
+    <View style={miniMapDynamicStyle} pointerEvents="box-none">
+      <MiniMap
+        riderLocations={riderLocations}
+        userLocation={userLocation}
+        routeCoords={routeCoords}
+        colorScheme={colorScheme}
+      />
+    </View>
+  );
+}
 import { db } from "@config/firebase";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
@@ -1610,7 +1630,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           suitability: Array.isArray(data.suitability)
             ? data.suitability
             : Object.keys(data.suitability || {}),
-
           amenities: Array.isArray(data.amenities)
             ? data.amenities
             : Object.keys(data.amenities || {}),
@@ -1661,7 +1680,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     return unsub;
   }, []);
 
-  // Monitor newly created places and ensure they're in crPlaces
+  // Monitor newly created places and ensure they
   useEffect(() => {
     if (!newlyCreatedPlace) return;
 
@@ -2183,6 +2202,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
+
     // Only check off-route if user has moved significantly since last check
     if (lastOffRouteCheckPos.current) {
       const distFromLastCheck = distanceBetweenMeters(userLocation, lastOffRouteCheckPos.current);
@@ -2192,30 +2212,33 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
     lastOffRouteCheckPos.current = userLocation;
 
-    // Find closest point on route to user
+    // Use snapped point for off-route check
+    const snappedPoint = projectPointToPolyline(userLocation, routeCoords);
+    const pointToCheck = snappedPoint || userLocation;
+
+    // Find closest point on route to snapped point
     let closestDist = Infinity;
     let closestIndex = -1;
     for (let i = 0; i < routeCoords.length; i++) {
       const coord = routeCoords[i];
       if (!coord || coord.latitude === undefined || coord.longitude === undefined) continue;
-      
-      const dist = distanceBetweenMeters(userLocation, coord);
+      const dist = distanceBetweenMeters(pointToCheck, coord);
       if (dist < closestDist) {
         closestDist = dist;
         closestIndex = i;
       }
     }
 
-    // Check if user is on polyline (within 50m)
+    // Check if user (snapped) is on polyline (within 50m)
     if (closestDist < 50) {
       // User is on the route - don't reroute
-      console.log(`[AutoReroute] User on route (${closestDist.toFixed(0)}m away), no reroute needed`);
+      console.log(`[AutoReroute] User (snapped) on route (${closestDist.toFixed(0)}m away), no reroute needed`);
       return;
     }
 
-    // Check if user is significantly off-route (50m+)
+    // Check if user (snapped) is significantly off-route (50m+)
     if (closestDist < OFF_ROUTE_THRESHOLD_METERS) {
-      console.log(`[AutoReroute] User slightly off-route (${closestDist.toFixed(0)}m away), monitoring...`);
+      console.log(`[AutoReroute] User (snapped) slightly off-route (${closestDist.toFixed(0)}m away), monitoring...`);
       return; // Not far enough off to reroute yet
     }
 
@@ -2602,7 +2625,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       clearFollowMeInactivityTimeout(); // Clean up inactivity timeout on unmount
     };
   }, []);
-
 
   /* ------------------------------------------------------------ */
   /* FETCH GOOGLE POIS ON REGION CHANGE                            */
@@ -4253,14 +4275,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
       {/* Mini map showing group members when riding */}
       {activeRide && riderLocations.length > 0 && (
-        <View style={styles.miniMapContainer}>
-          <MiniMap
-            riderLocations={riderLocations}
-            userLocation={userLocation}
-            routeCoords={routeCoords}
-            colorScheme={colorScheme}
-          />
-        </View>
+        <MiniMapWithResponsivePosition
+          riderLocations={riderLocations}
+          userLocation={userLocation}
+          routeCoords={routeCoords}
+          colorScheme={colorScheme}
+        />
       )}
       
       {showFilters && (

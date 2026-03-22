@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
-import { useMemo } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
@@ -46,45 +46,58 @@ export default function MiniMap({
 }) {
   const theme = useTheme();
 
-  // Calculate initial region to fit all riders and user
-  const initialRegion = useMemo(() => {
-    const allPoints = [
-      ...(userLocation ? [userLocation] : []),
-      ...riderLocations.map(r => ({ latitude: r.latitude, longitude: r.longitude })),
-    ];
+  // Keep user in center, update region every 30s to fit all riders
+  const mapRef = useRef(null);
+  const lastFitRef = useRef(Date.now());
 
-    if (allPoints.length === 0) {
+  // Initial region: center on user or fallback
+  const initialRegion = useMemo(() => {
+    if (userLocation) {
       return {
-        latitude: 51.5074,
-        longitude: -0.1278,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
       };
     }
-
-    const lats = allPoints.map(p => p.latitude);
-    const lngs = allPoints.map(p => p.longitude);
-
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-
-    const latDelta = (maxLat - minLat) * 1.3; // 30% padding
-    const lngDelta = (maxLng - minLng) * 1.3;
-
     return {
-      latitude: (minLat + maxLat) / 2,
-      longitude: (minLng + maxLng) / 2,
-      latitudeDelta: Math.max(latDelta, 0.05),
-      longitudeDelta: Math.max(lngDelta, 0.05),
+      latitude: 51.5074,
+      longitude: -0.1278,
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
     };
+  }, [userLocation]);
+
+  // Effect: every 30s, fit all riders in view (with user centered)
+  useEffect(() => {
+    if (!mapRef.current || !userLocation) return;
+    const interval = setInterval(() => {
+      if (!mapRef.current) return;
+      const allPoints = [userLocation, ...riderLocations.map(r => ({ latitude: r.latitude, longitude: r.longitude }))];
+      if (allPoints.length < 2) return;
+      // Calculate bounds
+      const lats = allPoints.map(p => p.latitude);
+      const lngs = allPoints.map(p => p.longitude);
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      const minLng = Math.min(...lngs);
+      const maxLng = Math.max(...lngs);
+      mapRef.current.animateToRegion({
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: Math.max((maxLat - minLat) * 1.3, 0.02),
+        longitudeDelta: Math.max((maxLng - minLng) * 1.3, 0.02),
+      }, 1000);
+      lastFitRef.current = Date.now();
+    }, 30000);
+    return () => clearInterval(interval);
   }, [userLocation, riderLocations]);
 
 
   return (
     <View style={[styles.container, containerStyles]}>
       <MapView
+        ref={mapRef}
         style={styles.map}
         initialRegion={initialRegion}
         customMapStyle={null}
@@ -126,7 +139,7 @@ export default function MiniMap({
           >
             <View style={styles.markerContainer}>
               <View style={[styles.userLocationMarker, { backgroundColor: theme.colors.primary }]} />
-              <View style={styles.labelBubble}>
+              <View style={[styles.labelBubble, { marginTop: 2, alignSelf: 'center', maxWidth: 70 }]}> 
                 <Text style={styles.labelText}>You</Text>
               </View>
             </View>
@@ -151,7 +164,7 @@ export default function MiniMap({
                   { backgroundColor: getUserColor(rider.id, index) }
                 ]} 
               />
-              <View style={styles.labelBubble}>
+              <View style={[styles.labelBubble, { marginTop: 2, alignSelf: 'center', maxWidth: 70 }]}> 
                 <Text style={styles.labelText} numberOfLines={1}>
                   {rider.userName || `Rider ${index + 1}`}
                 </Text>
