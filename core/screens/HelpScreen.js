@@ -21,9 +21,130 @@ export default function HelpScreen() {
   // Use dynamic theme from context
   const dynamicTheme = useTheme();
   const theme = dynamicTheme;
+  
+  const styles = StyleSheet.create({
+    container: {
+      alignItems: "center",
+      paddingBottom: 140, // Further increased for extra space above Tab Bar
+      backgroundColor: theme.colors.primaryLight,
+    },
+
+    header: {
+      width: screenWidth * 0.9,
+      paddingTop: 24,
+    },
+
+    title: {
+      fontSize: 22,
+      fontWeight: "700",
+      color: theme.colors.accentMid,
+      marginBottom: 6,
+    },
+
+    subTitle: {
+      fontSize: 14,
+      color: theme.colors.accentDark,
+      marginBottom: 12,
+    },
+
+    role: {
+      fontWeight: "600",
+      color: theme.colors.accentMid,
+    },
+
+    text: {
+      fontSize: 14,
+      color: theme.colors.accentMid,
+      lineHeight: 20,
+    },
+
+    section: {
+      width: screenWidth * 0.9,
+      marginTop: 28,
+    },
+
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.accentMid,
+      marginBottom: 10,
+    },
+
+    bullet: {
+      fontSize: 14,
+      color: theme.colors.accentDark,
+      marginBottom: 6,
+    },
+
+    subText: {
+      fontSize: 13,
+      color: theme.colors.accentDark,
+      marginBottom: 6,
+    },
+
+    controlRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      marginBottom: 10,
+    },
+
+    controlIcon: {
+      marginRight: 10,
+      marginTop: 2,
+    },
+
+    controlText: {
+      flex: 1,
+      fontSize: 14,
+      color: theme.colors.accentDark,
+      lineHeight: 20,
+    },
+
+    controlLabel: {
+      fontWeight: "600",
+    },
+
+    link: {
+      marginTop: 8,
+      fontSize: 14,
+      color: theme.colors.accentMid,
+      fontWeight: "600",
+    },
+
+    footer: {
+      marginTop: 40,
+    },
+
+    footerText: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+
+    legendRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+
+    legendText: {
+      flex: 1,
+      marginLeft: 12,
+      fontSize: 14,
+      color: theme.colors.accentDark,
+      lineHeight: 20,
+    },
+    waypointPin: {
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      backgroundColor: "#2196F3",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+  });
   const markerStyles = {
     destination: {
-      fill: theme.colors.primary,
+      fill: "#2196F3",
       circle: theme.colors.accentMid,
       stroke: theme.colors.danger,
     },
@@ -90,7 +211,7 @@ export default function HelpScreen() {
           <MaterialCommunityIcons
             name="crosshairs-gps"
             size={22}
-            color={theme.colors.primary}
+            color="#2196F3"
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
@@ -113,7 +234,7 @@ export default function HelpScreen() {
           <MaterialCommunityIcons
             name="navigation"
             size={22}
-            color={theme.colors.primary}
+            color="#2196F3"
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
@@ -136,7 +257,7 @@ export default function HelpScreen() {
           <MaterialCommunityIcons
             name="home"
             size={22}
-            color={theme.colors.primary}
+            color="#2196F3"
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
@@ -147,7 +268,7 @@ export default function HelpScreen() {
           <MaterialCommunityIcons
             name="map-marker-path"
             size={22}
-            color={theme.colors.primary}
+            color="#2196F3"
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
@@ -245,37 +366,37 @@ export default function HelpScreen() {
             <Text style={styles.controlLabel}>Place Icons</Text> — different icons will appear in the markers to identify the category of each place.
           </Text>
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="coffee" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="coffee" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Cafés and coffee stops</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="silverware-fork-knife" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="silverware-fork-knife" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Restaurants and food venues</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="beer" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="beer" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Pubs and bars</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="motorbike" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="motorbike" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Bike/Scooter garages and service centres</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="gas-station" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="gas-station" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Fuel stations</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="parking" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="parking" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Parking areas</Text>
         </View>
 
         <View style={styles.legendRow}>
-          <MaterialCommunityIcons name="forest" size={22} color={theme.colors.primaryDark} />
+          <MaterialCommunityIcons name="forest" size={22} color="#2196F3" />
           <Text style={styles.legendText}>Scenic viewpoints and stops</Text>
         </View>
       </View>
@@ -569,125 +690,3 @@ export default function HelpScreen() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: "center",
-    paddingBottom: 140, // Further increased for extra space above Tab Bar
-    backgroundColor: theme.colors.primaryLight,
-  },
-
-  header: {
-    width: screenWidth * 0.9,
-    paddingTop: 24,
-  },
-
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: theme.colors.accentMid,
-    marginBottom: 6,
-  },
-
-  subTitle: {
-    fontSize: 14,
-    color: theme.colors.accentDark,
-    marginBottom: 12,
-  },
-
-  role: {
-    fontWeight: "600",
-    color: theme.colors.accentMid,
-  },
-
-  text: {
-    fontSize: 14,
-    color: theme.colors.accentMid,
-    lineHeight: 20,
-  },
-
-  section: {
-    width: screenWidth * 0.9,
-    marginTop: 28,
-  },
-
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: theme.colors.accentMid,
-    marginBottom: 10,
-  },
-
-  bullet: {
-    fontSize: 14,
-    color: theme.colors.accentDark,
-    marginBottom: 6,
-  },
-
-  subText: {
-    fontSize: 13,
-    color: theme.colors.accentDark,
-    marginBottom: 6,
-  },
-
-  controlRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 10,
-  },
-
-  controlIcon: {
-    marginRight: 10,
-    marginTop: 2,
-  },
-
-  controlText: {
-    flex: 1,
-    fontSize: 14,
-    color: theme.colors.accentDark,
-    lineHeight: 20,
-  },
-
-  controlLabel: {
-    fontWeight: "600",
-  },
-
-  link: {
-    marginTop: 8,
-    fontSize: 14,
-    color: theme.colors.accentMid,
-    fontWeight: "600",
-  },
-
-  footer: {
-    marginTop: 40,
-  },
-
-  footerText: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-  },
-
-  legendRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-
-  legendText: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 14,
-    color: theme.colors.accentDark,
-    lineHeight: 20,
-  },
-  waypointPin: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: theme.colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-});
