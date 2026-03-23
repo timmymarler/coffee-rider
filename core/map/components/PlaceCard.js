@@ -65,6 +65,7 @@ const defaultSuitability = {
   walkers: false,
   cars: false,
   evDrivers: false,
+  bikeBrew: false,
 };
 
 const defaultAmenities = {
@@ -106,6 +107,13 @@ export default function PlaceCard({
   const [loadingGooglePhotos, setLoadingGooglePhotos] = useState(false);
   const [hoursExpanded, setHoursExpanded] = useState(false);
   const [currentPlace, setCurrentPlace] = useState(place);
+  // Bike & Brew state (must be before JSX)
+  const [bikeBrewChecked, setBikeBrewChecked] = useState(!!place?.bikeBrew);
+
+  // Keep bikeBrewChecked in sync with place prop (for editing existing places)
+  useEffect(() => {
+    setBikeBrewChecked(!!place?.bikeBrew);
+  }, [place?.bikeBrew, place?.id]);
   const openingStatus = getOpeningStatus(currentPlace.regularOpeningHours);
   const weekList = formatWeekdayText(currentPlace.regularOpeningHours);
 
@@ -711,6 +719,7 @@ export default function PlaceCard({
             ? place.googlePhotoRefs
             : (Array.isArray(googlePhotos) ? googlePhotos : []),        
         },
+        bikeBrew: bikeBrewChecked,
         updatedAt: serverTimestamp(),
       };
 
@@ -1195,12 +1204,15 @@ export default function PlaceCard({
               )}
             </View>
           )}
+
+
           {distanceMiles && (
             <Text style={styles.subText}>
               {/* {distanceMiles} miles away (straight line distance) */}
               {distanceText}
             </Text>
           )}
+
 
           {/* Opening Hours (Google only) */}
           <TouchableOpacity
@@ -1354,7 +1366,11 @@ export default function PlaceCard({
                         ? "walk"
                         : key === "cars"
                         ? "car"
-                        : "car-electric"
+                        : key === "evDrivers"
+                        ? "car-electric"
+                        : key === "bikeBrew"
+                        ? "handshake"
+                        : undefined
                     )}
                   </TouchableOpacity>
                 ))}

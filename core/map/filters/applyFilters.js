@@ -37,5 +37,10 @@ export function applyFilters(poi, filters) {
     }
   }
 
+  // Bike & Brew filter (CR only)
+  if (poi.source === "cr" && filters.bikeBrew) {
+    if (!poi.bikeBrew) return false;
+  }
+
   return true;
 }

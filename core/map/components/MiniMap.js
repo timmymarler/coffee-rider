@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
-import { useMemo, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 

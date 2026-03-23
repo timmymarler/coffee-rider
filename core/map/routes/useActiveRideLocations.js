@@ -50,11 +50,9 @@ export default function useActiveRideLocations(myActiveRide, userId) {
       activeRidesQuery,
       (snapshot) => {
         incMetric('useActiveRideLocations:snapshot', 1, 10);
-        
         const locations = [];
         snapshot.forEach((doc) => {
           const data = doc.data();
-          
           // Exclude self
           if (doc.id !== userId) {
             locations.push({
@@ -63,17 +61,18 @@ export default function useActiveRideLocations(myActiveRide, userId) {
             });
           }
         });
-
         incMetric('useActiveRideLocations:docs', locations.length, 10);
-        console.log('[useActiveRideLocations] Updated locations:', locations.length);
-        
+        // Debug log for troubleshooting on device
+        console.log('[useActiveRideLocations] RiderLocations:', locations);
         setRiderLocations(locations);
         setLoading(false);
       },
       (err) => {
+        // Debug log for troubleshooting on device
+        console.error('[useActiveRideLocations] Snapshot error:', err);
         // Ignore permission errors when user is logging out
         if (err.code !== 'permission-denied') {
-          console.error('[useActiveRideLocations] Snapshot error:', err);
+          console.error('[useActiveRideLocations] Non-permission error:', err);
         }
         setRiderLocations([]);
         setLoading(false);

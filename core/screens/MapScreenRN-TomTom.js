@@ -1,4 +1,15 @@
-import { useWindowDimensions } from "react-native";
+import { db } from "@config/firebase";
+import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
+import { TabBarContext } from "@context/TabBarContext";
+import { useTheme } from "@context/ThemeContext";
+import { debugLog } from "@core/utils/debugLog";
+import { incMetric } from "@core/utils/devMetrics";
+import Constants from "expo-constants";
+import { collection, doc, getDoc, getDocs, onSnapshot } from "firebase/firestore";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
+import MapView, { Marker, Polyline } from "react-native-maps";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function MiniMapWithResponsivePosition({ riderLocations, userLocation, routeCoords, colorScheme }) {
   const { width, height } = useWindowDimensions();
@@ -18,18 +29,6 @@ function MiniMapWithResponsivePosition({ riderLocations, userLocation, routeCoor
     </View>
   );
 }
-import { db } from "@config/firebase";
-import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
-import { TabBarContext } from "@context/TabBarContext";
-import { useTheme } from "@context/ThemeContext";
-import { debugLog } from "@core/utils/debugLog";
-import { incMetric } from "@core/utils/devMetrics";
-import Constants from "expo-constants";
-import { collection, doc, getDoc, getDocs, onSnapshot } from "firebase/firestore";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import MiniMap from "../map/components/MiniMap";
 import PlaceCard from "../map/components/PlaceCard";
@@ -188,7 +187,14 @@ const AMENITY_ICON_MAP = {
   };
 
 /* Rider focussed for now - add theme specific later */
-const FILTER_SUITABILITIES = RIDER_SUITABILITY;
+const FILTER_SUITABILITIES = [
+  ...RIDER_SUITABILITY,
+  {
+    key: "bikeBrew",
+    label: "Bike & Brew",
+    icon: "handshake",
+  },
+];
 const FILTER_CATEGORIES = RIDER_CATEGORIES;
 const FILTER_AMENITIES = RIDER_AMENITIES;
 
@@ -196,11 +202,13 @@ const FILTER_AMENITIES = RIDER_AMENITIES;
 /* FILTER STATE                                                       */
 /* ------------------------------------------------------------------ */
 
+
 const EMPTY_FILTERS = {
   suitability: new Set(),
   categories: new Set(),
   amenities: new Set(),
   sponsor: false,
+  bikeBrew: false,
 };
 
 const DEFAULT_FILTERS = {
@@ -208,6 +216,7 @@ const DEFAULT_FILTERS = {
   categories: [],
   amenities: [],
   sponsor: false,
+  bikeBrew: false,
 };
 
 const DEFAULT_MAP_STATE = {
@@ -4409,6 +4418,35 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
               })}
 
               {/* SPONSORS (ADMIN ONLY) */}
+              {/* Bike & Brew filter */}
+              <TouchableOpacity
+                key="bikeBrew"
+                style={[
+                  styles.iconButton,
+                  draftFilters.bikeBrew && styles.iconButtonActive,
+                ]}
+                onPress={() =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    bikeBrew: !prev.bikeBrew,
+                  }))
+                }
+              >
+                <MaterialCommunityIcons
+                  name="handshake"
+                  size={28}
+                  color={draftFilters.bikeBrew ? theme.colors.accentMid : theme.colors.primaryLight}
+                />
+                <Text
+                  style={[
+                    styles.iconLabel,
+                    draftFilters.bikeBrew && styles.iconLabelActive,
+                  ]}
+                >
+                  Bike & Brew
+                </Text>
+              </TouchableOpacity>
+
               {role === "admin" && (
                 <TouchableOpacity
                   key="sponsor"
