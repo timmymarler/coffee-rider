@@ -2002,22 +2002,41 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       const currentStep = routeSteps[currentStepIndex];
       if (currentStep?.end?.latitude) {
         const distToCurrentEnd = distanceBetweenMeters(userLocation, currentStep.end);
-        
         // Detect if we've passed the endpoint and are now 5m+ past it
         const advanceThreshold = 5; // meters past the endpoint
-        const hasPassedEndpoint = stepProgressRef.current.lastDistToEnd < distToCurrentEnd; // Distance started increasing
-        const isfarEnoughPast = distToCurrentEnd > advanceThreshold; // Now 5m+ past the endpoint
-        
+        const hasPassedEndpoint = stepProgressRef.current.lastDistToEnd < distToCurrentEnd;
+        const isfarEnoughPast = distToCurrentEnd > advanceThreshold;
+
+        // Special handling for last step (Finish): require user to be near both last step endpoint AND end of polyline
+        const isLastStep = currentStepIndex + 1 === routeSteps.length;
+        let isNearDestination = false;
+        if (isLastStep && routeDestination && userLocation) {
+          const distToDestination = distanceBetweenMeters(userLocation, routeDestination);
+          isNearDestination = distToDestination < 5; // Require user to be within 5m of destination
+        }
+
+        // Prevent premature Finish: if any further step (junction/turn) is within 300m, do not advance to Finish
+        let hasNearbyJunction = false;
+        if (isLastStep && routeSteps.length > 1) {
+          for (let i = 0; i < routeSteps.length - 1; i++) {
+            const step = routeSteps[i];
+            if (step?.end?.latitude) {
+              const distToStep = distanceBetweenMeters(userLocation, step.end);
+              if (distToStep > 0 && distToStep < 300 && i > currentStepIndex) {
+                hasNearbyJunction = true;
+                break;
+              }
+            }
+          }
+        }
+
         if (hasPassedEndpoint && isfarEnoughPast && currentStepIndex + 1 < routeSteps.length) {
-          // User passed the endpoint and is now 10m+ past it - advance to next
+          // Not the last step: advance as usual
           nextStepIdx = currentStepIndex + 1;
           const nextStep = routeSteps[nextStepIdx];
-          
-          // Calculate distance to the NEXT step's end
           if (nextStep?.end?.latitude) {
             distanceForDisplay = distanceBetweenMeters(userLocation, nextStep.end);
           }
-          
           console.log('[Navigation] Advancing step (5m after endpoint):', {
             from: currentStepIndex,
             to: nextStepIdx,
@@ -2028,6 +2047,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             nextStepDistance: Math.round(distanceForDisplay || 0),
             isRoundabout: nextStep?.nextManeuver?.includes('ROUNDABOUT'),
           });
+        } else if (isLastStep) {
+          // Only advance to Finish if user is near both last step endpoint AND polyline end, and no further junctions are within 300m
+          if (hasPassedEndpoint && isfarEnoughPast && isNearDestination && !hasNearbyJunction) {
+            nextStepIdx = currentStepIndex + 1;
+            distanceForDisplay = 0;
+            console.log('[Navigation] Advancing to Finish: user is near last step endpoint and destination, and no nearby junctions');
+            console.log('[Navigation][DEBUG] Route steps:', JSON.stringify(routeSteps, null, 2));
+            console.log('[Navigation][DEBUG] Route polyline:', JSON.stringify(routeCoords, null, 2));
+          } else {
+            // Prevent premature Finish: stay on last step
+            nextStepIdx = currentStepIndex;
+            distanceForDisplay = distToCurrentEnd;
+            if (hasNearbyJunction) {
+              console.log('[Navigation] Prevented Finish: found junction/turn within 300m ahead');
+            }
+          }
         } else {
           nextStepIdx = currentStepIndex;
           distanceForDisplay = distToCurrentEnd;
@@ -2178,24 +2213,51 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Detect Follow Me enable transition
     const justEnabledFollowMe = !followUserPrevRef.current && followUser;
     followUserPrevRef.current = followUser;
-    
-    // On Follow Me start: rebuild route from current location
+
+    // On Follow Me start: delay navigation if GPS is poor
     if (justEnabledFollowMe) {
       if (userLocation && routeDestination) {
-        console.log('[AutoReroute] Follow Me enabled - rebuilding route from current location');
-        const requestId = ++routeRequestId.current;
-        mapRoute({
-          origin: userLocation,
-          waypoints: waypoints,
-          destination: routeDestination,
-          travelMode: userTravelMode,
-          routeType: userRouteType,
-          requestId,
-          skipFitToView: true,
-          vehicleHeading: userLocation?.heading || null,
-        }).catch(error => {
-          console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
-        });
+        if (userLocation.accuracy && userLocation.accuracy > MAX_LOCATION_ACCURACY) {
+          // Delay navigation start until GPS improves
+          console.log('[AutoReroute] Follow Me enabled but GPS accuracy poor (' + userLocation.accuracy.toFixed(0) + 'm), waiting for better fix...');
+          // Optionally, show a UI indicator here (not implemented)
+          // Set up a watcher for improved GPS
+          const gpsWaitInterval = setInterval(() => {
+            if (lastGoodGPSRef.current && lastGoodGPSRef.current.accuracy <= MAX_LOCATION_ACCURACY) {
+              clearInterval(gpsWaitInterval);
+              console.log('[AutoReroute] Good GPS fix obtained (' + lastGoodGPSRef.current.accuracy.toFixed(0) + 'm), starting navigation');
+              const requestId = ++routeRequestId.current;
+              mapRoute({
+                origin: lastGoodGPSRef.current,
+                waypoints: waypoints,
+                destination: routeDestination,
+                travelMode: userTravelMode,
+                routeType: userRouteType,
+                requestId,
+                skipFitToView: true,
+                vehicleHeading: lastGoodGPSRef.current?.heading || null,
+              }).catch(error => {
+                console.warn('[AutoReroute] mapRoute error after GPS fix:', error);
+              });
+            }
+          }, 1000);
+        } else {
+          // GPS is good, start navigation immediately
+          console.log('[AutoReroute] Follow Me enabled - rebuilding route from current location');
+          const requestId = ++routeRequestId.current;
+          mapRoute({
+            origin: userLocation,
+            waypoints: waypoints,
+            destination: routeDestination,
+            travelMode: userTravelMode,
+            routeType: userRouteType,
+            requestId,
+            skipFitToView: true,
+            vehicleHeading: userLocation?.heading || null,
+          }).catch(error => {
+            console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
+          });
+        }
       }
       return; // Exit early, don't do off-route checking on first run
     }
@@ -2221,6 +2283,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
     lastOffRouteCheckPos.current = userLocation;
 
+
     // Use snapped point for off-route check
     const snappedPoint = projectPointToPolyline(userLocation, routeCoords);
     const pointToCheck = snappedPoint || userLocation;
@@ -2238,18 +2301,35 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
     }
 
-    // Check if user (snapped) is on polyline (within 50m)
-    if (closestDist < 50) {
+    // Dynamic off-route threshold: 50m + 1.5x current speed (m/s)
+    const speed = userLocation.speed || 0; // m/s
+    const dynamicThreshold = 50 + 1.5 * speed;
+    // Track consecutive off-route checks
+    if (!window._consecutiveOffRoute) window._consecutiveOffRoute = 0;
+
+    // Check if user (snapped) is on polyline (within dynamic threshold)
+    if (closestDist < dynamicThreshold) {
       // User is on the route - don't reroute
-      console.log(`[AutoReroute] User (snapped) on route (${closestDist.toFixed(0)}m away), no reroute needed`);
+      window._consecutiveOffRoute = 0;
+      console.log(`[AutoReroute] User (snapped) on route (${closestDist.toFixed(0)}m away, threshold ${dynamicThreshold.toFixed(0)}m), no reroute needed`);
       return;
     }
 
-    // Check if user (snapped) is significantly off-route (50m+)
-    if (closestDist < OFF_ROUTE_THRESHOLD_METERS) {
-      console.log(`[AutoReroute] User (snapped) slightly off-route (${closestDist.toFixed(0)}m away), monitoring...`);
+    // Check if user (snapped) is slightly off-route (within dynamic threshold + 25m)
+    if (closestDist < dynamicThreshold + 25) {
+      window._consecutiveOffRoute = 0;
+      console.log(`[AutoReroute] User (snapped) slightly off-route (${closestDist.toFixed(0)}m away, threshold ${dynamicThreshold.toFixed(0)}m), monitoring...`);
       return; // Not far enough off to reroute yet
     }
+
+    // User is off route: require two consecutive checks before rerouting
+    window._consecutiveOffRoute = (window._consecutiveOffRoute || 0) + 1;
+    if (window._consecutiveOffRoute < 2) {
+      console.log(`[AutoReroute] User off-route (${closestDist.toFixed(0)}m), first check, waiting for confirmation`);
+      return;
+    }
+    // Reset counter after reroute
+    window._consecutiveOffRoute = 0;
 
     // User is 50m+ off route - initiate reroute
     const now = Date.now();
@@ -3000,6 +3080,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       // --- Center map on exact match if found ---
       let exactMatch = null;
       // Check CR places for exact match
+
       exactMatch = crPlaces.find(
         (p) => p.source === "cr" && isExactMatch(p, activeQuery)
       );
@@ -3009,7 +3090,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }
 
       if (exactMatch && mapRef.current) {
-        setSelectedPlaceId(exactMatch.id);
+        // Only show Place Card if Coffee Rider place
+        if (exactMatch.source === "cr") {
+          setSelectedPlaceId(exactMatch.id);
+        }
         mapRef.current.animateCamera(
           {
             center: {
@@ -3749,6 +3833,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }
 
   async function loadSavedRide(ride, rideId) {
+      // Debug: Log loaded route steps and polyline for analysis
+      if (ride.routeSteps) {
+        console.log('[Navigation][DEBUG] Loaded route steps:', JSON.stringify(ride.routeSteps, null, 2));
+      }
+      if (ride.routePolyline) {
+        console.log('[Navigation][DEBUG] Loaded route polyline:', JSON.stringify(ride.routePolyline, null, 2));
+      }
     clearRoute();
     clearWaypoints();
 
