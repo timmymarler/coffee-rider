@@ -4020,8 +4020,28 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         markerPressedRef.current = false;
       }, 100);
       
+
       if (poi.source === "google") {
         if (!capabilities.canSearchGoogle) return;
+
+        // Check for CR place at this location (proximity or Google Place ID)
+        const PROXIMITY_THRESHOLD = 40; // meters
+        const crNearby = crPlaces.find(cr => {
+          // Match by Google Place ID
+          if (cr.googlePlaceId && cr.googlePlaceId === poi.id) return true;
+          // Match by proximity
+          const dx = (cr.latitude - poi.latitude) * 111320;
+          const dy = (cr.longitude - poi.longitude) * (40075000 * Math.cos((cr.latitude * Math.PI) / 180)) / 360;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          return distance < PROXIMITY_THRESHOLD;
+        });
+        if (crNearby) {
+          console.log("[MARKER] Google place matches CR place, opening CR placecard:", crNearby.id);
+          setSelectedPlaceId(crNearby.id);
+          return;
+        }
+
+        // Otherwise, promote to temp CR as before
         const temp = promoteGoogleToTempCr(poi);
         if (temp) {
           console.log("[MARKER] Google place, promoting to temp:", temp.id);
