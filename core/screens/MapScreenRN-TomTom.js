@@ -2040,6 +2040,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           console.log('[Navigation] Advancing step (5m after endpoint):', {
             from: currentStepIndex,
             to: nextStepIdx,
+            fromInstruction: routeSteps[currentStepIndex]?.nextInstruction,
+            toInstruction: nextStep?.instruction,
+            toNextInstruction: nextStep?.nextInstruction,
             distanceFromEndpoint: Math.round(distToCurrentEnd),
             nextStepManeuver: nextStep?.maneuver,
             nextStepNextManeuver: nextStep?.nextManeuver,
@@ -2091,9 +2094,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex]);
 
-  // Delay displaying next instruction when passing a junction
-  // Shows current instruction and distance for 5 seconds before showing next one
-  // But override if next junction is close (< 150m away)
+  useEffect(() => {
+    if (!isNavigationMode || routeSteps.length === 0) return;
+    
+    // Log all route steps once when route is loaded
+    if (routeSteps.length > 0 && !window.__routeStepsLogged) {
+      window.__routeStepsLogged = true;
+      console.log('[Navigation] ALL ROUTE STEPS:');
+      routeSteps.forEach((step, idx) => {
+        console.log(`  [${idx}] Current: ${step.instruction} | Next: ${step.nextInstruction} | Maneuver: ${step.nextManeuver}`);
+      });
+    }
+  }, [isNavigationMode, routeSteps]);
 
   // Track waypoint arrivals and mark them as visited
   useEffect(() => {
@@ -4733,6 +4745,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             displayLabel: label,
             nextRoundaboutExitNumber: step?.nextRoundaboutExitNumber,
             distance: Math.round(nextJunctionDistance || 0),
+            currentInstruction: step?.instruction,
+            currentManeuver: step?.maneuver,
           });
 
           return (
