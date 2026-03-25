@@ -2007,6 +2007,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         const hasPassedEndpoint = stepProgressRef.current.lastDistToEnd < distToCurrentEnd;
         const isfarEnoughPast = distToCurrentEnd > advanceThreshold;
 
+        if (hasPassedEndpoint) {
+          console.log('[Navigation] Passed endpoint:', {
+            step: currentStepIndex,
+            instruction: currentStep?.instruction,
+            nextInstruction: currentStep?.nextInstruction,
+            distToCurrentEnd: Math.round(distToCurrentEnd),
+            lastDistToEnd: Math.round(stepProgressRef.current.lastDistToEnd),
+          });
+        }
+
         // Special handling for last step (Finish): require user to be near both last step endpoint AND end of polyline
         const isLastStep = currentStepIndex + 1 === routeSteps.length;
         let isNearDestination = false;
@@ -5222,12 +5232,70 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         onClose={() => setShowRouteTypeSelector(false)}
       />
 
+      {/* DEBUG: On-screen step info overlay for phone testing */}
+      {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
+        <View style={styles.debugStepOverlay}>
+          <ScrollView style={styles.debugStepScroll}>
+            <Text style={styles.debugStepTitle}>Step {currentStepIndex} of {routeSteps.length - 1}</Text>
+            <Text style={styles.debugStepText}>
+              Curr: {routeSteps[currentStepIndex]?.instruction?.substring(0, 60)}
+            </Text>
+            <Text style={styles.debugStepText}>
+              Next: {routeSteps[currentStepIndex]?.nextInstruction?.substring(0, 60)}
+            </Text>
+            <Text style={styles.debugStepText}>
+              Distance: {nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : 'N/A'}
+            </Text>
+            {routeSteps[currentStepIndex] && (
+              <Text style={styles.debugStepText} numberOfLines={2}>
+                Maneuver: {routeSteps[currentStepIndex]?.nextManeuver || 'UNKNOWN'}
+              </Text>
+            )}
+          </ScrollView>
+        </View>
+      )}
+
     </View>
   );
 }
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+
+  debugStepOverlay: {
+    position: 'absolute',
+    bottom: 120,
+    left: 10,
+    right: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    borderRadius: 8,
+    padding: 12,
+    maxHeight: 200,
+    zIndex: 2100,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ff6b6b',
+  },
+  debugStepScroll: {
+    maxHeight: 180,
+  },
+  debugStepTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#fbbf24',
+    marginBottom: 6,
+  },
+  debugStepText: {
+    fontSize: 11,
+    color: '#e5e7eb',
+    marginBottom: 4,
+    fontFamily: 'monospace',
+  },
+
+  junctionDistanceTouchable: {
+    backgroundColor: 'rgba(255,0,0,0.2)',
+    borderRadius: 8,
+    padding: 12,
   },
 
   navigationArrow: {

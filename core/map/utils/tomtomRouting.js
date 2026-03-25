@@ -418,9 +418,15 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
     // Log all instructions with full details
     console.log('[tomtomRouting] ALL INSTRUCTIONS FROM TOMTOM:');
     instructions.forEach((instr, idx) => {
-      console.log(`  [${idx}]:`, JSON.stringify(instr, null, 2));
+      const roadName = instr.street || instr.text || 'unknown';
+      const maneuverType = instr.maneuver || 'UNKNOWN';
+      console.log(`  [${idx}] ${maneuverType.padEnd(20)} | ${roadName}`);
+      console.log(`       Full:`, JSON.stringify(instr, null, 2));
       if (instr.maneuver && instr.maneuver.includes('ROUNDABOUT')) {
-        console.log(`    --> ROUNDABOUT FOUND: maneuver=${instr.maneuver}, all keys:`, Object.keys(instr));
+        console.log(`       --> ROUNDABOUT FOUND: maneuver=${instr.maneuver}, all keys:`, Object.keys(instr));
+      }
+      if (roadName.toLowerCase().includes('bromham')) {
+        console.log(`       --> BROMHAM ROAD FOUND!`);
       }
     });
 
