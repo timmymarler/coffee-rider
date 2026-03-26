@@ -73,6 +73,7 @@ const ENABLE_GOOGLE_AUTO_FETCH = true;
 const MAX_LOCATION_ACCURACY = 25; // Meters - ignore readings worse than this
 const MIN_LOCATION_MOVE_DISTANCE = 3; // Meters - ignore updates < 3m away
 const NAVIGATION_LOCK_ON_DISTANCE = 80; // Meters from polyline before instructions engage
+const PROGRESS_TOLERANCE_METERS = 20; // Allow minor GPS jitter when mapping progress to steps
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
@@ -1553,6 +1554,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   }
 
+function getStepIndexForProgress(steps = [], progressMeters = 0) {
+  if (!Array.isArray(steps) || steps.length === 0) return 0;
+
+  for (let i = 0; i < steps.length; i++) {
+    const stepProgress = steps[i]?.polylineProgress;
+    if (typeof stepProgress !== "number") {
+      return i;
+    }
+    if (progressMeters + PROGRESS_TOLERANCE_METERS < stepProgress) {
+      return i;
+    }
+  }
+
+  return steps.length - 1;
+}
   function getFinalDestination() {
     if (routeDestination) return routeDestination;
     if (waypoints.length > 0) return waypoints[waypoints.length - 1];
@@ -2088,116 +2104,64 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     instructionsSuppressedRef.current = false;
 
     const navigationPosition = projection.point || userLocation;
-    
-    let nextStepIdx = currentStepIndex;
-    let distanceForDisplay = 0;
-    
-    // Check if we've passed the current step's endpoint
-    if (currentStepIndex < routeSteps.length) {
-      const currentStep = routeSteps[currentStepIndex];
-      if (currentStep?.end?.latitude) {
-        const distToCurrentEnd = distanceBetweenMeters(navigationPosition, currentStep.end);
-        // Detect if we've passed the endpoint and are now 5m+ past it
-        const advanceThreshold = 5; // meters past the endpoint
-        const hasPassedEndpoint = stepProgressRef.current.lastDistToEnd < distToCurrentEnd;
-        const isfarEnoughPast = distToCurrentEnd > advanceThreshold;
+    const progressMeters = projection.progressMeters || 0;
 
-        if (hasPassedEndpoint) {
-          console.log('[Navigation] Passed endpoint:', {
-            step: currentStepIndex,
-            instruction: currentStep?.instruction,
-            nextInstruction: currentStep?.nextInstruction,
-            distToCurrentEnd: Math.round(distToCurrentEnd),
-            lastDistToEnd: Math.round(stepProgressRef.current.lastDistToEnd),
-          });
+    let nextStepIdx = getStepIndexForProgress(routeSteps, progressMeters);
+    const lastInstructionIdx = Math.max(routeSteps.length - 2, 0);
+    const isPotentialFinish = nextStepIdx >= routeSteps.length - 1 && routeSteps.length > 1;
+
+    if (isPotentialFinish) {
+      let hasNearbyJunction = false;
+      for (let i = 0; i < routeSteps.length - 1; i++) {
+        const step = routeSteps[i];
+        if (!step?.end?.latitude) continue;
+        if (typeof step.polylineProgress !== 'number') continue;
+        if (step.polylineProgress <= progressMeters) continue;
+        const distToStep = distanceBetweenMeters(navigationPosition, step.end);
+        if (distToStep > 0 && distToStep < 300) {
+          hasNearbyJunction = true;
+          break;
         }
+      }
 
-        // Special handling for last step (Finish): require user to be near both last step endpoint AND end of polyline
-        const isLastStep = currentStepIndex + 1 === routeSteps.length;
-        let isNearDestination = false;
-        if (isLastStep && routeDestination && userLocation) {
-          const distToDestination = distanceBetweenMeters(navigationPosition, routeDestination);
-          isNearDestination = distToDestination < 5; // Require user to be within 5m of destination
-        }
+      const distToDestination = routeDestination
+        ? distanceBetweenMeters(navigationPosition, routeDestination)
+        : Infinity;
+      const isCloseToDestination = distToDestination <= 12; // require tight lock before Finish
 
-        // Prevent premature Finish: if any further step (junction/turn) is within 300m, do not advance to Finish
-        let hasNearbyJunction = false;
-        if (isLastStep && routeSteps.length > 1) {
-          for (let i = 0; i < routeSteps.length - 1; i++) {
-            const step = routeSteps[i];
-            if (step?.end?.latitude) {
-              const distToStep = distanceBetweenMeters(navigationPosition, step.end);
-              if (distToStep > 0 && distToStep < 300 && i > currentStepIndex) {
-                hasNearbyJunction = true;
-                break;
-              }
-            }
-          }
-        }
-
-        if (hasPassedEndpoint && isfarEnoughPast && currentStepIndex + 1 < routeSteps.length) {
-          // Not the last step: advance as usual
-          nextStepIdx = currentStepIndex + 1;
-          const nextStep = routeSteps[nextStepIdx];
-          if (nextStep?.end?.latitude) {
-            distanceForDisplay = distanceBetweenMeters(navigationPosition, nextStep.end);
-          }
-          console.log('[Navigation] Advancing step (5m after endpoint):', {
-            from: currentStepIndex,
-            to: nextStepIdx,
-            fromInstruction: routeSteps[currentStepIndex]?.nextInstruction,
-            toInstruction: nextStep?.instruction,
-            toNextInstruction: nextStep?.nextInstruction,
-            distanceFromEndpoint: Math.round(distToCurrentEnd),
-            nextStepManeuver: nextStep?.maneuver,
-            nextStepNextManeuver: nextStep?.nextManeuver,
-            nextStepInstruction: nextStep?.instruction?.substring(0, 40),
-            nextStepDistance: Math.round(distanceForDisplay || 0),
-            isRoundabout: nextStep?.nextManeuver?.includes('ROUNDABOUT'),
-          });
-        } else if (isLastStep) {
-          // Only advance to Finish if user is near both last step endpoint AND polyline end, and no further junctions are within 300m
-          if (hasPassedEndpoint && isfarEnoughPast && isNearDestination && !hasNearbyJunction) {
-            nextStepIdx = currentStepIndex + 1;
-            distanceForDisplay = 0;
-            console.log('[Navigation] Advancing to Finish: user is near last step endpoint and destination, and no nearby junctions');
-            console.log('[Navigation][DEBUG] Route steps:', JSON.stringify(routeSteps, null, 2));
-            console.log('[Navigation][DEBUG] Route polyline:', JSON.stringify(routeCoords, null, 2));
-          } else {
-            // Prevent premature Finish: stay on last step
-            nextStepIdx = currentStepIndex;
-            distanceForDisplay = distToCurrentEnd;
-            if (hasNearbyJunction) {
-              console.log('[Navigation] Prevented Finish: found junction/turn within 300m ahead');
-            }
-          }
+      if (!isCloseToDestination || hasNearbyJunction) {
+        nextStepIdx = Math.min(lastInstructionIdx, routeSteps.length - 1);
+        if (hasNearbyJunction) {
+          console.log('[Navigation] Holding before Finish due to nearby junction');
         } else {
-          nextStepIdx = currentStepIndex;
-          distanceForDisplay = distToCurrentEnd;
+          console.log('[Navigation] Holding before Finish until near destination', {
+            distToDestination: Math.round(distToDestination),
+          });
         }
       }
     }
-    
-    // Update step index if different
+
     if (nextStepIdx !== currentStepIndex) {
-      console.log('[Navigation] Step index updated:', {
+      console.log('[Navigation] Step index updated (progress-based):', {
         from: currentStepIndex,
         to: nextStepIdx,
+        progressMeters: Math.round(progressMeters),
       });
       setCurrentStepIndex(nextStepIdx);
     }
-    
-    // Calculate and display distance to current step's end
+
     if (nextStepIdx < routeSteps.length && routeSteps[nextStepIdx]?.end?.latitude) {
       const distToEnd = distanceBetweenMeters(navigationPosition, routeSteps[nextStepIdx].end);
       setNextJunctionDistance(distToEnd);
-      // Track for next comparison (to detect passing the endpoint)
       stepProgressRef.current.lastDistToEnd = distToEnd;
     } else {
       setNextJunctionDistance(null);
       stepProgressRef.current.lastDistToEnd = Infinity;
     }
-  }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex]);
+
+    stepProgressRef.current.lastStepIdx = nextStepIdx;
+    stepProgressRef.current.lastProgressMeters = progressMeters;
+  }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex, routeDestination]);
 
   useEffect(() => {
     if (!isNavigationMode || routeSteps.length === 0) return;
