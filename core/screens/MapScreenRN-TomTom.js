@@ -72,47 +72,124 @@ const ENABLE_GOOGLE_AUTO_FETCH = true;
 // Follow Me smoothing constants
 const MAX_LOCATION_ACCURACY = 25; // Meters - ignore readings worse than this
 const MIN_LOCATION_MOVE_DISTANCE = 3; // Meters - ignore updates < 3m away
+const NAVIGATION_LOCK_ON_DISTANCE = 80; // Meters from polyline before instructions engage
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
 /* ------------------------------------------------------------------ */
 
 // Project a point onto a line segment (polyline snapping)
-function projectPointToPolyline(point, polylineCoords) {
-  if (!polylineCoords || polylineCoords.length < 2) return null;
-  
+function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance = 80) {
+  if (!polylineCoords || polylineCoords.length < 2 || !point) return null;
+
   let closestPoint = null;
   let minDistance = Infinity;
-  
+  let cumulative = 0;
+  let bestProgress = 0;
+  let bestSegmentIndex = -1;
+  let bestT = 0;
+
   for (let i = 0; i < polylineCoords.length - 1; i++) {
     const p1 = polylineCoords[i];
     const p2 = polylineCoords[i + 1];
-    
-    // Vector from p1 to p2
+
     const dx = p2.longitude - p1.longitude;
     const dy = p2.latitude - p1.latitude;
-    
-    // Vector from p1 to point
+    const denom = dx * dx + dy * dy;
+    if (denom === 0) continue;
+
     const px = point.longitude - p1.longitude;
     const py = point.latitude - p1.latitude;
-    
-    // Project point onto segment
-    const t = Math.max(0, Math.min(1, (px * dx + py * dy) / (dx * dx + dy * dy)));
-    
+    const t = Math.max(0, Math.min(1, (px * dx + py * dy) / denom));
+
     const projectedLat = p1.latitude + t * dy;
     const projectedLng = p1.longitude + t * dx;
-    
-    // Distance from point to projection
-    const dist = Math.sqrt((point.latitude - projectedLat) ** 2 + (point.longitude - projectedLng) ** 2) * 111000; // Approx meters
-    
+    const projectedPoint = { latitude: projectedLat, longitude: projectedLng };
+
+    const dist = distanceBetweenMeters(point, projectedPoint);
+    const segmentLength = distanceBetweenMeters(p1, p2) || 0;
+
     if (dist < minDistance) {
       minDistance = dist;
-      closestPoint = { latitude: projectedLat, longitude: projectedLng };
+      closestPoint = projectedPoint;
+      bestProgress = cumulative + segmentLength * t;
+      bestSegmentIndex = i;
+      bestT = t;
     }
+
+    cumulative += segmentLength;
   }
-  
-  // Only snap if within reasonable distance (50m)
-  return minDistance < 50 ? closestPoint : null;
+
+  if (!closestPoint || minDistance === Infinity || minDistance > maxSnapDistance) {
+    return null;
+  }
+
+  return {
+    point: closestPoint,
+    distanceMeters: minDistance,
+    progressMeters: bestProgress,
+    segmentIndex: bestSegmentIndex,
+    segmentT: bestT,
+  };
+}
+
+function projectPointToPolyline(point, polylineCoords) {
+  const detailed = projectPointToPolylineDetailed(point, polylineCoords);
+  return detailed ? detailed.point : null;
+}
+
+function isCriticalManeuver(maneuver = "") {
+  if (!maneuver) return false;
+  const upper = maneuver.toUpperCase();
+  return (
+    upper.includes("TURN") ||
+    upper.includes("ROUNDABOUT") ||
+    upper.includes("EXIT") ||
+    upper.includes("MERGE")
+  );
+}
+
+function normalizeRouteSteps(rawSteps = [], coords = []) {
+  if (!Array.isArray(rawSteps) || rawSteps.length === 0) return [];
+
+  const filtered = [];
+  const MIN_STRAIGHT_DISTANCE = 25; // meters
+
+  rawSteps.forEach((step) => {
+    if (!step) return;
+    const clone = { ...step };
+    const maneuver = (clone.nextManeuver || clone.maneuver || '').toUpperCase();
+    clone.isCriticalStep = isCriticalManeuver(maneuver);
+
+    const isShortStraight =
+      !clone.isCriticalStep &&
+      (clone.maneuver || '').toUpperCase().includes('STRAIGHT') &&
+      typeof clone.distance === 'number' &&
+      clone.distance > 0 &&
+      clone.distance < MIN_STRAIGHT_DISTANCE;
+
+    if (isShortStraight && filtered.length > 0) {
+      const prev = filtered[filtered.length - 1];
+      prev.distance = (prev.distance || 0) + clone.distance;
+      return;
+    }
+
+    filtered.push(clone);
+  });
+
+  if (!coords || coords.length < 2) {
+    return filtered;
+  }
+
+  return filtered.map((step) => {
+    if (step?.end) {
+      const projection = projectPointToPolylineDetailed(step.end, coords, 200);
+      if (projection) {
+        step.polylineProgress = projection.progressMeters;
+      }
+    }
+    return step;
+  });
 }
 
 // Calculate distance between two points in meters
@@ -173,6 +250,8 @@ const AMENITY_ICON_MAP = {
     TURN_SLIGHT_RIGHT: { icon: "arrow-right-top-bold", label: "Slight right" },
     BEAR_LEFT: { icon: "arrow-top-left-thick", label: "Bear left" },
     BEAR_RIGHT: { icon: "arrow-top-right-thick", label: "Bear right" },
+    KEEP_LEFT: { icon: "arrow-top-left-thick", label: "Keep left" },
+    KEEP_RIGHT: { icon: "arrow-top-right-thick", label: "Keep right" },
     STRAIGHT: { icon: "arrow-up-bold", label: "Continue straight" },
     TAKE_EXIT: { icon: "arrow-top-left-thick", label: "Take the exit" },
     ROUNDABOUT_ENTER: { icon: "rotate-right", label: "Enter roundabout" },
@@ -809,6 +888,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }, [routeVersion]);
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
   const [routeSteps, setRouteSteps] = useState([]);
+  const routeStepsLoggedRef = useRef(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
   const [debugMode, setDebugMode] = useState(false); // Toggle with long press on distance display
@@ -1121,7 +1201,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       
       setCurrentStepIndex(0);
 
-      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity };
+      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0 };
 
     } catch (error) {
       console.error("[REFRESH] Error refreshing route:", error);
@@ -1980,7 +2060,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const stepProgressRef = useRef({
     lastStepIdx: 0,
     lastDistToEnd: Infinity,
+    lastProgressMeters: 0,
   });
+  const instructionsSuppressedRef = useRef(false);
 
   // Unified route progress tracking: determine current step based on location projection
   // onto the polyline, then display next junction and track progression
@@ -1990,9 +2072,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!routeSteps || routeSteps.length === 0) return;
     if (!routeCoords || routeCoords.length === 0) return;
 
-    // Project current location onto the polyline
-    const projectedPoint = projectPointToPolyline(userLocation, routeCoords);
-    const positionToUse = projectedPoint || userLocation;
+    // Project current location onto the polyline with generous tolerance
+    const projection = projectPointToPolylineDetailed(userLocation, routeCoords, 250);
+    if (!projection || projection.distanceMeters > NAVIGATION_LOCK_ON_DISTANCE) {
+      if (!instructionsSuppressedRef.current) {
+        instructionsSuppressedRef.current = true;
+        console.log('[Navigation] Waiting to lock onto route before showing instructions', {
+          distanceFromRoute: projection?.distanceMeters || null,
+        });
+      }
+      setNextJunctionDistance(null);
+      stepProgressRef.current.lastDistToEnd = Infinity;
+      return; // Skip instruction updates until we are near the route again
+    }
+    instructionsSuppressedRef.current = false;
+
+    const navigationPosition = projection.point || userLocation;
     
     let nextStepIdx = currentStepIndex;
     let distanceForDisplay = 0;
@@ -2001,7 +2096,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (currentStepIndex < routeSteps.length) {
       const currentStep = routeSteps[currentStepIndex];
       if (currentStep?.end?.latitude) {
-        const distToCurrentEnd = distanceBetweenMeters(userLocation, currentStep.end);
+        const distToCurrentEnd = distanceBetweenMeters(navigationPosition, currentStep.end);
         // Detect if we've passed the endpoint and are now 5m+ past it
         const advanceThreshold = 5; // meters past the endpoint
         const hasPassedEndpoint = stepProgressRef.current.lastDistToEnd < distToCurrentEnd;
@@ -2021,7 +2116,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         const isLastStep = currentStepIndex + 1 === routeSteps.length;
         let isNearDestination = false;
         if (isLastStep && routeDestination && userLocation) {
-          const distToDestination = distanceBetweenMeters(userLocation, routeDestination);
+          const distToDestination = distanceBetweenMeters(navigationPosition, routeDestination);
           isNearDestination = distToDestination < 5; // Require user to be within 5m of destination
         }
 
@@ -2031,7 +2126,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           for (let i = 0; i < routeSteps.length - 1; i++) {
             const step = routeSteps[i];
             if (step?.end?.latitude) {
-              const distToStep = distanceBetweenMeters(userLocation, step.end);
+              const distToStep = distanceBetweenMeters(navigationPosition, step.end);
               if (distToStep > 0 && distToStep < 300 && i > currentStepIndex) {
                 hasNearbyJunction = true;
                 break;
@@ -2045,7 +2140,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           nextStepIdx = currentStepIndex + 1;
           const nextStep = routeSteps[nextStepIdx];
           if (nextStep?.end?.latitude) {
-            distanceForDisplay = distanceBetweenMeters(userLocation, nextStep.end);
+            distanceForDisplay = distanceBetweenMeters(navigationPosition, nextStep.end);
           }
           console.log('[Navigation] Advancing step (5m after endpoint):', {
             from: currentStepIndex,
@@ -2094,7 +2189,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // Calculate and display distance to current step's end
     if (nextStepIdx < routeSteps.length && routeSteps[nextStepIdx]?.end?.latitude) {
-      const distToEnd = distanceBetweenMeters(userLocation, routeSteps[nextStepIdx].end);
+      const distToEnd = distanceBetweenMeters(navigationPosition, routeSteps[nextStepIdx].end);
       setNextJunctionDistance(distToEnd);
       // Track for next comparison (to detect passing the endpoint)
       stepProgressRef.current.lastDistToEnd = distToEnd;
@@ -2918,9 +3013,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setCurrentLoadedRouteId(null);
       setFollowUser(false);          // Disable Follow Me when clearing route
       setCurrentStepIndex(0);        // Reset step index
+      setRouteSteps([]);
+      routeStepsLoggedRef.current = false;
 
       setNextJunctionDistance(null); // Clear junction distance
-      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity }; // Reset step progress tracker
+      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0 }; // Reset step progress tracker
       
       // Cancel any pending instruction display update
       if (pendingDisplayTimeoutRef?.current) {
@@ -2962,7 +3059,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setRouteDistanceMeters(metadata.distance);
     }
     if (metadata.steps) {
-      setRouteSteps(metadata.steps);
+      const normalizedSteps = normalizeRouteSteps(metadata.steps, newCoords);
+      routeStepsLoggedRef.current = false;
+      setRouteSteps(normalizedSteps);
     }
   }
 
@@ -3628,7 +3727,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     });
     
     setCurrentStepIndex(0);
-    stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity };
+    stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0 };
 
     // Auto-fit view if not in Follow Me and not already fitted
     if (!skipFitToView && !routeFittedRef.current && !followUser) {
@@ -5296,17 +5395,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,0,0,0.2)',
     borderRadius: 8,
     padding: 12,
-  },
-
-  navigationArrow: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: theme.colors.primary,
   },
 
   recenterButton: {

@@ -36,6 +36,13 @@ service cloud.firestore {
       return isAuthed() && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'pro'];
     }
+
+    function isRouteOwner(data) {
+      return isAuthed() && (
+        (data.ownerId != null && data.ownerId == request.auth.uid) ||
+        (data.createdBy != null && data.createdBy == request.auth.uid)
+      );
+    }
     
     function isGroupMember(groupId) {
       return isAuthed() &&
@@ -107,7 +114,7 @@ service cloud.firestore {
       allow list: if
         isAuthed() && (
           // Allow querying own routes
-          request.auth.uid == resource.data.createdBy ||
+          isRouteOwner(resource.data) ||
           // Allow querying public routes
           resource.data.visibility == 'public' ||
           // Allow querying group routes (membership checked at query time via client)
@@ -117,11 +124,11 @@ service cloud.firestore {
       // For single document reads, enforce strict permissions
       allow get: if
         resource.data.visibility == 'public' ||
-        (isAuthed() && resource.data.createdBy == request.auth.uid) ||
+        isRouteOwner(resource.data) ||
         (resource.data.visibility == 'group' && isAuthed() && isGroupMember(resource.data.groupId));
 
       // Route creation is allowed for any signed-in user creating their own document
-      allow create: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
+      allow create: if isRouteOwner(request.resource.data);
 
       // Updates are allowed with stricter gating:
       // - Owners can update general route fields
@@ -138,7 +145,7 @@ service cloud.firestore {
 
         // Owner updates
         (
-          resource.data.createdBy == request.auth.uid && (
+          isRouteOwner(resource.data) && (
             // If changing visibility to public/group, require Pro/Admin
             (
               resource.data.visibility != request.resource.data.visibility &&
@@ -164,7 +171,7 @@ service cloud.firestore {
       allow delete: if isAuthed() && (
         // Owner or admin can soft-delete by setting deleted: true, deletedAt, deletedBy
         isAdmin() ||
-        resource.data.createdBy == request.auth.uid
+        isRouteOwner(resource.data)
       );
     }
 
