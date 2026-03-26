@@ -74,6 +74,7 @@ const MAX_LOCATION_ACCURACY = 25; // Meters - ignore readings worse than this
 const MIN_LOCATION_MOVE_DISTANCE = 3; // Meters - ignore updates < 3m away
 const NAVIGATION_LOCK_ON_DISTANCE = 80; // Meters from polyline before instructions engage
 const PROGRESS_TOLERANCE_METERS = 20; // Allow minor GPS jitter when mapping progress to steps
+const PROGRESS_BACKTRACK_TOLERANCE_METERS = 60; // Allow intentional U-turns but ignore small regressions (e.g. looped roundabouts)
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
@@ -892,7 +893,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const routeStepsLoggedRef = useRef(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
-  const [debugMode, setDebugMode] = useState(false); // Toggle with long press on distance display
   const routeFittedRef = useRef(false);
   
   // Active ride & location sharing
@@ -2104,9 +2104,32 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     instructionsSuppressedRef.current = false;
 
     const navigationPosition = projection.point || userLocation;
-    const progressMeters = projection.progressMeters || 0;
+    const rawProgressMeters = projection.progressMeters || 0;
+    const lastProgressMeters = stepProgressRef.current.lastProgressMeters || 0;
+    const previousStepIdx = stepProgressRef.current.lastStepIdx || 0;
+    let progressForStepMapping = rawProgressMeters;
+    let allowStepBacktrack = false;
 
-    let nextStepIdx = getStepIndexForProgress(routeSteps, progressMeters);
+    if (lastProgressMeters > 0 && rawProgressMeters + PROGRESS_TOLERANCE_METERS < lastProgressMeters) {
+      const regressionMeters = lastProgressMeters - rawProgressMeters;
+      if (regressionMeters > PROGRESS_BACKTRACK_TOLERANCE_METERS) {
+        allowStepBacktrack = true;
+        console.log('[Navigation] Allowing backtrack along route', {
+          regressionMeters: Math.round(regressionMeters),
+        });
+      } else {
+        progressForStepMapping = lastProgressMeters;
+        console.log('[Navigation] Ignoring minor regression near overlapping geometry', {
+          raw: Math.round(rawProgressMeters),
+          clamped: Math.round(progressForStepMapping),
+        });
+      }
+    }
+
+    let nextStepIdx = getStepIndexForProgress(routeSteps, progressForStepMapping);
+    if (!allowStepBacktrack) {
+      nextStepIdx = Math.max(nextStepIdx, previousStepIdx);
+    }
     const lastInstructionIdx = Math.max(routeSteps.length - 2, 0);
     const isPotentialFinish = nextStepIdx >= routeSteps.length - 1 && routeSteps.length > 1;
 
@@ -2116,7 +2139,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
         const step = routeSteps[i];
         if (!step?.end?.latitude) continue;
         if (typeof step.polylineProgress !== 'number') continue;
-        if (step.polylineProgress <= progressMeters) continue;
+        if (step.polylineProgress <= progressForStepMapping) continue;
         const distToStep = distanceBetweenMeters(navigationPosition, step.end);
         if (distToStep > 0 && distToStep < 300) {
           hasNearbyJunction = true;
@@ -2145,7 +2168,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       console.log('[Navigation] Step index updated (progress-based):', {
         from: currentStepIndex,
         to: nextStepIdx,
-        progressMeters: Math.round(progressMeters),
+        progressMeters: Math.round(progressForStepMapping),
       });
       setCurrentStepIndex(nextStepIdx);
     }
@@ -2160,7 +2183,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     }
 
     stepProgressRef.current.lastStepIdx = nextStepIdx;
-    stepProgressRef.current.lastProgressMeters = progressMeters;
+    stepProgressRef.current.lastProgressMeters = progressForStepMapping;
   }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex, routeDestination]);
 
   useEffect(() => {
@@ -4830,9 +4853,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 {/* Distance and label section */}
                 <View style={styles.junctionContent}>
                   {distText ? (
-                    <TouchableOpacity onLongPress={() => setDebugMode(!debugMode)}>
-                      <Text style={styles.junctionDistance}>{distText}</Text>
-                    </TouchableOpacity>
+                    <Text style={styles.junctionDistance}>{distText}</Text>
                   ) : null}
                   <Text style={styles.junctionLabel}>{label}</Text>
                   {/* Show the specific instruction detail (e.g., "Take exit 4", street name, etc.) */}
@@ -4852,18 +4873,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 </View>
               </View>
               
-              {/* Debug overlay - long press on distance to toggle */}
-              {debugMode && step && (
-                <View style={styles.debugPanel}>
-                  <Text style={styles.debugText}>═ STEP {currentStepIndex} ═</Text>
-                  <Text style={styles.debugText}>Next→ {nextManeuver?.substring(0, 20)}</Text>
-                  <Text style={styles.debugText}>Instr: {nextInstruction?.substring(0, 28)}</Text>
-                  {step?.nextRoundaboutExitNumber !== undefined && (
-                    <Text style={styles.debugText}>Exit: {step.nextRoundaboutExitNumber || "n/a"}</Text>
-                  )}
-                  <Text style={styles.debugText}>Dist: {Math.round(nextJunctionDistance || 0)}m</Text>
-                </View>
-              )}
             </>
           );
         })()
@@ -5295,29 +5304,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
         onClose={() => setShowRouteTypeSelector(false)}
       />
 
-      {/* DEBUG: On-screen step info overlay for phone testing */}
-      {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
-        <View style={styles.debugStepOverlay}>
-          <ScrollView style={styles.debugStepScroll}>
-            <Text style={styles.debugStepTitle}>Step {currentStepIndex} of {routeSteps.length - 1}</Text>
-            <Text style={styles.debugStepText}>
-              Curr: {routeSteps[currentStepIndex]?.instruction?.substring(0, 60)}
-            </Text>
-            <Text style={styles.debugStepText}>
-              Next: {routeSteps[currentStepIndex]?.nextInstruction?.substring(0, 60)}
-            </Text>
-            <Text style={styles.debugStepText}>
-              Distance: {nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : 'N/A'}
-            </Text>
-            {routeSteps[currentStepIndex] && (
-              <Text style={styles.debugStepText} numberOfLines={2}>
-                Maneuver: {routeSteps[currentStepIndex]?.nextManeuver || 'UNKNOWN'}
-              </Text>
-            )}
-          </ScrollView>
-        </View>
-      )}
-
     </View>
   );
 }
@@ -5326,34 +5312,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  debugStepOverlay: {
-    position: 'absolute',
-    bottom: 120,
-    left: 10,
-    right: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    borderRadius: 8,
-    padding: 12,
-    maxHeight: 200,
-    zIndex: 2100,
-    borderLeftWidth: 4,
-    borderLeftColor: '#ff6b6b',
-  },
-  debugStepScroll: {
-    maxHeight: 180,
-  },
-  debugStepTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#fbbf24',
-    marginBottom: 6,
-  },
-  debugStepText: {
-    fontSize: 11,
-    color: '#e5e7eb',
-    marginBottom: 4,
-    fontFamily: 'monospace',
-  },
 
   junctionDistanceTouchable: {
     backgroundColor: 'rgba(255,0,0,0.2)',
@@ -5520,26 +5478,6 @@ const styles = StyleSheet.create({
   junctionText: {
     fontSize: 12,
     color: "#e5e7eb",
-  },
-
-  debugPanel: {
-    position: "absolute",
-    bottom: 320,
-    left: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.85)",
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#fbbf24",
-    zIndex: 1999,
-    maxWidth: 200,
-  },
-  debugText: {
-    color: "#fbbf24",
-    fontSize: 11,
-    fontWeight: "600",
-    fontFamily: "monospace",
-    marginVertical: 2,
   },
 
   postboxTitle: {
