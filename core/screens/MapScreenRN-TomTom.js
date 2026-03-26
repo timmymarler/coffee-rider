@@ -147,7 +147,9 @@ function isCriticalManeuver(maneuver = "") {
     upper.includes("TURN") ||
     upper.includes("ROUNDABOUT") ||
     upper.includes("EXIT") ||
-    upper.includes("MERGE")
+    upper.includes("MERGE") ||
+    upper.includes("U_TURN") ||
+    upper.includes("UTURN")
   );
 }
 
@@ -244,6 +246,9 @@ const AMENITY_ICON_MAP = {
   ev_charger: "ev-plug-ccs2",
 };
 
+const U_TURN_LEFT_META = { icon: "u-turn-left", label: "Make a U-turn" };
+const U_TURN_RIGHT_META = { icon: "u-turn-right", label: "Make a U-turn" };
+
   // Maneuver → icon + label map (simplified)
   const MANEUVER_ICON_MAP = {
     TURN_LEFT: { icon: "arrow-left-bold", label: "Turn left" },
@@ -255,6 +260,17 @@ const AMENITY_ICON_MAP = {
     KEEP_LEFT: { icon: "arrow-top-left-thick", label: "Keep left" },
     KEEP_RIGHT: { icon: "arrow-top-right-thick", label: "Keep right" },
     STRAIGHT: { icon: "arrow-up-bold", label: "Continue straight" },
+    U_TURN_LEFT: U_TURN_LEFT_META,
+    UTURN_LEFT: U_TURN_LEFT_META,
+    TURN_LEFT_U: U_TURN_LEFT_META,
+    MAKE_U_TURN_LEFT: U_TURN_LEFT_META,
+    U_TURN_RIGHT: U_TURN_RIGHT_META,
+    UTURN_RIGHT: U_TURN_RIGHT_META,
+    TURN_RIGHT_U: U_TURN_RIGHT_META,
+    MAKE_U_TURN_RIGHT: U_TURN_RIGHT_META,
+    U_TURN: U_TURN_LEFT_META,
+    UTURN: U_TURN_LEFT_META,
+    MAKE_U_TURN: U_TURN_LEFT_META,
     TAKE_EXIT: { icon: "arrow-top-left-thick", label: "Take the exit" },
     ROUNDABOUT_ENTER: { icon: "rotate-right", label: "Enter roundabout" },
     ROUNDABOUT_EXIT: { icon: "rotate-right", label: "Exit roundabout" },

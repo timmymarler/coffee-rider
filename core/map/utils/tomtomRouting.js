@@ -1,6 +1,24 @@
 import polyline from "@mapbox/polyline";
 import Constants from "expo-constants";
 
+const isUTurnManeuver = (maneuver = "") => {
+  if (!maneuver) return false;
+  const upper = maneuver.toUpperCase();
+  return (
+    upper.includes("U_TURN") ||
+    upper.includes("UTURN") ||
+    upper.includes("TURN_LEFT_U") ||
+    upper.includes("TURN_RIGHT_U")
+  );
+};
+
+const getUTurnInstruction = (maneuver = "") => {
+  const upper = maneuver.toUpperCase();
+  if (upper.includes("RIGHT")) return "Make a U-turn right";
+  if (upper.includes("LEFT")) return "Make a U-turn left";
+  return "Make a U-turn";
+};
+
 /**
  * Fetch route from Google Directions API (best for pedestrian and cycling routing)
  * @param {Object} origin - {latitude, longitude}
@@ -480,6 +498,8 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
         }
         
         extra.roundaboutExitNumber = exitNumber;
+      } else if (isUTurnManeuver(maneuver)) {
+        instruction = getUTurnInstruction(maneuver);
       } else if (maneuver.includes("TURN_LEFT")) {
         instruction = "Turn left";
       } else if (maneuver.includes("TURN_RIGHT")) {
@@ -528,6 +548,8 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
           } else {
             nextInstruction = "Enter roundabout";
           }
+        } else if (isUTurnManeuver(nextManeuver)) {
+          nextInstruction = getUTurnInstruction(nextManeuver);
         } else if (nextManeuver.includes("TURN_LEFT") || nextManeuver === "LEFT") {
           nextInstruction = "Turn left";
         } else if (nextManeuver.includes("TURN_RIGHT") || nextManeuver === "RIGHT") {
