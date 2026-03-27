@@ -77,6 +77,26 @@ const NAVIGATION_LOCK_ON_DISTANCE = 80; // Meters from polyline before instructi
 const PROGRESS_TOLERANCE_METERS = 20; // Allow minor GPS jitter when mapping progress to steps
 const PROGRESS_BACKTRACK_TOLERANCE_METERS = 60; // Allow intentional U-turns but ignore small regressions (e.g. looped roundabouts)
 const SPEECH_REPEAT_WINDOW_MS = 8000; // Minimum time between repeating the same spoken instruction
+const INITIAL_SPEECH_DELAY_MS = 2500; // Wait a moment after maneuver before announcing next one
+const SPEECH_DISTANCE_STAGES = [
+  { id: 'halfMile', triggerMeters: 804.672, minMeters: 450 }, // ~0.5 mi
+  { id: 'threeHundredYards', triggerMeters: 274.32, minMeters: 120 }, // ~300 yd
+  { id: 'fiftyYards', triggerMeters: 55, minMeters: 10 },
+];
+const FEMALE_VOICE_PREFERENCES = Platform.select({
+  ios: [
+    'com.apple.ttsbundle.Kate-compact',
+    'com.apple.ttsbundle.Karen-compact',
+    'com.apple.ttsbundle.Samantha-compact',
+  ],
+  android: [
+    'en-gb-x-gba-network',
+    'en-gb-x-gbc-network',
+    'en-gb-x-gbb-local',
+  ],
+  default: [],
+});
+const FEMALE_VOICE_NAME_HINTS = ['kate', 'karen', 'samantha', 'victoria', 'serena', 'olivia', 'amy'];
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
@@ -392,18 +412,29 @@ function formatDistanceImperial(meters) {
 
 function formatDistanceForSpeech(meters) {
   if (meters == null || meters <= 0) return null;
-  if (meters < 75) {
+  const yards = meters * 1.09361;
+  if (yards < 40) {
     return "now";
   }
-  if (meters < 1000) {
-    const rounded = Math.round(meters / 50) * 50;
-    return `in ${rounded} metres`;
+  if (yards < 100) {
+    const rounded = Math.round(yards / 10) * 10;
+    return `in ${rounded} yards`;
   }
-  const km = meters / 1000;
-  if (km < 3) {
-    return `in ${km.toFixed(1)} kilometres`;
+  if (yards < 400) {
+    const rounded = Math.round(yards / 25) * 25;
+    return `in ${rounded} yards`;
   }
-  return `in ${Math.round(km)} kilometres`;
+  const miles = meters / 1609.344;
+  if (miles < 0.55 && miles > 0.45) {
+    return "in half a mile";
+  }
+  if (miles < 1) {
+    return `in ${Math.round(miles * 10) / 10} miles`;
+  }
+  if (miles < 10) {
+    return `in ${miles.toFixed(1)} miles`;
+  }
+  return `in ${Math.round(miles)} miles`;
 }
 
 function buildSpokenInstruction(baseInstruction, distanceMeters) {
@@ -937,6 +968,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
   const [isTtsEnabled, setIsTtsEnabled] = useState(true);
+  const [preferredVoiceId, setPreferredVoiceId] = useState(null);
+  const lastKnownDistanceRef = useRef(null);
   const routeFittedRef = useRef(false);
   
   // Active ride & location sharing
@@ -952,6 +985,45 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   useEffect(() => {
     return () => {
       Speech.stop();
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    (async () => {
+      try {
+        const voices = await Speech.getAvailableVoicesAsync();
+        if (isCancelled || !Array.isArray(voices)) return;
+
+        const preferenceList = Array.isArray(FEMALE_VOICE_PREFERENCES)
+          ? FEMALE_VOICE_PREFERENCES
+          : [];
+        for (const preferredId of preferenceList) {
+          const match = voices.find((voice) => voice.identifier === preferredId);
+          if (match) {
+            setPreferredVoiceId(match.identifier);
+            return;
+          }
+        }
+
+        const fallback = voices.find((voice) => {
+          const language = voice.language?.toLowerCase() || '';
+          const name = voice.name?.toLowerCase() || '';
+          if (!language.startsWith('en-')) return false;
+          return FEMALE_VOICE_NAME_HINTS.some((hint) => name.includes(hint));
+        });
+
+        if (fallback) {
+          setPreferredVoiceId(fallback.identifier);
+        }
+      } catch (error) {
+        console.warn('[TTS] Unable to enumerate voices:', error);
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
     };
   }, []);
   
@@ -2142,6 +2214,12 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
   });
   const instructionsSuppressedRef = useRef(false);
   const lastSpokenInstructionRef = useRef({ text: null, timestamp: 0 });
+  const speechScheduleRef = useRef({
+    currentStepIdx: -1,
+    spokenStages: new Set(),
+    stepStartedAt: 0,
+    initialSpoken: false,
+  });
 
   // Unified route progress tracking: determine current step based on location projection
   // onto the polyline, then display next junction and track progression
@@ -2266,31 +2344,82 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     if (!isNavigationMode || !isTtsEnabled) return;
     if (!routeSteps || routeSteps.length === 0) return;
     if (currentStepIndex >= routeSteps.length) return;
-    const currentStep = routeSteps[currentStepIndex];
-    const baseInstruction = currentStep?.nextInstruction || currentStep?.instruction;
-    if (!baseInstruction) return;
 
-    const spokenInstruction = buildSpokenInstruction(baseInstruction, nextJunctionDistance);
-    if (!spokenInstruction) return;
+    let schedule = speechScheduleRef.current;
+    if (schedule.currentStepIdx !== currentStepIndex) {
+      schedule = {
+        currentStepIdx: currentStepIndex,
+        spokenStages: new Set(),
+        stepStartedAt: Date.now(),
+        initialSpoken: false,
+      };
+      speechScheduleRef.current = schedule;
+      lastKnownDistanceRef.current = null;
+    }
+
+    const speakInstruction = () => {
+      const currentStep = routeSteps[currentStepIndex];
+      const baseInstruction = currentStep?.nextInstruction || currentStep?.instruction;
+      if (!baseInstruction) return false;
+
+      const distanceForSpeech = nextJunctionDistance ?? lastKnownDistanceRef.current;
+      const spokenInstruction = buildSpokenInstruction(baseInstruction, distanceForSpeech);
+      if (!spokenInstruction) return false;
+
+      const now = Date.now();
+      const { text, timestamp } = lastSpokenInstructionRef.current;
+      if (text === spokenInstruction && now - timestamp < SPEECH_REPEAT_WINDOW_MS) {
+        return false;
+      }
+
+      try {
+        Speech.stop();
+        Speech.speak(spokenInstruction, {
+          language: "en-GB",
+          pitch: 1,
+          rate: 0.95,
+          voice: preferredVoiceId || undefined,
+        });
+        lastSpokenInstructionRef.current = { text: spokenInstruction, timestamp: now };
+        return true;
+      } catch (error) {
+        console.warn('[TTS] Failed to speak instruction:', error);
+        return false;
+      }
+    };
+
+    const distanceNow = nextJunctionDistance ?? null;
+    const previousDistance = lastKnownDistanceRef.current;
+    if (distanceNow != null) {
+      lastKnownDistanceRef.current = distanceNow;
+    } else {
+      lastKnownDistanceRef.current = null;
+    }
 
     const now = Date.now();
-    const { text, timestamp } = lastSpokenInstructionRef.current;
-    if (text === spokenInstruction && now - timestamp < SPEECH_REPEAT_WINDOW_MS) {
-      return;
+    if (!schedule.initialSpoken && now - schedule.stepStartedAt >= INITIAL_SPEECH_DELAY_MS) {
+      const spoke = speakInstruction();
+      if (spoke) {
+        schedule.initialSpoken = true;
+        schedule.spokenStages.add('initial');
+        return;
+      }
     }
 
-    try {
-      Speech.stop();
-      Speech.speak(spokenInstruction, {
-        language: "en-GB",
-        pitch: 1,
-        rate: 0.95,
-      });
-      lastSpokenInstructionRef.current = { text: spokenInstruction, timestamp: now };
-    } catch (error) {
-      console.warn('[TTS] Failed to speak instruction:', error);
+    if (distanceNow == null) return;
+
+    for (const stage of SPEECH_DISTANCE_STAGES) {
+      if (schedule.spokenStages.has(stage.id)) continue;
+      const withinWindow = distanceNow <= stage.triggerMeters && distanceNow >= stage.minMeters;
+      const crossedThreshold =
+        previousDistance != null && previousDistance > stage.triggerMeters && distanceNow <= stage.triggerMeters;
+      if (!withinWindow && !crossedThreshold) continue;
+      if (speakInstruction()) {
+        schedule.spokenStages.add(stage.id);
+      }
+      break;
     }
-  }, [currentStepIndex, routeSteps, isNavigationMode, isTtsEnabled, nextJunctionDistance]);
+  }, [currentStepIndex, routeSteps, isNavigationMode, isTtsEnabled, nextJunctionDistance, preferredVoiceId]);
 
   // Track waypoint arrivals and mark them as visited
   useEffect(() => {
