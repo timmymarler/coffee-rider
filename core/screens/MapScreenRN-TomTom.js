@@ -84,6 +84,7 @@ const SPEECH_DISTANCE_STAGES = [
   { id: 'fiftyYards', triggerMeters: 55, minMeters: 10 },
 ];
 const POST_TURN_SUPPRESSION_METERS = 40; // Wait until rider clears junction before next-step callout
+const ARRIVAL_ANNOUNCE_DISTANCE_METERS = 35;
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
@@ -2316,14 +2317,17 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       }
     }
 
-    const speakInstruction = () => {
-      const currentStep = routeSteps[currentStepIndex];
-      const baseInstruction = currentStep?.nextInstruction || currentStep?.instruction;
-      if (!baseInstruction) return false;
+    const speakInstruction = (overrideText = null) => {
+      let spokenInstruction = overrideText;
+      if (!spokenInstruction) {
+        const currentStep = routeSteps[currentStepIndex];
+        const baseInstruction = currentStep?.nextInstruction || currentStep?.instruction;
+        if (!baseInstruction) return false;
 
-      const distanceForSpeech = nextJunctionDistance ?? lastKnownDistanceRef.current;
-      const spokenInstruction = buildSpokenInstruction(baseInstruction, distanceForSpeech);
-      if (!spokenInstruction) return false;
+        const distanceForSpeech = nextJunctionDistance ?? lastKnownDistanceRef.current;
+        spokenInstruction = buildSpokenInstruction(baseInstruction, distanceForSpeech);
+        if (!spokenInstruction) return false;
+      }
 
       const now = Date.now();
       const { text, timestamp } = lastSpokenInstructionRef.current;
@@ -2347,6 +2351,13 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     };
 
     const distanceNow = nextJunctionDistance ?? null;
+    const distToDestination =
+      routeDestination && userLocation
+        ? distanceBetweenMeters(userLocation, routeDestination)
+        : null;
+    const isFinalStep = currentStepIndex >= routeSteps.length - 1;
+    const shouldAnnounceArrival =
+      isFinalStep && typeof distToDestination === 'number' && distToDestination <= ARRIVAL_ANNOUNCE_DISTANCE_METERS;
     const previousDistance = lastKnownDistanceRef.current;
     if (distanceNow != null) {
       lastKnownDistanceRef.current = distanceNow;
@@ -2360,6 +2371,18 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       if (spoke) {
         schedule.initialSpoken = true;
         schedule.spokenStages.add('initial');
+        return;
+      }
+    }
+
+    if (shouldAnnounceArrival && !schedule.spokenStages.has('arrival')) {
+      const destinationName = routeDestination?.name?.trim();
+      const arrivalText = destinationName
+        ? `You have arrived at ${destinationName}`
+        : 'You have arrived at your destination';
+      if (speakInstruction(arrivalText)) {
+        schedule.spokenStages.add('arrival');
+        schedule.initialSpoken = true;
         return;
       }
     }
@@ -2384,6 +2407,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     isTtsEnabled,
     nextJunctionDistance,
     userLocation,
+    routeDestination,
   ]);
 
   // Track waypoint arrivals and mark them as visited
