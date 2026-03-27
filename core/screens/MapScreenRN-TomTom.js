@@ -36,6 +36,7 @@ import SvgPin from "../map/components/SvgPin";
 
 import * as KeepAwake from "expo-keep-awake";
 import * as Location from "expo-location";
+import * as Speech from "expo-speech";
 import { classifyPoi } from "../map/classify/classifyPois";
 import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
@@ -75,6 +76,7 @@ const MIN_LOCATION_MOVE_DISTANCE = 3; // Meters - ignore updates < 3m away
 const NAVIGATION_LOCK_ON_DISTANCE = 80; // Meters from polyline before instructions engage
 const PROGRESS_TOLERANCE_METERS = 20; // Allow minor GPS jitter when mapping progress to steps
 const PROGRESS_BACKTRACK_TOLERANCE_METERS = 60; // Allow intentional U-turns but ignore small regressions (e.g. looped roundabouts)
+const SPEECH_REPEAT_WINDOW_MS = 8000; // Minimum time between repeating the same spoken instruction
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
@@ -386,6 +388,31 @@ function formatDistanceImperial(meters) {
   }
   const yards = meters * 1.09361;
   return `${Math.round(yards)} yd`;
+}
+
+function formatDistanceForSpeech(meters) {
+  if (meters == null || meters <= 0) return null;
+  if (meters < 75) {
+    return "now";
+  }
+  if (meters < 1000) {
+    const rounded = Math.round(meters / 50) * 50;
+    return `in ${rounded} metres`;
+  }
+  const km = meters / 1000;
+  if (km < 3) {
+    return `in ${km.toFixed(1)} kilometres`;
+  }
+  return `in ${Math.round(km)} kilometres`;
+}
+
+function buildSpokenInstruction(baseInstruction, distanceMeters) {
+  if (!baseInstruction) return null;
+  const distancePhrase = formatDistanceForSpeech(distanceMeters);
+  if (!distancePhrase || distancePhrase === "now") {
+    return baseInstruction;
+  }
+  return `${distancePhrase}, ${baseInstruction}`;
 }
 
 // Calculate bearing (compass direction) between two points
@@ -909,6 +936,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const routeStepsLoggedRef = useRef(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
+  const [isTtsEnabled, setIsTtsEnabled] = useState(true);
   const routeFittedRef = useRef(false);
   
   // Active ride & location sharing
@@ -920,6 +948,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Track activeRide state separately - update TabBarContext when it changes
   const previousActiveRideRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      Speech.stop();
+    };
+  }, []);
   
   // Explicit handler: Rebuild route when vehicle type changes
   const handleVehicleTypeChange = useCallback(() => {
@@ -931,6 +965,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       });
     }
   }, [routeCoords.length, routeDestination, waypoints.length, userLocation, followUser]);
+
+  const handleTtsToggle = useCallback(() => {
+    setIsTtsEnabled((prev) => {
+      const next = !prev;
+      if (!next) {
+        Speech.stop();
+      } else {
+        lastSpokenInstructionRef.current = { text: null, timestamp: 0 };
+      }
+      return next;
+    });
+  }, []);
 
   // Explicit handler: Rebuild route when route type changes
   const handleRouteTypeChange = useCallback(() => {
@@ -2095,6 +2141,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     lastProgressMeters: 0,
   });
   const instructionsSuppressedRef = useRef(false);
+  const lastSpokenInstructionRef = useRef({ text: null, timestamp: 0 });
 
   // Unified route progress tracking: determine current step based on location projection
   // onto the polyline, then display next junction and track progression
@@ -2214,6 +2261,36 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       });
     }
   }, [isNavigationMode, routeSteps]);
+
+  useEffect(() => {
+    if (!isNavigationMode || !isTtsEnabled) return;
+    if (!routeSteps || routeSteps.length === 0) return;
+    if (currentStepIndex >= routeSteps.length) return;
+    const currentStep = routeSteps[currentStepIndex];
+    const baseInstruction = currentStep?.nextInstruction || currentStep?.instruction;
+    if (!baseInstruction) return;
+
+    const spokenInstruction = buildSpokenInstruction(baseInstruction, nextJunctionDistance);
+    if (!spokenInstruction) return;
+
+    const now = Date.now();
+    const { text, timestamp } = lastSpokenInstructionRef.current;
+    if (text === spokenInstruction && now - timestamp < SPEECH_REPEAT_WINDOW_MS) {
+      return;
+    }
+
+    try {
+      Speech.stop();
+      Speech.speak(spokenInstruction, {
+        language: "en-GB",
+        pitch: 1,
+        rate: 0.95,
+      });
+      lastSpokenInstructionRef.current = { text: spokenInstruction, timestamp: now };
+    } catch (error) {
+      console.warn('[TTS] Failed to speak instruction:', error);
+    }
+  }, [currentStepIndex, routeSteps, isNavigationMode, isTtsEnabled, nextJunctionDistance]);
 
   // Track waypoint arrivals and mark them as visited
   useEffect(() => {
@@ -4840,9 +4917,25 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 <MaterialCommunityIcons name={displayMeta.icon} size={80} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
                 {/* Distance and label section */}
                 <View style={styles.junctionContent}>
-                  {distText ? (
-                    <Text style={styles.junctionDistance}>{distText}</Text>
-                  ) : null}
+                  <View style={styles.junctionHeaderRow}>
+                    {distText ? (
+                      <Text style={styles.junctionDistance}>{distText}</Text>
+                    ) : (
+                      <View style={styles.junctionHeaderSpacer} />
+                    )}
+                    <TouchableOpacity
+                      onPress={handleTtsToggle}
+                      style={styles.ttsToggleButton}
+                      accessibilityRole="button"
+                      accessibilityLabel={isTtsEnabled ? "Mute navigation voice" : "Unmute navigation voice"}
+                    >
+                      <MaterialCommunityIcons
+                        name={isTtsEnabled ? "volume-high" : "volume-mute"}
+                        size={24}
+                        color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.6)"}
+                      />
+                    </TouchableOpacity>
+                  </View>
                   <Text style={styles.junctionLabel}>{label}</Text>
                   {/* Show the specific instruction detail (e.g., "Take exit 4", street name, etc.) */}
                   {!suppressInstruction && nextInstruction && nextInstruction !== label && (
@@ -5457,6 +5550,19 @@ const styles = StyleSheet.create({
     color: "rgba(245, 245, 240, 0.80)",
     marginTop: 3,
     flexWrap: "wrap",
+  },
+  junctionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  junctionHeaderSpacer: {
+    flex: 1,
+  },
+  ttsToggleButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   junctionTitle: {
     fontSize: 14,
