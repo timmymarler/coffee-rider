@@ -979,6 +979,18 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   useEffect(() => {
     console.log('[DEBUG routeVersion change] New routeVersion:', routeVersion);
   }, [routeVersion]);
+
+  useEffect(() => {
+    speechScheduleRef.current = {
+      currentStepIdx: -1,
+      spokenStages: new Set(),
+      stepStartedAt: 0,
+      initialSpoken: false,
+      suppressionStartedAt: null,
+    };
+    lastKnownDistanceRef.current = null;
+    lastSpokenInstructionRef.current = { text: null, timestamp: 0 };
+  }, [routeVersion]);
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
   const [routeSteps, setRouteSteps] = useState([]);
   const routeStepsLoggedRef = useRef(false);
