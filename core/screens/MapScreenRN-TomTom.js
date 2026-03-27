@@ -83,6 +83,7 @@ const SPEECH_DISTANCE_STAGES = [
   { id: 'threeHundredYards', triggerMeters: 274.32, minMeters: 120 }, // ~300 yd
   { id: 'fiftyYards', triggerMeters: 55, minMeters: 10 },
 ];
+const POST_TURN_SUPPRESSION_METERS = 40; // Wait until rider clears junction before next-step callout
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
@@ -2303,6 +2304,18 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       lastKnownDistanceRef.current = null;
     }
 
+    const prevStepEnd = currentStepIndex > 0 ? routeSteps[currentStepIndex - 1]?.end : null;
+    if (prevStepEnd && userLocation) {
+      const distFromPrevEnd = distanceBetweenMeters(userLocation, prevStepEnd);
+      if (
+        typeof distFromPrevEnd === 'number' &&
+        distFromPrevEnd <= POST_TURN_SUPPRESSION_METERS
+      ) {
+        schedule.stepStartedAt = Date.now();
+        return;
+      }
+    }
+
     const speakInstruction = () => {
       const currentStep = routeSteps[currentStepIndex];
       const baseInstruction = currentStep?.nextInstruction || currentStep?.instruction;
@@ -2364,7 +2377,14 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       }
       break;
     }
-  }, [currentStepIndex, routeSteps, isNavigationMode, isTtsEnabled, nextJunctionDistance]);
+  }, [
+    currentStepIndex,
+    routeSteps,
+    isNavigationMode,
+    isTtsEnabled,
+    nextJunctionDistance,
+    userLocation,
+  ]);
 
   // Track waypoint arrivals and mark them as visited
   useEffect(() => {
