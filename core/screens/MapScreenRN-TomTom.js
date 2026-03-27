@@ -85,6 +85,7 @@ const SPEECH_DISTANCE_STAGES = [
 ];
 const POST_TURN_SUPPRESSION_METERS = 40; // Wait until rider clears junction before next-step callout
 const ARRIVAL_ANNOUNCE_DISTANCE_METERS = 35;
+const GENERIC_CONTINUE_REGEX = /^continue\b/i;
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
@@ -432,6 +433,31 @@ function buildSpokenInstruction(baseInstruction, distanceMeters) {
     return baseInstruction;
   }
   return `${distancePhrase}, ${baseInstruction}`;
+}
+
+function getEffectiveInstructionText(step) {
+  if (!step) return null;
+  const raw = (step.nextInstruction || step.instruction || '').trim();
+  const nextManeuver = (step.nextManeuver || step.maneuver || '').trim().toUpperCase();
+
+  if (raw && !GENERIC_CONTINUE_REGEX.test(raw)) {
+    return raw;
+  }
+
+  if (nextManeuver.includes('ROUNDABOUT') && step.nextRoundaboutExitNumber) {
+    return `Take exit ${step.nextRoundaboutExitNumber}`;
+  }
+
+  const maneuverMeta = MANEUVER_ICON_MAP[nextManeuver];
+  if (maneuverMeta?.label) {
+    return maneuverMeta.label;
+  }
+
+  if (raw) return raw;
+  if (nextManeuver.includes('ROUNDABOUT')) {
+    return 'Enter the roundabout';
+  }
+  return 'Continue straight';
 }
 
 // Calculate bearing (compass direction) between two points
@@ -2321,7 +2347,8 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       let spokenInstruction = overrideText;
       if (!spokenInstruction) {
         const currentStep = routeSteps[currentStepIndex];
-        const baseInstruction = currentStep?.nextInstruction || currentStep?.instruction;
+        const effectiveInstruction = getEffectiveInstructionText(currentStep);
+        const baseInstruction = effectiveInstruction || currentStep?.nextInstruction || currentStep?.instruction;
         if (!baseInstruction) return false;
 
         const distanceForSpeech = nextJunctionDistance ?? lastKnownDistanceRef.current;
@@ -4952,7 +4979,9 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           // Get the NEXT instruction (what comes after the current step)
           // This is embedded in the step during route creation, so it's always correct
           const nextManeuver = (step?.nextManeuver || "STRAIGHT").trim().toUpperCase();
-          const nextInstruction = step?.nextInstruction || "Continue";
+          const rawNextInstruction = step?.nextInstruction || "Continue";
+          const normalizedNextInstruction = getEffectiveInstructionText(step);
+          const effectiveInstruction = normalizedNextInstruction || rawNextInstruction;
           let meta = MANEUVER_ICON_MAP[nextManeuver];
           
           // Fallback for unrecognized maneuvers
@@ -4971,9 +5000,9 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           
           // Check if this is any roundabout maneuver with exit info in the instruction
           if (nextManeuver.includes("ROUNDABOUT")) {
-            if (nextInstruction && nextInstruction.toLowerCase().includes("exit")) {
+            if (rawNextInstruction && rawNextInstruction.toLowerCase().includes("exit")) {
               // The instruction already has the exit info (e.g., "Take exit 1")
-              label = nextInstruction;
+              label = rawNextInstruction;
               suppressInstruction = true;
               displayMeta = MANEUVER_ICON_MAP.ROUNDABOUT_EXIT;
               console.log('[Roundabout] Using nextInstruction as label:', label);
@@ -5020,12 +5049,13 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           console.log('[DirectionsPanel] Step:', {
             stepIndex: currentStepIndex,
             nextManeuver,
-            nextInstruction,
+            nextInstruction: rawNextInstruction,
             displayLabel: label,
             nextRoundaboutExitNumber: step?.nextRoundaboutExitNumber,
             distance: Math.round(nextJunctionDistance || 0),
             currentInstruction: step?.instruction,
             currentManeuver: step?.maneuver,
+            normalizedInstruction: effectiveInstruction,
           });
 
           return (
@@ -5056,8 +5086,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                   </View>
                   <Text style={styles.junctionLabel}>{label}</Text>
                   {/* Show the specific instruction detail (e.g., "Take exit 4", street name, etc.) */}
-                  {!suppressInstruction && nextInstruction && nextInstruction !== label && (
-                    <Text style={styles.junctionInstruction}>{nextInstruction}</Text>
+                  {!suppressInstruction &&
+                    effectiveInstruction &&
+                    effectiveInstruction !== label && (
+                      <Text style={styles.junctionInstruction}>{effectiveInstruction}</Text>
                   )}
                   {remainingDistanceMeters && remainingDurationSeconds && (
                     <Text style={styles.junctionRemaining}>
