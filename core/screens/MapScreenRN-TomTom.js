@@ -86,6 +86,7 @@ const SPEECH_DISTANCE_STAGES = [
 const POST_TURN_SUPPRESSION_METERS = 40; // Wait until rider clears junction before next-step callout
 const ARRIVAL_ANNOUNCE_DISTANCE_METERS = 35;
 const GENERIC_CONTINUE_REGEX = /^continue\b/i;
+const POST_TURN_SUPPRESSION_TIMEOUT_MS = 10000;
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
@@ -2193,6 +2194,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     spokenStages: new Set(),
     stepStartedAt: 0,
     initialSpoken: false,
+    suppressionStartedAt: null,
   });
 
   // Unified route progress tracking: determine current step based on location projection
@@ -2326,6 +2328,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
         spokenStages: new Set(),
         stepStartedAt: Date.now(),
         initialSpoken: false,
+        suppressionStartedAt: null,
       };
       speechScheduleRef.current = schedule;
       lastKnownDistanceRef.current = null;
@@ -2338,10 +2341,18 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
         typeof distFromPrevEnd === 'number' &&
         distFromPrevEnd <= POST_TURN_SUPPRESSION_METERS
       ) {
-        schedule.stepStartedAt = Date.now();
-        return;
+        const now = Date.now();
+        if (!schedule.suppressionStartedAt) {
+          schedule.suppressionStartedAt = now;
+        }
+        if (now - schedule.suppressionStartedAt < POST_TURN_SUPPRESSION_TIMEOUT_MS) {
+          schedule.stepStartedAt = now;
+          return;
+        }
+        schedule.suppressionStartedAt = null;
       }
     }
+    schedule.suppressionStartedAt = null;
 
     const speakInstruction = (overrideText = null) => {
       let spokenInstruction = overrideText;
