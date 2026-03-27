@@ -83,20 +83,6 @@ const SPEECH_DISTANCE_STAGES = [
   { id: 'threeHundredYards', triggerMeters: 274.32, minMeters: 120 }, // ~300 yd
   { id: 'fiftyYards', triggerMeters: 55, minMeters: 10 },
 ];
-const FEMALE_VOICE_PREFERENCES = Platform.select({
-  ios: [
-    'com.apple.ttsbundle.Kate-compact',
-    'com.apple.ttsbundle.Karen-compact',
-    'com.apple.ttsbundle.Samantha-compact',
-  ],
-  android: [
-    'en-gb-x-gba-network',
-    'en-gb-x-gbc-network',
-    'en-gb-x-gbb-local',
-  ],
-  default: [],
-});
-const FEMALE_VOICE_NAME_HINTS = ['kate', 'karen', 'samantha', 'victoria', 'serena', 'olivia', 'amy'];
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
@@ -968,7 +954,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
   const [isTtsEnabled, setIsTtsEnabled] = useState(true);
-  const [preferredVoiceId, setPreferredVoiceId] = useState(null);
   const lastKnownDistanceRef = useRef(null);
   const routeFittedRef = useRef(false);
   
@@ -985,45 +970,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   useEffect(() => {
     return () => {
       Speech.stop();
-    };
-  }, []);
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    (async () => {
-      try {
-        const voices = await Speech.getAvailableVoicesAsync();
-        if (isCancelled || !Array.isArray(voices)) return;
-
-        const preferenceList = Array.isArray(FEMALE_VOICE_PREFERENCES)
-          ? FEMALE_VOICE_PREFERENCES
-          : [];
-        for (const preferredId of preferenceList) {
-          const match = voices.find((voice) => voice.identifier === preferredId);
-          if (match) {
-            setPreferredVoiceId(match.identifier);
-            return;
-          }
-        }
-
-        const fallback = voices.find((voice) => {
-          const language = voice.language?.toLowerCase() || '';
-          const name = voice.name?.toLowerCase() || '';
-          if (!language.startsWith('en-')) return false;
-          return FEMALE_VOICE_NAME_HINTS.some((hint) => name.includes(hint));
-        });
-
-        if (fallback) {
-          setPreferredVoiceId(fallback.identifier);
-        }
-      } catch (error) {
-        console.warn('[TTS] Unable to enumerate voices:', error);
-      }
-    })();
-
-    return () => {
-      isCancelled = true;
     };
   }, []);
   
@@ -2378,7 +2324,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           language: "en-GB",
           pitch: 1,
           rate: 0.95,
-          voice: preferredVoiceId || undefined,
         });
         lastSpokenInstructionRef.current = { text: spokenInstruction, timestamp: now };
         return true;
@@ -2419,7 +2364,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       }
       break;
     }
-  }, [currentStepIndex, routeSteps, isNavigationMode, isTtsEnabled, nextJunctionDistance, preferredVoiceId]);
+  }, [currentStepIndex, routeSteps, isNavigationMode, isTtsEnabled, nextJunctionDistance]);
 
   // Track waypoint arrivals and mark them as visited
   useEffect(() => {
