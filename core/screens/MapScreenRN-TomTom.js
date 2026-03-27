@@ -4571,6 +4571,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                   </TouchableOpacity>
                 );
               })}
+
             </View>
             
 
@@ -4653,35 +4654,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
               })}
 
               {/* SPONSORS (ADMIN ONLY) */}
-              {/* Bike & Brew filter */}
-              <TouchableOpacity
-                key="bikeBrew"
-                style={[
-                  styles.iconButton,
-                  draftFilters.bikeBrew && styles.iconButtonActive,
-                ]}
-                onPress={() =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    bikeBrew: !prev.bikeBrew,
-                  }))
-                }
-              >
-                <MaterialCommunityIcons
-                  name="handshake"
-                  size={28}
-                  color={draftFilters.bikeBrew ? theme.colors.accentMid : theme.colors.primaryLight}
-                />
-                <Text
-                  style={[
-                    styles.iconLabel,
-                    draftFilters.bikeBrew && styles.iconLabelActive,
-                  ]}
-                >
-                  Bike & Brew
-                </Text>
-              </TouchableOpacity>
-
               {role === "admin" && (
                 <TouchableOpacity
                   key="sponsor"

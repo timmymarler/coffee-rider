@@ -124,13 +124,13 @@ export function getRouteStyle(travelMode, theme, isNavigationMode = false) {
       outlineWidth: isNavigationMode ? 12 : 8,
     },
     car: {
-      mainColor: '#DC2626',      // Red
-      outlineColor: '#7F1D1D',   // Dark red
+      mainColor: '#7C3AED',      // Purple
+      outlineColor: '#4C1D95',   // Dark purple for contrast
       mainWidth: isNavigationMode ? 10 : 6,
       outlineWidth: isNavigationMode ? 12 : 8,
     },
     motorcycle: {
-      mainColor: isNavigationMode ? '#2196F3' : '#BBDEFB', // Brighter blue in Follow Me
+      mainColor: '#2196F3',      // Consistent Rider blue for planning + navigation
       outlineColor: '#1565C0',   // Dark blue
       mainWidth: isNavigationMode ? 10 : 6,
       outlineWidth: isNavigationMode ? 12 : 8,
