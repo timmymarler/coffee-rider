@@ -83,10 +83,12 @@ const SPEECH_DISTANCE_STAGES = [
   { id: 'threeHundredYards', triggerMeters: 274.32, minMeters: 120 }, // ~300 yd
   { id: 'fiftyYards', triggerMeters: 55, minMeters: 10 },
 ];
-const POST_TURN_SUPPRESSION_METERS = 40; // Wait until rider clears junction before next-step callout
+const POST_TURN_SUPPRESSION_METERS = 30; // Wait until rider clears junction before next-step callout
+const POST_TURN_SUPPRESSION_TIMEOUT_MS = 6000;
+const POST_TURN_SUPPRESSION_NEXT_LIMIT_METERS = 250;
 const ARRIVAL_ANNOUNCE_DISTANCE_METERS = 35;
 const GENERIC_CONTINUE_REGEX = /^continue\b/i;
-const POST_TURN_SUPPRESSION_TIMEOUT_MS = 10000;
+const SPEECH_FAILSAFE_INTERVAL_MS = 20000;
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
@@ -2290,8 +2292,31 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       setCurrentStepIndex(nextStepIdx);
     }
 
-    if (nextStepIdx < routeSteps.length && routeSteps[nextStepIdx]?.end?.latitude) {
-      const distToEnd = distanceBetweenMeters(navigationPosition, routeSteps[nextStepIdx].end);
+    let distToEnd = null;
+    if (nextStepIdx < routeSteps.length) {
+      const upcomingStep = routeSteps[nextStepIdx];
+      if (typeof upcomingStep?.polylineProgress === 'number') {
+        const remainingMeters = Math.max(upcomingStep.polylineProgress - progressForStepMapping, 0);
+        if (Number.isFinite(remainingMeters)) {
+          distToEnd = remainingMeters;
+        }
+      }
+
+      const hasEndCoordinates =
+        typeof upcomingStep?.end?.latitude === 'number' &&
+        typeof upcomingStep?.end?.longitude === 'number' &&
+        Number.isFinite(upcomingStep.end.latitude) &&
+        Number.isFinite(upcomingStep.end.longitude);
+
+      if (!Number.isFinite(distToEnd) && hasEndCoordinates) {
+        const straightLineDistance = distanceBetweenMeters(navigationPosition, upcomingStep.end);
+        if (Number.isFinite(straightLineDistance)) {
+          distToEnd = straightLineDistance;
+        }
+      }
+    }
+
+    if (Number.isFinite(distToEnd)) {
       setNextJunctionDistance(distToEnd);
       stepProgressRef.current.lastDistToEnd = distToEnd;
     } else {
@@ -2334,8 +2359,17 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       lastKnownDistanceRef.current = null;
     }
 
+    const measuredDistance = Number.isFinite(nextJunctionDistance)
+      ? nextJunctionDistance
+      : null;
     const prevStepEnd = currentStepIndex > 0 ? routeSteps[currentStepIndex - 1]?.end : null;
-    if (prevStepEnd && userLocation) {
+    const shouldSuppressTurnCallout =
+      prevStepEnd &&
+      userLocation &&
+      measuredDistance != null &&
+      measuredDistance <= POST_TURN_SUPPRESSION_NEXT_LIMIT_METERS;
+
+    if (shouldSuppressTurnCallout) {
       const distFromPrevEnd = distanceBetweenMeters(userLocation, prevStepEnd);
       if (
         typeof distFromPrevEnd === 'number' &&
@@ -2349,7 +2383,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           schedule.stepStartedAt = now;
           return;
         }
-        schedule.suppressionStartedAt = null;
       }
     }
     schedule.suppressionStartedAt = null;
@@ -2388,7 +2421,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       }
     };
 
-    const distanceNow = nextJunctionDistance ?? null;
+    const fallbackDistance = Number.isFinite(lastKnownDistanceRef.current)
+      ? lastKnownDistanceRef.current
+      : null;
+    const distanceNow = measuredDistance ?? fallbackDistance ?? null;
     const distToDestination =
       routeDestination && userLocation
         ? distanceBetweenMeters(userLocation, routeDestination)
@@ -2397,9 +2433,9 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     const shouldAnnounceArrival =
       isFinalStep && typeof distToDestination === 'number' && distToDestination <= ARRIVAL_ANNOUNCE_DISTANCE_METERS;
     const previousDistance = lastKnownDistanceRef.current;
-    if (distanceNow != null) {
-      lastKnownDistanceRef.current = distanceNow;
-    } else {
+    if (measuredDistance != null) {
+      lastKnownDistanceRef.current = measuredDistance;
+    } else if (!Number.isFinite(previousDistance)) {
       lastKnownDistanceRef.current = null;
     }
 
@@ -2425,7 +2461,19 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       }
     }
 
-    if (distanceNow == null) return;
+    if (distanceNow == null) {
+      const timeSinceLastSpeech = now - (lastSpokenInstructionRef.current.timestamp || 0);
+      if (
+        lastSpokenInstructionRef.current.timestamp > 0 &&
+        timeSinceLastSpeech >= SPEECH_FAILSAFE_INTERVAL_MS &&
+        !schedule.spokenStages.has('failsafe')
+      ) {
+        if (speakInstruction()) {
+          schedule.spokenStages.add('failsafe');
+        }
+      }
+      return;
+    }
 
     for (const stage of SPEECH_DISTANCE_STAGES) {
       if (schedule.spokenStages.has(stage.id)) continue;
