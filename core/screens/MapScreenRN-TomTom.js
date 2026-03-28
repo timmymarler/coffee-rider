@@ -997,6 +997,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
   const [isTtsEnabled, setIsTtsEnabled] = useState(true);
+  const [showDirectionsFullscreen, setShowDirectionsFullscreen] = useState(false);
   const lastKnownDistanceRef = useRef(null);
   const routeFittedRef = useRef(false);
   
@@ -1006,6 +1007,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   
   // Navigation mode is active when Follow Me is enabled OR user is on an active ride
   const isNavigationMode = followUser || !!activeRide;
+
+  const openDirectionsFullscreen = useCallback(() => {
+    setShowDirectionsFullscreen(true);
+  }, []);
+
+  const closeDirectionsFullscreen = useCallback(() => {
+    setShowDirectionsFullscreen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isNavigationMode || !hasRoute) {
+      setShowDirectionsFullscreen(false);
+    }
+  }, [isNavigationMode, hasRoute]);
 
   // Track activeRide state separately - update TabBarContext when it changes
   const previousActiveRideRef = useRef(null);
@@ -5129,9 +5144,28 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
             normalizedInstruction: effectiveInstruction,
           });
 
+          let remainingSummary = null;
+          if (remainingDistanceMeters && remainingDurationSeconds) {
+            const totalMins = Math.round(remainingDurationSeconds / 60);
+            const hours = Math.floor(totalMins / 60);
+            const mins = totalMins % 60;
+            const durationText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+            remainingSummary = `${formatDistanceImperial(remainingDistanceMeters)} • ${durationText} remaining`;
+          }
+
           return (
             <>
-              <View style={[styles.junctionPanel, getJunctionPanelStyle()]}>
+              <Pressable
+                onLongPress={openDirectionsFullscreen}
+                delayLongPress={450}
+                style={({ pressed }) => [
+                  styles.junctionPanel,
+                  getJunctionPanelStyle(),
+                  pressed && styles.junctionPanelPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityHint="Long press to expand directions"
+              >
                 {/* Large direction icon */}
                 <MaterialCommunityIcons name={displayMeta.icon} size={80} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
                 {/* Distance and label section */}
@@ -5162,19 +5196,47 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                     effectiveInstruction !== label && (
                       <Text style={styles.junctionInstruction}>{effectiveInstruction}</Text>
                   )}
-                  {remainingDistanceMeters && remainingDurationSeconds && (
-                    <Text style={styles.junctionRemaining}>
-                      {formatDistanceImperial(remainingDistanceMeters)} • {(() => {
-                        const totalMins = Math.round(remainingDurationSeconds / 60);
-                        const hours = Math.floor(totalMins / 60);
-                        const mins = totalMins % 60;
-                        return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-                      })()} remaining
-                    </Text>
+                  {remainingSummary && (
+                    <Text style={styles.junctionRemaining}>{remainingSummary}</Text>
                   )}
                 </View>
-              </View>
-              
+              </Pressable>
+
+              <Modal
+                visible={showDirectionsFullscreen}
+                animationType="fade"
+                transparent={false}
+                onRequestClose={closeDirectionsFullscreen}
+              >
+                <Pressable style={styles.fullscreenDirectionsContainer} onPress={closeDirectionsFullscreen}>
+                  <View
+                    style={[
+                      styles.fullscreenDirectionsContent,
+                      { paddingTop: insets.top + 32, paddingBottom: insets.bottom + 32 },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={displayMeta.icon}
+                      size={160}
+                      color="#ffffff"
+                      style={styles.fullscreenDirectionsIcon}
+                    />
+                    {distText ? (
+                      <Text style={styles.fullscreenDirectionsDistance}>{distText}</Text>
+                    ) : null}
+                    <Text style={styles.fullscreenDirectionsLabel}>{label}</Text>
+                    {!suppressInstruction &&
+                      effectiveInstruction &&
+                      effectiveInstruction !== label && (
+                        <Text style={styles.fullscreenDirectionsInstruction}>{effectiveInstruction}</Text>
+                    )}
+                    {remainingSummary && (
+                      <Text style={styles.fullscreenDirectionsRemaining}>{remainingSummary}</Text>
+                    )}
+                    <Text style={styles.fullscreenDirectionsHint}>Tap anywhere to exit fullscreen</Text>
+                  </View>
+                </Pressable>
+              </Modal>
             </>
           );
         })()
@@ -5738,6 +5800,9 @@ const styles = StyleSheet.create({
     elevation: 8,
     gap: 16,
   },
+  junctionPanelPressed: {
+    opacity: 0.92,
+  },
   junctionIcon: {
     marginRight: 4,
   },
@@ -5784,6 +5849,51 @@ const styles = StyleSheet.create({
   ttsToggleButton: {
     paddingHorizontal: 8,
     paddingVertical: 4,
+  },
+  fullscreenDirectionsContainer: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+  fullscreenDirectionsContent: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  fullscreenDirectionsIcon: {
+    marginBottom: 32,
+  },
+  fullscreenDirectionsDistance: {
+    fontSize: 72,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  fullscreenDirectionsLabel: {
+    fontSize: 40,
+    fontWeight: "700",
+    color: "#ffffff",
+    textAlign: "center",
+    marginTop: 16,
+  },
+  fullscreenDirectionsInstruction: {
+    fontSize: 24,
+    fontWeight: "500",
+    color: "rgba(255,255,255,0.85)",
+    textAlign: "center",
+    marginTop: 12,
+  },
+  fullscreenDirectionsRemaining: {
+    fontSize: 20,
+    fontWeight: "500",
+    color: "rgba(255,255,255,0.65)",
+    marginTop: 32,
+    textAlign: "center",
+  },
+  fullscreenDirectionsHint: {
+    fontSize: 16,
+    color: "rgba(255,255,255,0.55)",
+    marginTop: 48,
+    textAlign: "center",
   },
   junctionTitle: {
     fontSize: 14,
