@@ -87,6 +87,7 @@ const POST_TURN_SUPPRESSION_METERS = 30; // Wait until rider clears junction bef
 const POST_TURN_SUPPRESSION_TIMEOUT_MS = 6000;
 const POST_TURN_SUPPRESSION_NEXT_LIMIT_METERS = 250;
 const ARRIVAL_ANNOUNCE_DISTANCE_METERS = 35;
+const ARRIVAL_PANEL_DISTANCE_METERS = 45;
 const GENERIC_CONTINUE_REGEX = /^continue\b/i;
 const SPEECH_FAILSAFE_INTERVAL_MS = 20000;
 
@@ -991,6 +992,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     lastKnownDistanceRef.current = null;
     lastSpokenInstructionRef.current = { text: null, timestamp: 0 };
   }, [routeVersion]);
+
+  useEffect(() => {
+    setHasArrivedAtDestination(false);
+  }, [routeVersion]);
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
   const [routeSteps, setRouteSteps] = useState([]);
   const routeStepsLoggedRef = useRef(false);
@@ -998,6 +1003,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
   const [isTtsEnabled, setIsTtsEnabled] = useState(true);
   const [showDirectionsFullscreen, setShowDirectionsFullscreen] = useState(false);
+  const [hasArrivedAtDestination, setHasArrivedAtDestination] = useState(false);
   const lastKnownDistanceRef = useRef(null);
   const routeFittedRef = useRef(false);
   
@@ -2550,20 +2556,59 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
 
   // Detect when user reaches destination and capture traveled polyline for saving
   useEffect(() => {
-    // Only check destination reached if we have an actual route destination or waypoints
     const hasRouteIntent = routeDestination || waypoints.length > 0;
-    if (!hasRouteIntent) return;
-    
-    if (!isNavigationMode || !routeSteps || routeSteps.length === 0) return;
-    
-    // Only consider arrival if we have actual steps and have reached the final one
-    const hasReachedDestination = routeSteps.length >= 2 && currentStepIndex >= routeSteps.length - 1;
-    
-    if (hasReachedDestination && !pendingRidePolyline && traveledPolyline && traveledPolyline.length > 1) {
+    if (!hasRouteIntent) {
+      if (hasArrivedAtDestination) {
+        setHasArrivedAtDestination(false);
+      }
+      return;
+    }
+
+    if (!isNavigationMode || !routeSteps || routeSteps.length === 0 || !userLocation || !routeCoords || routeCoords.length === 0) {
+      return;
+    }
+
+    // Only consider arrival if we have reached the final step
+    const onFinalStep = currentStepIndex >= routeSteps.length - 1;
+    if (!onFinalStep) {
+      return;
+    }
+
+    const lastCoord = routeCoords[routeCoords.length - 1];
+    if (!lastCoord) {
+      return;
+    }
+
+    const distToDestinationMeters = distanceBetweenMeters(userLocation, lastCoord);
+    const isCloseToDestination =
+      typeof distToDestinationMeters === 'number' &&
+      !Number.isNaN(distToDestinationMeters) &&
+      distToDestinationMeters <= ARRIVAL_PANEL_DISTANCE_METERS;
+
+    if (!isCloseToDestination) {
+      return;
+    }
+
+    if (!hasArrivedAtDestination) {
+      setHasArrivedAtDestination(true);
+    }
+
+    if (!pendingRidePolyline && traveledPolyline && traveledPolyline.length > 1) {
       console.log('[DestinationReached] Capturing traveled polyline for save - length:', traveledPolyline.length);
       setPendingRidePolyline(traveledPolyline);
     }
-  }, [currentStepIndex, routeSteps, isNavigationMode, traveledPolyline, pendingRidePolyline, routeDestination, waypoints.length]);
+  }, [
+    currentStepIndex,
+    routeSteps,
+    isNavigationMode,
+    traveledPolyline,
+    pendingRidePolyline,
+    routeDestination,
+    waypoints.length,
+    userLocation,
+    routeCoords,
+    hasArrivedAtDestination,
+  ]);
 
   /**
    * Calculate bearing from one point to another (in degrees)
@@ -2641,6 +2686,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     // Detect Follow Me enable transition
     const justEnabledFollowMe = !followUserPrevRef.current && followUser;
     followUserPrevRef.current = followUser;
+
+    if (hasArrivedAtDestination) {
+      return;
+    }
 
     // On Follow Me start: delay navigation if GPS is poor
     if (justEnabledFollowMe) {
@@ -2808,13 +2857,24 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     }).catch(error => {
       console.warn('[AutoReroute] mapRoute reroute error:', error);
     });
-  }, [userLocation, followUser, routeCoords, routeDestination, waypoints, visitedWaypointIndices, getNextUnvisitedWaypointIndex, userTravelMode, userRouteType]);
+  }, [
+    userLocation,
+    followUser,
+    routeCoords,
+    routeDestination,
+    waypoints,
+    visitedWaypointIndices,
+    getNextUnvisitedWaypointIndex,
+    userTravelMode,
+    userRouteType,
+    hasArrivedAtDestination,
+  ]);
 
   // Accumulate persistent travelled path during Follow Me
   // This path persists across reroutes and is only updated on real user movement
   const lastTravelledWaypointRef = useRef(null);
   useEffect(() => {
-    if (!followUser || !userLocation) {
+    if (!followUser || !userLocation || hasArrivedAtDestination) {
       return;
     }
 
@@ -2835,7 +2895,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       });
       lastTravelledWaypointRef.current = userLocation;
     }
-  }, [followUser, userLocation]);
+  }, [followUser, userLocation, hasArrivedAtDestination]);
 
   // When Follow Me turns off, use persistent path for save (not recalculated one)
   // Clear persistent path when Follow Me re-enables or ride is saved
@@ -3301,6 +3361,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       setRouteDistanceMeters(null);
       setManualStartPoint(null);
       setPersistentTravelledPath([]);  // Clear tracked ride polyline
+      setHasArrivedAtDestination(false);
       lastTravelledWaypointRef.current = null;  // Reset last waypoint tracker
       
       // Store timeout ID so we can cancel it if needed
@@ -5035,20 +5096,21 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           // Check if we've reached the destination (at the last step)
           // Only show if we have an actual route and have reached final step with proximity check
           const hasRouteIntent = routeDestination || waypoints.length > 0;
-          const hasValidRouteSteps = routeSteps && routeSteps.length >= 2;
+          const hasValidRouteSteps = routeSteps && routeSteps.length >= 1;
           const isAtFinalStep = currentStepIndex >= routeSteps.length - 1;
           
-          // Additional proximity check: only show arrival if reasonably close to destination (within 10m)
-          let isCloseToDestination = true;
+          let distToDestinationMeters = null;
+          let isCloseToDestination = false;
           if (routeDestination && routeCoords.length > 0 && userLocation) {
             const lastCoord = routeCoords[routeCoords.length - 1];
-            const distToDestinationMeters = distanceBetweenMeters(userLocation, lastCoord);
-            isCloseToDestination = distToDestinationMeters <= 10; // Only show within 10m of actual destination
+            distToDestinationMeters = distanceBetweenMeters(userLocation, lastCoord);
+            isCloseToDestination = typeof distToDestinationMeters === 'number' && distToDestinationMeters <= ARRIVAL_PANEL_DISTANCE_METERS;
           }
           
           const hasReachedDestination = hasRouteIntent && hasValidRouteSteps && isAtFinalStep && isCloseToDestination;
+          const shouldShowArrivalPanel = hasArrivedAtDestination || hasReachedDestination;
           
-          if (hasReachedDestination) {
+          if (shouldShowArrivalPanel) {
             // Show destination reached message with Save Ride button
             return (
               <View style={[styles.junctionPanel, getJunctionPanelStyle()]}>
@@ -5153,6 +5215,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
             remainingSummary = `${formatDistanceImperial(remainingDistanceMeters)} • ${durationText} remaining`;
           }
 
+          const continueCheckSource = (label || effectiveInstruction || rawNextInstruction || '').trim();
+          const isContinueInstruction = continueCheckSource.length > 0 && GENERIC_CONTINUE_REGEX.test(continueCheckSource);
+          const shouldShowDistance = Boolean(distText) && !isContinueInstruction;
+
           return (
             <>
               <Pressable
@@ -5171,7 +5237,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 {/* Distance and label section */}
                 <View style={styles.junctionContent}>
                   <View style={styles.junctionHeaderRow}>
-                    {distText ? (
+                    {shouldShowDistance ? (
                       <Text style={styles.junctionDistance}>{distText}</Text>
                     ) : (
                       <View style={styles.junctionHeaderSpacer} />
@@ -5206,6 +5272,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 visible={showDirectionsFullscreen}
                 animationType="fade"
                 transparent={false}
+                supportedOrientations={["portrait", "portrait-upside-down", "landscape", "landscape-left", "landscape-right"]}
                 onRequestClose={closeDirectionsFullscreen}
               >
                 <Pressable style={styles.fullscreenDirectionsContainer} onPress={closeDirectionsFullscreen}>
@@ -5221,7 +5288,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                       color="#ffffff"
                       style={styles.fullscreenDirectionsIcon}
                     />
-                    {distText ? (
+                    {shouldShowDistance ? (
                       <Text style={styles.fullscreenDirectionsDistance}>{distText}</Text>
                     ) : null}
                     <Text style={styles.fullscreenDirectionsLabel}>{label}</Text>
