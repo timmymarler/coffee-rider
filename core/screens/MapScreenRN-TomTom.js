@@ -5218,6 +5218,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           const continueCheckSource = (label || effectiveInstruction || rawNextInstruction || '').trim();
           const isContinueInstruction = continueCheckSource.length > 0 && GENERIC_CONTINUE_REGEX.test(continueCheckSource);
           const shouldShowDistance = Boolean(distText) && !isContinueInstruction;
+          const fullscreenPaddingTop = (isLandscape ? insets.top + 16 : insets.top + 32);
+          const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 16 : insets.bottom + 32);
+          const fullscreenPaddingHorizontal = isLandscape ? 32 : 24;
+          const fullscreenIconSize = isLandscape ? 120 : 160;
 
           return (
             <>
@@ -5268,42 +5272,48 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 </View>
               </Pressable>
 
-              <Modal
-                visible={showDirectionsFullscreen}
-                animationType="fade"
-                transparent={false}
-                supportedOrientations={["portrait", "portrait-upside-down", "landscape", "landscape-left", "landscape-right"]}
-                onRequestClose={closeDirectionsFullscreen}
-              >
-                <Pressable style={styles.fullscreenDirectionsContainer} onPress={closeDirectionsFullscreen}>
-                  <View
-                    style={[
-                      styles.fullscreenDirectionsContent,
-                      { paddingTop: insets.top + 32, paddingBottom: insets.bottom + 32 },
-                    ]}
-                  >
-                    <MaterialCommunityIcons
-                      name={displayMeta.icon}
-                      size={160}
-                      color="#ffffff"
-                      style={styles.fullscreenDirectionsIcon}
-                    />
-                    {shouldShowDistance ? (
-                      <Text style={styles.fullscreenDirectionsDistance}>{distText}</Text>
-                    ) : null}
-                    <Text style={styles.fullscreenDirectionsLabel}>{label}</Text>
-                    {!suppressInstruction &&
-                      effectiveInstruction &&
-                      effectiveInstruction !== label && (
-                        <Text style={styles.fullscreenDirectionsInstruction}>{effectiveInstruction}</Text>
-                    )}
-                    {remainingSummary && (
-                      <Text style={styles.fullscreenDirectionsRemaining}>{remainingSummary}</Text>
-                    )}
-                    <Text style={styles.fullscreenDirectionsHint}>Tap anywhere to exit fullscreen</Text>
-                  </View>
-                </Pressable>
-              </Modal>
+                <Modal
+                  visible={showDirectionsFullscreen}
+                  animationType="fade"
+                  transparent={false}
+                  supportedOrientations={["portrait", "portrait-upside-down", "landscape", "landscape-left", "landscape-right"]}
+                  onRequestClose={closeDirectionsFullscreen}
+                >
+                  <Pressable style={styles.fullscreenDirectionsContainer} onPress={closeDirectionsFullscreen}>
+                    <ScrollView
+                      contentContainerStyle={[
+                        styles.fullscreenDirectionsContent,
+                        {
+                          paddingTop: fullscreenPaddingTop,
+                          paddingBottom: fullscreenPaddingBottom,
+                          paddingHorizontal: fullscreenPaddingHorizontal,
+                        },
+                      ]}
+                      showsVerticalScrollIndicator={false}
+                      alwaysBounceVertical={false}
+                    >
+                      <MaterialCommunityIcons
+                        name={displayMeta.icon}
+                        size={fullscreenIconSize}
+                        color="#ffffff"
+                        style={styles.fullscreenDirectionsIcon}
+                      />
+                      {shouldShowDistance ? (
+                        <Text style={[styles.fullscreenDirectionsDistance, isLandscape && styles.fullscreenDirectionsDistanceLandscape]}>{distText}</Text>
+                      ) : null}
+                      <Text style={[styles.fullscreenDirectionsLabel, isLandscape && styles.fullscreenDirectionsLabelLandscape]}>{label}</Text>
+                      {!suppressInstruction &&
+                        effectiveInstruction &&
+                        effectiveInstruction !== label && (
+                          <Text style={[styles.fullscreenDirectionsInstruction, isLandscape && styles.fullscreenDirectionsInstructionLandscape]}>{effectiveInstruction}</Text>
+                      )}
+                      {remainingSummary && (
+                        <Text style={[styles.fullscreenDirectionsRemaining, isLandscape && styles.fullscreenDirectionsRemainingLandscape]}>{remainingSummary}</Text>
+                      )}
+                      <Text style={[styles.fullscreenDirectionsHint, isLandscape && styles.fullscreenDirectionsHintLandscape]}>Tap anywhere to exit fullscreen</Text>
+                    </ScrollView>
+                  </Pressable>
+                </Modal>
             </>
           );
         })()
@@ -5922,7 +5932,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#000000",
   },
   fullscreenDirectionsContent: {
-    flex: 1,
+    flexGrow: 1,
+    minHeight: "100%",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
@@ -5935,12 +5946,20 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#ffffff",
   },
+  fullscreenDirectionsDistanceLandscape: {
+    fontSize: 56,
+    lineHeight: 64,
+  },
   fullscreenDirectionsLabel: {
     fontSize: 40,
     fontWeight: "700",
     color: "#ffffff",
     textAlign: "center",
     marginTop: 16,
+  },
+  fullscreenDirectionsLabelLandscape: {
+    fontSize: 32,
+    marginTop: 12,
   },
   fullscreenDirectionsInstruction: {
     fontSize: 24,
@@ -5949,6 +5968,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
   },
+  fullscreenDirectionsInstructionLandscape: {
+    fontSize: 20,
+    marginTop: 8,
+  },
   fullscreenDirectionsRemaining: {
     fontSize: 20,
     fontWeight: "500",
@@ -5956,11 +5979,18 @@ const styles = StyleSheet.create({
     marginTop: 32,
     textAlign: "center",
   },
+  fullscreenDirectionsRemainingLandscape: {
+    fontSize: 18,
+    marginTop: 20,
+  },
   fullscreenDirectionsHint: {
     fontSize: 16,
     color: "rgba(255,255,255,0.55)",
     marginTop: 48,
     textAlign: "center",
+  },
+  fullscreenDirectionsHintLandscape: {
+    marginTop: 28,
   },
   junctionTitle: {
     fontSize: 14,
