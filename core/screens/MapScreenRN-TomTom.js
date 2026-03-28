@@ -263,6 +263,9 @@ const AMENITY_ICON_MAP = {
 
 const U_TURN_LEFT_META = { icon: "u-turn-left", label: "Make a U-turn" };
 const U_TURN_RIGHT_META = { icon: "u-turn-right", label: "Make a U-turn" };
+const ARRIVAL_META = { icon: "flag-checkered", label: "Destination ahead" };
+const ARRIVAL_LEFT_META = { icon: "flag-checkered", label: "Destination on the left" };
+const ARRIVAL_RIGHT_META = { icon: "flag-checkered", label: "Destination on the right" };
 
   // Maneuver → icon + label map (simplified)
   const MANEUVER_ICON_MAP = {
@@ -296,6 +299,14 @@ const U_TURN_RIGHT_META = { icon: "u-turn-right", label: "Make a U-turn" };
     ROUNDABOUT_CROSS: { icon: "rotate-right", label: "Continue straight" },
     MERGE_LEFT: { icon: "arrow-left-bottom", label: "Merge left" },
     MERGE_RIGHT: { icon: "arrow-right-bottom", label: "Merge right" },
+    ARRIVE: ARRIVAL_META,
+    ARRIVAL: ARRIVAL_META,
+    ARRIVAL_LEFT: ARRIVAL_LEFT_META,
+    ARRIVE_LEFT: ARRIVAL_LEFT_META,
+    ARRIVAL_RIGHT: ARRIVAL_RIGHT_META,
+    ARRIVE_RIGHT: ARRIVAL_RIGHT_META,
+    DESTINATION_LEFT: ARRIVAL_LEFT_META,
+    DESTINATION_RIGHT: ARRIVAL_RIGHT_META,
   };
 
 /* Rider focussed for now - add theme specific later */
@@ -442,7 +453,22 @@ function buildSpokenInstruction(baseInstruction, distanceMeters) {
 function getEffectiveInstructionText(step) {
   if (!step) return null;
   const raw = (step.nextInstruction || step.instruction || '').trim();
+  const currentManeuver = (step.maneuver || '').trim().toUpperCase();
   const nextManeuver = (step.nextManeuver || step.maneuver || '').trim().toUpperCase();
+
+  if (step.arrivalDetails && currentManeuver.includes('ARRIVE')) {
+    return step.arrivalDetails.text || 'You have reached your destination';
+  }
+
+  if (step.nextArrivalDetails && nextManeuver.includes('ARRIVE')) {
+    if (step.nextArrivalDetails.side) {
+      return `Your destination will be on the ${step.nextArrivalDetails.side}`;
+    }
+    if (step.nextArrivalDetails.text) {
+      return step.nextArrivalDetails.text;
+    }
+    return 'Your destination is ahead';
+  }
 
   if (raw && !GENERIC_CONTINUE_REGEX.test(raw)) {
     return raw;
@@ -995,7 +1021,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   useEffect(() => {
     setHasArrivedAtDestination(false);
+    if (arrivalPolylineLockRef.current) {
+      arrivalPolylineLockRef.current = false;
+      setHidePolylines(false);
+    }
   }, [routeVersion]);
+
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
   const [routeSteps, setRouteSteps] = useState([]);
   const routeStepsLoggedRef = useRef(false);
@@ -1006,6 +1037,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [hasArrivedAtDestination, setHasArrivedAtDestination] = useState(false);
   const lastKnownDistanceRef = useRef(null);
   const routeFittedRef = useRef(false);
+  const arrivalPolylineLockRef = useRef(false);
   
   // Active ride & location sharing
   const { activeRide, endRide } = useActiveRide(user);
@@ -2347,6 +2379,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           distToEnd = straightLineDistance;
         }
       }
+
+      if (!Number.isFinite(distToEnd) && Number.isFinite(distToDestination)) {
+        distToEnd = distToDestination;
+      }
     }
 
     if (Number.isFinite(distToEnd)) {
@@ -2560,6 +2596,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     if (!hasRouteIntent) {
       if (hasArrivedAtDestination) {
         setHasArrivedAtDestination(false);
+        if (arrivalPolylineLockRef.current) {
+          arrivalPolylineLockRef.current = false;
+          setHidePolylines(false);
+        }
       }
       return;
     }
@@ -2591,6 +2631,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
 
     if (!hasArrivedAtDestination) {
       setHasArrivedAtDestination(true);
+      if (!arrivalPolylineLockRef.current) {
+        arrivalPolylineLockRef.current = true;
+        setHidePolylines(true);
+      }
     }
 
     if (!pendingRidePolyline && traveledPolyline && traveledPolyline.length > 1) {
@@ -3362,6 +3406,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       setManualStartPoint(null);
       setPersistentTravelledPath([]);  // Clear tracked ride polyline
       setHasArrivedAtDestination(false);
+      arrivalPolylineLockRef.current = false;
       lastTravelledWaypointRef.current = null;  // Reset last waypoint tracker
       
       // Store timeout ID so we can cancel it if needed
@@ -5216,8 +5261,31 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           }
 
           const continueCheckSource = (label || effectiveInstruction || rawNextInstruction || '').trim();
+          const nextArrivalDetails = step?.nextArrivalDetails || null;
+          const isArrivalApproach = nextManeuver.includes('ARRIVE');
           const isContinueInstruction = continueCheckSource.length > 0 && GENERIC_CONTINUE_REGEX.test(continueCheckSource);
-          const shouldShowDistance = Boolean(distText) && !isContinueInstruction;
+          const shouldShowDistance = Boolean(distText) && (!isContinueInstruction || isArrivalApproach);
+
+          let arrivalInstructionDisplay = null;
+          if (isArrivalApproach) {
+            const baseInstruction = nextArrivalDetails?.side
+              ? `Your destination will be on the ${nextArrivalDetails.side}`
+              : (nextArrivalDetails?.text || 'Your destination is ahead');
+            if (distText) {
+              const lowered = baseInstruction.length > 0
+                ? baseInstruction.charAt(0).toLowerCase() + baseInstruction.slice(1)
+                : baseInstruction;
+              arrivalInstructionDisplay = `In ${distText}, ${lowered}`;
+            } else {
+              arrivalInstructionDisplay = baseInstruction;
+            }
+            label = nextArrivalDetails?.side
+              ? `Destination on the ${nextArrivalDetails.side}`
+              : 'Destination ahead';
+            displayMeta = MANEUVER_ICON_MAP[nextManeuver] || MANEUVER_ICON_MAP.ARRIVE || displayMeta;
+          }
+
+          const instructionForDisplay = arrivalInstructionDisplay || effectiveInstruction;
           const fullscreenPaddingTop = (isLandscape ? insets.top + 16 : insets.top + 32);
           const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 16 : insets.bottom + 32);
           const fullscreenPaddingHorizontal = isLandscape ? 32 : 24;
@@ -5262,9 +5330,9 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                   <Text style={styles.junctionLabel}>{label}</Text>
                   {/* Show the specific instruction detail (e.g., "Take exit 4", street name, etc.) */}
                   {!suppressInstruction &&
-                    effectiveInstruction &&
-                    effectiveInstruction !== label && (
-                      <Text style={styles.junctionInstruction}>{effectiveInstruction}</Text>
+                    instructionForDisplay &&
+                    instructionForDisplay !== label && (
+                      <Text style={styles.junctionInstruction}>{instructionForDisplay}</Text>
                   )}
                   {remainingSummary && (
                     <Text style={styles.junctionRemaining}>{remainingSummary}</Text>
@@ -5303,9 +5371,9 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                       ) : null}
                       <Text style={[styles.fullscreenDirectionsLabel, isLandscape && styles.fullscreenDirectionsLabelLandscape]}>{label}</Text>
                       {!suppressInstruction &&
-                        effectiveInstruction &&
-                        effectiveInstruction !== label && (
-                          <Text style={[styles.fullscreenDirectionsInstruction, isLandscape && styles.fullscreenDirectionsInstructionLandscape]}>{effectiveInstruction}</Text>
+                        instructionForDisplay &&
+                        instructionForDisplay !== label && (
+                          <Text style={[styles.fullscreenDirectionsInstruction, isLandscape && styles.fullscreenDirectionsInstructionLandscape]}>{instructionForDisplay}</Text>
                       )}
                       {remainingSummary && (
                         <Text style={[styles.fullscreenDirectionsRemaining, isLandscape && styles.fullscreenDirectionsRemainingLandscape]}>{remainingSummary}</Text>

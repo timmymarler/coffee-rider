@@ -19,6 +19,25 @@ const getUTurnInstruction = (maneuver = "") => {
   return "Make a U-turn";
 };
 
+const extractArrivalDetails = (instruction = {}) => {
+  const rawText = (instruction.text || '').trim();
+  const combined = `${instruction.maneuver || ''} ${rawText}`.toLowerCase();
+  const sideMatch = combined.match(/(?:on|at|towards?|to)\s+the\s+(left|right)\b/);
+  const inferredSide = sideMatch ? sideMatch[1] : null;
+  const street =
+    instruction.streetName ||
+    instruction.road ||
+    instruction.street ||
+    instruction.address ||
+    null;
+
+  return {
+    text: rawText || 'You have reached your destination',
+    side: inferredSide,
+    street,
+  };
+};
+
 /**
  * Fetch route from Google Directions API (best for pedestrian and cycling routing)
  * @param {Object} origin - {latitude, longitude}
@@ -455,16 +474,21 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       // The end point is the location of the next instruction (or current if last)
       const endPoint = idx < instructions.length - 1 ? instructions[idx + 1].point : instr.point;
 
-      let maneuver = instr.maneuver || "STRAIGHT";
+      let maneuver = (instr.maneuver || "STRAIGHT").toUpperCase();
       let instruction = instr.text || "Continue";
       let extra = {};
+      const isArrivalManeuver = maneuver.includes("ARRIVE");
 
       // IMPORTANT: Interpret instruction based on maneuver type, not just raw text
       // This fixes cases where road names don't change but the actual turn direction does
       // e.g., staying on "Panenham Rd" even though the main road changes name
       
       // Handle roundabout maneuvers and extract exit number
-      if (maneuver.includes("ROUNDABOUT")) {
+      if (isArrivalManeuver) {
+        const arrivalDetails = extractArrivalDetails(instr);
+        instruction = arrivalDetails.text;
+        extra.arrivalDetails = arrivalDetails;
+      } else if (maneuver.includes("ROUNDABOUT")) {
         let exitNumber = null;
         
         if (typeof instr.roundaboutExitNumber === "number" && instr.roundaboutExitNumber > 0) {
@@ -531,11 +555,16 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
 
       if (idx + 1 < instructions.length) {
         const nextInstr = instructions[idx + 1];
-        nextManeuver = nextInstr.maneuver || "STRAIGHT";
+        nextManeuver = (nextInstr.maneuver || "STRAIGHT").toUpperCase();
+        const isNextArrival = nextManeuver.includes("ARRIVE");
         
         // Apply the same instruction conversion logic to the next instruction
         // Don't just use raw text - interpret the maneuver properly
-        if (nextManeuver.includes("ROUNDABOUT")) {
+        if (isNextArrival) {
+          const arrivalDetails = extractArrivalDetails(nextInstr);
+          nextInstruction = arrivalDetails.text || "Arrive at your destination";
+          extra.nextArrivalDetails = arrivalDetails;
+        } else if (nextManeuver.includes("ROUNDABOUT")) {
           if (typeof nextInstr.roundaboutExitNumber === "number" && nextInstr.roundaboutExitNumber > 0) {
             nextRoundaboutExitNumber = nextInstr.roundaboutExitNumber;
             nextInstruction = `Take exit ${nextRoundaboutExitNumber}`;
