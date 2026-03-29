@@ -88,6 +88,7 @@ const POST_TURN_SUPPRESSION_TIMEOUT_MS = 6000;
 const POST_TURN_SUPPRESSION_NEXT_LIMIT_METERS = 250;
 const ARRIVAL_ANNOUNCE_DISTANCE_METERS = 35;
 const ARRIVAL_PANEL_DISTANCE_METERS = 45;
+const ARRIVAL_ONROUTE_TOLERANCE_METERS = 30;
 const GENERIC_CONTINUE_REGEX = /^continue\b/i;
 const SPEECH_FAILSAFE_INTERVAL_MS = 20000;
 
@@ -1059,6 +1060,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setShowDirectionsFullscreen(false);
     }
   }, [isNavigationMode, hasRoute]);
+
+  useEffect(() => {
+    if (hasArrivedAtDestination && showDirectionsFullscreen) {
+      setShowDirectionsFullscreen(false);
+    }
+  }, [hasArrivedAtDestination, showDirectionsFullscreen]);
 
   // Track activeRide state separately - update TabBarContext when it changes
   const previousActiveRideRef = useRef(null);
@@ -2626,6 +2633,17 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       distToDestinationMeters <= ARRIVAL_PANEL_DISTANCE_METERS;
 
     if (!isCloseToDestination) {
+      return;
+    }
+
+    // Require the rider to be near the planned route before concluding the trip
+    const polylineProjection = projectPointToPolylineDetailed(userLocation, routeCoords, 200);
+    const isAlignedWithPolyline =
+      !!polylineProjection &&
+      typeof polylineProjection.distanceMeters === 'number' &&
+      polylineProjection.distanceMeters <= ARRIVAL_ONROUTE_TOLERANCE_METERS;
+
+    if (!isAlignedWithPolyline) {
       return;
     }
 
@@ -5154,18 +5172,57 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           
           const hasReachedDestination = hasRouteIntent && hasValidRouteSteps && isAtFinalStep && isCloseToDestination;
           const shouldShowArrivalPanel = hasArrivedAtDestination || hasReachedDestination;
+          const fullscreenPaddingTop = (isLandscape ? insets.top + 16 : insets.top + 32);
+          const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 16 : insets.bottom + 32);
+          const fullscreenPaddingHorizontal = isLandscape ? 32 : 24;
+          const fullscreenIconSize = isLandscape ? 120 : 160;
           
           if (shouldShowArrivalPanel) {
             // Show destination reached message with Save Ride button
             return (
-              <View style={[styles.junctionPanel, getJunctionPanelStyle()]}>
-                <MaterialCommunityIcons name="check-circle" size={80} color="rgba(76, 175, 80, 0.95)" style={styles.junctionIcon} />
-                <View style={styles.junctionContent}>
-                  <Text style={styles.junctionLabel}>You have</Text>
-                  <Text style={styles.junctionLabel}>reached your</Text>
-                  <Text style={styles.junctionLabel}>destination</Text>
+              <>
+                <View style={[styles.junctionPanel, getJunctionPanelStyle()]}> 
+                  <MaterialCommunityIcons name="check-circle" size={80} color="rgba(76, 175, 80, 0.95)" style={styles.junctionIcon} />
+                  <View style={styles.junctionContent}>
+                    <Text style={styles.junctionLabel}>You have</Text>
+                    <Text style={styles.junctionLabel}>reached your</Text>
+                    <Text style={styles.junctionLabel}>destination</Text>
+                  </View>
                 </View>
-              </View>
+
+                <Modal
+                  visible={showDirectionsFullscreen}
+                  animationType="fade"
+                  transparent={false}
+                  supportedOrientations={["portrait", "portrait-upside-down", "landscape", "landscape-left", "landscape-right"]}
+                  onRequestClose={closeDirectionsFullscreen}
+                >
+                  <Pressable style={styles.fullscreenDirectionsContainer} onPress={closeDirectionsFullscreen}>
+                    <ScrollView
+                      contentContainerStyle={[
+                        styles.fullscreenDirectionsContent,
+                        {
+                          paddingTop: fullscreenPaddingTop,
+                          paddingBottom: fullscreenPaddingBottom,
+                          paddingHorizontal: fullscreenPaddingHorizontal,
+                        },
+                      ]}
+                      showsVerticalScrollIndicator={false}
+                      alwaysBounceVertical={false}
+                    >
+                      <MaterialCommunityIcons
+                        name="check-circle"
+                        size={fullscreenIconSize}
+                        color="rgba(76, 175, 80, 0.95)"
+                        style={styles.fullscreenDirectionsIcon}
+                      />
+                      <Text style={[styles.fullscreenDirectionsLabel, isLandscape && styles.fullscreenDirectionsLabelLandscape]}>You have reached your destination</Text>
+                      <Text style={[styles.fullscreenDirectionsInstruction, isLandscape && styles.fullscreenDirectionsInstructionLandscape]}>Tap anywhere to exit navigation.</Text>
+                      <Text style={[styles.fullscreenDirectionsHint, isLandscape && styles.fullscreenDirectionsHintLandscape]}>Tap anywhere to exit fullscreen</Text>
+                    </ScrollView>
+                  </Pressable>
+                </Modal>
+              </>
             );
           }
           
@@ -5286,10 +5343,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           }
 
           const instructionForDisplay = arrivalInstructionDisplay || effectiveInstruction;
-          const fullscreenPaddingTop = (isLandscape ? insets.top + 16 : insets.top + 32);
-          const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 16 : insets.bottom + 32);
-          const fullscreenPaddingHorizontal = isLandscape ? 32 : 24;
-          const fullscreenIconSize = isLandscape ? 120 : 160;
 
           return (
             <>
