@@ -14,7 +14,8 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import theme from "@themes";
 import Constants from "expo-constants";
-import { Tabs, usePathname, useRouter } from "expo-router";
+import { StripeProvider } from "@stripe/stripe-react-native";
+import { Stack, Tabs, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Alert, Animated, Dimensions, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
@@ -370,6 +371,9 @@ function LayoutContent() {
 export default function Layout() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashChecked, setSplashChecked] = useState(false);
+  const stripeConfig = Constants.expoConfig?.extra?.stripe || {};
+  const stripePublishableKey = stripeConfig.publishableKey || stripeConfig.publishableKeyLive;
+  const merchantIdentifier = stripeConfig.merchantIdentifier || "merchant.com.timmy.marler.coffeerider";
 
   // Check if splash has been shown for this version
   useEffect(() => {
@@ -422,9 +426,15 @@ export default function Layout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <ThemeAwareLayoutContent />
-      </AuthProvider>
+      <StripeProvider
+        publishableKey={stripePublishableKey || "pk_test_PLACEHOLDER"}
+        merchantIdentifier={merchantIdentifier}
+        urlScheme={Constants.expoConfig?.scheme}
+      >
+        <AuthProvider>
+          <ThemeAwareLayoutContent />
+        </AuthProvider>
+      </StripeProvider>
     </GestureHandlerRootView>
   );
 }
