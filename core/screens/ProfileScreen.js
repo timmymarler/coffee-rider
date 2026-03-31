@@ -197,6 +197,24 @@ export default function ProfileScreen() {
   const email = user?.email || "";
   const role = profile?.role || "user";
 
+  const formatSubscriptionDate = (value) => {
+    if (!value) return 'Not set';
+    const ms = value?.seconds ? value.seconds * 1000 : value;
+    const date = new Date(ms);
+    if (Number.isNaN(date.getTime())) {
+      return 'Not set';
+    }
+    return date.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  const formatPlanLabel = (plan) => {
+    if (!plan) return 'Unknown';
+    const normalized = plan.toLowerCase();
+    if (normalized === 'monthly') return 'Monthly';
+    if (normalized === 'annual') return 'Annual';
+    return plan.charAt(0).toUpperCase() + plan.slice(1);
+  };
+
   // Create theme-aware styles inside component so they update when theme changes
   // MUST be defined before guest mode check to avoid "Cannot read property 'container' of undefined"
   const dynamicStyles = StyleSheet.create({
@@ -1036,6 +1054,39 @@ export default function ProfileScreen() {
       {subscription && profile?.role === 'pro' && (
       <View style={styles.cardWrap}>
       <CRCard>
+        <View style={{ marginBottom: theme.spacing.md }}>
+          <Text style={{
+            color: theme.colors.textMuted,
+            fontSize: 12,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+          }}>
+            Current Plan
+          </Text>
+          <Text style={{
+            color: theme.colors.text,
+            fontSize: 20,
+            fontWeight: '700',
+            marginTop: 4,
+          }}>
+            {formatPlanLabel(subscription?.plan)}
+          </Text>
+          <Text style={{
+            color: theme.colors.text,
+            marginTop: theme.spacing.xs,
+          }}>
+            Renews on {formatSubscriptionDate(subscription?.renewalDate)}
+          </Text>
+          {subscription?.cancelAtPeriodEnd && (
+            <Text style={{
+              color: theme.colors.accentMid,
+              marginTop: theme.spacing.xs,
+              fontSize: 12,
+            }}>
+              Access ends {formatSubscriptionDate(subscription?.cancellationEffectiveDate || subscription?.renewalDate)}
+            </Text>
+          )}
+        </View>
         <CRButton
           title="Unsubscribe"
           variant="accentMid"
@@ -1178,7 +1229,7 @@ export default function ProfileScreen() {
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <CRButton
                 title={unsubscribing ? "Cancelling…" : "Cancel Subscription"}
-                variant="accentMid"
+                variant="danger"
                 loading={unsubscribing}
                 disabled={unsubscribing}
                 onPress={handleUnsubscribe}

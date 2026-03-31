@@ -21,6 +21,7 @@ const readEnv = (key) => {
 };
 
 const STRIPE_API_VERSION = '2024-06-20';
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 const getStripeSecretKey = () => {
   const key = readEnv('STRIPE_LIVE_SECRET_KEY') || readEnv('STRIPE_TEST_SECRET_KEY');
@@ -29,6 +30,8 @@ const getStripeSecretKey = () => {
   }
   return key;
 };
+
+const isLiveMode = () => Boolean(readEnv('STRIPE_LIVE_SECRET_KEY'));
 
 let stripeClient = null;
 const getStripe = () => {
@@ -49,6 +52,22 @@ const getPriceId = (plan) => {
 
 const getWebhookSecret = () =>
   readEnv('STRIPE_LIVE_WEBHOOK_SECRET') || readEnv('STRIPE_TEST_WEBHOOK_SECRET');
+
+const getRenewalOverrideMs = (planId) => {
+  if (isLiveMode()) {
+    return null;
+  }
+
+  if (planId === 'annual') {
+    return 7 * DAY_IN_MS;
+  }
+
+  if (planId === 'monthly') {
+    return 1 * DAY_IN_MS;
+  }
+
+  return null;
+};
 
 const firestore = admin.firestore();
 const { FieldValue } = admin.firestore;
@@ -74,8 +93,9 @@ const ensureCustomerForUid = async (uid) => {
   const userSnap = await userRef.get();
   const userData = userSnap.exists ? userSnap.data() : {};
 
-  if (userData?.stripeCustomerId) {
-    return userData.stripeCustomerId;
+  const customerField = isLiveMode() ? 'stripeCustomerId' : 'stripeCustomerIdTest';
+  if (userData?.[customerField]) {
+    return userData[customerField];
   }
 
   const authUser = await admin.auth().getUser(uid);
@@ -88,7 +108,7 @@ const ensureCustomerForUid = async (uid) => {
 
   await userRef.set(
     {
-      stripeCustomerId: customer.id,
+      [customerField]: customer.id,
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }
@@ -113,22 +133,63 @@ const mapStripeStatus = (status) => {
   }
 };
 
+const resolveUidForSubscription = async (subscription) => {
+  if (subscription.metadata?.firebaseUID) {
+    return subscription.metadata.firebaseUID;
+  }
+
+  try {
+    const snapshot = await firestore
+      .collectionGroup('subscription')
+      .where('stripeSubscriptionId', '==', subscription.id)
+      .limit(1)
+      .get();
+
+    if (!snapshot.empty) {
+      const userDocRef = snapshot.docs[0].ref.parent.parent;
+      return userDocRef?.id || null;
+    }
+  } catch (err) {
+    functions.logger.error('Failed to resolve UID via collectionGroup lookup', err);
+  }
+
+  return null;
+};
+
 const handleSubscriptionSync = async (subscription) => {
-  const uid = subscription.metadata?.firebaseUID;
+  const uid = await resolveUidForSubscription(subscription);
   if (!uid) {
     functions.logger.warn('Subscription missing firebaseUID metadata', subscription.id);
     return;
   }
 
-  const planId = subscription.metadata?.planId || subscription.items?.data?.[0]?.price?.metadata?.planId || 'monthly';
-  const renewalDate = subscription.current_period_end ? subscription.current_period_end * 1000 : null;
+  const planId =
+    subscription.metadata?.planId || subscription.items?.data?.[0]?.price?.metadata?.planId || 'monthly';
+  const currentPeriodEnd =
+    subscription.current_period_end || subscription.items?.data?.[0]?.current_period_end || null;
+  const overrideDuration = getRenewalOverrideMs(planId);
+  const renewalDate = overrideDuration
+    ? Date.now() + overrideDuration
+    : currentPeriodEnd
+    ? currentPeriodEnd * 1000
+    : null; // Stripe sometimes nests period info on the item
+  const cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
+  const cancellationEffectiveDate = cancelAtPeriodEnd && renewalDate ? renewalDate : null;
   const status = mapStripeStatus(subscription.status);
+
+  functions.logger.info('Syncing subscription state', {
+    uid,
+    subscriptionId: subscription.id,
+    status,
+  });
 
   await upsertSubscriptionDocument(uid, {
     status,
     plan: planId,
     stripeSubscriptionId: subscription.id,
     renewalDate,
+    cancelAtPeriodEnd,
+    cancellationEffectiveDate,
   });
 
   await updateUserProfile(uid, {
@@ -136,6 +197,7 @@ const handleSubscriptionSync = async (subscription) => {
     subscriptionStatus: status,
     subscriptionPlan: planId,
     subscriptionExpiresAt: renewalDate,
+    subscriptionCancelAtPeriodEnd: cancelAtPeriodEnd,
   });
 };
 
@@ -160,17 +222,28 @@ export const createSubscriptionPaymentSheet = functions
     }
 
     const planId = (data?.planId || '').toLowerCase();
+    const liveSecretKey = readEnv('STRIPE_LIVE_SECRET_KEY');
+    const secretKeyPrefix = liveSecretKey ? liveSecretKey.slice(0, 3) : null;
+    functions.logger.info('createSubscriptionPaymentSheet invoked', {
+      uid: context.auth.uid,
+      planId,
+      secretKeyPrefix,
+      hasLiveSecretKey: Boolean(liveSecretKey),
+    });
     const priceId = getPriceId(planId);
     if (!priceId) {
       throw new functions.https.HttpsError('invalid-argument', 'Unknown plan selected.');
     }
+    functions.logger.info('Stripe price resolved', { planId, priceId });
 
     const customerId = await ensureCustomerForUid(context.auth.uid);
+    functions.logger.info('Stripe customer ready', { uid: context.auth.uid, customerId });
     const stripe = getStripe();
     const ephemeralKey = await stripe.ephemeralKeys.create(
       { customer: customerId },
       { apiVersion: '2024-06-20' }
     );
+    functions.logger.info('Ephemeral key created', { uid: context.auth.uid, customerId });
 
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
@@ -193,6 +266,11 @@ export const createSubscriptionPaymentSheet = functions
       status: 'pending',
       plan: planId,
       stripeSubscriptionId: subscription.id,
+    });
+    functions.logger.info('Subscription document updated', {
+      uid: context.auth.uid,
+      subscriptionId: subscription.id,
+      status: 'pending',
     });
 
     await updateUserProfile(context.auth.uid, {
@@ -227,21 +305,16 @@ export const cancelStripeSubscription = functions
       throw new functions.https.HttpsError('permission-denied', 'Subscription does not belong to this user.');
     }
 
-    await stripe.subscriptions.cancel(subscriptionId);
-
-    await upsertSubscriptionDocument(context.auth.uid, {
-      status: 'cancelled',
-      stripeSubscriptionId: subscriptionId,
-      cancelledAt: FieldValue.serverTimestamp(),
+    const updatedSubscription = await stripe.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: true,
     });
 
-    await updateUserProfile(context.auth.uid, {
-      role: 'user',
-      subscriptionStatus: 'cancelled',
-      subscriptionExpiresAt: null,
-    });
+    await handleSubscriptionSync(updatedSubscription);
 
-    return { status: 'cancelled' };
+    return {
+      status: updatedSubscription.status,
+      cancelAtPeriodEnd: updatedSubscription.cancel_at_period_end,
+    };
   });
 
 export const stripeWebhook = functions
@@ -254,6 +327,11 @@ export const stripeWebhook = functions
     }
 
     const webhookSecret = getWebhookSecret();
+    functions.logger.info('stripeWebhook invoked', {
+      hasLiveSecretKey: Boolean(readEnv('STRIPE_LIVE_SECRET_KEY')),
+      hasWebhookSecret: Boolean(webhookSecret),
+      headersPresent: Boolean(req.headers['stripe-signature']),
+    });
     if (!webhookSecret) {
       res.status(500).send('Webhook secret not configured');
       return;
