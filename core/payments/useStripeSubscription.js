@@ -2,6 +2,7 @@ import { functions } from '@config/firebase';
 import { useStripe } from '@stripe/stripe-react-native';
 import { httpsCallable } from 'firebase/functions';
 import { useCallback, useMemo, useState } from 'react';
+import Constants from 'expo-constants';
 import { SUBSCRIPTION_PLANS } from './stripeService';
 
 const ensureStripeCustomerCallable = httpsCallable(functions, 'ensureStripeCustomer');
@@ -12,6 +13,8 @@ export function useStripeSubscription() {
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
+  const appScheme = Constants.expoConfig?.scheme || Constants.expoConfig?.slug || 'coffeerider';
+  const paymentSheetReturnUrl = `${appScheme}://stripe-redirect`;
 
   const planLookup = useMemo(() => {
     return Object.values(SUBSCRIPTION_PLANS).reduce((acc, plan) => {
@@ -50,6 +53,7 @@ export function useStripeSubscription() {
           customerEphemeralKeySecret: ephemeralKeySecret,
           paymentIntentClientSecret,
           merchantDisplayName: 'Coffee Rider',
+          returnURL: paymentSheetReturnUrl,
         });
 
         if (initResult.error) {
@@ -60,7 +64,15 @@ export function useStripeSubscription() {
 
         const presentResult = await presentPaymentSheet({ clientSecret: paymentIntentClientSecret });
         if (presentResult.error) {
-          throw new Error(presentResult.error.message || 'Payment was cancelled.');
+          const wasCancelled = presentResult.error.code === 'Canceled' || presentResult.error.code === 'CanceledByUser';
+          if (wasCancelled) {
+            console.info('[Stripe] Payment sheet cancelled by user');
+            setStatus('idle');
+            setError(null);
+            return { cancelled: true };
+          }
+
+          throw new Error(presentResult.error.message || 'Payment failed.');
         }
 
         setStatus('completed');
@@ -72,7 +84,7 @@ export function useStripeSubscription() {
         throw err;
       }
     },
-    [initPaymentSheet, planLookup, presentPaymentSheet]
+    [initPaymentSheet, paymentSheetReturnUrl, planLookup, presentPaymentSheet]
   );
 
   const cancelPaidSubscription = useCallback(async (stripeSubscriptionId) => {

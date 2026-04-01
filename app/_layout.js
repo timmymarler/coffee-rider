@@ -372,7 +372,9 @@ export default function Layout() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashChecked, setSplashChecked] = useState(false);
   const stripeConfig = Constants.expoConfig?.extra?.stripe || {};
-  const stripePublishableKey = stripeConfig.publishableKey || stripeConfig.publishableKeyLive;
+  const normalizeKey = (value) => (typeof value === 'string' ? value.trim() : '');
+  const stripePublishableKey =
+    normalizeKey(stripeConfig.publishableKeyLive) || normalizeKey(stripeConfig.publishableKey);
   const merchantIdentifier = stripeConfig.merchantIdentifier || "merchant.com.timmy.marler.coffeerider";
 
   // Check if splash has been shown for this version
