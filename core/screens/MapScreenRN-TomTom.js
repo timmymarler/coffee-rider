@@ -14,17 +14,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ---------------------------------------------------------------------------
 // JunctionView – Beeline-style schematic road diagram for the fullscreen
-// navigation pod.  Renders approach road, departure road, T-junction side
-// stubs, and a triangle position marker using react-native-svg.
+// navigation pod. Renders approach/departure route geometry and side-road rails
+// in monochrome using react-native-svg.
 // ---------------------------------------------------------------------------
-function JunctionView({ maneuver }) {
-  const C = 80; // center X of the 160px wide canvas
-  const JY = 44; // junction Y
+function JunctionView({ maneuver, step, routeCoords, compact = false }) {
+  const C = compact ? 72 : 90; // center X of the canvas
+  const JY = compact ? 42 : 50; // junction Y
 
   // Primary route stays solid; non-selected roads are dual "rails".
-  const routeWidth = 6;
-  const railOuter = 4;
-  const railInner = 1.8;
+  const routeWidth = compact ? 6.2 : 7.5;
+  const railOuter = compact ? 4.2 : 5.2;
+  const railInner = compact ? 1.8 : 2.2;
   const roadColor = "rgba(255,255,255,0.96)";
   const sideColor = "rgba(255,255,255,0.72)";
   const cutoutColor = "#000000";
@@ -32,45 +32,129 @@ function JunctionView({ maneuver }) {
   const m = (maneuver || "STRAIGHT").toUpperCase();
   const isArrival = m.includes("ARRIVE") || m.includes("ARRIVAL") || m.includes("DESTINATION");
 
-  // Always render approach road from the bottom to the junction.
-  const approach = `M ${C} 124 L ${C} ${JY}`;
-  // Rider position marker.
-  const arrow = `${C},80 ${C - 11},102 ${C + 11},102`;
+  const buildPath = (pts) => {
+    if (!Array.isArray(pts) || pts.length < 2) return null;
+    return pts.reduce((acc, p, idx) => {
+      const x = Number.isFinite(p.x) ? p.x : 0;
+      const y = Number.isFinite(p.y) ? p.y : 0;
+      return `${acc}${idx === 0 ? "M" : " L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    }, "");
+  };
 
-  let departure = null;
+  const derivedGeometry = useMemo(() => {
+    if (!Array.isArray(routeCoords) || routeCoords.length < 2) return null;
+
+    const anchor = step?.end || step?.position || routeCoords[Math.floor(routeCoords.length * 0.5)];
+    if (!anchor?.latitude || !anchor?.longitude) return null;
+
+    let nearestIndex = 0;
+    let nearestDistSq = Infinity;
+
+    for (let i = 0; i < routeCoords.length; i++) {
+      const local = toLocalMeters(anchor, routeCoords[i]);
+      const d2 = local.x * local.x + local.y * local.y;
+      if (d2 < nearestDistSq) {
+        nearestDistSq = d2;
+        nearestIndex = i;
+      }
+    }
+
+    const start = Math.max(0, nearestIndex - 18);
+    const end = Math.min(routeCoords.length - 1, nearestIndex + 22);
+    const windowPoints = routeCoords.slice(start, end + 1);
+    if (windowPoints.length < 2) return null;
+
+    const inboundA = routeCoords[Math.max(0, nearestIndex - 8)];
+    const inboundB = routeCoords[Math.max(0, nearestIndex - 1)];
+    const inboundALocal = toLocalMeters(anchor, inboundA);
+    const inboundBLocal = toLocalMeters(anchor, inboundB);
+    const vx = inboundBLocal.x - inboundALocal.x;
+    const vy = -(inboundBLocal.y - inboundALocal.y); // y-flip for screen space
+    const mag = Math.sqrt(vx * vx + vy * vy);
+    if (!Number.isFinite(mag) || mag < 0.1) return null;
+
+    const heading = Math.atan2(vy, vx);
+    const target = -Math.PI / 2; // align route travel with upward direction
+    const rot = target - heading;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+
+    const rotated = windowPoints.map((coord) => {
+      const local = toLocalMeters(anchor, coord);
+      const sx = local.x;
+      const sy = -local.y;
+      return {
+        x: sx * cos - sy * sin,
+        y: sx * sin + sy * cos,
+      };
+    });
+
+    const maxAbsX = Math.max(...rotated.map((p) => Math.abs(p.x)), 1);
+    const maxAbsY = Math.max(...rotated.map((p) => Math.abs(p.y)), 1);
+    const scaleLimit = compact ? 1.5 : 1.85;
+    const scale = Math.min(scaleLimit, Math.max(0.55, Math.min(70 / maxAbsX, 72 / maxAbsY)));
+
+    const fitted = rotated.map((p) => ({
+      x: C + p.x * scale,
+      y: JY + p.y * scale,
+    }));
+
+    const junctionIdx = Math.min(Math.max(nearestIndex - start, 1), fitted.length - 1);
+    const approachPoints = fitted.slice(0, junctionIdx + 1).map((p, idx, arr) => {
+      // Keep the first section of the chosen route visually straight-up.
+      if (idx <= Math.min(5, Math.floor(arr.length * 0.45))) {
+        return { ...p, x: C };
+      }
+      return p;
+    });
+    const departurePoints = fitted.slice(junctionIdx);
+
+    return {
+      approach: buildPath(approachPoints),
+      departure: buildPath(departurePoints),
+    };
+  }, [routeCoords, step]);
+
+  const fallbackApproach = compact ? `M ${C} 108 L ${C} ${JY}` : `M ${C} 136 L ${C} ${JY}`;
+  const arrowPoints = compact
+    ? `${C},76 ${C - 9},93 ${C + 9},93`
+    : `${C},98 ${C - 11},118 ${C + 11},118`;
+
+  let approach = derivedGeometry?.approach || fallbackApproach;
+  let departure = isArrival ? null : derivedGeometry?.departure;
   const sides = [];
 
   if (isArrival) {
     // Arrival view: no outgoing leg beyond the destination.
   } else if (m === "TURN_LEFT" || m === "TURN_SHARP_LEFT") {
-    departure = `M ${C} ${JY} L 5 ${JY}`;
+    departure = departure || `M ${C} ${JY} L 5 ${JY}`;
     sides.push(`M ${C} ${JY} L ${C} 5`);
   } else if (m === "TURN_RIGHT" || m === "TURN_SHARP_RIGHT") {
-    departure = `M ${C} ${JY} L 155 ${JY}`;
+    departure = departure || `M ${C} ${JY} L 155 ${JY}`;
     sides.push(`M ${C} ${JY} L ${C} 5`);
   } else if (m === "TURN_SLIGHT_LEFT" || m === "BEAR_LEFT" || m === "KEEP_LEFT") {
-    departure = `M ${C} ${JY} Q 46 17 4 3`;
+    departure = departure || `M ${C} ${JY} Q 46 17 4 3`;
   } else if (m === "TURN_SLIGHT_RIGHT" || m === "BEAR_RIGHT" || m === "KEEP_RIGHT") {
-    departure = `M ${C} ${JY} Q 114 17 156 3`;
+    departure = departure || `M ${C} ${JY} Q 114 17 156 3`;
   } else if (m.includes("U_TURN") || m.includes("UTURN") || m.includes("MAKE_U")) {
     const goRight = !m.includes("LEFT");
     const ux = goRight ? C + 34 : C - 34;
-    departure = `M ${C} ${JY} Q ${ux} ${JY} ${ux} ${JY + 28} Q ${ux} ${JY + 56} ${C} ${JY + 56}`;
+    departure = departure || `M ${C} ${JY} Q ${ux} ${JY} ${ux} ${JY + 28} Q ${ux} ${JY + 56} ${C} ${JY + 56}`;
   } else if (m.includes("ROUNDABOUT")) {
-    departure = `M ${C} ${JY} L ${C} 59`;
+    departure = departure || `M ${C} ${JY} L ${C} 59`;
     sides.push(`M ${C} 23 L ${C} 5`);
   } else if (m === "MERGE_LEFT") {
-    departure = `M ${C} ${JY} L ${C} 5`;
+    departure = departure || `M ${C} ${JY} L ${C} 5`;
     sides.push(`M 5 ${JY + 20} Q ${C - 20} ${JY + 8} ${C} ${JY}`);
   } else if (m === "MERGE_RIGHT") {
-    departure = `M ${C} ${JY} L ${C} 5`;
+    departure = departure || `M ${C} ${JY} L ${C} 5`;
     sides.push(`M 155 ${JY + 20} Q ${C + 20} ${JY + 8} ${C} ${JY}`);
   } else if (m === "TAKE_EXIT") {
-    departure = `M ${C} ${JY} Q 114 17 156 3`;
+    departure = departure || `M ${C} ${JY} Q 114 17 156 3`;
     sides.push(`M ${C} ${JY} L ${C} 5`);
   } else {
     // STRAIGHT (default)
-    departure = `M ${C} ${JY} L ${C} 5`;
+    departure = departure || `M ${C} ${JY} L ${C} 5`;
   }
 
   const renderSolidPath = (d, key) => (
@@ -83,23 +167,31 @@ function JunctionView({ maneuver }) {
   ];
 
   return (
-    <Svg width={160} height={130} viewBox="0 0 160 130" style={{ marginBottom: 16 }}>
-      {sides.map((d, i) => renderDualPath(d, sideColor, `s${i}`))}
-      {renderSolidPath(approach, "approach")}
-      {departure ? renderSolidPath(departure, "departure") : null}
+    <View
+      style={{
+        marginBottom: compact ? 10 : 18,
+        transform: [{ perspective: compact ? 800 : 900 }, { rotateX: compact ? "20deg" : "28deg" }],
+      }}
+      pointerEvents="none"
+    >
+      <Svg width={compact ? 148 : 188} height={compact ? 116 : 156} viewBox={compact ? "0 0 144 112" : "0 0 180 150"}>
+        {sides.map((d, i) => renderDualPath(d, sideColor, `s${i}`))}
+        {renderSolidPath(approach, "approach")}
+        {departure ? renderSolidPath(departure, "departure") : null}
 
-      {m.includes("ROUNDABOUT") && (
-        <>
-          <Circle cx={C} cy={41} r={15} stroke={roadColor} strokeWidth={routeWidth} fill="none" />
-        </>
-      )}
+        {m.includes("ROUNDABOUT") && (
+          <>
+            <Circle cx={C} cy={compact ? 34 : 41} r={compact ? 12 : 15} stroke={roadColor} strokeWidth={routeWidth} fill="none" />
+          </>
+        )}
 
-      {isArrival ? (
-        <Circle cx={C} cy={JY} r={8} fill={roadColor} />
-      ) : (
-        <Polygon points={arrow} fill="rgba(255,255,255,0.97)" />
-      )}
-    </Svg>
+        {isArrival ? (
+          <Circle cx={C} cy={JY} r={compact ? 7 : 9} fill={roadColor} />
+        ) : (
+          <Polygon points={arrowPoints} fill="rgba(255,255,255,0.98)" />
+        )}
+      </Svg>
+    </View>
   );
 }
 
@@ -236,7 +328,6 @@ function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance =
 
     const dist = distanceBetweenMeters(point, projectedPoint);
     const segmentLength = distanceBetweenMeters(p1, p2) || 0;
-
     if (dist < minDistance) {
       minDistance = dist;
       closestPoint = projectedPoint;
@@ -300,7 +391,6 @@ function normalizeRouteSteps(rawSteps = [], coords = []) {
 
     if (isShortStraight && filtered.length > 0) {
       const prev = filtered[filtered.length - 1];
-      prev.distance = (prev.distance || 0) + clone.distance;
       return;
     }
 
@@ -5284,10 +5374,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           
           const hasReachedDestination = hasRouteIntent && hasValidRouteSteps && isAtFinalStep && isCloseToDestination;
           const shouldShowArrivalPanel = hasArrivedAtDestination || hasReachedDestination;
-          const fullscreenPaddingTop = (isLandscape ? insets.top + 16 : insets.top + 32);
-          const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 16 : insets.bottom + 32);
+          const fullscreenPaddingTop = (isLandscape ? insets.top + 8 : insets.top + 32);
+          const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 8 : insets.bottom + 32);
           const fullscreenPaddingHorizontal = isLandscape ? 32 : 24;
-          const fullscreenIconSize = isLandscape ? 120 : 160;
+          const fullscreenIconSize = isLandscape ? 80 : 160;
           
           if (shouldShowArrivalPanel) {
             // Show destination reached message with Save Ride button
@@ -5313,6 +5403,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                     <ScrollView
                       contentContainerStyle={[
                         styles.fullscreenDirectionsContent,
+                        isLandscape && styles.fullscreenDirectionsContentLandscape,
                         {
                           paddingTop: fullscreenPaddingTop,
                           paddingBottom: fullscreenPaddingBottom,
@@ -5525,13 +5616,13 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                       showsVerticalScrollIndicator={false}
                       alwaysBounceVertical={false}
                     >
+                      <JunctionView maneuver={nextManeuver} step={step} routeCoords={routeCoords} compact={isLandscape} />
                       <MaterialCommunityIcons
                         name={displayMeta.icon}
                         size={fullscreenIconSize}
                         color="#ffffff"
                         style={styles.fullscreenDirectionsIcon}
                       />
-                      <JunctionView maneuver={nextManeuver} />
                       {shouldShowDistance ? (
                         <Text style={[styles.fullscreenDirectionsDistance, isLandscape && styles.fullscreenDirectionsDistanceLandscape]}>{distText}</Text>
                       ) : null}
@@ -6171,6 +6262,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
+  },
+  fullscreenDirectionsContentLandscape: {
+    justifyContent: "flex-start",
   },
   fullscreenDirectionsIcon: {
     marginBottom: 32,
