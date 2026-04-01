@@ -12,11 +12,20 @@ const cancelStripeSubscriptionCallable = httpsCallable(functions, 'cancelStripeS
  * Replace with actual Stripe product IDs when account is set up
  */
 export const STRIPE_PRODUCTS = {
+  DAILY: stripeExtra.priceDaily || 'price_test_daily_PLACEHOLDER',
   MONTHLY: stripeExtra.priceMonthly || 'price_test_monthly_PLACEHOLDER',
   ANNUAL: stripeExtra.priceAnnual || 'price_test_annual_PLACEHOLDER',
 };
 
 export const SUBSCRIPTION_PLANS = {
+  DAILY: {
+    id: 'daily',
+    name: 'Daily',
+    price: '£0.99',
+    period: 'per day',
+    priceInCents: 99,
+    stripePrice: STRIPE_PRODUCTS.DAILY,
+  },
   MONTHLY: {
     id: 'monthly',
     name: 'Monthly',
@@ -165,7 +174,9 @@ export async function activateSubscription({
     }
     
     // Calculate renewal date based on plan
-    if (plan.id === 'monthly') {
+    if (plan.id === 'daily') {
+      renewalDate.setDate(renewalDate.getDate() + 1);
+    } else if (plan.id === 'monthly') {
       renewalDate.setMonth(renewalDate.getMonth() + 1);
     } else if (plan.id === 'annual') {
       renewalDate.setFullYear(renewalDate.getFullYear() + 1);

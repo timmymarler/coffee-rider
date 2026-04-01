@@ -57,10 +57,15 @@ export default function SubscriptionsScreen() {
     try {
       setProcessing(true);
       setSelectedPlan(plan.id);
-      await subscribeToPlan(plan.id);
+      const result = await subscribeToPlan(plan.id);
+      if (result?.cancelled) {
+        Alert.alert('Payment cancelled', 'No payment was taken.');
+        return;
+      }
       Alert.alert(
         'Processing Payment',
-        'Once Stripe confirms the payment your Pro access will unlock automatically.'
+        'Once Stripe confirms the payment your Pro access will unlock automatically.',
+        [{ text: 'OK', onPress: () => router.replace('/profile') }]
       );
       await refreshProfile();
     } catch (err) {
@@ -159,6 +164,16 @@ export default function SubscriptionsScreen() {
           Choose your plan
         </Text>
 
+        {/* Annual Plan */}
+        <PricingCard
+          plan={SUBSCRIPTION_PLANS.ANNUAL}
+          isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
+          onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.ANNUAL)}
+          processing={processing && selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
+          disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
+          theme={theme}
+        />
+
         {/* Monthly Plan */}
         <PricingCard
           plan={SUBSCRIPTION_PLANS.MONTHLY}
@@ -169,12 +184,12 @@ export default function SubscriptionsScreen() {
           theme={theme}
         />
 
-        {/* Annual Plan */}
+        {/* Daily Plan */}
         <PricingCard
-          plan={SUBSCRIPTION_PLANS.ANNUAL}
-          isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
-          onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.ANNUAL)}
-          processing={processing && selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
+          plan={SUBSCRIPTION_PLANS.DAILY}
+          isSelected={selectedPlan === SUBSCRIPTION_PLANS.DAILY.id}
+          onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.DAILY)}
+          processing={processing && selectedPlan === SUBSCRIPTION_PLANS.DAILY.id}
           disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
           theme={theme}
         />
@@ -334,12 +349,6 @@ function PricingCard({ plan, isSelected, onPress, processing, isPopular, theme, 
           </>
         )}
       </Pressable>
-
-      {plan.id === 'monthly' && (
-        <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}>
-          (Includes 30 days free before subscription starts)
-        </Text>
-      )}
 
       {plan.id === 'annual' && (
         <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}>

@@ -21,7 +21,6 @@ const readEnv = (key) => {
 };
 
 const STRIPE_API_VERSION = '2024-06-20';
-const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 const getStripeSecretKey = () => {
   const key = readEnv('STRIPE_LIVE_SECRET_KEY') || readEnv('STRIPE_TEST_SECRET_KEY');
@@ -44,30 +43,19 @@ const getStripe = () => {
 };
 
 const getPriceId = (plan) => {
-  const normalized = plan === 'annual' ? 'ANNUAL' : 'MONTHLY';
-  return (
-    readEnv(`STRIPE_LIVE_PRICE_${normalized}`) || readEnv(`STRIPE_TEST_PRICE_${normalized}`)
-  );
+  const normalizedPlan = (plan || '').toLowerCase();
+  let suffix = 'MONTHLY';
+  if (normalizedPlan === 'annual') {
+    suffix = 'ANNUAL';
+  } else if (normalizedPlan === 'daily') {
+    suffix = 'DAILY';
+  }
+
+  return readEnv(`STRIPE_LIVE_PRICE_${suffix}`) || readEnv(`STRIPE_TEST_PRICE_${suffix}`);
 };
 
 const getWebhookSecret = () =>
   readEnv('STRIPE_LIVE_WEBHOOK_SECRET') || readEnv('STRIPE_TEST_WEBHOOK_SECRET');
-
-const getRenewalOverrideMs = (planId) => {
-  if (isLiveMode()) {
-    return null;
-  }
-
-  if (planId === 'annual') {
-    return 7 * DAY_IN_MS;
-  }
-
-  if (planId === 'monthly') {
-    return 1 * DAY_IN_MS;
-  }
-
-  return null;
-};
 
 const firestore = admin.firestore();
 const { FieldValue } = admin.firestore;
@@ -167,10 +155,7 @@ const handleSubscriptionSync = async (subscription) => {
     subscription.metadata?.planId || subscription.items?.data?.[0]?.price?.metadata?.planId || 'monthly';
   const currentPeriodEnd =
     subscription.current_period_end || subscription.items?.data?.[0]?.current_period_end || null;
-  const overrideDuration = getRenewalOverrideMs(planId);
-  const renewalDate = overrideDuration
-    ? Date.now() + overrideDuration
-    : currentPeriodEnd
+  const renewalDate = currentPeriodEnd
     ? currentPeriodEnd * 1000
     : null; // Stripe sometimes nests period info on the item
   const cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
