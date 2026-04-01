@@ -1,3 +1,4 @@
+import { Circle, Path, Polygon, Svg } from "react-native-svg";
 import { db } from "@config/firebase";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
@@ -10,6 +11,97 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "r
 import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+// ---------------------------------------------------------------------------
+// JunctionView – Beeline-style schematic road diagram for the fullscreen
+// navigation pod.  Renders approach road, departure road, T-junction side
+// stubs, and a triangle position marker using react-native-svg.
+// ---------------------------------------------------------------------------
+function JunctionView({ maneuver }) {
+  const C = 80; // center X of the 160px wide canvas
+  const JY = 44; // junction Y
+
+  // Primary route stays solid; non-selected roads are dual "rails".
+  const routeWidth = 6;
+  const railOuter = 4;
+  const railInner = 1.8;
+  const roadColor = "rgba(255,255,255,0.96)";
+  const sideColor = "rgba(255,255,255,0.72)";
+  const cutoutColor = "#000000";
+
+  const m = (maneuver || "STRAIGHT").toUpperCase();
+  const isArrival = m.includes("ARRIVE") || m.includes("ARRIVAL") || m.includes("DESTINATION");
+
+  // Always render approach road from the bottom to the junction.
+  const approach = `M ${C} 124 L ${C} ${JY}`;
+  // Rider position marker.
+  const arrow = `${C},80 ${C - 11},102 ${C + 11},102`;
+
+  let departure = null;
+  const sides = [];
+
+  if (isArrival) {
+    // Arrival view: no outgoing leg beyond the destination.
+  } else if (m === "TURN_LEFT" || m === "TURN_SHARP_LEFT") {
+    departure = `M ${C} ${JY} L 5 ${JY}`;
+    sides.push(`M ${C} ${JY} L ${C} 5`);
+  } else if (m === "TURN_RIGHT" || m === "TURN_SHARP_RIGHT") {
+    departure = `M ${C} ${JY} L 155 ${JY}`;
+    sides.push(`M ${C} ${JY} L ${C} 5`);
+  } else if (m === "TURN_SLIGHT_LEFT" || m === "BEAR_LEFT" || m === "KEEP_LEFT") {
+    departure = `M ${C} ${JY} Q 46 17 4 3`;
+  } else if (m === "TURN_SLIGHT_RIGHT" || m === "BEAR_RIGHT" || m === "KEEP_RIGHT") {
+    departure = `M ${C} ${JY} Q 114 17 156 3`;
+  } else if (m.includes("U_TURN") || m.includes("UTURN") || m.includes("MAKE_U")) {
+    const goRight = !m.includes("LEFT");
+    const ux = goRight ? C + 34 : C - 34;
+    departure = `M ${C} ${JY} Q ${ux} ${JY} ${ux} ${JY + 28} Q ${ux} ${JY + 56} ${C} ${JY + 56}`;
+  } else if (m.includes("ROUNDABOUT")) {
+    departure = `M ${C} ${JY} L ${C} 59`;
+    sides.push(`M ${C} 23 L ${C} 5`);
+  } else if (m === "MERGE_LEFT") {
+    departure = `M ${C} ${JY} L ${C} 5`;
+    sides.push(`M 5 ${JY + 20} Q ${C - 20} ${JY + 8} ${C} ${JY}`);
+  } else if (m === "MERGE_RIGHT") {
+    departure = `M ${C} ${JY} L ${C} 5`;
+    sides.push(`M 155 ${JY + 20} Q ${C + 20} ${JY + 8} ${C} ${JY}`);
+  } else if (m === "TAKE_EXIT") {
+    departure = `M ${C} ${JY} Q 114 17 156 3`;
+    sides.push(`M ${C} ${JY} L ${C} 5`);
+  } else {
+    // STRAIGHT (default)
+    departure = `M ${C} ${JY} L ${C} 5`;
+  }
+
+  const renderSolidPath = (d, key) => (
+    <Path key={key} d={d} stroke={roadColor} strokeWidth={routeWidth} strokeLinecap="round" fill="none" />
+  );
+
+  const renderDualPath = (d, color, key) => [
+    <Path key={`${key}-outer`} d={d} stroke={color} strokeWidth={railOuter} strokeLinecap="round" fill="none" />,
+    <Path key={`${key}-inner`} d={d} stroke={cutoutColor} strokeWidth={railInner} strokeLinecap="round" fill="none" />,
+  ];
+
+  return (
+    <Svg width={160} height={130} viewBox="0 0 160 130" style={{ marginBottom: 16 }}>
+      {sides.map((d, i) => renderDualPath(d, sideColor, `s${i}`))}
+      {renderSolidPath(approach, "approach")}
+      {departure ? renderSolidPath(departure, "departure") : null}
+
+      {m.includes("ROUNDABOUT") && (
+        <>
+          <Circle cx={C} cy={41} r={15} stroke={roadColor} strokeWidth={routeWidth} fill="none" />
+        </>
+      )}
+
+      {isArrival ? (
+        <Circle cx={C} cy={JY} r={8} fill={roadColor} />
+      ) : (
+        <Polygon points={arrow} fill="rgba(255,255,255,0.97)" />
+      )}
+    </Svg>
+  );
+}
 
 function MiniMapWithResponsivePosition({ riderLocations, userLocation, routeCoords, colorScheme }) {
   const { width, height } = useWindowDimensions();
@@ -91,13 +183,33 @@ const ARRIVAL_PANEL_DISTANCE_METERS = 45;
 const ARRIVAL_ONROUTE_TOLERANCE_METERS = 30;
 const GENERIC_CONTINUE_REGEX = /^continue\b/i;
 const SPEECH_FAILSAFE_INTERVAL_MS = 20000;
+const METERS_PER_DEGREE_LAT = 111320;
+const EARTH_CIRCUMFERENCE_METERS = 40075000;
+
+function metersPerDegreeLongitude(lat) {
+  return (EARTH_CIRCUMFERENCE_METERS * Math.cos((lat * Math.PI) / 180)) / 360;
+}
+
+function toLocalMeters(base, coord) {
+  const dy = (coord.latitude - base.latitude) * METERS_PER_DEGREE_LAT;
+  const metersPerLon = metersPerDegreeLongitude(base.latitude);
+  const dx = (coord.longitude - base.longitude) * (metersPerLon || 0);
+  return { x: dx, y: dy };
+}
+
+function localMetersToLatLng(base, offsetX, offsetY) {
+  const metersPerLon = metersPerDegreeLongitude(base.latitude);
+  const latitude = base.latitude + offsetY / METERS_PER_DEGREE_LAT;
+  const longitude = metersPerLon ? base.longitude + offsetX / metersPerLon : base.longitude;
+  return { latitude, longitude };
+}
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
 /* ------------------------------------------------------------------ */
 
 // Project a point onto a line segment (polyline snapping)
-function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance = 80) {
+function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance = 30) {
   if (!polylineCoords || polylineCoords.length < 2 || !point) return null;
 
   let closestPoint = null;
@@ -111,18 +223,16 @@ function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance =
     const p1 = polylineCoords[i];
     const p2 = polylineCoords[i + 1];
 
-    const dx = p2.longitude - p1.longitude;
-    const dy = p2.latitude - p1.latitude;
+    const p2Local = toLocalMeters(p1, p2);
+    const pointLocal = toLocalMeters(p1, point);
+    const dx = p2Local.x;
+    const dy = p2Local.y;
     const denom = dx * dx + dy * dy;
     if (denom === 0) continue;
 
-    const px = point.longitude - p1.longitude;
-    const py = point.latitude - p1.latitude;
-    const t = Math.max(0, Math.min(1, (px * dx + py * dy) / denom));
-
-    const projectedLat = p1.latitude + t * dy;
-    const projectedLng = p1.longitude + t * dx;
-    const projectedPoint = { latitude: projectedLat, longitude: projectedLng };
+    const t = Math.max(0, Math.min(1, (pointLocal.x * dx + pointLocal.y * dy) / denom));
+    const projectedLocal = { x: dx * t, y: dy * t };
+    const projectedPoint = localMetersToLatLng(p1, projectedLocal.x, projectedLocal.y);
 
     const dist = distanceBetweenMeters(point, projectedPoint);
     const segmentLength = distanceBetweenMeters(p1, p2) || 0;
@@ -151,8 +261,8 @@ function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance =
   };
 }
 
-function projectPointToPolyline(point, polylineCoords) {
-  const detailed = projectPointToPolylineDetailed(point, polylineCoords);
+function projectPointToPolyline(point, polylineCoords, maxSnapDistance = 30) {
+  const detailed = projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance);
   return detailed ? detailed.point : null;
 }
 
@@ -2739,10 +2849,15 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
   const lastOffRouteCheckPos = useRef(null); // Track last position where we checked for off-route
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
-  const OFF_ROUTE_THRESHOLD_METERS = 50; // Reroute if 50m+ off the route
+  const consecutiveOffRouteRef = useRef(0);
+  const lastOffRouteDistanceRef = useRef(null);
   const REROUTE_COOLDOWN_SECONDS = 10; // Only attempt reroute every 10 seconds max (faster response to off-route)
   const MIN_MOVEMENT_BEFORE_CHECK = 75; // Only check off-route after user moves 75m (reduces check frequency on faster movement like bikes)
   const MIN_GPS_ACCURACY = 35; // Ignore off-route checks if GPS accuracy is worse than this (meters)
+  const BASE_OFF_ROUTE_THRESHOLD_METERS = 20;
+  const MAX_SPEED_BUFFER_METERS = 20;
+  const OFF_ROUTE_CONFIRMATION_COUNT = 3;
+  const OFF_ROUTE_MONITOR_PADDING = 10;
   
   useEffect(() => {
     // Detect Follow Me enable transition
@@ -2823,54 +2938,50 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     lastOffRouteCheckPos.current = userLocation;
 
 
-    // Use snapped point for off-route check
-    const snappedPoint = projectPointToPolyline(userLocation, routeCoords);
-    const pointToCheck = snappedPoint || userLocation;
+    const projection = projectPointToPolylineDetailed(userLocation, routeCoords, 200);
+    const distanceToRoute = typeof projection?.distanceMeters === 'number'
+      ? projection.distanceMeters
+      : distanceBetweenMeters(userLocation, routeCoords[0]);
+    const distanceFromRoute = Number.isFinite(distanceToRoute) ? distanceToRoute : Infinity;
 
-    // Find closest point on route to snapped point
-    let closestDist = Infinity;
-    let closestIndex = -1;
-    for (let i = 0; i < routeCoords.length; i++) {
-      const coord = routeCoords[i];
-      if (!coord || coord.latitude === undefined || coord.longitude === undefined) continue;
-      const dist = distanceBetweenMeters(pointToCheck, coord);
-      if (dist < closestDist) {
-        closestDist = dist;
-        closestIndex = i;
-      }
-    }
+    const speed = Math.max(0, userLocation.speed || 0); // m/s
+    const speedBuffer = Math.min(MAX_SPEED_BUFFER_METERS, speed * 1.2);
+    const accuracy = Math.max(0, userLocation.accuracy || 0);
+    const rerouteThreshold = BASE_OFF_ROUTE_THRESHOLD_METERS + speedBuffer;
+    const effectiveDistance = Math.max(0, distanceFromRoute - accuracy);
+    const monitorThreshold = rerouteThreshold + OFF_ROUTE_MONITOR_PADDING;
 
-    // Dynamic off-route threshold: 50m + 1.5x current speed (m/s)
-    const speed = userLocation.speed || 0; // m/s
-    const dynamicThreshold = 50 + 1.5 * speed;
-    // Track consecutive off-route checks
-    if (!window._consecutiveOffRoute) window._consecutiveOffRoute = 0;
-
-    // Check if user (snapped) is on polyline (within dynamic threshold)
-    if (closestDist < dynamicThreshold) {
-      // User is on the route - don't reroute
-      window._consecutiveOffRoute = 0;
-      console.log(`[AutoReroute] User (snapped) on route (${closestDist.toFixed(0)}m away, threshold ${dynamicThreshold.toFixed(0)}m), no reroute needed`);
+    if (effectiveDistance <= rerouteThreshold) {
+      consecutiveOffRouteRef.current = 0;
+      lastOffRouteDistanceRef.current = effectiveDistance;
+      console.log(`[AutoReroute] On route (${effectiveDistance.toFixed(0)}m effective / ${distanceFromRoute.toFixed(0)}m raw, accuracy ${accuracy.toFixed(0)}m, threshold ${rerouteThreshold.toFixed(0)}m)`);
       return;
     }
 
-    // Check if user (snapped) is slightly off-route (within dynamic threshold + 25m)
-    if (closestDist < dynamicThreshold + 25) {
-      window._consecutiveOffRoute = 0;
-      console.log(`[AutoReroute] User (snapped) slightly off-route (${closestDist.toFixed(0)}m away, threshold ${dynamicThreshold.toFixed(0)}m), monitoring...`);
-      return; // Not far enough off to reroute yet
-    }
-
-    // User is off route: require two consecutive checks before rerouting
-    window._consecutiveOffRoute = (window._consecutiveOffRoute || 0) + 1;
-    if (window._consecutiveOffRoute < 2) {
-      console.log(`[AutoReroute] User off-route (${closestDist.toFixed(0)}m), first check, waiting for confirmation`);
+    if (effectiveDistance <= monitorThreshold) {
+      consecutiveOffRouteRef.current = 0;
+      lastOffRouteDistanceRef.current = effectiveDistance;
+      console.log(`[AutoReroute] Near threshold (${effectiveDistance.toFixed(0)}m effective), monitoring...`);
       return;
     }
-    // Reset counter after reroute
-    window._consecutiveOffRoute = 0;
 
-    // User is 50m+ off route - initiate reroute
+    if (lastOffRouteDistanceRef.current != null && effectiveDistance < lastOffRouteDistanceRef.current - 5) {
+      // Getting closer again, reset confirmation window
+      consecutiveOffRouteRef.current = 0;
+    }
+
+    consecutiveOffRouteRef.current += 1;
+    lastOffRouteDistanceRef.current = effectiveDistance;
+
+    if (consecutiveOffRouteRef.current < OFF_ROUTE_CONFIRMATION_COUNT) {
+      console.log(`[AutoReroute] Off-route reading ${consecutiveOffRouteRef.current}/${OFF_ROUTE_CONFIRMATION_COUNT} (${effectiveDistance.toFixed(0)}m effective)`);
+      return;
+    }
+
+    consecutiveOffRouteRef.current = 0;
+    lastOffRouteDistanceRef.current = null;
+
+    // User is confirmed off route - initiate reroute
     const now = Date.now();
     const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
     
@@ -2879,8 +2990,8 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       return; // Still in cooldown period
     }
 
-    // All conditions met: off-route 50m+ and enough time elapsed
-    console.log(`[AutoReroute] User off-route (${closestDist.toFixed(0)}m), rerouting...`);
+    // All conditions met: user confirmed off-route and cooldown elapsed
+    console.log(`[AutoReroute] User off-route (${effectiveDistance.toFixed(0)}m effective), rerouting...`);
     lastRerouteAttemptRef.current = now;
     
     // Find next unvisited waypoint
@@ -4936,6 +5047,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                 zIndex={1000}
               />
+
         </MapView>
       ) : (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.primaryDark }}>
@@ -5419,6 +5531,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                         color="#ffffff"
                         style={styles.fullscreenDirectionsIcon}
                       />
+                      <JunctionView maneuver={nextManeuver} />
                       {shouldShowDistance ? (
                         <Text style={[styles.fullscreenDirectionsDistance, isLandscape && styles.fullscreenDirectionsDistanceLandscape]}>{distText}</Text>
                       ) : null}
