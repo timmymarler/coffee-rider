@@ -83,6 +83,7 @@ export default function CalendarScreen() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [rsvpLoading, setRsvpLoading] = useState(false);
   
   // Share event modal state
   const [shareModalVisible, setShareModalVisible] = useState(false);
@@ -98,7 +99,7 @@ export default function CalendarScreen() {
   );
 
   // Only pass regions to useEvents - suitability will be filtered client-side
-  const { events: allEvents, loading, deleteEvent, deleteEventSeries } = useEvents(useEventsFilter);
+  const { events: allEvents, loading, deleteEvent, deleteEventSeries, joinEvent, leaveEvent } = useEvents(useEventsFilter);
 
   // Load user's groups for share modal
   const { groups } = useAllUserGroups(user?.uid);
@@ -366,7 +367,9 @@ export default function CalendarScreen() {
 
     return (
       <View>
-        {dayEvents.map((item) => (
+        {dayEvents.map((item) => {
+          const isGoing = Array.isArray(item.attendees) && item.attendees.includes(user?.uid);
+          return (
           <TouchableOpacity
             key={item.id}
             style={styles.eventCard}
@@ -402,6 +405,12 @@ export default function CalendarScreen() {
                   });
                 })()}
               </Text>
+              {isGoing && (
+                <View style={styles.goingBadge}>
+                  <MaterialCommunityIcons name="check-circle" size={13} color="#10b981" />
+                  <Text style={styles.goingBadgeText}>Going</Text>
+                </View>
+              )}
             </View>
             <View style={styles.eventDetails}>
               <Text style={styles.eventTitle}>{item.title}</Text>
@@ -414,13 +423,14 @@ export default function CalendarScreen() {
                 )}
                 {item.attendees && (
                   <Text style={styles.eventAttendees}>
-                    {item.attendees.length} attending
+                    {item.attendees.length} {item.attendees.length === 1 ? "person" : "people"} going
                   </Text>
                 )}
               </View>
             </View>
           </TouchableOpacity>
-        ))}
+          );
+        })}
       </View>
     );
   };
@@ -724,9 +734,56 @@ export default function CalendarScreen() {
                 {selectedEvent.attendees && (
                   <View style={styles.eventModalSection}>
                     <Text style={styles.eventModalLabel}>Attendees</Text>
-                    <Text style={styles.eventModalValue}>{selectedEvent.attendees.length} people</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <MaterialCommunityIcons name="account-multiple" size={16} color={theme.colors.accentMid} />
+                      <Text style={styles.eventModalValue}>
+                        {selectedEvent.attendees.length} {selectedEvent.attendees.length === 1 ? "person" : "people"} going
+                      </Text>
+                    </View>
                   </View>
                 )}
+
+                {/* RSVP — available to any signed-in non-creator */}
+                {user && selectedEvent.createdBy !== user?.uid && selectedEvent.userId !== user?.uid && (() => {
+                  const isGoing = Array.isArray(selectedEvent.attendees) && selectedEvent.attendees.includes(user.uid);
+                  return (
+                    <TouchableOpacity
+                      style={[styles.rsvpButton, isGoing && styles.rsvpButtonGoing]}
+                      disabled={rsvpLoading}
+                      onPress={async () => {
+                        setRsvpLoading(true);
+                        try {
+                          if (isGoing) {
+                            await leaveEvent(selectedEvent.id);
+                            setSelectedEvent((prev) => prev ? {
+                              ...prev,
+                              attendees: (prev.attendees || []).filter((id) => id !== user.uid),
+                            } : prev);
+                          } else {
+                            await joinEvent(selectedEvent.id);
+                            setSelectedEvent((prev) => prev ? {
+                              ...prev,
+                              attendees: [...new Set([...(prev.attendees || []), user.uid])],
+                            } : prev);
+                          }
+                        } catch (e) {
+                          Alert.alert("Error", "Could not update your RSVP. Please try again.");
+                        } finally {
+                          setRsvpLoading(false);
+                        }
+                      }}
+                    >
+                      <MaterialCommunityIcons
+                        name={isGoing ? "check-circle" : "calendar-plus"}
+                        size={20}
+                        color={isGoing ? "#fff" : theme.colors.accentMid}
+                      />
+                      <Text style={[styles.rsvpButtonText, isGoing && styles.rsvpButtonGoingText]}>
+                        {rsvpLoading ? "Updating…" : isGoing ? "I'm going" : "I'm going"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })()}
 
                 {selectedEvent.description && (
                   <View style={styles.eventModalSection}>
@@ -1565,6 +1622,44 @@ const styles = StyleSheet.create({
   },
   
   // Share modal styles
+    // RSVP button
+    rsvpButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 14,
+      paddingHorizontal: theme.spacing.md,
+      borderWidth: 1.5,
+      borderColor: theme.colors.accentMid,
+      borderRadius: 8,
+      marginTop: theme.spacing.lg,
+      marginHorizontal: 20,
+      gap: 8,
+    },
+    rsvpButtonGoing: {
+      backgroundColor: "#10b981",
+      borderColor: "#10b981",
+    },
+    rsvpButtonText: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: theme.colors.accentMid,
+    },
+    rsvpButtonGoingText: {
+      color: "#fff",
+    },
+    // Going badge on event list cards
+    goingBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+      marginTop: 4,
+    },
+    goingBadgeText: {
+      fontSize: 10,
+      fontWeight: "600",
+      color: "#10b981",
+    },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.6)",

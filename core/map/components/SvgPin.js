@@ -18,6 +18,7 @@ export default function SvgPin({
   icon = "map-marker",
   iconColor = "#000",
   strokeWidth = STROKE_WIDTH,
+  visited = false,
 }) {
   // Use dynamic theme from context
   const dynamicTheme = useTheme();
@@ -28,6 +29,8 @@ export default function SvgPin({
   if (circle === undefined) circle = theme.colors.accentDark;
   const iconSize = size * 0.45;
 
+  const visitedStroke = "#10b981"; // emerald, softer green
+
   return (
     <View style={{ alignItems: "center", justifyContent: "center" }}>
       <Svg
@@ -35,11 +38,21 @@ export default function SvgPin({
         height={size}
         viewBox="0 0 24 24"
       >
+        {/* Visited outer edge — rendered behind the pin body */}
+        {visited && (
+          <Path
+            d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+            fill="none"
+            stroke={visitedStroke}
+            strokeWidth={strokeWidth + 2.2}
+          />
+        )}
+
         {/* Pin body */}
         <Path
           d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
           fill={fill}
-          stroke={stroke}
+          stroke={visited ? visitedStroke : stroke}
           strokeWidth={strokeWidth}
         />
 
@@ -49,7 +62,6 @@ export default function SvgPin({
           cy="9"
           r={INNER_RADIUS}
           fill={circle}
-
           opacity={0.9}
         />
       </Svg>
@@ -67,6 +79,32 @@ export default function SvgPin({
           color={iconColor}
         />
       </View>
+
+      {/* Visited badge — small green checkmark dot at top-right */}
+      {visited && (
+        <View
+          style={{
+            position: "absolute",
+            top: -1,
+            right: -1,
+            width: Math.round(size * 0.28),
+            height: Math.round(size * 0.28),
+            borderRadius: Math.round(size * 0.14),
+            backgroundColor: visitedStroke,
+            borderWidth: 1.5,
+            borderColor: "#fff",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <MaterialCommunityIcons
+            name="check"
+            size={Math.round(size * 0.17)}
+            color="#fff"
+            style={{ marginTop: -1 }}
+          />
+        </View>
+      )}
     </View>
   );
 }

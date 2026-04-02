@@ -286,7 +286,22 @@ service cloud.firestore {
       
       allow update: if isAuthed() && (
         isAdmin() ||
-        (resource.data.userId == request.auth.uid)
+        (resource.data.userId == request.auth.uid) ||
+        (
+          // RSVP: allow attendees-only updates on visible events
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attendees']) &&
+          request.resource.data.attendees is list &&
+          (
+            // User must be toggling their own attendance (join or leave)
+            (resource.data.attendees is list && resource.data.attendees.hasAny([request.auth.uid])) ||
+            request.resource.data.attendees.hasAny([request.auth.uid])
+          ) &&
+          (
+            resource.data.visibility == 'public' ||
+            (resource.data.visibility == 'group' && resource.data.groupIds is list && resource.data.groupIds.size() > 0) ||
+            resource.data.userId == request.auth.uid
+          )
+        )
       );
       
       allow delete: if isAuthed() && (

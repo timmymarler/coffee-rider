@@ -6,7 +6,8 @@ import { useTheme } from "@context/ThemeContext";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
-import { collection, doc, getDoc, getDocs, onSnapshot } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
+import { arrayUnion } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
@@ -533,6 +534,7 @@ const EMPTY_FILTERS = {
   amenities: new Set(),
   sponsor: false,
   bikeBrew: false,
+  visited: false,
 };
 
 const DEFAULT_FILTERS = {
@@ -541,6 +543,7 @@ const DEFAULT_FILTERS = {
   amenities: [],
   sponsor: false,
   bikeBrew: false,
+  visited: false,
 };
 
 const DEFAULT_MAP_STATE = {
@@ -1102,7 +1105,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
-  const filtersActive = appliedFilters.suitability.size > 0 || appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0 || appliedFilters.sponsor;
+  const filtersActive = appliedFilters.suitability.size > 0 || appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0 || appliedFilters.sponsor || appliedFilters.visited;
   const [userLocation, setUserLocation] = useState(null);
 
   const [mapRegion, setMapRegion] = useState(userLocation);
@@ -1135,6 +1138,36 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const user = auth?.user || null;
   const role = auth?.profile?.role || "guest";
   const capabilities = getCapabilities(role);
+
+  // Visited places — derived from user profile (auto-updates via AuthContext's real-time listener)
+  const visitedPlaceIds = useMemo(
+    () => new Set(Array.isArray(auth?.profile?.visitedPlaceIds) ? auth.profile.visitedPlaceIds : []),
+    [auth?.profile?.visitedPlaceIds]
+  );
+
+  const markVisited = useCallback(async (placeId, isCurrentlyVisited = false) => {
+    if (!user?.uid || !placeId) return;
+    try {
+      if (isCurrentlyVisited) {
+        // Remove from visited
+        const userRef = doc(db, "users", user.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const current = userSnap.data().visitedPlaceIds || [];
+          await updateDoc(userRef, {
+            visitedPlaceIds: current.filter((id) => id !== placeId),
+          });
+        }
+      } else {
+        // Add to visited
+        await updateDoc(doc(db, "users", user.uid), {
+          visitedPlaceIds: arrayUnion(placeId),
+        });
+      }
+    } catch (err) {
+      console.error("[VISITED] Failed to toggle place visited:", err);
+    }
+  }, [user?.uid]);
   
   // Get user's routing preferences
   const { 
@@ -4039,12 +4072,18 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       });
     }
 
+    // Visited filter — show only places the user has been to
+    if (appliedFilters.visited) {
+      list = list.filter((p) => visitedPlaceIds.has(p.id));
+    }
+
     return list;
   }, [
     crPlaces,
     paddedRegion,
     appliedFilters,
     sponsoredPlaceIds,
+    visitedPlaceIds,
   ]);
 
   const searchMarkers = useMemo(() => {
@@ -4859,6 +4898,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
 
     const { fill, circle, stroke, strokeWidth } = markerStyles[markerMode];
     const pinSize = isSponsor ? 38 : 36; // Slightly bigger size for sponsors
+    const isVisited = visitedPlaceIds.has(poi.id);
 
     const handleMarkerPress = (e) => {
       console.log("[MARKER] Marker.onPress on:", poi.title || poi.name, "selectedPlaceId will be:", poi.id);
@@ -4923,7 +4963,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           onLongPress={handleMarkerLongPress}
           onPress={() => {}} // Consume the press to avoid double-triggering
         >
-          <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} strokeWidth={strokeWidth} size={pinSize} />
+          <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} strokeWidth={strokeWidth} size={pinSize} visited={isVisited} />
         </Pressable>
       </Marker>
     );
@@ -5206,6 +5246,37 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 );
               })}
 
+              {/* VISITED */}
+              {user && (
+                <TouchableOpacity
+                  key="visited"
+                  style={[
+                    styles.iconButton,
+                    draftFilters.visited && styles.iconButtonActive,
+                  ]}
+                  onPress={() =>
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      visited: !prev.visited,
+                    }))
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name="map-marker-check"
+                    size={26}
+                    color={draftFilters.visited ? "#10b981" : theme.colors.primaryLight}
+                  />
+                  <Text
+                    style={[
+                      styles.iconLabel,
+                      draftFilters.visited && styles.iconLabelActive,
+                    ]}
+                  >
+                    Visited
+                  </Text>
+                </TouchableOpacity>
+              )}
+
             </View>
             
 
@@ -5317,6 +5388,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                   </Text>
                 </TouchableOpacity>
               )}
+
             </View>
           </ScrollView>
           <TouchableOpacity
@@ -5717,6 +5789,8 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           hasRoute={routeCoords.length > 0}
           routeMeta={routeMeta}
           isLandscape={isLandscape}
+          isVisited={visitedPlaceIds.has(selectedPlace?.id)}
+          onMarkVisited={markVisited}
           onRoute={(placeArg) => {
             // If somehow a Google place slips through, promote it before routing so it behaves like CR
             if (placeArg?.source === "google") {
