@@ -2,6 +2,7 @@ import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
 import { SUBSCRIPTION_PLANS, startFreeTrial } from '@core/payments/stripeService';
+import { useStripeSubscription } from '@core/payments/useStripeSubscription';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useContext, useState } from 'react';
@@ -22,6 +23,7 @@ export default function SubscriptionsScreen() {
   const theme = useTheme();
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const { subscribeToPlan, status: stripeStatus } = useStripeSubscription();
 
   const handleStartTrial = async () => {
     if (!user?.email) {
@@ -55,14 +57,17 @@ export default function SubscriptionsScreen() {
     try {
       setProcessing(true);
       setSelectedPlan(plan.id);
-      
-      // TODO: Implement Stripe payment flow here
-      // When calling activateSubscription, pass isFromTrial: true if user is currently in trial
-      // This ensures they don't get an additional 30-day free period if upgrading from 7-day trial
+      const result = await subscribeToPlan(plan.id);
+      if (result?.cancelled) {
+        Alert.alert('Payment cancelled', 'No payment was taken.');
+        return;
+      }
       Alert.alert(
-        'Coming Soon',
-        `Payment integration for ${plan.name} plan coming soon`
+        'Processing Payment',
+        'Once Stripe confirms the payment your Pro access will unlock automatically.',
+        [{ text: 'OK', onPress: () => router.replace('/profile') }]
       );
+      await refreshProfile();
     } catch (err) {
       Alert.alert('Error', err.message || 'Payment failed');
     } finally {
@@ -159,21 +164,33 @@ export default function SubscriptionsScreen() {
           Choose your plan
         </Text>
 
-        {/* Monthly Plan */}
-        <PricingCard
-          plan={SUBSCRIPTION_PLANS.MONTHLY}
-          isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
-          onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.MONTHLY)}
-          processing={processing && selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
-          theme={theme}
-        />
-
         {/* Annual Plan */}
         <PricingCard
           plan={SUBSCRIPTION_PLANS.ANNUAL}
           isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
           onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.ANNUAL)}
           processing={processing && selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
+          disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
+          theme={theme}
+        />
+
+        {/* Monthly Plan */}
+        <PricingCard
+          plan={SUBSCRIPTION_PLANS.MONTHLY}
+          isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
+          onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.MONTHLY)}
+          processing={processing && selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
+          disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
+          theme={theme}
+        />
+
+        {/* Daily Plan */}
+        <PricingCard
+          plan={SUBSCRIPTION_PLANS.DAILY}
+          isSelected={selectedPlan === SUBSCRIPTION_PLANS.DAILY.id}
+          onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.DAILY)}
+          processing={processing && selectedPlan === SUBSCRIPTION_PLANS.DAILY.id}
+          disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
           theme={theme}
         />
 
@@ -274,7 +291,7 @@ function Features({ theme }) {
   );
 }
 
-function PricingCard({ plan, isSelected, onPress, processing, isPopular, theme }) {
+function PricingCard({ plan, isSelected, onPress, processing, isPopular, theme, disabled }) {
   return (
     <Pressable
       style={[
@@ -286,8 +303,8 @@ function PricingCard({ plan, isSelected, onPress, processing, isPopular, theme }
         },
         processing && styles.buttonDisabled,
       ]}
-      onPress={onPress}
-      disabled={processing}
+        onPress={onPress}
+        disabled={processing || disabled}
     >
       {isPopular && (
         <View style={[styles.popularBadge, { backgroundColor: theme.colors.primary }]}>
@@ -319,7 +336,7 @@ function PricingCard({ plan, isSelected, onPress, processing, isPopular, theme }
           processing && { opacity: 0.5 },
         ]}
         onPress={onPress}
-        disabled={processing}
+        disabled={processing || disabled}
       >
         {processing ? (
           <ActivityIndicator color={theme.colors.primary} size="small" />
@@ -332,12 +349,6 @@ function PricingCard({ plan, isSelected, onPress, processing, isPopular, theme }
           </>
         )}
       </Pressable>
-
-      {plan.id === 'monthly' && (
-        <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}>
-          (Includes 30 days free before subscription starts)
-        </Text>
-      )}
 
       {plan.id === 'annual' && (
         <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}>

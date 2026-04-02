@@ -1,17 +1,31 @@
 // core/payments/stripeService.js
-import { db } from '@config/firebase';
+import { db, functions } from '@config/firebase';
 import { addDoc, collection, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import Constants from 'expo-constants';
+
+const stripeExtra = Constants.expoConfig?.extra?.stripe || {};
+const cancelStripeSubscriptionCallable = httpsCallable(functions, 'cancelStripeSubscription');
 
 /**
  * Stripe subscription products
  * Replace with actual Stripe product IDs when account is set up
  */
 export const STRIPE_PRODUCTS = {
-  MONTHLY: 'price_1234567890', // £2.99/month
-  ANNUAL: 'price_0987654321',  // £29.99/year
+  DAILY: stripeExtra.priceDaily || 'price_test_daily_PLACEHOLDER',
+  MONTHLY: stripeExtra.priceMonthly || 'price_test_monthly_PLACEHOLDER',
+  ANNUAL: stripeExtra.priceAnnual || 'price_test_annual_PLACEHOLDER',
 };
 
 export const SUBSCRIPTION_PLANS = {
+  DAILY: {
+    id: 'daily',
+    name: 'Daily',
+    price: '£0.99',
+    period: 'per day',
+    priceInCents: 99,
+    stripePrice: STRIPE_PRODUCTS.DAILY,
+  },
   MONTHLY: {
     id: 'monthly',
     name: 'Monthly',
@@ -160,7 +174,9 @@ export async function activateSubscription({
     }
     
     // Calculate renewal date based on plan
-    if (plan.id === 'monthly') {
+    if (plan.id === 'daily') {
+      renewalDate.setDate(renewalDate.getDate() + 1);
+    } else if (plan.id === 'monthly') {
       renewalDate.setMonth(renewalDate.getMonth() + 1);
     } else if (plan.id === 'annual') {
       renewalDate.setFullYear(renewalDate.getFullYear() + 1);
@@ -200,34 +216,29 @@ export async function cancelSubscription({ userId, stripeSubscriptionId }) {
   }
 
   try {
-    // Update subscription status to cancelled
+    if (stripeSubscriptionId) {
+      const result = await cancelStripeSubscriptionCallable({ stripeSubscriptionId });
+      return result.data || { status: 'cancelled' };
+    }
+
+    // Trials or free tiers (no Stripe subscription yet) fall back to Firestore only
     await setDoc(
       doc(db, 'users', userId, 'subscription', 'current'),
       {
         status: 'cancelled',
-        stripeSubscriptionId: stripeSubscriptionId || null,
+        stripeSubscriptionId: null,
         cancelledAt: serverTimestamp(),
       },
       { merge: true }
     );
 
-    // Update user profile to reflect cancellation (back to 'user' role)
     await updateDoc(doc(db, 'users', userId), {
       role: 'user',
       subscriptionStatus: 'cancelled',
       subscriptionExpiresAt: null,
     });
 
-    // If this is a paid subscription (has stripeSubscriptionId), call Cloud Function to cancel with Stripe
-    if (stripeSubscriptionId) {
-      // TODO: Implement Cloud Function to handle Stripe cancellation
-      // POST /cancelSubscription with { userId, stripeSubscriptionId }
-    }
-
-    return {
-      status: 'cancelled',
-      message: 'Subscription cancelled successfully',
-    };
+    return { status: 'cancelled' };
   } catch (err) {
     console.error('[Stripe] Error cancelling subscription:', err);
     throw err;

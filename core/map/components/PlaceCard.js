@@ -100,6 +100,8 @@ export default function PlaceCard({
   onRoute,
   onNavigate,
   isLandscape = false,
+  isVisited = false,
+  onMarkVisited = null,
 }) {
   const [googlePhotos, setGooglePhotos] = useState([]);
   const [googleRatingLive, setGoogleRatingLive] = useState(null);
@@ -1143,6 +1145,20 @@ export default function PlaceCard({
             </TouchableOpacity>
           )}
 
+          {/* Mark as Visited — shown for any CR place when user is logged in */}
+          {isCr && currentUid && onMarkVisited && (
+            <TouchableOpacity
+              style={[styles.photoActionButton, isVisited && styles.visitedActionButton]}
+              onPress={() => onMarkVisited(safePlace.id, isVisited)}
+            >
+              <MaterialCommunityIcons
+                name={isVisited ? "map-marker-check" : "map-marker-plus-outline"}
+                size={18}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          )}
+
         </View>
       </View>
 
@@ -1942,6 +1958,10 @@ function createStyles(theme, isLandscape) {
       shadowOpacity: 0.25,
       shadowRadius: 4,
       shadowOffset: { width: 0, height: 2 },
+    },
+
+    visitedActionButton: {
+      backgroundColor: "#10b981",
     },
 
     primaryAction: {

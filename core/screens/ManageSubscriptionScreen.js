@@ -6,13 +6,13 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useContext, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
 export default function ManageSubscriptionScreen() {
@@ -21,42 +21,34 @@ export default function ManageSubscriptionScreen() {
   const { subscription, isSubscribed, isInTrial, getTrialDaysRemaining } = useContext(SubscriptionContext);
   const theme = useTheme();
   const [cancelling, setCancelling] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   const hasActiveSubscription = isSubscribed();
   const isCurrentlyInTrial = isInTrial();
   const trialDaysLeft = getTrialDaysRemaining();
 
   const handleCancelSubscription = async () => {
-    Alert.alert(
-      'Cancel Subscription?',
-      'You will lose access to Pro features at the end of your current billing period.',
-      [
-        { text: 'Keep Subscription', style: 'cancel' },
-        {
-          text: 'Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setCancelling(true);
-              if (subscription?.stripeSubscriptionId) {
-                await cancelSubscription({
-                  userId: user.uid,
-                  stripeSubscriptionId: subscription.stripeSubscriptionId,
-                });
-                Alert.alert(
-                  'Subscription Cancelled',
-                  'You have until ' + formatDate(subscription.renewalDate) + ' to enjoy Pro features.'
-                );
-              }
-            } catch (err) {
-              Alert.alert('Error', err.message || 'Failed to cancel subscription');
-            } finally {
-              setCancelling(false);
-            }
-          },
-        },
-      ]
-    );
+    if (!subscription?.stripeSubscriptionId) {
+      return;
+    }
+
+    try {
+      setCancelling(true);
+      await cancelSubscription({
+        userId: user.uid,
+        stripeSubscriptionId: subscription.stripeSubscriptionId,
+      });
+      Alert.alert(
+        'Cancellation Scheduled',
+        `You will keep Pro access until ${formatDate(subscription.renewalDate) || 'the next renewal date'}.`
+      );
+    } catch (err) {
+      console.error('[Subscription] Failed to cancel subscription', err);
+      Alert.alert('Error', err?.message || 'Failed to cancel subscription');
+    } finally {
+      setCancelling(false);
+      setConfirmingCancel(false);
+    }
   };
 
   const formatDate = (date) => {
@@ -147,31 +139,75 @@ export default function ManageSubscriptionScreen() {
       {/* Cancel Button (only for paid subscriptions, not trials) */}
       {hasActiveSubscription && !isCurrentlyInTrial && (
         <View style={styles.section}>
-          <Pressable
-            style={[
-              styles.cancelButton,
-              { borderColor: theme.colors.danger },
-              cancelling && styles.buttonDisabled,
-            ]}
-            onPress={handleCancelSubscription}
-            disabled={cancelling}
-          >
-            {cancelling ? (
-              <ActivityIndicator color={theme.colors.danger} />
-            ) : (
-              <>
+          {confirmingCancel ? (
+            <View style={styles.confirmColumn}>
+              <Pressable
+                style={[
+                  styles.cancelButton,
+                  { borderColor: theme.colors.primary },
+                  cancelling && styles.buttonDisabled,
+                ]}
+                onPress={() => setConfirmingCancel(false)}
+                disabled={cancelling}
+              >
                 <MaterialCommunityIcons
-                  name="close-circle"
+                  name="arrow-left-circle"
                   size={20}
-                  color={theme.colors.danger}
+                  color={theme.colors.primary}
                   style={{ marginRight: 8 }}
                 />
-                <Text style={[styles.cancelButtonText, { color: theme.colors.danger }]}>
-                  Cancel Subscription
+                <Text style={[styles.cancelButtonText, { color: theme.colors.primary }]}>
+                  Keep Subscription
                 </Text>
-              </>
-            )}
-          </Pressable>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.destructiveButton,
+                  { backgroundColor: theme.colors.danger },
+                  cancelling && styles.buttonDisabled,
+                ]}
+                onPress={handleCancelSubscription}
+                disabled={cancelling}
+              >
+                {cancelling ? (
+                  <ActivityIndicator color={theme.colors.background} />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="close-circle"
+                      size={20}
+                      color={theme.colors.background}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={[styles.cancelButtonText, { color: theme.colors.background }]}>
+                      Cancel Subscription
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              style={[
+                styles.cancelButton,
+                { borderColor: theme.colors.danger },
+                cancelling && styles.buttonDisabled,
+              ]}
+              onPress={() => setConfirmingCancel(true)}
+              disabled={cancelling}
+            >
+              <MaterialCommunityIcons
+                name="close-circle"
+                size={20}
+                color={theme.colors.danger}
+                style={{ marginRight: 8 }}
+              />
+              <Text style={[styles.cancelButtonText, { color: theme.colors.danger }]}>
+                Cancel Subscription
+              </Text>
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -292,9 +328,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  destructiveButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+  },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  confirmColumn: {
+    flexDirection: 'column',
   },
   buttonDisabled: {
     opacity: 0.5,

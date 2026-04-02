@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "subscription",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "stripeSubscriptionId", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

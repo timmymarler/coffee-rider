@@ -15,6 +15,16 @@ const tomtomApiKey = isIOS
   ? process.env.EXPO_PUBLIC_TOMTOM_API_KEY_IOS || process.env.EXPO_PUBLIC_TOMTOM_API_KEY
   : process.env.EXPO_PUBLIC_TOMTOM_API_KEY_ANDROID || process.env.EXPO_PUBLIC_TOMTOM_API_KEY;
 
+const stripePublishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || null;
+const stripePublishableKeyLive = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY_LIVE || null;
+const stripePriceDaily = process.env.EXPO_PUBLIC_STRIPE_PRICE_DAILY || null;
+const stripePriceMonthly = process.env.EXPO_PUBLIC_STRIPE_PRICE_MONTHLY || null;
+const stripePriceAnnual = process.env.EXPO_PUBLIC_STRIPE_PRICE_ANNUAL || null;
+const stripePriceDailyLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_DAILY_LIVE || null;
+const stripePriceMonthlyLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_MONTHLY_LIVE || null;
+const stripePriceAnnualLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_ANNUAL_LIVE || null;
+const stripeMerchantIdentifier = process.env.STRIPE_MERCHANT_IDENTIFIER || 'merchant.com.timmy.marler.coffeerider';
+
 // Use these variables wherever you need the keys
 // Read the app variant from ENV or default to rider
 const APP_NAME = process.env.APP_NAME || "rider";
@@ -57,7 +67,7 @@ export default {
     name: DISPLAY_NAME[APP_NAME],
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
-    version: "2.20.9",
+    version: "2.22.0",
     icon: `${brandFolder}/icon.png`,
     splash: {
       image: `${brandFolder}/splash.png`,
@@ -73,6 +83,17 @@ export default {
       googleMapsApiKey: googleMapsApiKey,
       googlePlacesApiKey: googlePlacesApiKey,
       tomtomApiKey: tomtomApiKey,
+      stripe: {
+        publishableKey: stripePublishableKey,
+        publishableKeyLive: stripePublishableKeyLive,
+        merchantIdentifier: stripeMerchantIdentifier,
+          priceDaily: stripePriceDaily,
+        priceMonthly: stripePriceMonthly,
+        priceAnnual: stripePriceAnnual,
+          priceDailyLive: stripePriceDailyLive,
+        priceMonthlyLive: stripePriceMonthlyLive,
+        priceAnnualLive: stripePriceAnnualLive,
+      },
       firebase: {
         apiKey: isIOS
           ? process.env.EXPO_PUBLIC_FIREBASE_API_KEY_IOS
@@ -120,6 +141,17 @@ export default {
         foregroundImage: `${brandFolder}/adaptive-icon.png`,
         backgroundColor: "#FFFFFF"
       }
-    }
+    },
+
+    plugins: [
+      [
+        "@stripe/stripe-react-native",
+        {
+          merchantIdentifier: stripeMerchantIdentifier,
+          enableGooglePay: true,
+          enableApplePay: true
+        }
+      ]
+    ]
   }
 };

@@ -4,6 +4,8 @@ import { AuthContext } from "@context/AuthContext";
 import { useAllUserGroups } from "@core/groups/hooks";
 import {
     addDoc,
+    arrayRemove,
+    arrayUnion,
     collection,
     deleteDoc,
     doc,
@@ -176,17 +178,15 @@ export function useEvents(filters = {}) {
 
     try {
       const eventRef = doc(db, "events", eventId);
-      const eventSnap = await getDocs(query(collection(db, "events"), where("__name__", "==", eventId)));
-      
-      if (eventSnap.docs.length > 0) {
-        const eventData = eventSnap.docs[0].data();
-        const attendees = eventData.attendees || [];
-        
-        if (!attendees.includes(user.uid)) {
-          attendees.push(user.uid);
-          await updateDoc(eventRef, { attendees });
-        }
-      }
+      await updateDoc(eventRef, { attendees: arrayUnion(user.uid) });
+      // Update local state optimistically
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === eventId
+            ? { ...e, attendees: [...new Set([...(e.attendees || []), user.uid])] }
+            : e
+        )
+      );
     } catch (err) {
       console.error("Error joining event:", err);
       throw err;
@@ -198,13 +198,15 @@ export function useEvents(filters = {}) {
 
     try {
       const eventRef = doc(db, "events", eventId);
-      const eventSnap = await getDocs(query(collection(db, "events"), where("__name__", "==", eventId)));
-      
-      if (eventSnap.docs.length > 0) {
-        const eventData = eventSnap.docs[0].data();
-        const attendees = (eventData.attendees || []).filter((id) => id !== user.uid);
-        await updateDoc(eventRef, { attendees });
-      }
+      await updateDoc(eventRef, { attendees: arrayRemove(user.uid) });
+      // Update local state optimistically
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === eventId
+            ? { ...e, attendees: (e.attendees || []).filter((id) => id !== user.uid) }
+            : e
+        )
+      );
     } catch (err) {
       console.error("Error leaving event:", err);
       throw err;

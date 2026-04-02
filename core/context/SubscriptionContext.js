@@ -11,6 +11,7 @@ export function SubscriptionProvider({ children, userId }) {
   const [error, setError] = useState(null);
   const unsubscribeRef = useRef(null);
   const expirationCheckRef = useRef(null);
+  const userSyncRef = useRef({ status: null, expiresAt: null });
 
   // Check if subscription has expired
   const checkAndUpdateExpiration = useCallback((subData) => {
@@ -45,9 +46,26 @@ export function SubscriptionProvider({ children, userId }) {
             console.error('[Subscription] Error updating user profile on trial expiration:', err);
           });
         }
+        userSyncRef.current = { status: 'expired', expiresAt: null };
         return null;
       }
       console.log('[Subscription] Trial is still active');
+      if (userId) {
+        const expiresAtMs = trialEndDate.getTime();
+        if (
+          userSyncRef.current.status !== 'trial' ||
+          userSyncRef.current.expiresAt !== expiresAtMs
+        ) {
+          userSyncRef.current = { status: 'trial', expiresAt: expiresAtMs };
+          updateDoc(doc(db, 'users', userId), {
+            role: 'pro',
+            subscriptionStatus: 'trial',
+            subscriptionExpiresAt: expiresAtMs,
+          }).catch((err) => {
+            console.error('[Subscription] Error syncing trial status to user profile:', err);
+          });
+        }
+      }
       return subData;
     }
 
@@ -77,9 +95,27 @@ export function SubscriptionProvider({ children, userId }) {
             console.error('[Subscription] Error updating user profile on subscription expiration:', err);
           });
         }
+        userSyncRef.current = { status: 'expired', expiresAt: null };
         return null;
       }
       console.log('[Subscription] Subscription is still active');
+      if (userId) {
+        const renewalMs = renewalDate.getTime();
+        if (
+          userSyncRef.current.status !== 'active' ||
+          userSyncRef.current.expiresAt !== renewalMs
+        ) {
+          userSyncRef.current = { status: 'active', expiresAt: renewalMs };
+          updateDoc(doc(db, 'users', userId), {
+            role: 'pro',
+            subscriptionStatus: 'active',
+            subscriptionPlan: subData.plan || null,
+            subscriptionExpiresAt: renewalMs,
+          }).catch((err) => {
+            console.error('[Subscription] Error syncing active status to user profile:', err);
+          });
+        }
+      }
       return subData;
     }
 

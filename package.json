@@ -1,7 +1,7 @@
 {
   "name": "coffee-rider-v2",
   "main": "expo-router/entry",
-  "version": "2.20.9",
+  "version": "2.22.0",
   "buildNumber": "2",
   "scripts": {
     "start": "expo start",
@@ -22,6 +22,7 @@
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
+    "@stripe/stripe-react-native": "0.50.3",
     "expo": "~54.0.24",
     "expo-apple-authentication": "^8.0.8",
     "expo-av": "~16.0.7",

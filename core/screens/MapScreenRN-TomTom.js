@@ -1,3 +1,4 @@
+import { Circle, Path, Polygon, Svg } from "react-native-svg";
 import { db } from "@config/firebase";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
@@ -5,11 +6,195 @@ import { useTheme } from "@context/ThemeContext";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
-import { collection, doc, getDoc, getDocs, onSnapshot } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
+import { arrayUnion } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+// ---------------------------------------------------------------------------
+// JunctionView – Beeline-style schematic road diagram for the fullscreen
+// navigation pod. Renders approach/departure route geometry and side-road rails
+// in monochrome using react-native-svg.
+// ---------------------------------------------------------------------------
+function JunctionView({ maneuver, step, routeCoords, compact = false }) {
+  const C = compact ? 72 : 90; // center X of the canvas
+  const JY = compact ? 42 : 50; // junction Y
+
+  // Primary route stays solid; non-selected roads are dual "rails".
+  const routeWidth = compact ? 6.2 : 7.5;
+  const railOuter = compact ? 4.2 : 5.2;
+  const railInner = compact ? 1.8 : 2.2;
+  const roadColor = "rgba(255,255,255,0.96)";
+  const sideColor = "rgba(255,255,255,0.72)";
+  const cutoutColor = "#000000";
+
+  const m = (maneuver || "STRAIGHT").toUpperCase();
+  const isArrival = m.includes("ARRIVE") || m.includes("ARRIVAL") || m.includes("DESTINATION");
+
+  const buildPath = (pts) => {
+    if (!Array.isArray(pts) || pts.length < 2) return null;
+    return pts.reduce((acc, p, idx) => {
+      const x = Number.isFinite(p.x) ? p.x : 0;
+      const y = Number.isFinite(p.y) ? p.y : 0;
+      return `${acc}${idx === 0 ? "M" : " L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    }, "");
+  };
+
+  const derivedGeometry = useMemo(() => {
+    if (!Array.isArray(routeCoords) || routeCoords.length < 2) return null;
+
+    const anchor = step?.end || step?.position || routeCoords[Math.floor(routeCoords.length * 0.5)];
+    if (!anchor?.latitude || !anchor?.longitude) return null;
+
+    let nearestIndex = 0;
+    let nearestDistSq = Infinity;
+
+    for (let i = 0; i < routeCoords.length; i++) {
+      const local = toLocalMeters(anchor, routeCoords[i]);
+      const d2 = local.x * local.x + local.y * local.y;
+      if (d2 < nearestDistSq) {
+        nearestDistSq = d2;
+        nearestIndex = i;
+      }
+    }
+
+    const start = Math.max(0, nearestIndex - 18);
+    const end = Math.min(routeCoords.length - 1, nearestIndex + 22);
+    const windowPoints = routeCoords.slice(start, end + 1);
+    if (windowPoints.length < 2) return null;
+
+    const inboundA = routeCoords[Math.max(0, nearestIndex - 8)];
+    const inboundB = routeCoords[Math.max(0, nearestIndex - 1)];
+    const inboundALocal = toLocalMeters(anchor, inboundA);
+    const inboundBLocal = toLocalMeters(anchor, inboundB);
+    const vx = inboundBLocal.x - inboundALocal.x;
+    const vy = -(inboundBLocal.y - inboundALocal.y); // y-flip for screen space
+    const mag = Math.sqrt(vx * vx + vy * vy);
+    if (!Number.isFinite(mag) || mag < 0.1) return null;
+
+    const heading = Math.atan2(vy, vx);
+    const target = -Math.PI / 2; // align route travel with upward direction
+    const rot = target - heading;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+
+    const rotated = windowPoints.map((coord) => {
+      const local = toLocalMeters(anchor, coord);
+      const sx = local.x;
+      const sy = -local.y;
+      return {
+        x: sx * cos - sy * sin,
+        y: sx * sin + sy * cos,
+      };
+    });
+
+    const maxAbsX = Math.max(...rotated.map((p) => Math.abs(p.x)), 1);
+    const maxAbsY = Math.max(...rotated.map((p) => Math.abs(p.y)), 1);
+    const scaleLimit = compact ? 1.5 : 1.85;
+    const scale = Math.min(scaleLimit, Math.max(0.55, Math.min(70 / maxAbsX, 72 / maxAbsY)));
+
+    const fitted = rotated.map((p) => ({
+      x: C + p.x * scale,
+      y: JY + p.y * scale,
+    }));
+
+    const junctionIdx = Math.min(Math.max(nearestIndex - start, 1), fitted.length - 1);
+    const approachPoints = fitted.slice(0, junctionIdx + 1).map((p, idx, arr) => {
+      // Keep the first section of the chosen route visually straight-up.
+      if (idx <= Math.min(5, Math.floor(arr.length * 0.45))) {
+        return { ...p, x: C };
+      }
+      return p;
+    });
+    const departurePoints = fitted.slice(junctionIdx);
+
+    return {
+      approach: buildPath(approachPoints),
+      departure: buildPath(departurePoints),
+    };
+  }, [routeCoords, step]);
+
+  const fallbackApproach = compact ? `M ${C} 108 L ${C} ${JY}` : `M ${C} 136 L ${C} ${JY}`;
+  const arrowPoints = compact
+    ? `${C},76 ${C - 9},93 ${C + 9},93`
+    : `${C},98 ${C - 11},118 ${C + 11},118`;
+
+  let approach = derivedGeometry?.approach || fallbackApproach;
+  let departure = isArrival ? null : derivedGeometry?.departure;
+  const sides = [];
+
+  if (isArrival) {
+    // Arrival view: no outgoing leg beyond the destination.
+  } else if (m === "TURN_LEFT" || m === "TURN_SHARP_LEFT") {
+    departure = departure || `M ${C} ${JY} L 5 ${JY}`;
+    sides.push(`M ${C} ${JY} L ${C} 5`);
+  } else if (m === "TURN_RIGHT" || m === "TURN_SHARP_RIGHT") {
+    departure = departure || `M ${C} ${JY} L 155 ${JY}`;
+    sides.push(`M ${C} ${JY} L ${C} 5`);
+  } else if (m === "TURN_SLIGHT_LEFT" || m === "BEAR_LEFT" || m === "KEEP_LEFT") {
+    departure = departure || `M ${C} ${JY} Q 46 17 4 3`;
+  } else if (m === "TURN_SLIGHT_RIGHT" || m === "BEAR_RIGHT" || m === "KEEP_RIGHT") {
+    departure = departure || `M ${C} ${JY} Q 114 17 156 3`;
+  } else if (m.includes("U_TURN") || m.includes("UTURN") || m.includes("MAKE_U")) {
+    const goRight = !m.includes("LEFT");
+    const ux = goRight ? C + 34 : C - 34;
+    departure = departure || `M ${C} ${JY} Q ${ux} ${JY} ${ux} ${JY + 28} Q ${ux} ${JY + 56} ${C} ${JY + 56}`;
+  } else if (m.includes("ROUNDABOUT")) {
+    departure = departure || `M ${C} ${JY} L ${C} 59`;
+    sides.push(`M ${C} 23 L ${C} 5`);
+  } else if (m === "MERGE_LEFT") {
+    departure = departure || `M ${C} ${JY} L ${C} 5`;
+    sides.push(`M 5 ${JY + 20} Q ${C - 20} ${JY + 8} ${C} ${JY}`);
+  } else if (m === "MERGE_RIGHT") {
+    departure = departure || `M ${C} ${JY} L ${C} 5`;
+    sides.push(`M 155 ${JY + 20} Q ${C + 20} ${JY + 8} ${C} ${JY}`);
+  } else if (m === "TAKE_EXIT") {
+    departure = departure || `M ${C} ${JY} Q 114 17 156 3`;
+    sides.push(`M ${C} ${JY} L ${C} 5`);
+  } else {
+    // STRAIGHT (default)
+    departure = departure || `M ${C} ${JY} L ${C} 5`;
+  }
+
+  const renderSolidPath = (d, key) => (
+    <Path key={key} d={d} stroke={roadColor} strokeWidth={routeWidth} strokeLinecap="round" fill="none" />
+  );
+
+  const renderDualPath = (d, color, key) => [
+    <Path key={`${key}-outer`} d={d} stroke={color} strokeWidth={railOuter} strokeLinecap="round" fill="none" />,
+    <Path key={`${key}-inner`} d={d} stroke={cutoutColor} strokeWidth={railInner} strokeLinecap="round" fill="none" />,
+  ];
+
+  return (
+    <View
+      style={{
+        marginBottom: compact ? 10 : 18,
+        transform: [{ perspective: compact ? 800 : 900 }, { rotateX: compact ? "20deg" : "28deg" }],
+      }}
+      pointerEvents="none"
+    >
+      <Svg width={compact ? 148 : 188} height={compact ? 116 : 156} viewBox={compact ? "0 0 144 112" : "0 0 180 150"}>
+        {sides.map((d, i) => renderDualPath(d, sideColor, `s${i}`))}
+        {renderSolidPath(approach, "approach")}
+        {departure ? renderSolidPath(departure, "departure") : null}
+
+        {m.includes("ROUNDABOUT") && (
+          <>
+            <Circle cx={C} cy={compact ? 34 : 41} r={compact ? 12 : 15} stroke={roadColor} strokeWidth={routeWidth} fill="none" />
+          </>
+        )}
+
+        {isArrival ? (
+          <Circle cx={C} cy={JY} r={compact ? 7 : 9} fill={roadColor} />
+        ) : (
+          <Polygon points={arrowPoints} fill="rgba(255,255,255,0.98)" />
+        )}
+      </Svg>
+    </View>
+  );
+}
 
 function MiniMapWithResponsivePosition({ riderLocations, userLocation, routeCoords, colorScheme }) {
   const { width, height } = useWindowDimensions();
@@ -91,13 +276,33 @@ const ARRIVAL_PANEL_DISTANCE_METERS = 45;
 const ARRIVAL_ONROUTE_TOLERANCE_METERS = 30;
 const GENERIC_CONTINUE_REGEX = /^continue\b/i;
 const SPEECH_FAILSAFE_INTERVAL_MS = 20000;
+const METERS_PER_DEGREE_LAT = 111320;
+const EARTH_CIRCUMFERENCE_METERS = 40075000;
+
+function metersPerDegreeLongitude(lat) {
+  return (EARTH_CIRCUMFERENCE_METERS * Math.cos((lat * Math.PI) / 180)) / 360;
+}
+
+function toLocalMeters(base, coord) {
+  const dy = (coord.latitude - base.latitude) * METERS_PER_DEGREE_LAT;
+  const metersPerLon = metersPerDegreeLongitude(base.latitude);
+  const dx = (coord.longitude - base.longitude) * (metersPerLon || 0);
+  return { x: dx, y: dy };
+}
+
+function localMetersToLatLng(base, offsetX, offsetY) {
+  const metersPerLon = metersPerDegreeLongitude(base.latitude);
+  const latitude = base.latitude + offsetY / METERS_PER_DEGREE_LAT;
+  const longitude = metersPerLon ? base.longitude + offsetX / metersPerLon : base.longitude;
+  return { latitude, longitude };
+}
 
 /* ------------------------------------------------------------------ */
 /* UTILITY FUNCTIONS                                                  */
 /* ------------------------------------------------------------------ */
 
 // Project a point onto a line segment (polyline snapping)
-function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance = 80) {
+function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance = 30) {
   if (!polylineCoords || polylineCoords.length < 2 || !point) return null;
 
   let closestPoint = null;
@@ -111,22 +316,19 @@ function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance =
     const p1 = polylineCoords[i];
     const p2 = polylineCoords[i + 1];
 
-    const dx = p2.longitude - p1.longitude;
-    const dy = p2.latitude - p1.latitude;
+    const p2Local = toLocalMeters(p1, p2);
+    const pointLocal = toLocalMeters(p1, point);
+    const dx = p2Local.x;
+    const dy = p2Local.y;
     const denom = dx * dx + dy * dy;
     if (denom === 0) continue;
 
-    const px = point.longitude - p1.longitude;
-    const py = point.latitude - p1.latitude;
-    const t = Math.max(0, Math.min(1, (px * dx + py * dy) / denom));
-
-    const projectedLat = p1.latitude + t * dy;
-    const projectedLng = p1.longitude + t * dx;
-    const projectedPoint = { latitude: projectedLat, longitude: projectedLng };
+    const t = Math.max(0, Math.min(1, (pointLocal.x * dx + pointLocal.y * dy) / denom));
+    const projectedLocal = { x: dx * t, y: dy * t };
+    const projectedPoint = localMetersToLatLng(p1, projectedLocal.x, projectedLocal.y);
 
     const dist = distanceBetweenMeters(point, projectedPoint);
     const segmentLength = distanceBetweenMeters(p1, p2) || 0;
-
     if (dist < minDistance) {
       minDistance = dist;
       closestPoint = projectedPoint;
@@ -151,8 +353,8 @@ function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance =
   };
 }
 
-function projectPointToPolyline(point, polylineCoords) {
-  const detailed = projectPointToPolylineDetailed(point, polylineCoords);
+function projectPointToPolyline(point, polylineCoords, maxSnapDistance = 30) {
+  const detailed = projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance);
   return detailed ? detailed.point : null;
 }
 
@@ -190,7 +392,6 @@ function normalizeRouteSteps(rawSteps = [], coords = []) {
 
     if (isShortStraight && filtered.length > 0) {
       const prev = filtered[filtered.length - 1];
-      prev.distance = (prev.distance || 0) + clone.distance;
       return;
     }
 
@@ -333,6 +534,7 @@ const EMPTY_FILTERS = {
   amenities: new Set(),
   sponsor: false,
   bikeBrew: false,
+  visited: false,
 };
 
 const DEFAULT_FILTERS = {
@@ -341,6 +543,7 @@ const DEFAULT_FILTERS = {
   amenities: [],
   sponsor: false,
   bikeBrew: false,
+  visited: false,
 };
 
 const DEFAULT_MAP_STATE = {
@@ -902,7 +1105,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
-  const filtersActive = appliedFilters.suitability.size > 0 || appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0 || appliedFilters.sponsor;
+  const filtersActive = appliedFilters.suitability.size > 0 || appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0 || appliedFilters.sponsor || appliedFilters.visited;
   const [userLocation, setUserLocation] = useState(null);
 
   const [mapRegion, setMapRegion] = useState(userLocation);
@@ -935,6 +1138,36 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const user = auth?.user || null;
   const role = auth?.profile?.role || "guest";
   const capabilities = getCapabilities(role);
+
+  // Visited places — derived from user profile (auto-updates via AuthContext's real-time listener)
+  const visitedPlaceIds = useMemo(
+    () => new Set(Array.isArray(auth?.profile?.visitedPlaceIds) ? auth.profile.visitedPlaceIds : []),
+    [auth?.profile?.visitedPlaceIds]
+  );
+
+  const markVisited = useCallback(async (placeId, isCurrentlyVisited = false) => {
+    if (!user?.uid || !placeId) return;
+    try {
+      if (isCurrentlyVisited) {
+        // Remove from visited
+        const userRef = doc(db, "users", user.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const current = userSnap.data().visitedPlaceIds || [];
+          await updateDoc(userRef, {
+            visitedPlaceIds: current.filter((id) => id !== placeId),
+          });
+        }
+      } else {
+        // Add to visited
+        await updateDoc(doc(db, "users", user.uid), {
+          visitedPlaceIds: arrayUnion(placeId),
+        });
+      }
+    } catch (err) {
+      console.error("[VISITED] Failed to toggle place visited:", err);
+    }
+  }, [user?.uid]);
   
   // Get user's routing preferences
   const { 
@@ -2739,10 +2972,15 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
   const lastRerouteAttemptRef = useRef(0); // Track last reroute attempt time to avoid excessive API calls
   const lastOffRouteCheckPos = useRef(null); // Track last position where we checked for off-route
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
-  const OFF_ROUTE_THRESHOLD_METERS = 50; // Reroute if 50m+ off the route
+  const consecutiveOffRouteRef = useRef(0);
+  const lastOffRouteDistanceRef = useRef(null);
   const REROUTE_COOLDOWN_SECONDS = 10; // Only attempt reroute every 10 seconds max (faster response to off-route)
   const MIN_MOVEMENT_BEFORE_CHECK = 75; // Only check off-route after user moves 75m (reduces check frequency on faster movement like bikes)
   const MIN_GPS_ACCURACY = 35; // Ignore off-route checks if GPS accuracy is worse than this (meters)
+  const BASE_OFF_ROUTE_THRESHOLD_METERS = 20;
+  const MAX_SPEED_BUFFER_METERS = 20;
+  const OFF_ROUTE_CONFIRMATION_COUNT = 3;
+  const OFF_ROUTE_MONITOR_PADDING = 10;
   
   useEffect(() => {
     // Detect Follow Me enable transition
@@ -2823,54 +3061,50 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     lastOffRouteCheckPos.current = userLocation;
 
 
-    // Use snapped point for off-route check
-    const snappedPoint = projectPointToPolyline(userLocation, routeCoords);
-    const pointToCheck = snappedPoint || userLocation;
+    const projection = projectPointToPolylineDetailed(userLocation, routeCoords, 200);
+    const distanceToRoute = typeof projection?.distanceMeters === 'number'
+      ? projection.distanceMeters
+      : distanceBetweenMeters(userLocation, routeCoords[0]);
+    const distanceFromRoute = Number.isFinite(distanceToRoute) ? distanceToRoute : Infinity;
 
-    // Find closest point on route to snapped point
-    let closestDist = Infinity;
-    let closestIndex = -1;
-    for (let i = 0; i < routeCoords.length; i++) {
-      const coord = routeCoords[i];
-      if (!coord || coord.latitude === undefined || coord.longitude === undefined) continue;
-      const dist = distanceBetweenMeters(pointToCheck, coord);
-      if (dist < closestDist) {
-        closestDist = dist;
-        closestIndex = i;
-      }
-    }
+    const speed = Math.max(0, userLocation.speed || 0); // m/s
+    const speedBuffer = Math.min(MAX_SPEED_BUFFER_METERS, speed * 1.2);
+    const accuracy = Math.max(0, userLocation.accuracy || 0);
+    const rerouteThreshold = BASE_OFF_ROUTE_THRESHOLD_METERS + speedBuffer;
+    const effectiveDistance = Math.max(0, distanceFromRoute - accuracy);
+    const monitorThreshold = rerouteThreshold + OFF_ROUTE_MONITOR_PADDING;
 
-    // Dynamic off-route threshold: 50m + 1.5x current speed (m/s)
-    const speed = userLocation.speed || 0; // m/s
-    const dynamicThreshold = 50 + 1.5 * speed;
-    // Track consecutive off-route checks
-    if (!window._consecutiveOffRoute) window._consecutiveOffRoute = 0;
-
-    // Check if user (snapped) is on polyline (within dynamic threshold)
-    if (closestDist < dynamicThreshold) {
-      // User is on the route - don't reroute
-      window._consecutiveOffRoute = 0;
-      console.log(`[AutoReroute] User (snapped) on route (${closestDist.toFixed(0)}m away, threshold ${dynamicThreshold.toFixed(0)}m), no reroute needed`);
+    if (effectiveDistance <= rerouteThreshold) {
+      consecutiveOffRouteRef.current = 0;
+      lastOffRouteDistanceRef.current = effectiveDistance;
+      console.log(`[AutoReroute] On route (${effectiveDistance.toFixed(0)}m effective / ${distanceFromRoute.toFixed(0)}m raw, accuracy ${accuracy.toFixed(0)}m, threshold ${rerouteThreshold.toFixed(0)}m)`);
       return;
     }
 
-    // Check if user (snapped) is slightly off-route (within dynamic threshold + 25m)
-    if (closestDist < dynamicThreshold + 25) {
-      window._consecutiveOffRoute = 0;
-      console.log(`[AutoReroute] User (snapped) slightly off-route (${closestDist.toFixed(0)}m away, threshold ${dynamicThreshold.toFixed(0)}m), monitoring...`);
-      return; // Not far enough off to reroute yet
-    }
-
-    // User is off route: require two consecutive checks before rerouting
-    window._consecutiveOffRoute = (window._consecutiveOffRoute || 0) + 1;
-    if (window._consecutiveOffRoute < 2) {
-      console.log(`[AutoReroute] User off-route (${closestDist.toFixed(0)}m), first check, waiting for confirmation`);
+    if (effectiveDistance <= monitorThreshold) {
+      consecutiveOffRouteRef.current = 0;
+      lastOffRouteDistanceRef.current = effectiveDistance;
+      console.log(`[AutoReroute] Near threshold (${effectiveDistance.toFixed(0)}m effective), monitoring...`);
       return;
     }
-    // Reset counter after reroute
-    window._consecutiveOffRoute = 0;
 
-    // User is 50m+ off route - initiate reroute
+    if (lastOffRouteDistanceRef.current != null && effectiveDistance < lastOffRouteDistanceRef.current - 5) {
+      // Getting closer again, reset confirmation window
+      consecutiveOffRouteRef.current = 0;
+    }
+
+    consecutiveOffRouteRef.current += 1;
+    lastOffRouteDistanceRef.current = effectiveDistance;
+
+    if (consecutiveOffRouteRef.current < OFF_ROUTE_CONFIRMATION_COUNT) {
+      console.log(`[AutoReroute] Off-route reading ${consecutiveOffRouteRef.current}/${OFF_ROUTE_CONFIRMATION_COUNT} (${effectiveDistance.toFixed(0)}m effective)`);
+      return;
+    }
+
+    consecutiveOffRouteRef.current = 0;
+    lastOffRouteDistanceRef.current = null;
+
+    // User is confirmed off route - initiate reroute
     const now = Date.now();
     const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
     
@@ -2879,8 +3113,8 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       return; // Still in cooldown period
     }
 
-    // All conditions met: off-route 50m+ and enough time elapsed
-    console.log(`[AutoReroute] User off-route (${closestDist.toFixed(0)}m), rerouting...`);
+    // All conditions met: user confirmed off-route and cooldown elapsed
+    console.log(`[AutoReroute] User off-route (${effectiveDistance.toFixed(0)}m effective), rerouting...`);
     lastRerouteAttemptRef.current = now;
     
     // Find next unvisited waypoint
@@ -3838,12 +4072,18 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       });
     }
 
+    // Visited filter — show only places the user has been to
+    if (appliedFilters.visited) {
+      list = list.filter((p) => visitedPlaceIds.has(p.id));
+    }
+
     return list;
   }, [
     crPlaces,
     paddedRegion,
     appliedFilters,
     sponsoredPlaceIds,
+    visitedPlaceIds,
   ]);
 
   const searchMarkers = useMemo(() => {
@@ -4658,6 +4898,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
 
     const { fill, circle, stroke, strokeWidth } = markerStyles[markerMode];
     const pinSize = isSponsor ? 38 : 36; // Slightly bigger size for sponsors
+    const isVisited = visitedPlaceIds.has(poi.id);
 
     const handleMarkerPress = (e) => {
       console.log("[MARKER] Marker.onPress on:", poi.title || poi.name, "selectedPlaceId will be:", poi.id);
@@ -4722,7 +4963,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           onLongPress={handleMarkerLongPress}
           onPress={() => {}} // Consume the press to avoid double-triggering
         >
-          <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} strokeWidth={strokeWidth} size={pinSize} />
+          <SvgPin icon={icon} fill={fill} circle={circle} stroke={stroke} strokeWidth={strokeWidth} size={pinSize} visited={isVisited} />
         </Pressable>
       </Marker>
     );
@@ -4936,6 +5177,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                 zIndex={1000}
               />
+
         </MapView>
       ) : (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.primaryDark }}>
@@ -5003,6 +5245,37 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                   </TouchableOpacity>
                 );
               })}
+
+              {/* VISITED */}
+              {user && (
+                <TouchableOpacity
+                  key="visited"
+                  style={[
+                    styles.iconButton,
+                    draftFilters.visited && styles.iconButtonActive,
+                  ]}
+                  onPress={() =>
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      visited: !prev.visited,
+                    }))
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name="map-marker-check"
+                    size={26}
+                    color={draftFilters.visited ? "#10b981" : theme.colors.primaryLight}
+                  />
+                  <Text
+                    style={[
+                      styles.iconLabel,
+                      draftFilters.visited && styles.iconLabelActive,
+                    ]}
+                  >
+                    Visited
+                  </Text>
+                </TouchableOpacity>
+              )}
 
             </View>
             
@@ -5115,6 +5388,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                   </Text>
                 </TouchableOpacity>
               )}
+
             </View>
           </ScrollView>
           <TouchableOpacity
@@ -5172,10 +5446,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           
           const hasReachedDestination = hasRouteIntent && hasValidRouteSteps && isAtFinalStep && isCloseToDestination;
           const shouldShowArrivalPanel = hasArrivedAtDestination || hasReachedDestination;
-          const fullscreenPaddingTop = (isLandscape ? insets.top + 16 : insets.top + 32);
-          const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 16 : insets.bottom + 32);
+          const fullscreenPaddingTop = (isLandscape ? insets.top + 8 : insets.top + 32);
+          const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 8 : insets.bottom + 32);
           const fullscreenPaddingHorizontal = isLandscape ? 32 : 24;
-          const fullscreenIconSize = isLandscape ? 120 : 160;
+          const fullscreenIconSize = isLandscape ? 80 : 160;
           
           if (shouldShowArrivalPanel) {
             // Show destination reached message with Save Ride button
@@ -5201,6 +5475,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                     <ScrollView
                       contentContainerStyle={[
                         styles.fullscreenDirectionsContent,
+                        isLandscape && styles.fullscreenDirectionsContentLandscape,
                         {
                           paddingTop: fullscreenPaddingTop,
                           paddingBottom: fullscreenPaddingBottom,
@@ -5413,6 +5688,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                       showsVerticalScrollIndicator={false}
                       alwaysBounceVertical={false}
                     >
+                      <JunctionView maneuver={nextManeuver} step={step} routeCoords={routeCoords} compact={isLandscape} />
                       <MaterialCommunityIcons
                         name={displayMeta.icon}
                         size={fullscreenIconSize}
@@ -5513,6 +5789,8 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           hasRoute={routeCoords.length > 0}
           routeMeta={routeMeta}
           isLandscape={isLandscape}
+          isVisited={visitedPlaceIds.has(selectedPlace?.id)}
+          onMarkVisited={markVisited}
           onRoute={(placeArg) => {
             // If somehow a Google place slips through, promote it before routing so it behaves like CR
             if (placeArg?.source === "google") {
@@ -6058,6 +6336,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
+  },
+  fullscreenDirectionsContentLandscape: {
+    justifyContent: "flex-start",
   },
   fullscreenDirectionsIcon: {
     marginBottom: 32,
