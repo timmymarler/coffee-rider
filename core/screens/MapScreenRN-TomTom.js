@@ -302,15 +302,20 @@ function localMetersToLatLng(base, offsetX, offsetY) {
 /* ------------------------------------------------------------------ */
 
 // Project a point onto a line segment (polyline snapping)
-function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance = 30) {
+// When minProgressMeters > 0, segments behind confirmed progress are deprioritised.
+// This prevents snapping to an earlier loop through the same road (the core cause of
+// "haywire" navigation when retracing previously-driven streets).
+const PROJECTION_BACKWARD_TOLERANCE = 50; // metres behind last confirmed progress still eligible
+
+function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance = 30, minProgressMeters = 0) {
   if (!polylineCoords || polylineCoords.length < 2 || !point) return null;
 
-  let closestPoint = null;
-  let minDistance = Infinity;
+  // Only look at segments at or ahead of current confirmed progress (minus a small GPS-jitter margin)
+  const searchFromProgress = Math.max(0, minProgressMeters - PROJECTION_BACKWARD_TOLERANCE);
+
+  let bestForward = null; // closest match at/ahead of confirmed progress
+  let bestGlobal = null;  // globally closest match (fallback if route genuinely reverses)
   let cumulative = 0;
-  let bestProgress = 0;
-  let bestSegmentIndex = -1;
-  let bestT = 0;
 
   for (let i = 0; i < polylineCoords.length - 1; i++) {
     const p1 = polylineCoords[i];
@@ -321,7 +326,10 @@ function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance =
     const dx = p2Local.x;
     const dy = p2Local.y;
     const denom = dx * dx + dy * dy;
-    if (denom === 0) continue;
+    if (denom === 0) {
+      cumulative += 0;
+      continue;
+    }
 
     const t = Math.max(0, Math.min(1, (pointLocal.x * dx + pointLocal.y * dy) / denom));
     const projectedLocal = { x: dx * t, y: dy * t };
@@ -329,28 +337,28 @@ function projectPointToPolylineDetailed(point, polylineCoords, maxSnapDistance =
 
     const dist = distanceBetweenMeters(point, projectedPoint);
     const segmentLength = distanceBetweenMeters(p1, p2) || 0;
-    if (dist < minDistance) {
-      minDistance = dist;
-      closestPoint = projectedPoint;
-      bestProgress = cumulative + segmentLength * t;
-      bestSegmentIndex = i;
-      bestT = t;
+    const segmentProgress = cumulative + segmentLength * t;
+
+    // Always track the globally nearest point (emergency fallback)
+    if (dist < (bestGlobal?.distanceMeters ?? Infinity)) {
+      bestGlobal = { point: projectedPoint, distanceMeters: dist, progressMeters: segmentProgress, segmentIndex: i, segmentT: t };
+    }
+
+    // Track the nearest forward-biased point (preferred)
+    if (segmentProgress >= searchFromProgress && dist < (bestForward?.distanceMeters ?? Infinity)) {
+      bestForward = { point: projectedPoint, distanceMeters: dist, progressMeters: segmentProgress, segmentIndex: i, segmentT: t };
     }
 
     cumulative += segmentLength;
   }
 
-  if (!closestPoint || minDistance === Infinity || minDistance > maxSnapDistance) {
+  // Prefer forward-biased match; fall back to global only if nothing valid exists ahead
+  const best = bestForward || bestGlobal;
+  if (!best || best.distanceMeters > maxSnapDistance) {
     return null;
   }
 
-  return {
-    point: closestPoint,
-    distanceMeters: minDistance,
-    progressMeters: bestProgress,
-    segmentIndex: bestSegmentIndex,
-    segmentT: bestT,
-  };
+  return best;
 }
 
 function projectPointToPolyline(point, polylineCoords, maxSnapDistance = 30) {
@@ -2512,8 +2520,12 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     if (!routeSteps || routeSteps.length === 0) return;
     if (!routeCoords || routeCoords.length === 0) return;
 
-    // Project current location onto the polyline with generous tolerance
-    const projection = projectPointToPolylineDetailed(userLocation, routeCoords, 250);
+    // Project current location onto polyline, biased to current progress to avoid
+    // snapping to earlier segments when the route crosses a previously-driven road
+    const projection = projectPointToPolylineDetailed(
+      userLocation, routeCoords, 250,
+      stepProgressRef.current.lastProgressMeters || 0
+    );
     if (!projection || projection.distanceMeters > NAVIGATION_LOCK_ON_DISTANCE) {
       if (!instructionsSuppressedRef.current) {
         instructionsSuppressedRef.current = true;
@@ -2974,12 +2986,12 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
   const consecutiveOffRouteRef = useRef(0);
   const lastOffRouteDistanceRef = useRef(null);
-  const REROUTE_COOLDOWN_SECONDS = 10; // Only attempt reroute every 10 seconds max (faster response to off-route)
-  const MIN_MOVEMENT_BEFORE_CHECK = 75; // Only check off-route after user moves 75m (reduces check frequency on faster movement like bikes)
+  const REROUTE_COOLDOWN_SECONDS = 5; // Minimum seconds between reroute attempts
+  const MIN_MOVEMENT_BEFORE_CHECK = 20; // Only check off-route after user moves 20m
   const MIN_GPS_ACCURACY = 35; // Ignore off-route checks if GPS accuracy is worse than this (meters)
   const BASE_OFF_ROUTE_THRESHOLD_METERS = 20;
   const MAX_SPEED_BUFFER_METERS = 20;
-  const OFF_ROUTE_CONFIRMATION_COUNT = 3;
+  const OFF_ROUTE_CONFIRMATION_COUNT = 2; // Consecutive off-route readings required before rerouting
   const OFF_ROUTE_MONITOR_PADDING = 10;
   
   useEffect(() => {
@@ -3061,7 +3073,11 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     lastOffRouteCheckPos.current = userLocation;
 
 
-    const projection = projectPointToPolylineDetailed(userLocation, routeCoords, 200);
+    // Forward-biased projection: measure distance to the UPCOMING route, not an old segment
+    const projection = projectPointToPolylineDetailed(
+      userLocation, routeCoords, 200,
+      stepProgressRef.current.lastProgressMeters || 0
+    );
     const distanceToRoute = typeof projection?.distanceMeters === 'number'
       ? projection.distanceMeters
       : distanceBetweenMeters(userLocation, routeCoords[0]);
