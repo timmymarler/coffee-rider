@@ -410,11 +410,28 @@ function normalizeRouteSteps(rawSteps = [], coords = []) {
     return filtered;
   }
 
+  // Map each step endpoint onto the route in sequence so progress never jumps
+  // backward when the polyline overlaps itself (same/opposite direction loops).
+  const STEP_PROGRESS_BACKTRACK_TOLERANCE = 12;
+  const STEP_PROGRESS_SEARCH_BACKWARD = 25;
+  let lastStepProgress = 0;
+
   return filtered.map((step) => {
     if (step?.end) {
-      const projection = projectPointToPolylineDetailed(step.end, coords, 200);
-      if (projection) {
-        step.polylineProgress = projection.progressMeters;
+      const projection = projectPointToPolylineDetailed(
+        step.end,
+        coords,
+        250,
+        Math.max(0, lastStepProgress - STEP_PROGRESS_SEARCH_BACKWARD)
+      );
+      if (projection && Number.isFinite(projection.progressMeters)) {
+        const projectedProgress = projection.progressMeters;
+        if (projectedProgress + STEP_PROGRESS_BACKTRACK_TOLERANCE < lastStepProgress) {
+          step.polylineProgress = lastStepProgress;
+        } else {
+          step.polylineProgress = projectedProgress;
+          lastStepProgress = Math.max(lastStepProgress, projectedProgress);
+        }
       }
     }
     return step;
