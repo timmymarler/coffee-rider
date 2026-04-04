@@ -271,7 +271,7 @@ import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
 const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17; // Android: 17, iOS: 7 - More zoomed in for better detail
 const FOLLOW_CENTER_AHEAD_METERS_PORTRAIT = 120;
-const FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE = 45;
+const FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE = 55;
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 // Follow Me smoothing constants
