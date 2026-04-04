@@ -271,7 +271,7 @@ import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
 const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17; // Android: 17, iOS: 7 - More zoomed in for better detail
 const FOLLOW_CENTER_AHEAD_METERS_PORTRAIT = 120;
-const FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE = 70;
+const FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE = 45;
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 // Follow Me smoothing constants
@@ -1267,6 +1267,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
   const previousFollowUserRef = useRef(false); // Track previous Follow Me state to detect when it turn off
+  const lastFollowHeadingRef = useRef(null); // Cache last usable heading for stable Follow Me offset
   const pendingFlushRef = useRef(null); // Track pending polyline flush to cancel on clearRoute
   const pendingDisplayTimeoutRef = useRef(null); // Track pending instruction display timeout
   const {
@@ -2376,6 +2377,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       ? heading
       : (Number.isFinite(coords?.heading) && coords.heading !== -1 ? coords.heading : null);
 
+    if (!Number.isFinite(effectiveHeading) && Number.isFinite(lastFollowHeadingRef.current)) {
+      effectiveHeading = lastFollowHeadingRef.current;
+    }
+
     // Simulator and some GPS readings often provide no heading.
     // In Follow Me, derive direction from the current route segment so we can
     // still bias the camera forward and keep the user marker lower on screen.
@@ -2394,6 +2399,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       if (segStart && segEnd) {
         effectiveHeading = calculateBearing(segStart, segEnd);
       }
+    }
+
+    if (Number.isFinite(effectiveHeading)) {
+      lastFollowHeadingRef.current = effectiveHeading;
     }
 
     const aheadMeters = followMode
@@ -2609,6 +2618,25 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 0, followMode: true });
     }
   }, [userLocation, isNavigationMode]);
+
+  // Ensure Follow Me camera offset is re-applied on orientation changes and
+  // once route geometry becomes available (prevents delayed/erratic placement).
+  useEffect(() => {
+    if (!followUser || !userLocation) return;
+
+    const timeoutId = setTimeout(() => {
+      recenterOnUser({
+        zoom: FOLLOW_ZOOM,
+        pitch: 35,
+        followMode: true,
+        heading: Number.isFinite(lastFollowHeadingRef.current) ? lastFollowHeadingRef.current : null,
+      }).catch((error) => {
+        console.warn('[FollowMe] Orientation/route recenter error:', error);
+      });
+    }, 120);
+
+    return () => clearTimeout(timeoutId);
+  }, [followUser, isLandscape, routeCoords.length]);
 
   // Track progression through steps to detect crossings accurately
   const stepProgressRef = useRef({
