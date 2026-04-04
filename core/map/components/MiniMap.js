@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
@@ -33,6 +33,22 @@ function getUserColor(userId, index) {
   return USER_COLORS[Math.abs(hash) % USER_COLORS.length];
 }
 
+function isFiniteCoord(coord) {
+  return (
+    coord &&
+    Number.isFinite(coord.latitude) &&
+    Number.isFinite(coord.longitude)
+  );
+}
+
+function normalizeCoord(coord) {
+  if (!coord) return null;
+  const latitude = coord.latitude ?? coord.lat;
+  const longitude = coord.longitude ?? coord.lng;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return { latitude, longitude };
+}
+
 /**
  * Mini map component to show group member locations
  */
@@ -40,15 +56,20 @@ export default function MiniMap({
   riderLocations = [],
   userLocation = null,
   routeCoords = [],
+  destination = null,
+  waypoints = [],
+  showDestination = true,
+  showWaypoints = false,
   styles: containerStyles = {},
   colorScheme = 'light',
   isModal = false,
 }) {
   const theme = useTheme();
 
-  // Keep user in center, update region every 30s to fit all riders
   const mapRef = useRef(null);
-  const lastFitRef = useRef(Date.now());
+  const fitTimeoutRef = useRef(null);
+  const hasFittedRef = useRef(false);
+  const [isMapReady, setIsMapReady] = useState(false);
 
   // Initial region: center on user or fallback
   const initialRegion = useMemo(() => {
@@ -68,30 +89,121 @@ export default function MiniMap({
     };
   }, [userLocation]);
 
-  // Effect: fit all markers (user + riders) with padding for name bubbles every 30s, not on every update
-  useEffect(() => {
-    if (!mapRef.current) return;
-    const fitAll = () => {
-      const coords = [];
-      if (userLocation) {
-        coords.push({ latitude: userLocation.latitude, longitude: userLocation.longitude });
-      }
-      riderLocations.forEach(rider => {
+  const participantCoordinates = useMemo(() => {
+    const coords = [];
+    if (isFiniteCoord(userLocation)) {
+      coords.push({ latitude: userLocation.latitude, longitude: userLocation.longitude });
+    }
+    riderLocations.forEach((rider) => {
+      if (isFiniteCoord(rider)) {
         coords.push({ latitude: rider.latitude, longitude: rider.longitude });
+      }
+    });
+    return coords;
+  }, [userLocation, riderLocations]);
+
+  const routeOverviewCoordinates = useMemo(() => {
+    if (!Array.isArray(routeCoords) || routeCoords.length === 0) return [];
+    if (routeCoords.length <= 80) {
+      return routeCoords.filter(isFiniteCoord);
+    }
+
+    const sampled = [];
+    const sampleEvery = Math.max(1, Math.ceil(routeCoords.length / 60));
+    for (let i = 0; i < routeCoords.length; i += sampleEvery) {
+      const coord = routeCoords[i];
+      if (isFiniteCoord(coord)) sampled.push(coord);
+    }
+
+    const first = routeCoords[0];
+    const last = routeCoords[routeCoords.length - 1];
+    if (isFiniteCoord(first)) sampled.unshift(first);
+    if (isFiniteCoord(last)) sampled.push(last);
+    return sampled;
+  }, [routeCoords]);
+
+  const destinationCoord = useMemo(() => normalizeCoord(destination), [destination]);
+
+  const waypointCoordinates = useMemo(() => {
+    if (!Array.isArray(waypoints) || waypoints.length === 0) return [];
+    const normalized = [];
+    waypoints.forEach((wp) => {
+      const coord = normalizeCoord(wp);
+      if (coord) normalized.push(coord);
+    });
+    return normalized;
+  }, [waypoints]);
+
+  const visibleWaypointCoordinates = useMemo(() => {
+    return showWaypoints ? waypointCoordinates : [];
+  }, [showWaypoints, waypointCoordinates]);
+
+  const fitCoordinates = useMemo(() => {
+    const destinationPoints = showDestination && destinationCoord ? [destinationCoord] : [];
+    return [
+      ...routeOverviewCoordinates,
+      ...participantCoordinates,
+      ...destinationPoints,
+      ...visibleWaypointCoordinates,
+    ];
+  }, [routeOverviewCoordinates, participantCoordinates, showDestination, destinationCoord, visibleWaypointCoordinates]);
+
+  const fitSignature = useMemo(() => {
+    if (fitCoordinates.length === 0) return 'empty';
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+
+    fitCoordinates.forEach((c) => {
+      if (c.latitude < minLat) minLat = c.latitude;
+      if (c.latitude > maxLat) maxLat = c.latitude;
+      if (c.longitude < minLng) minLng = c.longitude;
+      if (c.longitude > maxLng) maxLng = c.longitude;
+    });
+
+    return [
+      fitCoordinates.length,
+      minLat.toFixed(5),
+      maxLat.toFixed(5),
+      minLng.toFixed(5),
+      maxLng.toFixed(5),
+      isModal ? 'modal' : 'inline',
+    ].join(':');
+  }, [fitCoordinates, isModal]);
+
+  useEffect(() => {
+    if (!mapRef.current || !isMapReady || fitCoordinates.length < 2) return;
+
+    if (fitTimeoutRef.current) {
+      clearTimeout(fitTimeoutRef.current);
+    }
+
+    fitTimeoutRef.current = setTimeout(() => {
+      if (!mapRef.current) return;
+
+      mapRef.current.fitToCoordinates(fitCoordinates, {
+        edgePadding: isModal
+          ? { top: 70, right: 50, bottom: 70, left: 50 }
+          : { top: 28, right: 28, bottom: 28, left: 28 },
+        animated: isModal && hasFittedRef.current,
       });
-      if (coords.length > 1 && mapRef.current) {
-        mapRef.current.fitToCoordinates(coords, {
-          edgePadding: { top: 40, right: 80, bottom: 40, left: 80 },
-          animated: true,
-        });
+
+      hasFittedRef.current = true;
+    }, 120);
+
+    return () => {
+      if (fitTimeoutRef.current) {
+        clearTimeout(fitTimeoutRef.current);
+        fitTimeoutRef.current = null;
       }
     };
-    // Initial fit on mount
-    fitAll();
-    // Refit every 30s
-    const interval = setInterval(fitAll, 30000);
-    return () => clearInterval(interval);
-  }, [userLocation, riderLocations.length]);
+  }, [fitSignature, fitCoordinates, isModal, isMapReady]);
+
+  useEffect(() => {
+    // Each mount/mode switch should allow a fresh first-fit for this map instance.
+    hasFittedRef.current = false;
+  }, [isModal]);
 
 
   return (
@@ -101,13 +213,13 @@ export default function MiniMap({
         style={styles.map}
         initialRegion={initialRegion}
         customMapStyle={null}
-        zoomEnabled={false}
-        scrollEnabled={false}
+        onMapReady={() => setIsMapReady(true)}
+        zoomEnabled={isModal}
+        scrollEnabled={isModal}
         pitchEnabled={false}
-        rotateEnabled={false}
+        rotateEnabled={isModal}
         showsMyLocationButton={false}
         showsUserLocation={false}
-        // No onMapReady fit; handled by effect above
       >
         {/* Route polyline - background */}
         {routeCoords.length > 1 && (
@@ -137,6 +249,7 @@ export default function MiniMap({
             }}
             anchor={{ x: 0.5, y: 1 }}
             zIndex={200}
+            tracksViewChanges={false}
           >
             <View style={styles.markerContainer}>
               <View style={[styles.userLocationMarker, { backgroundColor: theme.colors.primary }]} />
@@ -146,6 +259,33 @@ export default function MiniMap({
             </View>
           </Marker>
         )}
+
+        {/* Destination marker */}
+        {showDestination && destinationCoord && (
+          <Marker
+            coordinate={destinationCoord}
+            anchor={{ x: 0.5, y: 0.5 }}
+            zIndex={260}
+            tracksViewChanges={false}
+          >
+            <View style={styles.destinationMarker}>
+              <MaterialCommunityIcons name="map-marker" size={12} color="#fff" />
+            </View>
+          </Marker>
+        )}
+
+        {/* Waypoint markers (modal/fullscreen only) */}
+        {visibleWaypointCoordinates.map((coord, idx) => (
+          <Marker
+            key={`waypoint-${idx}-${coord.latitude}-${coord.longitude}`}
+            coordinate={coord}
+            anchor={{ x: 0.5, y: 0.5 }}
+            zIndex={255}
+            tracksViewChanges={false}
+          >
+            <View style={styles.waypointMarker} />
+          </Marker>
+        ))}
 
         {/* Other riders - consistent sized dots with colors and labels */}
         {riderLocations.map((rider, index) => (
@@ -157,6 +297,7 @@ export default function MiniMap({
             }}
             anchor={{ x: 0.5, y: 1 }}
             zIndex={300}
+            tracksViewChanges={false}
           >
             <View style={styles.markerContainer}>
               <View 
@@ -216,6 +357,24 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     borderWidth: 2,
     borderColor: '#fff',
+  },
+  destinationMarker: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ef4444',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waypointMarker: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#f59e0b',
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   markerContainer: {
     alignItems: 'center',

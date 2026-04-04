@@ -196,7 +196,15 @@ function JunctionView({ maneuver, step, routeCoords, compact = false }) {
   );
 }
 
-function MiniMapWithResponsivePosition({ riderLocations, userLocation, routeCoords, colorScheme }) {
+function MiniMapWithResponsivePosition({
+  riderLocations,
+  userLocation,
+  routeCoords,
+  routeDestination,
+  waypoints,
+  colorScheme,
+  onPressMiniMap,
+}) {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
   const miniMapDynamicStyle = [
@@ -204,14 +212,23 @@ function MiniMapWithResponsivePosition({ riderLocations, userLocation, routeCoor
     isLandscape ? { right: 140 } : {}, // Move left in landscape
   ];
   return (
-    <View style={miniMapDynamicStyle} pointerEvents="box-none">
+    <Pressable
+      style={({ pressed }) => [miniMapDynamicStyle, pressed && styles.miniMapPressed]}
+      onPress={onPressMiniMap}
+      accessibilityRole="button"
+      accessibilityLabel="Open mini map"
+    >
       <MiniMap
         riderLocations={riderLocations}
         userLocation={userLocation}
         routeCoords={routeCoords}
+        destination={routeDestination}
+        waypoints={waypoints}
+        showDestination
+        showWaypoints={false}
         colorScheme={colorScheme}
       />
-    </View>
+    </Pressable>
   );
 }
 
@@ -253,6 +270,8 @@ import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
 const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17; // Android: 17, iOS: 7 - More zoomed in for better detail
+const FOLLOW_CENTER_AHEAD_METERS_PORTRAIT = 120;
+const FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE = 180;
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 // Follow Me smoothing constants
@@ -295,6 +314,17 @@ function localMetersToLatLng(base, offsetX, offsetY) {
   const latitude = base.latitude + offsetY / METERS_PER_DEGREE_LAT;
   const longitude = metersPerLon ? base.longitude + offsetX / metersPerLon : base.longitude;
   return { latitude, longitude };
+}
+
+function offsetCoordinateByHeadingMeters(baseCoord, headingDegrees, meters) {
+  if (!baseCoord || !Number.isFinite(headingDegrees) || !Number.isFinite(meters) || meters === 0) {
+    return baseCoord;
+  }
+
+  const headingRadians = (headingDegrees * Math.PI) / 180;
+  const offsetY = Math.cos(headingRadians) * meters;
+  const offsetX = Math.sin(headingRadians) * meters;
+  return localMetersToLatLng(baseCoord, offsetX, offsetY);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1293,6 +1323,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
   const [isTtsEnabled, setIsTtsEnabled] = useState(true);
   const [showDirectionsFullscreen, setShowDirectionsFullscreen] = useState(false);
+  const [showMiniMapFullscreen, setShowMiniMapFullscreen] = useState(false);
   const [hasArrivedAtDestination, setHasArrivedAtDestination] = useState(false);
   const lastKnownDistanceRef = useRef(null);
   const routeFittedRef = useRef(false);
@@ -1318,6 +1349,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setShowDirectionsFullscreen(false);
     }
   }, [isNavigationMode, hasRoute]);
+
+  useEffect(() => {
+    if (!activeRide || riderLocations.length === 0) {
+      setShowMiniMapFullscreen(false);
+    }
+  }, [activeRide, riderLocations.length]);
 
   useEffect(() => {
     if (hasArrivedAtDestination && showDirectionsFullscreen) {
@@ -1395,6 +1432,34 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }).catch(error => {
         console.warn('[ACTIVE_RIDE] mapRoute error:', error);
       });
+    }
+
+    if (rideJustStarted) {
+      // Re-arm Follow Me on shared-ride rejoin and reset camera guards that can
+      // remain stale on iOS after ending and restarting a ride.
+      clearFollowMeInactivityTimeout();
+      skipNextFollowTickRef.current = false;
+      skipNextRegionChangeRef.current = true;
+      skipRegionChangeUntilRef.current = Date.now() + 2500;
+      isAnimatingRef.current = false;
+
+      if (!followUser) {
+        setFollowUser(true);
+      }
+
+      recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true }).catch((error) => {
+        console.warn('[ACTIVE_RIDE] recenter error:', error);
+      });
+
+      if (Platform.OS === 'ios') {
+        setTimeout(() => {
+          if (activeRideRef.current) {
+            recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true }).catch((error) => {
+              console.warn('[ACTIVE_RIDE] iOS recenter retry error:', error);
+            });
+          }
+        }, 900);
+      }
     }
     
     // Update ref for next comparison
@@ -2299,18 +2364,50 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     }
   }
 
-  async function recenterOnUser({ zoom = null, heading = null, pitch = null } = {}) {
+  async function recenterOnUser({ zoom = null, heading = null, pitch = null, followMode = false } = {}) {
     if (!mapRef.current) return;
 
     const coords = await ensureUserLocation();
     if (!coords) return;
 
     isAnimatingRef.current = true;
+
+    let effectiveHeading = Number.isFinite(heading) && heading !== -1
+      ? heading
+      : (Number.isFinite(coords?.heading) && coords.heading !== -1 ? coords.heading : null);
+
+    // Simulator and some GPS readings often provide no heading.
+    // In Follow Me, derive direction from the current route segment so we can
+    // still bias the camera forward and keep the user marker lower on screen.
+    if (followMode && !Number.isFinite(effectiveHeading) && Array.isArray(routeCoords) && routeCoords.length > 1) {
+      const projection = projectPointToPolylineDetailed(
+        coords,
+        routeCoords,
+        350,
+        stepProgressRef.current?.lastProgressMeters || 0
+      );
+
+      const segIdx = Number.isInteger(projection?.segmentIndex) ? projection.segmentIndex : -1;
+      const segStart = segIdx >= 0 ? routeCoords[segIdx] : null;
+      const segEnd = segIdx >= 0 && segIdx + 1 < routeCoords.length ? routeCoords[segIdx + 1] : null;
+
+      if (segStart && segEnd) {
+        effectiveHeading = calculateBearing(segStart, segEnd);
+      }
+    }
+
+    const aheadMeters = followMode
+      ? (isLandscape ? FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE : FOLLOW_CENTER_AHEAD_METERS_PORTRAIT)
+      : 0;
+
+    const centerPoint = followMode && Number.isFinite(effectiveHeading)
+      ? offsetCoordinateByHeadingMeters(coords, effectiveHeading, aheadMeters)
+      : { latitude: coords.latitude, longitude: coords.longitude };
     
     // Build camera config with platform-specific zoom handling
     let cameraConfig = {
-      center: { latitude: coords.latitude, longitude: coords.longitude },
-      ...(heading !== null ? { heading } : {}),
+      center: { latitude: centerPoint.latitude, longitude: centerPoint.longitude },
+      ...(effectiveHeading !== null ? { heading: effectiveHeading } : {}),
       ...(pitch !== null ? { pitch } : {}),
     };
     
@@ -2378,7 +2475,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
     skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
     skipRegionChangeUntilRef.current = Date.now() + 2000;
-    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35 });
+    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true });
 
     // Now enable follow mode and start 15-minute inactivity timer
     // This triggers the AutoReroute effect to rebuild the route from current location
@@ -2472,7 +2569,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       // Now enable Follow Me mode to guide to home
       skipNextFollowTickRef.current = true;
       skipNextRegionChangeRef.current = true;
-      await recenterOnUser({ zoom: FOLLOW_ZOOM });
+      await recenterOnUser({ zoom: FOLLOW_ZOOM, followMode: true });
       setFollowUser(true);
       
       await debugLog("ROUTE_TO_HOME", "Follow Me enabled - tracking route home");
@@ -2506,10 +2603,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     // Update camera during navigation (Follow Me or active ride)
     // If we have heading, use it for orientation; otherwise just center on location
     if (userLocation.heading !== undefined && userLocation.heading !== -1) {
-      recenterOnUser({ heading: userLocation.heading, pitch: 35, zoom: FOLLOW_ZOOM });
+      recenterOnUser({ heading: userLocation.heading, pitch: 35, zoom: FOLLOW_ZOOM, followMode: true });
     } else {
       // Fallback: center on location without heading (for active rides or when heading unavailable)
-      recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 0 });
+      recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 0, followMode: true });
     }
   }, [userLocation, isNavigationMode]);
 
@@ -5230,9 +5327,48 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           riderLocations={riderLocations}
           userLocation={userLocation}
           routeCoords={routeCoords}
+          routeDestination={routeDestination}
+          waypoints={waypoints}
           colorScheme={colorScheme}
+          onPressMiniMap={() => setShowMiniMapFullscreen(true)}
         />
       )}
+
+      <Modal
+        visible={showMiniMapFullscreen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMiniMapFullscreen(false)}
+      >
+        <View style={styles.miniMapModalOverlay}>
+          <View style={styles.miniMapModalCard}>
+            <View style={styles.miniMapModalHeader}>
+              <Text style={styles.miniMapModalTitle}>Group Ride Overview</Text>
+              <TouchableOpacity
+                onPress={() => setShowMiniMapFullscreen(false)}
+                style={styles.miniMapModalCloseButton}
+                accessibilityRole="button"
+                accessibilityLabel="Close mini map"
+              >
+                <MaterialCommunityIcons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.miniMapModalMapWrap}>
+              <MiniMap
+                riderLocations={riderLocations}
+                userLocation={userLocation}
+                routeCoords={routeCoords}
+                destination={routeDestination}
+                waypoints={waypoints}
+                showDestination
+                showWaypoints
+                colorScheme={colorScheme}
+                isModal
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
       
       {showFilters && (
         <View style={styles.filterPanel}>
@@ -6221,6 +6357,59 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
+  },
+
+  miniMapPressed: {
+    opacity: 0.9,
+  },
+
+  miniMapModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.62)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+
+  miniMapModalCard: {
+    width: '100%',
+    maxWidth: 900,
+    height: '78%',
+    backgroundColor: theme.colors.surface,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+
+  miniMapModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.primaryDark,
+  },
+
+  miniMapModalTitle: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  miniMapModalCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  miniMapModalMapWrap: {
+    flex: 1,
+    padding: 12,
   },
 
   noticeBox: {
