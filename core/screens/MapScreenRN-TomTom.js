@@ -2373,12 +2373,20 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
 
     isAnimatingRef.current = true;
 
-    let effectiveHeading = Number.isFinite(heading) && heading !== -1
-      ? heading
-      : (Number.isFinite(coords?.heading) && coords.heading !== -1 ? coords.heading : null);
+    const hasExplicitHeading = Number.isFinite(heading) && heading !== -1;
+    let effectiveHeading = null;
 
-    if (!Number.isFinite(effectiveHeading) && Number.isFinite(lastFollowHeadingRef.current)) {
-      effectiveHeading = lastFollowHeadingRef.current;
+    if (followMode) {
+      effectiveHeading = hasExplicitHeading
+        ? heading
+        : (Number.isFinite(coords?.heading) && coords.heading !== -1 ? coords.heading : null);
+
+      if (!Number.isFinite(effectiveHeading) && Number.isFinite(lastFollowHeadingRef.current)) {
+        effectiveHeading = lastFollowHeadingRef.current;
+      }
+    } else {
+      // Normal recenter should always return to north-up unless a heading is explicitly provided.
+      effectiveHeading = hasExplicitHeading ? heading : 0;
     }
 
     // Simulator and some GPS readings often provide no heading.
@@ -2416,7 +2424,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     // Build camera config with platform-specific zoom handling
     let cameraConfig = {
       center: { latitude: centerPoint.latitude, longitude: centerPoint.longitude },
-      ...(effectiveHeading !== null ? { heading: effectiveHeading } : {}),
+      ...(Number.isFinite(effectiveHeading) ? { heading: effectiveHeading } : {}),
       ...(pitch !== null ? { pitch } : {}),
     };
     
@@ -2443,7 +2451,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
   function handleRecentre() {
     // Always reset to normal zoom and no tilt
     skipNextRegionChangeRef.current = true;
-    recenterOnUser({ zoom: RECENTER_ZOOM, pitch: 0 });
+    recenterOnUser({ zoom: RECENTER_ZOOM, pitch: 0, heading: 0 });
   }
 
   function clearFollowMeInactivityTimeout() {
@@ -2473,7 +2481,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       // Revert to normal zoom and no tilt
       skipNextRegionChangeRef.current = true;
       skipRegionChangeUntilRef.current = Date.now() + 2000;
-      await recenterOnUser({ zoom: RECENTER_ZOOM, pitch: 0 });
+      await recenterOnUser({ zoom: RECENTER_ZOOM, pitch: 0, heading: 0 });
       return;
     }
 
