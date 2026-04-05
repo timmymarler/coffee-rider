@@ -216,7 +216,7 @@ export default function HelpScreen() {
           />
           <Text style={styles.controlText}>
             <Text style={styles.controlLabel}>Re-centre</Text> — moves the map
-            back to your current location.
+            back to your current location and resets orientation to north-up.
           </Text>
         </View>
         <View style={styles.controlRow}>
@@ -227,7 +227,7 @@ export default function HelpScreen() {
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
-            <Text style={styles.controlLabel}>Location Sharing</Text> — when you start a group ride, your live location is shared with other riders in real-time (every 10 seconds). You'll see their markers on the map too. Your location is ONLY shared when you explicitly start a ride and ONLY visible to riders on the same route in the same group. Ending your ride immediately stops all sharing.
+            <Text style={styles.controlLabel}>Stop Sharing (while on a ride)</Text> — when a group ride is active, this button turns red. Tapping it asks you to confirm ending the ride and immediately stops live location sharing.
           </Text>
         </View>
         <View style={styles.controlRow}>
@@ -238,8 +238,8 @@ export default function HelpScreen() {
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
-            <Text style={styles.controlLabel}>Follow Me</Text> — tapping this icon (or activating Navigation) keeps the map
-            centred on you as you move. Dragging the map will turn this off.
+            <Text style={styles.controlLabel}>Follow Me</Text> — tapping this icon keeps the map
+            centered on you as you move. Dragging the map turns this off.
           </Text>
         </View>
         <View style={styles.controlRow}>
@@ -250,29 +250,29 @@ export default function HelpScreen() {
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
-            <Text style={styles.controlLabel}>Follow Me (Active)</Text> — when you enable Follow Me, the icon will turn red and the map stays centered on your location. Your location is visible on the map in real-time.
+            <Text style={styles.controlLabel}>Follow Me (Long press)</Text> — long press the navigation icon for 2 quick actions: if Follow Me is off, it builds a route to your saved home and starts Follow Me; if Follow Me is already on, it opens your current route in your native maps app.
           </Text>
         </View>
         <View style={styles.controlRow}>
           <MaterialCommunityIcons
-            name="home"
+            name="image-filter-center-focus-strong"
             size={22}
             color="#2196F3"
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
-            <Text style={styles.controlLabel}>Route to Home</Text> — when not following, long press the Follow Me icon to create a route from your current location to your home address. Make sure you've added your home address in your Profile first. This will automatically enable Follow Me mode to guide you home.
+            <Text style={styles.controlLabel}>Mini map (group rides)</Text> — tap the mini map to open the fullscreen group overview modal, then tap X to close.
           </Text>
         </View>
         <View style={styles.controlRow}>
           <MaterialCommunityIcons
-            name="map-marker-path"
+            name="fullscreen"
             size={22}
             color="#2196F3"
             style={styles.controlIcon}
           />
           <Text style={styles.controlText}>
-            <Text style={styles.controlLabel}>Route to Selected Place</Text> — tap any place marker to open its details card, then long press the Follow Me icon to route to that place with Follow Me automatically enabled. The place card will close and navigation will start immediately.
+            <Text style={styles.controlLabel}>Directions panel (long press)</Text> — while navigating, long press the turn instruction panel to open it fullscreen. Tap anywhere to close fullscreen.
           </Text>
         </View>
         <Text style={styles.sectionTitle}>Map actions</Text>
@@ -287,8 +287,7 @@ export default function HelpScreen() {
         <View style={styles.legendRow}>
           <View style={styles.waypointPin}></View>
           <Text style={styles.legendText}>
-            <Text style={styles.controlLabel}>Way Points</Text> - Long Press on any marker (or any location) and immediately show the suggested route and load your navigation software 
-            from the main screen. Want to route via different places? Long Press on the map to add way points.
+            <Text style={styles.controlLabel}>Waypoints and quick routing</Text> - Long press any marker to open a quick menu with Add waypoint, Add as start point, or Add as destination. Long press on the map to open the same point menu for any location (and Add new place here when available).
           </Text>
         </View>
       </View>
