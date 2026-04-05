@@ -210,7 +210,7 @@ export default function ProfileScreen() {
   const formatPlanLabel = (plan) => {
     if (!plan) return 'Unknown';
     const normalized = plan.toLowerCase();
-    if (normalized === 'daily') return 'Daily';
+    if (normalized === 'daily') return 'Legacy';
     if (normalized === 'monthly') return 'Monthly';
     if (normalized === 'annual') return 'Annual';
     return plan.charAt(0).toUpperCase() + plan.slice(1);

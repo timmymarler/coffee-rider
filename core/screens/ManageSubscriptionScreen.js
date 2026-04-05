@@ -57,6 +57,13 @@ export default function ManageSubscriptionScreen() {
     return d.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
+  const formatPlanLabel = (plan) => {
+    if (!plan) return 'UNKNOWN';
+    const normalized = plan.toLowerCase();
+    if (normalized === 'daily') return 'LEGACY';
+    return normalized.toUpperCase();
+  };
+
   if (!hasActiveSubscription && !isCurrentlyInTrial) {
     return (
       <ScrollView style={[styles.container, { backgroundColor: theme.colors.primaryDark }]}>
@@ -110,7 +117,7 @@ export default function ManageSubscriptionScreen() {
             {isCurrentlyInTrial ? 'Trial Remaining' : 'Plan'}
           </Text>
           <Text style={[styles.statusValue, { color: theme.colors.text }]}>
-            {isCurrentlyInTrial ? `${trialDaysLeft} days` : subscription?.plan?.toUpperCase()}
+            {isCurrentlyInTrial ? `${trialDaysLeft} days` : formatPlanLabel(subscription?.plan)}
           </Text>
         </View>
 

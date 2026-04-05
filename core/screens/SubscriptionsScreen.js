@@ -184,16 +184,6 @@ export default function SubscriptionsScreen() {
           theme={theme}
         />
 
-        {/* Daily Plan */}
-        <PricingCard
-          plan={SUBSCRIPTION_PLANS.DAILY}
-          isSelected={selectedPlan === SUBSCRIPTION_PLANS.DAILY.id}
-          onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.DAILY)}
-          processing={processing && selectedPlan === SUBSCRIPTION_PLANS.DAILY.id}
-          disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
-          theme={theme}
-        />
-
         {/* Free Trial CTA (if not already in trial or subscribed) */}
         {!isCurrentlyInTrial && !hasActiveSubscription && (
           <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}>
