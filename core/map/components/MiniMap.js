@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
 // Color palette for users
@@ -49,6 +49,30 @@ function normalizeCoord(coord) {
   return { latitude, longitude };
 }
 
+function distanceMeters(a, b) {
+  if (!a || !b) return Infinity;
+  const dLat = (b.latitude - a.latitude) * 111320;
+  const metersPerLng = (40075000 * Math.cos((a.latitude * Math.PI) / 180)) / 360;
+  const dLng = (b.longitude - a.longitude) * metersPerLng;
+  return Math.sqrt(dLat * dLat + dLng * dLng);
+}
+
+function offsetByMeters(coord, meters, angleDeg) {
+  if (!coord || !Number.isFinite(meters) || !Number.isFinite(angleDeg)) return coord;
+  const radians = (angleDeg * Math.PI) / 180;
+  const dNorth = Math.cos(radians) * meters;
+  const dEast = Math.sin(radians) * meters;
+
+  const dLat = dNorth / 111320;
+  const metersPerLng = (40075000 * Math.cos((coord.latitude * Math.PI) / 180)) / 360;
+  const dLng = metersPerLng ? (dEast / metersPerLng) : 0;
+
+  return {
+    latitude: coord.latitude + dLat,
+    longitude: coord.longitude + dLng,
+  };
+}
+
 /**
  * Mini map component to show group member locations
  */
@@ -65,6 +89,7 @@ export default function MiniMap({
   isModal = false,
 }) {
   const theme = useTheme();
+  const markerTracksViewChanges = Platform.OS !== 'ios';
 
   const mapRef = useRef(null);
   const fitTimeoutRef = useRef(null);
@@ -138,6 +163,40 @@ export default function MiniMap({
     return showWaypoints ? waypointCoordinates : [];
   }, [showWaypoints, waypointCoordinates]);
 
+  const userCoord = useMemo(() => normalizeCoord(userLocation), [userLocation]);
+
+  const renderRiders = useMemo(() => {
+    const adjusted = [];
+
+    riderLocations.forEach((rider, index) => {
+      const coord = normalizeCoord(rider);
+      if (!coord) return;
+
+      let renderedCoord = coord;
+      const nearUser = userCoord && distanceMeters(coord, userCoord) < 6;
+      const baseAngle = ((index * 97) % 360);
+
+      if (nearUser) {
+        renderedCoord = offsetByMeters(renderedCoord, 9, baseAngle);
+      }
+
+      for (let i = 0; i < adjusted.length; i += 1) {
+        if (distanceMeters(renderedCoord, adjusted[i].coordinate) < 4) {
+          renderedCoord = offsetByMeters(renderedCoord, 7, baseAngle + 35);
+          break;
+        }
+      }
+
+      adjusted.push({
+        ...rider,
+        renderIndex: index,
+        coordinate: renderedCoord,
+      });
+    });
+
+    return adjusted;
+  }, [riderLocations, userCoord]);
+
   const fitCoordinates = useMemo(() => {
     const destinationPoints = showDestination && destinationCoord ? [destinationCoord] : [];
     return [
@@ -184,8 +243,8 @@ export default function MiniMap({
 
       mapRef.current.fitToCoordinates(fitCoordinates, {
         edgePadding: isModal
-          ? { top: 70, right: 50, bottom: 70, left: 50 }
-          : { top: 28, right: 28, bottom: 28, left: 28 },
+          ? { top: 96, right: 72, bottom: 104, left: 72 }
+          : { top: 42, right: 42, bottom: 52, left: 42 },
         animated: isModal && hasFittedRef.current,
       });
 
@@ -247,15 +306,15 @@ export default function MiniMap({
               latitude: userLocation.latitude,
               longitude: userLocation.longitude,
             }}
-            anchor={{ x: 0.5, y: 1 }}
+            anchor={{ x: 0.5, y: 0.5 }}
             zIndex={200}
-            tracksViewChanges={false}
+            tracksViewChanges={markerTracksViewChanges}
           >
-            <View style={styles.markerContainer}>
-              <View style={[styles.userLocationMarker, { backgroundColor: theme.colors.primary }]} />
-              <View style={[styles.labelBubble, { marginTop: 2, alignSelf: 'center', maxWidth: 70 }]}> 
+            <View style={styles.markerContainer} collapsable={false}>
+              <View style={[styles.labelBubble, styles.markerLabel]}> 
                 <Text style={styles.labelText}>You</Text>
               </View>
+              <View style={[styles.userLocationMarker, { backgroundColor: theme.colors.primary }]} />
             </View>
           </Marker>
         )}
@@ -266,7 +325,7 @@ export default function MiniMap({
             coordinate={destinationCoord}
             anchor={{ x: 0.5, y: 0.5 }}
             zIndex={260}
-            tracksViewChanges={false}
+            tracksViewChanges={markerTracksViewChanges}
           >
             <View style={styles.destinationMarker}>
               <MaterialCommunityIcons name="map-marker" size={12} color="#fff" />
@@ -281,36 +340,33 @@ export default function MiniMap({
             coordinate={coord}
             anchor={{ x: 0.5, y: 0.5 }}
             zIndex={255}
-            tracksViewChanges={false}
+            tracksViewChanges={markerTracksViewChanges}
           >
             <View style={styles.waypointMarker} />
           </Marker>
         ))}
 
         {/* Other riders - consistent sized dots with colors and labels */}
-        {riderLocations.map((rider, index) => (
+        {renderRiders.map((rider, index) => (
           <Marker
             key={`rider-${rider.id}`}
-            coordinate={{
-              latitude: rider.latitude,
-              longitude: rider.longitude,
-            }}
-            anchor={{ x: 0.5, y: 1 }}
+            coordinate={rider.coordinate}
+            anchor={{ x: 0.5, y: 0.5 }}
             zIndex={300}
-            tracksViewChanges={false}
+            tracksViewChanges={markerTracksViewChanges}
           >
-            <View style={styles.markerContainer}>
+            <View style={styles.markerContainer} collapsable={false}>
+              <View style={[styles.labelBubble, styles.markerLabel]}> 
+                <Text style={styles.labelText} numberOfLines={1}>
+                  {rider.userName || `Rider ${rider.renderIndex + 1}`}
+                </Text>
+              </View>
               <View 
                 style={[
                   styles.riderMarker, 
-                  { backgroundColor: getUserColor(rider.id, index) }
+                  { backgroundColor: getUserColor(rider.id, rider.renderIndex) }
                 ]} 
               />
-              <View style={[styles.labelBubble, { marginTop: 2, alignSelf: 'center', maxWidth: 70 }]}> 
-                <Text style={styles.labelText} numberOfLines={1}>
-                  {rider.userName || `Rider ${index + 1}`}
-                </Text>
-              </View>
             </View>
           </Marker>
         ))}
@@ -378,7 +434,13 @@ const styles = StyleSheet.create({
   },
   markerContainer: {
     alignItems: 'center',
-    gap: 4,
+    minWidth: 72,
+    minHeight: 38,
+  },
+  markerLabel: {
+    marginBottom: 3,
+    alignSelf: 'center',
+    maxWidth: 72,
   },
   labelBubble: {
     backgroundColor: 'rgba(0, 0, 0, 0.8)',

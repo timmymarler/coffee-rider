@@ -1,8 +1,8 @@
 import { functions } from '@config/firebase';
 import { useStripe } from '@stripe/stripe-react-native';
+import Constants from 'expo-constants';
 import { httpsCallable } from 'firebase/functions';
 import { useCallback, useMemo, useState } from 'react';
-import Constants from 'expo-constants';
 import { SUBSCRIPTION_PLANS } from './stripeService';
 
 const ensureStripeCustomerCallable = httpsCallable(functions, 'ensureStripeCustomer');
