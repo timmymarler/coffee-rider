@@ -5,7 +5,6 @@ import { Dimensions, Linking, Pressable, ScrollView, StyleSheet, Text, View } fr
 import { AuthContext } from "@context/AuthContext";
 import { useTheme } from "@context/ThemeContext";
 import { getCapabilities } from "@core/roles/capabilities";
-import theme from "@themes";
 import { useLocalSearchParams } from "expo-router";
 import SvgPin from "../map/components/SvgPin";
 

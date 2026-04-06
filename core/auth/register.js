@@ -21,8 +21,9 @@ import {
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
+import { showProUpgradePrompt, shouldShowProUpgradePrompt } from "@core/utils/proUpgradePrompt";
 import theme from "@themes";
-import { addDoc, collection, doc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import AuthLayout from "./AuthLayout";
 import { isAppleSignInAvailable, signInWithApple } from "./socialAuth";
 
@@ -129,9 +130,25 @@ export default function RegisterScreen({ onBack }) {
     setSocialProcess('apple');
     try {
       await signInWithApple();
+      let role = null;
+      try {
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+          const profileSnap = await getDoc(doc(db, "users", uid));
+          role = profileSnap.exists() ? profileSnap.data()?.role : null;
+        }
+      } catch (profileErr) {
+        console.warn("Unable to read user profile role after Apple sign-in:", profileErr);
+      }
+
       setSocialSubmitting(false);
       setSocialProcess(null);
       router.replace("map");
+      if (shouldShowProUpgradePrompt(role)) {
+        setTimeout(() => {
+          showProUpgradePrompt(router);
+        }, 250);
+      }
     } catch (err) {
       setSocialSubmitting(false);
       setSocialProcess(null);
@@ -220,6 +237,14 @@ export default function RegisterScreen({ onBack }) {
       }
       
       setSubmitting(false);
+      if (shouldShowProUpgradePrompt(selectedRole)) {
+        router.replace("/map");
+        setTimeout(() => {
+          showProUpgradePrompt(router);
+        }, 250);
+        return;
+      }
+
       Alert.alert(
         "Verification email sent",
         "Please check your email to verify your account before logging in.",

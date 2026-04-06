@@ -1,4 +1,3 @@
-import { Circle, Path, Polygon, Svg } from "react-native-svg";
 import { db } from "@config/firebase";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
@@ -6,193 +5,128 @@ import { useTheme } from "@context/ThemeContext";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
-import { collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
-import { arrayUnion } from "firebase/firestore";
+import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
 
-// ---------------------------------------------------------------------------
-// JunctionView – Beeline-style schematic road diagram for the fullscreen
-// navigation pod. Renders approach/departure route geometry and side-road rails
-// in monochrome using react-native-svg.
-// ---------------------------------------------------------------------------
-function JunctionView({ maneuver, step, routeCoords, compact = false }) {
-  const C = compact ? 72 : 90; // center X of the canvas
-  const JY = compact ? 42 : 50; // junction Y
+function isRoundaboutManeuver(maneuver = "") {
+  return String(maneuver).toUpperCase().includes("ROUNDABOUT");
+}
 
-  // Primary route stays solid; non-selected roads are dual "rails".
-  const routeWidth = compact ? 6.2 : 7.5;
-  const railOuter = compact ? 4.2 : 5.2;
-  const railInner = compact ? 1.8 : 2.2;
-  const roadColor = "rgba(255,255,255,0.96)";
-  const sideColor = "rgba(255,255,255,0.72)";
-  const cutoutColor = "#000000";
+function getRoundaboutExitAngleDegrees(maneuver = "", exitNumber, turnAngle = null) {
+  const upper = String(maneuver || "").toUpperCase();
+  const parsedExit = Number(exitNumber);
+  const parsedTurnAngle = Number(turnAngle);
 
-  const m = (maneuver || "STRAIGHT").toUpperCase();
-  const isArrival = m.includes("ARRIVE") || m.includes("ARRIVAL") || m.includes("DESTINATION");
+  const isLeftHalf = (angle) => angle >= 90 && angle <= 270;
+  const isRightHalf = (angle) => angle <= 90 || angle >= 270;
 
-  const buildPath = (pts) => {
-    if (!Array.isArray(pts) || pts.length < 2) return null;
-    return pts.reduce((acc, p, idx) => {
-      const x = Number.isFinite(p.x) ? p.x : 0;
-      const y = Number.isFinite(p.y) ? p.y : 0;
-      return `${acc}${idx === 0 ? "M" : " L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    }, "");
-  };
+  if (Number.isFinite(parsedTurnAngle)) {
+    // TomTom can provide signed delta angles (common), so map from "straight ahead" (up=270).
+    // Fallback interpretation uses absolute compass-like angles if values are outside signed range.
+    const normalizedTurn = ((parsedTurnAngle % 360) + 360) % 360;
+    const signedCandidate = ((270 + parsedTurnAngle) % 360 + 360) % 360;
+    const absoluteCandidate = normalizedTurn;
 
-  const derivedGeometry = useMemo(() => {
-    if (!Array.isArray(routeCoords) || routeCoords.length < 2) return null;
+    let chosen = signedCandidate;
 
-    const anchor = step?.end || step?.position || routeCoords[Math.floor(routeCoords.length * 0.5)];
-    if (!anchor?.latitude || !anchor?.longitude) return null;
-
-    let nearestIndex = 0;
-    let nearestDistSq = Infinity;
-
-    for (let i = 0; i < routeCoords.length; i++) {
-      const local = toLocalMeters(anchor, routeCoords[i]);
-      const d2 = local.x * local.x + local.y * local.y;
-      if (d2 < nearestDistSq) {
-        nearestDistSq = d2;
-        nearestIndex = i;
-      }
+    // If maneuver semantics contradict the candidate side, try the alternate interpretation.
+    if ((upper.includes("LEFT") || upper.includes("EXIT_LEFT")) && !isLeftHalf(chosen) && isLeftHalf(absoluteCandidate)) {
+      chosen = absoluteCandidate;
+    }
+    if ((upper.includes("RIGHT") || upper.includes("EXIT_RIGHT")) && !isRightHalf(chosen) && isRightHalf(absoluteCandidate)) {
+      chosen = absoluteCandidate;
     }
 
-    const start = Math.max(0, nearestIndex - 18);
-    const end = Math.min(routeCoords.length - 1, nearestIndex + 22);
-    const windowPoints = routeCoords.slice(start, end + 1);
-    if (windowPoints.length < 2) return null;
-
-    const inboundA = routeCoords[Math.max(0, nearestIndex - 8)];
-    const inboundB = routeCoords[Math.max(0, nearestIndex - 1)];
-    const inboundALocal = toLocalMeters(anchor, inboundA);
-    const inboundBLocal = toLocalMeters(anchor, inboundB);
-    const vx = inboundBLocal.x - inboundALocal.x;
-    const vy = -(inboundBLocal.y - inboundALocal.y); // y-flip for screen space
-    const mag = Math.sqrt(vx * vx + vy * vy);
-    if (!Number.isFinite(mag) || mag < 0.1) return null;
-
-    const heading = Math.atan2(vy, vx);
-    const target = -Math.PI / 2; // align route travel with upward direction
-    const rot = target - heading;
-    const cos = Math.cos(rot);
-    const sin = Math.sin(rot);
-
-    const rotated = windowPoints.map((coord) => {
-      const local = toLocalMeters(anchor, coord);
-      const sx = local.x;
-      const sy = -local.y;
-      return {
-        x: sx * cos - sy * sin,
-        y: sx * sin + sy * cos,
-      };
-    });
-
-    const maxAbsX = Math.max(...rotated.map((p) => Math.abs(p.x)), 1);
-    const maxAbsY = Math.max(...rotated.map((p) => Math.abs(p.y)), 1);
-    const scaleLimit = compact ? 1.5 : 1.85;
-    const scale = Math.min(scaleLimit, Math.max(0.55, Math.min(70 / maxAbsX, 72 / maxAbsY)));
-
-    const fitted = rotated.map((p) => ({
-      x: C + p.x * scale,
-      y: JY + p.y * scale,
-    }));
-
-    const junctionIdx = Math.min(Math.max(nearestIndex - start, 1), fitted.length - 1);
-    const approachPoints = fitted.slice(0, junctionIdx + 1).map((p, idx, arr) => {
-      // Keep the first section of the chosen route visually straight-up.
-      if (idx <= Math.min(5, Math.floor(arr.length * 0.45))) {
-        return { ...p, x: C };
-      }
-      return p;
-    });
-    const departurePoints = fitted.slice(junctionIdx);
-
-    return {
-      approach: buildPath(approachPoints),
-      departure: buildPath(departurePoints),
-    };
-  }, [routeCoords, step]);
-
-  const fallbackApproach = compact ? `M ${C} 108 L ${C} ${JY}` : `M ${C} 136 L ${C} ${JY}`;
-  const arrowPoints = compact
-    ? `${C},76 ${C - 9},93 ${C + 9},93`
-    : `${C},98 ${C - 11},118 ${C + 11},118`;
-
-  let approach = derivedGeometry?.approach || fallbackApproach;
-  let departure = isArrival ? null : derivedGeometry?.departure;
-  const sides = [];
-
-  if (isArrival) {
-    // Arrival view: no outgoing leg beyond the destination.
-  } else if (m === "TURN_LEFT" || m === "TURN_SHARP_LEFT") {
-    departure = departure || `M ${C} ${JY} L 5 ${JY}`;
-    sides.push(`M ${C} ${JY} L ${C} 5`);
-  } else if (m === "TURN_RIGHT" || m === "TURN_SHARP_RIGHT") {
-    departure = departure || `M ${C} ${JY} L 155 ${JY}`;
-    sides.push(`M ${C} ${JY} L ${C} 5`);
-  } else if (m === "TURN_SLIGHT_LEFT" || m === "BEAR_LEFT" || m === "KEEP_LEFT") {
-    departure = departure || `M ${C} ${JY} Q 46 17 4 3`;
-  } else if (m === "TURN_SLIGHT_RIGHT" || m === "BEAR_RIGHT" || m === "KEEP_RIGHT") {
-    departure = departure || `M ${C} ${JY} Q 114 17 156 3`;
-  } else if (m.includes("U_TURN") || m.includes("UTURN") || m.includes("MAKE_U")) {
-    const goRight = !m.includes("LEFT");
-    const ux = goRight ? C + 34 : C - 34;
-    departure = departure || `M ${C} ${JY} Q ${ux} ${JY} ${ux} ${JY + 28} Q ${ux} ${JY + 56} ${C} ${JY + 56}`;
-  } else if (m.includes("ROUNDABOUT")) {
-    departure = departure || `M ${C} ${JY} L ${C} 59`;
-    sides.push(`M ${C} 23 L ${C} 5`);
-  } else if (m === "MERGE_LEFT") {
-    departure = departure || `M ${C} ${JY} L ${C} 5`;
-    sides.push(`M 5 ${JY + 20} Q ${C - 20} ${JY + 8} ${C} ${JY}`);
-  } else if (m === "MERGE_RIGHT") {
-    departure = departure || `M ${C} ${JY} L ${C} 5`;
-    sides.push(`M 155 ${JY + 20} Q ${C + 20} ${JY + 8} ${C} ${JY}`);
-  } else if (m === "TAKE_EXIT") {
-    departure = departure || `M ${C} ${JY} Q 114 17 156 3`;
-    sides.push(`M ${C} ${JY} L ${C} 5`);
-  } else {
-    // STRAIGHT (default)
-    departure = departure || `M ${C} ${JY} L ${C} 5`;
+    return chosen;
   }
 
-  const renderSolidPath = (d, key) => (
-    <Path key={key} d={d} stroke={roadColor} strokeWidth={routeWidth} strokeLinecap="round" fill="none" />
-  );
+  if (Number.isFinite(parsedExit) && parsedExit > 0) {
+    // Left-driving style reference: exit 1 should appear to the LEFT.
+    // Angles are screen-space (0=right, 90=down, 180=left, 270=up).
+    const normalized = (Math.round(parsedExit) - 1) % 8;
+    return (180 + normalized * 45) % 360;
+  }
 
-  const renderDualPath = (d, color, key) => [
-    <Path key={`${key}-outer`} d={d} stroke={color} strokeWidth={railOuter} strokeLinecap="round" fill="none" />,
-    <Path key={`${key}-inner`} d={d} stroke={cutoutColor} strokeWidth={railInner} strokeLinecap="round" fill="none" />,
-  ];
+  if (upper.includes("EXIT_LEFT") || upper.includes("ENTER_LEFT")) return 180;
+  if (upper.includes("EXIT_RIGHT") || upper.includes("ENTER_RIGHT")) return 0;
+  if (upper.includes("CROSS")) return 270;
+  return 225;
+}
+
+function polarToCartesian(cx, cy, radius, angleDegrees) {
+  const radians = (angleDegrees * Math.PI) / 180;
+  return {
+    x: cx + radius * Math.cos(radians),
+    y: cy + radius * Math.sin(radians),
+  };
+}
+
+function RoundaboutExitIcon({ size = 80, exitNumber, turnAngle, maneuver, color = "rgba(245, 245, 240, 0.95)" }) {
+  const center = size / 2;
+  const ringRadius = size * 0.26;
+  const ringStroke = Math.max(3, size * 0.075);
+  const exitAngle = getRoundaboutExitAngleDegrees(maneuver, exitNumber, turnAngle);
+
+  // Draw a short directional arc close to the selected exit so the icon
+  // does not appear to originate from the top for low exit numbers.
+  const arcSpan = 84;
+  const arcStartAngle = ((exitAngle - arcSpan) % 360 + 360) % 360;
+  const arcStart = polarToCartesian(center, center, ringRadius, arcStartAngle);
+  const arcEnd = polarToCartesian(center, center, ringRadius, exitAngle);
+  const largeArcFlag = 0;
+
+  const exitOuter = polarToCartesian(center, center, ringRadius + size * 0.24, exitAngle);
+  const exitInner = polarToCartesian(center, center, ringRadius + ringStroke * 0.6, exitAngle);
+
+  const arrowTip = exitOuter;
+  const arrowBase = polarToCartesian(center, center, ringRadius + size * 0.18, exitAngle);
+  const arrowLeft = polarToCartesian(arrowBase.x, arrowBase.y, size * 0.07, exitAngle + 145);
+  const arrowRight = polarToCartesian(arrowBase.x, arrowBase.y, size * 0.07, exitAngle - 145);
 
   return (
-    <View
-      style={{
-        marginBottom: compact ? 10 : 18,
-        transform: [{ perspective: compact ? 800 : 900 }, { rotateX: compact ? "20deg" : "28deg" }],
-      }}
-      pointerEvents="none"
-    >
-      <Svg width={compact ? 148 : 188} height={compact ? 116 : 156} viewBox={compact ? "0 0 144 112" : "0 0 180 150"}>
-        {sides.map((d, i) => renderDualPath(d, sideColor, `s${i}`))}
-        {renderSolidPath(approach, "approach")}
-        {departure ? renderSolidPath(departure, "departure") : null}
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ marginBottom: 2 }}>
+      <Circle cx={center} cy={center} r={ringRadius} stroke={color} strokeWidth={ringStroke} fill="none" />
 
-        {m.includes("ROUNDABOUT") && (
-          <>
-            <Circle cx={C} cy={compact ? 34 : 41} r={compact ? 12 : 15} stroke={roadColor} strokeWidth={routeWidth} fill="none" />
-          </>
-        )}
+      <Path
+        d={`M ${arcStart.x.toFixed(1)} ${arcStart.y.toFixed(1)} A ${ringRadius.toFixed(1)} ${ringRadius.toFixed(1)} 0 ${largeArcFlag} 1 ${arcEnd.x.toFixed(1)} ${arcEnd.y.toFixed(1)}`}
+        stroke={color}
+        strokeWidth={Math.max(2, size * 0.06)}
+        strokeLinecap="round"
+        fill="none"
+      />
 
-        {isArrival ? (
-          <Circle cx={C} cy={JY} r={compact ? 7 : 9} fill={roadColor} />
-        ) : (
-          <Polygon points={arrowPoints} fill="rgba(255,255,255,0.98)" />
-        )}
-      </Svg>
-    </View>
+      <Path
+        d={`M ${exitInner.x.toFixed(1)} ${exitInner.y.toFixed(1)} L ${exitOuter.x.toFixed(1)} ${exitOuter.y.toFixed(1)}`}
+        stroke={color}
+        strokeWidth={Math.max(2, size * 0.06)}
+        strokeLinecap="round"
+      />
+
+      <Polygon
+        points={`${arrowTip.x.toFixed(1)},${arrowTip.y.toFixed(1)} ${arrowLeft.x.toFixed(1)},${arrowLeft.y.toFixed(1)} ${arrowRight.x.toFixed(1)},${arrowRight.y.toFixed(1)}`}
+        fill={color}
+      />
+
+      {Number.isFinite(Number(exitNumber)) && Number(exitNumber) > 0 ? (
+        <>
+          <Circle cx={center} cy={center} r={size * 0.15} fill="rgba(0,0,0,0.28)" />
+          <SvgText
+            x={center}
+            y={center + size * 0.045}
+            textAnchor="middle"
+            fontSize={Math.max(10, size * 0.16)}
+            fontWeight="700"
+            fill={color}
+          >
+            {String(Math.round(Number(exitNumber)))}
+          </SvgText>
+        </>
+      ) : null}
+    </Svg>
   );
 }
 
@@ -259,6 +193,7 @@ import useWaypoints from "@core/map/waypoints/useWaypoints";
 import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
+import { showProUpgradePrompt } from "@core/utils/proUpgradePrompt";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
@@ -1996,7 +1931,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   async function handleSaveRoute(routeName) {
     if (!routeCoords.length || !user) return;
     if (!capabilities.canSaveRoutes) {
-      setPostbox({ type: "info", message: "Your account cannot save routes." });
+      showProUpgradePrompt(router);
       return;
     }
     if (!user) {
@@ -2112,7 +2047,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     }
     
     if (!capabilities?.canSaveRoutes) {
-      setPostbox({ type: "info", message: "Your account cannot save rides." });
+      showProUpgradePrompt(router);
       return;
     }
 
@@ -3992,10 +3927,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     if (!capabilities.canSearchGoogle) {
       console.log("[SEARCH] Google search blocked for role");
       setGooglePois([]); // ensure no stale results linger
-      setSearchNotice({
-        title: "Search restricted",
-        message: "You must log in to use the search function.",
-      });      
+      showProUpgradePrompt(router);
       return;
     }    
     // Prevent duplicate searches
@@ -5076,7 +5008,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       
 
       if (poi.source === "google") {
-        if (!capabilities.canSearchGoogle) return;
+        if (!capabilities.canSearchGoogle) {
+          showProUpgradePrompt(router);
+          return;
+        }
 
         // Check for CR place at this location (proximity or Google Place ID)
         const PROXIMITY_THRESHOLD = 40; // meters
@@ -5110,7 +5045,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
 
     const handleMarkerLongPress = () => {
       console.log("[MARKER] Long press on:", poi.title || poi.name);
-      if (!capabilities.canCreateRoutes) return;
+      if (!capabilities.canCreateRoutes) {
+        showProUpgradePrompt(router);
+        return;
+      }
       
       setPendingMarker(poi);
       setShowMarkerMenu(true);
@@ -5165,7 +5103,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
             }
           }}
           onLongPress={async (e) => {
-            if (!capabilities.canCreateRoutes) return;
+            if (!capabilities.canCreateRoutes) {
+              showProUpgradePrompt(router);
+              return;
+            }
 
             const { latitude, longitude } = e.nativeEvent.coordinate;
 
@@ -5838,7 +5779,19 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 accessibilityHint="Long press to expand directions"
               >
                 {/* Large direction icon */}
-                <MaterialCommunityIcons name={displayMeta.icon} size={80} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
+                {isRoundaboutManeuver(nextManeuver) ? (
+                  <View style={styles.junctionIcon}>
+                    <RoundaboutExitIcon
+                      size={80}
+                      exitNumber={step?.nextRoundaboutExitNumber}
+                      turnAngle={step?.nextRoundaboutTurnAngle}
+                      maneuver={nextManeuver}
+                      color="rgba(245, 245, 240, 0.95)"
+                    />
+                  </View>
+                ) : (
+                  <MaterialCommunityIcons name={displayMeta.icon} size={80} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
+                )}
                 {/* Distance and label section */}
                 <View style={styles.junctionContent}>
                   <View style={styles.junctionHeaderRow}>
@@ -5893,13 +5846,22 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                       showsVerticalScrollIndicator={false}
                       alwaysBounceVertical={false}
                     >
-                      <JunctionView maneuver={nextManeuver} step={step} routeCoords={routeCoords} compact={isLandscape} />
-                      <MaterialCommunityIcons
-                        name={displayMeta.icon}
-                        size={fullscreenIconSize}
-                        color="#ffffff"
-                        style={styles.fullscreenDirectionsIcon}
-                      />
+                      {isRoundaboutManeuver(nextManeuver) ? (
+                        <RoundaboutExitIcon
+                          size={fullscreenIconSize}
+                          exitNumber={step?.nextRoundaboutExitNumber}
+                          turnAngle={step?.nextRoundaboutTurnAngle}
+                          maneuver={nextManeuver}
+                          color="#ffffff"
+                        />
+                      ) : (
+                        <MaterialCommunityIcons
+                          name={displayMeta.icon}
+                          size={fullscreenIconSize}
+                          color="#ffffff"
+                          style={styles.fullscreenDirectionsIcon}
+                        />
+                      )}
                       {shouldShowDistance ? (
                         <Text style={[styles.fullscreenDirectionsDistance, isLandscape && styles.fullscreenDirectionsDistanceLandscape]}>{distText}</Text>
                       ) : null}
@@ -5975,6 +5937,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           value={searchInput}
           onChange={setSearchInput}
           onSubmit={(query) => {
+            if (!capabilities.canSearchGoogle) {
+              showProUpgradePrompt(router);
+              return;
+            }
             setActiveQuery(query);
             setSearchOrigin(mapRegion);
           }}

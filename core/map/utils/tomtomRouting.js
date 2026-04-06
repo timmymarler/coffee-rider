@@ -38,6 +38,25 @@ const extractArrivalDetails = (instruction = {}) => {
   };
 };
 
+const extractRoundaboutTurnAngle = (instruction = {}) => {
+  const candidates = [
+    instruction?.turnAngleInDecimalDegrees,
+    instruction?.turnAngle,
+    instruction?.roundaboutTurnAngleInDecimalDegrees,
+    instruction?.roundaboutTurnAngle,
+    instruction?.exitAngle,
+  ];
+
+  for (const value of candidates) {
+    const angle = Number(value);
+    if (Number.isFinite(angle)) {
+      return angle;
+    }
+  }
+
+  return null;
+};
+
 /**
  * Fetch route from Google Directions API (best for pedestrian and cycling routing)
  * @param {Object} origin - {latitude, longitude}
@@ -490,6 +509,7 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
         extra.arrivalDetails = arrivalDetails;
       } else if (maneuver.includes("ROUNDABOUT")) {
         let exitNumber = null;
+        const roundaboutTurnAngle = extractRoundaboutTurnAngle(instr);
         
         if (typeof instr.roundaboutExitNumber === "number" && instr.roundaboutExitNumber > 0) {
           exitNumber = instr.roundaboutExitNumber;
@@ -522,6 +542,7 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
         }
         
         extra.roundaboutExitNumber = exitNumber;
+        extra.roundaboutTurnAngle = roundaboutTurnAngle;
       } else if (isUTurnManeuver(maneuver)) {
         instruction = getUTurnInstruction(maneuver);
       } else if (maneuver.includes("TURN_LEFT")) {
@@ -552,6 +573,7 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       let nextInstruction = "Finish";
       let nextManeuver = "ARRIVE";
       let nextRoundaboutExitNumber = null;
+      let nextRoundaboutTurnAngle = null;
 
       if (idx + 1 < instructions.length) {
         const nextInstr = instructions[idx + 1];
@@ -565,6 +587,7 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
           nextInstruction = arrivalDetails.text || "Arrive at your destination";
           extra.nextArrivalDetails = arrivalDetails;
         } else if (nextManeuver.includes("ROUNDABOUT")) {
+          nextRoundaboutTurnAngle = extractRoundaboutTurnAngle(nextInstr);
           if (typeof nextInstr.roundaboutExitNumber === "number" && nextInstr.roundaboutExitNumber > 0) {
             nextRoundaboutExitNumber = nextInstr.roundaboutExitNumber;
             nextInstruction = `Take exit ${nextRoundaboutExitNumber}`;
@@ -618,6 +641,7 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
         nextInstruction,
         nextManeuver,
         nextRoundaboutExitNumber,
+        nextRoundaboutTurnAngle,
         ...extra,
       };
     }) : [];

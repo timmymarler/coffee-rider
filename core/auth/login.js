@@ -1,10 +1,12 @@
 // core/auth/login.js
 import { AuthContext } from "@/core/context/AuthContext";
-import { auth } from "@config/firebase";
+import { auth, db } from "@config/firebase";
+import { showProUpgradePrompt, shouldShowProUpgradePrompt } from "@core/utils/proUpgradePrompt";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import theme from "@themes";
 import { useRouter } from "expo-router";
 import { sendEmailVerification, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -68,9 +70,22 @@ export default function LoginScreen() {
 
     setSubmitting(true);
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      let role = null;
+      try {
+        const profileSnap = await getDoc(doc(db, "users", credential.user.uid));
+        role = profileSnap.exists() ? profileSnap.data()?.role : null;
+      } catch (profileErr) {
+        console.warn("Unable to read user profile role after login:", profileErr);
+      }
+
       setSubmitting(false);
       router.replace("map");
+      if (shouldShowProUpgradePrompt(role)) {
+        setTimeout(() => {
+          showProUpgradePrompt(router);
+        }, 250);
+      }
     } catch (err) {
       console.error("Login error:", err);
       setSubmitting(false);
@@ -132,9 +147,25 @@ export default function LoginScreen() {
     setSocialProcess('apple');
     try {
       await signInWithApple();
+      let role = null;
+      try {
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+          const profileSnap = await getDoc(doc(db, "users", uid));
+          role = profileSnap.exists() ? profileSnap.data()?.role : null;
+        }
+      } catch (profileErr) {
+        console.warn("Unable to read user profile role after Apple sign-in:", profileErr);
+      }
+
       setSocialSubmitting(false);
       setSocialProcess(null);
       router.replace("map");
+      if (shouldShowProUpgradePrompt(role)) {
+        setTimeout(() => {
+          showProUpgradePrompt(router);
+        }, 250);
+      }
     } catch (err) {
       setSocialSubmitting(false);
       setSocialProcess(null);
