@@ -2997,6 +2997,25 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       return;
     }
 
+    const projectedProgressMeters = polylineProjection?.progressMeters;
+    const routeLengthMeters = Number.isFinite(routeDistanceMeters)
+      ? routeDistanceMeters
+      : routeCoords.reduce((total, point, idx) => {
+          if (idx === 0) return 0;
+          return total + distanceBetweenMeters(routeCoords[idx - 1], point);
+        }, 0);
+    const projectedRemainingMeters =
+      Number.isFinite(projectedProgressMeters) && Number.isFinite(routeLengthMeters)
+        ? Math.max(routeLengthMeters - projectedProgressMeters, 0)
+        : Infinity;
+    const isNearRouteEndByProgress =
+      Number.isFinite(projectedRemainingMeters) &&
+      projectedRemainingMeters <= Math.max(ARRIVAL_PANEL_DISTANCE_METERS + 15, 60);
+
+    if (!isNearRouteEndByProgress) {
+      return;
+    }
+
     if (!hasArrivedAtDestination) {
       setHasArrivedAtDestination(true);
       if (!arrivalPolylineLockRef.current) {
@@ -3019,6 +3038,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     waypoints.length,
     userLocation,
     routeCoords,
+    routeDistanceMeters,
     hasArrivedAtDestination,
   ]);
 
