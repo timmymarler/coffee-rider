@@ -1264,6 +1264,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastKnownDistanceRef = useRef(null);
   const routeFittedRef = useRef(false);
   const arrivalPolylineLockRef = useRef(false);
+  const routeTransitionGuardUntilRef = useRef(0);
   
   // Active ride & location sharing
   const { activeRide, endRide } = useActiveRide(user);
@@ -2405,6 +2406,15 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     }
   }
 
+  function beginRouteTransitionGuard(durationMs = 2500) {
+    routeTransitionGuardUntilRef.current = Date.now() + durationMs;
+    setHasArrivedAtDestination(false);
+    if (arrivalPolylineLockRef.current) {
+      arrivalPolylineLockRef.current = false;
+      setHidePolylines(false);
+    }
+  }
+
   /* ------------------------------------------------------------ */
   /* FOLLOW MODE                                                  */
   /* ------------------------------------------------------------ */
@@ -2482,11 +2492,17 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       }
 
       // Clear existing waypoints and route
+      beginRouteTransitionGuard(4000);
       clearWaypoints();
       setRouteCoords([]);
       setRouteVersion(v => v + 1);  // Ensure old Polyline components unmount
       routeFittedRef.current = false;
       setRouteClearedByUser(false); // Ensure route building is not blocked
+      setCurrentStepIndex(0);
+      setRouteSteps([]);
+      routeStepsLoggedRef.current = false;
+      setNextJunctionDistance(null);
+      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0 };
 
       // Set home as destination
       await debugLog("ROUTE_TO_HOME", "Route to home initiated", { lat: homeCoords.lat, lng: homeCoords.lng });
@@ -2942,6 +2958,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     }
 
     if (!isNavigationMode || !routeSteps || routeSteps.length === 0 || !userLocation || !routeCoords || routeCoords.length === 0) {
+      return;
+    }
+
+    if (Date.now() < routeTransitionGuardUntilRef.current) {
       return;
     }
 
@@ -3745,6 +3765,8 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     routeRequestId.current += 1;   // invalidate in-flight requests
     
     try {
+      beginRouteTransitionGuard(2500);
+
       // Hide polylines temporarily for visual clearness (extra failsafe for Android)
       setHidePolylines(true);
       
@@ -5576,22 +5598,15 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           
           if (!step) return null;
 
-          // Check if we've reached the destination (at the last step)
-          // Only show if we have an actual route and have reached final step with proximity check
-          const hasRouteIntent = routeDestination || waypoints.length > 0;
-          const hasValidRouteSteps = routeSteps && routeSteps.length >= 1;
-          const isAtFinalStep = currentStepIndex >= routeSteps.length - 1;
+          const isRouteTransitioning = Date.now() < routeTransitionGuardUntilRef.current;
           
           let distToDestinationMeters = null;
-          let isCloseToDestination = false;
           if (routeDestination && routeCoords.length > 0 && userLocation) {
             const lastCoord = routeCoords[routeCoords.length - 1];
             distToDestinationMeters = distanceBetweenMeters(userLocation, lastCoord);
-            isCloseToDestination = typeof distToDestinationMeters === 'number' && distToDestinationMeters <= ARRIVAL_PANEL_DISTANCE_METERS;
           }
           
-          const hasReachedDestination = hasRouteIntent && hasValidRouteSteps && isAtFinalStep && isCloseToDestination;
-          const shouldShowArrivalPanel = hasArrivedAtDestination || hasReachedDestination;
+          const shouldShowArrivalPanel = hasArrivedAtDestination && !isRouteTransitioning;
           const fullscreenPaddingTop = (isLandscape ? insets.top + 8 : insets.top + 32);
           const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 8 : insets.bottom + 32);
           const fullscreenPaddingHorizontal = isLandscape ? 32 : 24;
