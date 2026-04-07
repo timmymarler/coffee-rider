@@ -21,7 +21,7 @@ import {
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
-import { showProUpgradePrompt, shouldShowProUpgradePrompt } from "@core/utils/proUpgradePrompt";
+import { shouldShowProUpgradePrompt, showProUpgradePrompt } from "@core/utils/proUpgradePrompt";
 import theme from "@themes";
 import { addDoc, collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import AuthLayout from "./AuthLayout";

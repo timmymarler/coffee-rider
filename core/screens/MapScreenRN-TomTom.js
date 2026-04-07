@@ -5271,7 +5271,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
             {/* Remaining route - outline layer for pedestrians and cyclists */}
               <Polyline
                 key="active-outline"
-                coordinates={routeCoords}
+                coordinates={followUser ? remainingPolyline : routeCoords}
                 strokeWidth={hidePolylines ? 0 : (shouldRenderOutline(userTravelMode) && routeCoords.length > 0 ? (isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)) : 0)}
                 strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                 zIndex={999}
@@ -5279,7 +5279,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
               {/* Remaining route */}
               <Polyline
                 key="active-route"
-                coordinates={routeCoords}
+                coordinates={followUser ? remainingPolyline : routeCoords}
                 strokeWidth={hidePolylines ? 0 : (routeCoords.length > 0 ? (isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)) : 0)}
                 strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                 zIndex={1000}

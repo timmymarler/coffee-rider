@@ -1,7 +1,7 @@
 // core/auth/login.js
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
-import { showProUpgradePrompt, shouldShowProUpgradePrompt } from "@core/utils/proUpgradePrompt";
+import { shouldShowProUpgradePrompt, showProUpgradePrompt } from "@core/utils/proUpgradePrompt";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import theme from "@themes";
 import { useRouter } from "expo-router";
@@ -9,16 +9,16 @@ import { sendEmailVerification, signInWithEmailAndPassword, signOut } from "fire
 import { doc, getDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import AuthLayout from "./AuthLayout";
 import RegisterScreen from "./register";
