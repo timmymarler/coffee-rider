@@ -25,7 +25,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Clipboard, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Clipboard, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LoginScreen from "../auth/login";
 import RegisterScreen from "../auth/register";
@@ -628,6 +628,23 @@ export default function ProfileScreen() {
     }
   }
 
+  async function handleReportIssue() {
+    const subject = encodeURIComponent("Coffee Rider Issue Report");
+    const url = `mailto:support@coffee-rider.co.uk?subject=${subject}`;
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert("No Email App", "Please set up an email app to report an issue.");
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (error) {
+      console.error("[ProfileScreen] Failed to open issue report email:", error);
+      Alert.alert("Unable to Open Email", "Please email support@coffee-rider.co.uk manually.");
+    }
+  }
+
   // -----------------------------------
   // MAIN PROFILE LAYOUT
   // -----------------------------------
@@ -1049,6 +1066,28 @@ export default function ProfileScreen() {
           />
         </View>
       </CRCard>
+      </View>
+
+      {/* Report Issue */}
+      <View style={styles.cardWrap}>
+        <CRCard>
+          <CRButton
+            title="Report Issue"
+            variant="accentMid"
+            onPress={handleReportIssue}
+            style={{ width: "100%" }}
+          />
+          <Text
+            style={{
+              color: theme.colors.textMuted,
+              fontSize: 12,
+              marginTop: theme.spacing.sm,
+              textAlign: "center",
+            }}
+          >
+            Opens an email to support@coffee-rider.co.uk
+          </Text>
+        </CRCard>
       </View>
 
       {/* Unsubscribe Section - Only show if user has active subscription */}
