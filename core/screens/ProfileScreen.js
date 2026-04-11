@@ -52,7 +52,7 @@ export default function ProfileScreen() {
     "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
 
   const [displayName, setDisplayName] = useState(profile?.displayName || user?.displayName || "");
-  const [contactEmail, setContactEmail] = useState(profile?.contactEmail || "");
+  const [contactEmail, setContactEmail] = useState(profile?.contactEmail || user?.email || "");
   const [bio, setBio] = useState(profile?.bio || "");
   const [bike, setBike] = useState(profile?.bike || "");
   const [homeLocation, setHomeLocation] = useState(profile?.homeLocation || "");
@@ -86,7 +86,7 @@ export default function ProfileScreen() {
   // Update when profile changes
   useEffect(() => {
     setDisplayName(profile?.displayName || user?.displayName || "");
-    setContactEmail(profile?.contactEmail || "");
+    setContactEmail(profile?.contactEmail || user?.email || "");
     
     // Load different fields based on role
     if (profile?.role === "place-owner") {
@@ -723,7 +723,7 @@ export default function ProfileScreen() {
               marginTop: theme.spacing.xs,
             }}
           >
-            {contactEmail || "(No contact email)"}
+            {contactEmail || user?.email || "(No contact email)"}
           </Text>
           <View style={{ marginTop: theme.spacing.sm }}>
             <CRInfoBadge label={role.charAt(0).toUpperCase() + role.slice(1)} />

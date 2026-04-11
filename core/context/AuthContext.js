@@ -11,7 +11,7 @@ import {
 } from "firebase/auth";
 import { deleteDoc, doc, getDoc, onSnapshot } from "firebase/firestore";
 import { createContext, useEffect, useRef, useState } from "react";
-import { Alert, AppState } from "react-native";
+import { AppState } from "react-native";
 
 import { getCapabilities } from "@core/roles/capabilities";
 import { checkVersionStatus, fetchVersionInfo } from "@core/utils/versionCheck";

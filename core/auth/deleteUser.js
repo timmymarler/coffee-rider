@@ -3,7 +3,7 @@ import {
     doc,
     getDocs,
     query,
-  updateDoc,
+    updateDoc,
     where,
     writeBatch
 } from 'firebase/firestore';

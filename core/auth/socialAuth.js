@@ -6,7 +6,7 @@ import {
     OAuthProvider,
     signInWithCredential,
 } from "firebase/auth";
-import { doc, serverTimestamp, setDoc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { Platform } from "react-native";
 
 // Conditionally import Apple Sign-in (only available after native compilation)

@@ -1,8 +1,6 @@
-export { uploadImage } from './uploadImage.js';
 export { deleteUserAccount } from './deleteUserAccount.js';
 export {
-	ensureStripeCustomer,
-	createSubscriptionPaymentSheet,
-	cancelStripeSubscription,
-	stripeWebhook,
+    cancelStripeSubscription, createSubscriptionPaymentSheet, ensureStripeCustomer, stripeWebhook
 } from './stripeSubscriptions.js';
+export { uploadImage } from './uploadImage.js';
+

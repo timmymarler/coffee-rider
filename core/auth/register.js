@@ -2,8 +2,8 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useRouter } from "expo-router";
 import {
-  createUserWithEmailAndPassword,
-  sendEmailVerification,
+    createUserWithEmailAndPassword,
+    sendEmailVerification,
 } from "firebase/auth";
 import { useContext, useEffect, useState } from "react";
 import {
@@ -25,10 +25,10 @@ import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
 import {
-  getBetaProFields,
-  shouldShowProUpgradePrompt,
-  showBetaWelcomePrompt,
-  showProUpgradePrompt,
+    getBetaProFields,
+    shouldShowProUpgradePrompt,
+    showBetaWelcomePrompt,
+    showProUpgradePrompt,
 } from "@core/utils/proUpgradePrompt";
 import theme from "@themes";
 import { addDoc, collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
@@ -204,6 +204,7 @@ export default function RegisterScreen({ onBack }) {
       const userData = {
         uid: user.uid,
         email: user.email,
+        contactEmail: normalizedEmail,
         role: isBetaUserSignup ? "pro" : selectedRole,
         displayName: displayName.trim(),
         createdAt: serverTimestamp(),
