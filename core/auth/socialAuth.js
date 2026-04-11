@@ -1,5 +1,6 @@
 // core/auth/socialAuth.js
 import { auth, db } from "@config/firebase";
+import { getBetaProFields } from "@core/utils/proUpgradePrompt";
 import {
     GoogleAuthProvider,
     OAuthProvider,
@@ -123,6 +124,7 @@ export const signInWithGoogle = async () => {
     
     try {
       if (!userSnapshot.exists()) {
+        const betaProFields = getBetaProFields();
         // New user - set all fields including displayName and contactEmail
         await setDoc(
           userDocRef,
@@ -132,7 +134,7 @@ export const signInWithGoogle = async () => {
             contactEmail: firebaseUser.email, // Use real email for group invites
             displayName: firebaseUser.displayName || "Google User",
             photoURL: firebaseUser.photoURL,
-            role: "user",
+            ...betaProFields,
             authProvider: "google",
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -250,6 +252,7 @@ export const signInWithApple = async () => {
       const userSnapshot = await getDoc(userDocRef);
       
       if (!userSnapshot.exists()) {
+        const betaProFields = getBetaProFields();
         // New user - set all fields including displayName and contactEmail
         await setDoc(
           userDocRef,
@@ -258,7 +261,7 @@ export const signInWithApple = async () => {
             email: firebaseUser.email,
             contactEmail: null, // Apple users will set this in Profile when upgrading
             displayName: displayName,
-            role: "user",
+            ...betaProFields,
             authProvider: "apple",
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),

@@ -9,9 +9,9 @@ import {
     signOut,
     updateProfile
 } from "firebase/auth";
-import { deleteDoc, doc, onSnapshot } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, onSnapshot } from "firebase/firestore";
 import { createContext, useEffect, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { Alert, AppState } from "react-native";
 
 import { getCapabilities } from "@core/roles/capabilities";
 import { checkVersionStatus, fetchVersionInfo } from "@core/utils/versionCheck";
@@ -40,6 +40,26 @@ export default function AuthProvider({ children }) {
     versionInfo: null,
   });
   const profileUnsubscribeRef = useRef(null); // Real-time listener for profile changes
+  const deletedAccountAlertShownRef = useRef(false);
+
+  async function handleDeletedAccountDetected() {
+    if (deletedAccountAlertShownRef.current) return;
+    deletedAccountAlertShownRef.current = true;
+
+    try {
+      await clearSession();
+      await signOut(auth);
+    } catch (err) {
+      console.warn('[AuthContext] Error during deleted-account sign out:', err?.message || err);
+    } finally {
+      setUser(null);
+      setProfile(null);
+      setEmailVerified(false);
+      setTimeout(() => {
+        deletedAccountAlertShownRef.current = false;
+      }, 1500);
+    }
+  }
 
   // ----------------------------------------
   // SESSION PERSISTENCE
@@ -247,6 +267,14 @@ export default function AuthProvider({ children }) {
           return;
         }
 
+        const profileRef = doc(db, 'users', firebaseUser.uid);
+        const initialProfileSnap = await getDoc(profileRef);
+        if (initialProfileSnap.exists() && initialProfileSnap.data()?.deleted) {
+          console.warn('[AuthContext] Deleted profile detected on initial auth check.');
+          await handleDeletedAccountDetected();
+          return;
+        }
+
         console.log('[AuthContext] firebaseUser detected:', firebaseUser.email);
         console.log('[AuthContext] emailVerified:', firebaseUser.emailVerified);
         setUser(firebaseUser);
@@ -256,23 +284,38 @@ export default function AuthProvider({ children }) {
         await saveSession(firebaseUser);
 
         await ensureUserDocument(firebaseUser.uid, firebaseUser);
-        
+
         // Set up real-time listener for profile changes (e.g., when subscription expires and role changes)
-        const profileRef = doc(db, 'users', firebaseUser.uid);
         profileUnsubscribeRef.current = onSnapshot(
           profileRef,
           (docSnap) => {
             if (docSnap.exists()) {
-              console.log('[AuthContext] Profile updated in real-time. New role:', docSnap.data().role);
-              setProfile(docSnap.data());
+              const profileData = docSnap.data();
+
+              if (profileData?.deleted) {
+                console.warn('[AuthContext] Deleted profile detected. Forcing sign out.');
+                handleDeletedAccountDetected();
+                return;
+              }
+
+              console.log('[AuthContext] Profile updated in real-time. New role:', profileData.role);
+              setProfile(profileData);
             }
           },
           (err) => {
+            if (err?.code === 'permission-denied') {
+              console.warn('[AuthContext] Profile listener ended due to permission change (expected during logout/deletion).');
+              return;
+            }
             console.error('[AuthContext] Error listening to profile:', err);
           }
         );
       } catch (err) {
+        if (err?.code === 'permission-denied') {
+          console.warn('[AuthContext] Auth state/profile access changed during teardown (expected).');
+        } else {
         console.error("AuthContext error:", err);
+        }
       } finally {
         setLoading(false);
       }

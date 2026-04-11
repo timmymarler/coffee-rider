@@ -3,10 +3,14 @@ import {
     doc,
     getDocs,
     query,
+  updateDoc,
     where,
     writeBatch
 } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../../config/firebase';
+
+const deleteUserAccountCallable = httpsCallable(functions, 'deleteUserAccount');
 
 /**
  * Hard delete a user account and cascade soft-delete their content
@@ -28,84 +32,94 @@ export const deleteUser = async (userId, currentUserId, isAdmin = false) => {
   }
 
   try {
-    // Create a batch operation for all updates
-    const batch = writeBatch(db);
     const timestamp = new Date();
-
-    // 1. Soft-delete the user document
-    const userRef = doc(db, 'users', userId);
-    batch.update(userRef, {
+    const softDeletePayload = {
       deleted: true,
       deletedAt: timestamp,
       deletedBy: currentUserId,
-    });
+    };
 
-    // 2. Soft-delete all routes created by this user
-    const routesQuery = query(
-      collection(db, 'routes'),
-      where('createdBy', '==', userId)
-    );
-    const routesSnapshot = await getDocs(routesQuery);
-    routesSnapshot.docs.forEach(docSnap => {
-      batch.update(doc(db, 'routes', docSnap.id), {
-        deleted: true,
-        deletedAt: timestamp,
-        deletedBy: currentUserId,
-      });
-    });
+    // 1. Soft-delete the user document first (must succeed)
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, softDeletePayload);
 
-    // 3. Soft-delete all calendar events created by this user
-    const eventsQuery = query(
-      collection(db, 'calendar_events'),
-      where('createdBy', '==', userId)
-    );
-    const eventsSnapshot = await getDocs(eventsQuery);
-    eventsSnapshot.docs.forEach(docSnap => {
-      batch.update(doc(db, 'calendar_events', docSnap.id), {
-        deleted: true,
-        deletedAt: timestamp,
-        deletedBy: currentUserId,
-      });
-    });
+    // 2. Soft-delete routes/events/groups best-effort.
+    // Never allow related-content cleanup failures to block hard account deletion.
+    let routeFailures = 0;
+    let eventFailures = 0;
+    let groupFailures = 0;
 
-    // 4. Soft-delete all groups created by this user
-    const groupsQuery = query(
-      collection(db, 'groups'),
-      where('createdBy', '==', userId)
-    );
-    const groupsSnapshot = await getDocs(groupsQuery);
-    groupsSnapshot.docs.forEach(docSnap => {
-      batch.update(doc(db, 'groups', docSnap.id), {
-        deleted: true,
-        deletedAt: timestamp,
-        deletedBy: currentUserId,
-      });
-    });
-
-    // Commit all changes
-    await batch.commit();
-
-    // 5. Call Cloud Function to hard-delete the auth account
-    // This happens separately via Firebase Admin SDK
-    // The frontend just triggers it and lets backend handle it
     try {
-      const response = await fetch(
-        'https://us-central1-coffee-rider-app.cloudfunctions.net/deleteUserAccount',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ uid: userId }),
-        }
+      const routesQuery = query(collection(db, 'routes'), where('createdBy', '==', userId));
+      const routesSnapshot = await getDocs(routesQuery);
+      const routeResults = await Promise.allSettled(
+        routesSnapshot.docs.map((routeDoc) =>
+          updateDoc(doc(db, 'routes', routeDoc.id), softDeletePayload)
+        )
       );
-      if (!response.ok) {
-        console.error('Error calling deleteUserAccount function:', response.statusText);
-      }
+      routeFailures = routeResults.filter((r) => r.status === 'rejected').length;
+    } catch (err) {
+      routeFailures += 1;
+      console.warn('[deleteUser] Route cleanup query failed:', err?.message || err);
+    }
+
+    try {
+      const eventsByUserIdQuery = query(collection(db, 'events'), where('userId', '==', userId));
+      const eventsByCreatedByQuery = query(collection(db, 'events'), where('createdBy', '==', userId));
+      const [eventsByUserIdSnapshot, eventsByCreatedBySnapshot] = await Promise.all([
+        getDocs(eventsByUserIdQuery),
+        getDocs(eventsByCreatedByQuery),
+      ]);
+
+      const eventIds = new Set([
+        ...eventsByUserIdSnapshot.docs.map((d) => d.id),
+        ...eventsByCreatedBySnapshot.docs.map((d) => d.id),
+      ]);
+      const eventResults = await Promise.allSettled(
+        [...eventIds].map((eventId) => updateDoc(doc(db, 'events', eventId), softDeletePayload))
+      );
+      eventFailures = eventResults.filter((r) => r.status === 'rejected').length;
+    } catch (err) {
+      eventFailures += 1;
+      console.warn('[deleteUser] Event cleanup query failed:', err?.message || err);
+    }
+
+    try {
+      const groupsByOwnerIdQuery = query(collection(db, 'groups'), where('ownerId', '==', userId));
+      const groupsByCreatedByQuery = query(collection(db, 'groups'), where('createdBy', '==', userId));
+      const [groupsByOwnerIdSnapshot, groupsByCreatedBySnapshot] = await Promise.all([
+        getDocs(groupsByOwnerIdQuery),
+        getDocs(groupsByCreatedByQuery),
+      ]);
+
+      const groupIds = new Set([
+        ...groupsByOwnerIdSnapshot.docs.map((d) => d.id),
+        ...groupsByCreatedBySnapshot.docs.map((d) => d.id),
+      ]);
+      const groupResults = await Promise.allSettled(
+        [...groupIds].map((groupId) => updateDoc(doc(db, 'groups', groupId), softDeletePayload))
+      );
+      groupFailures = groupResults.filter((r) => r.status === 'rejected').length;
+    } catch (err) {
+      groupFailures += 1;
+      console.warn('[deleteUser] Group cleanup query failed:', err?.message || err);
+    }
+
+    if (routeFailures || eventFailures || groupFailures) {
+      console.warn('[deleteUser] Partial soft-delete failures', {
+        routeFailures,
+        eventFailures,
+        groupFailures,
+      });
+    }
+
+    // 5. Best-effort call to hard-delete the auth account.
+    // This is intentionally non-blocking so account deactivation can still complete
+    // even if auth deletion is unavailable.
+    try {
+      await deleteUserAccountCallable({ uid: userId });
     } catch (error) {
-      console.error('Error calling Cloud Function to delete auth account:', error);
-      // Don't throw here - the Firestore data is already soft-deleted
-      // The auth account deletion can be retried separately
+      console.warn('[deleteUser] Auth identity removal unavailable:', error?.message || error);
     }
   } catch (error) {
     console.error('Error deleting user:', error);
@@ -152,30 +166,58 @@ export const recoverUser = async (userId, currentUserId, isAdmin = false) => {
       });
     });
 
-    // Recover all their events
-    const eventsQuery = query(
-      collection(db, 'calendar_events'),
+    // Recover all their events (support both userId and createdBy).
+    const recoverEventsByUserIdQuery = query(
+      collection(db, 'events'),
+      where('userId', '==', userId),
+      where('deleted', '==', true)
+    );
+    const recoverEventsByCreatedByQuery = query(
+      collection(db, 'events'),
       where('createdBy', '==', userId),
       where('deleted', '==', true)
     );
-    const eventsSnapshot = await getDocs(eventsQuery);
-    eventsSnapshot.docs.forEach(docSnap => {
-      batch.update(doc(db, 'calendar_events', docSnap.id), {
+    const [recoverEventsByUserIdSnapshot, recoverEventsByCreatedBySnapshot] = await Promise.all([
+      getDocs(recoverEventsByUserIdQuery),
+      getDocs(recoverEventsByCreatedByQuery),
+    ]);
+
+    const recoverEventIds = new Set([
+      ...recoverEventsByUserIdSnapshot.docs.map((d) => d.id),
+      ...recoverEventsByCreatedBySnapshot.docs.map((d) => d.id),
+    ]);
+
+    recoverEventIds.forEach((eventId) => {
+      batch.update(doc(db, 'events', eventId), {
         deleted: false,
         deletedAt: null,
         deletedBy: null,
       });
     });
 
-    // Recover all their groups
-    const groupsQuery = query(
+    // Recover all their groups (support ownerId and createdBy).
+    const recoverGroupsByOwnerIdQuery = query(
+      collection(db, 'groups'),
+      where('ownerId', '==', userId),
+      where('deleted', '==', true)
+    );
+    const recoverGroupsByCreatedByQuery = query(
       collection(db, 'groups'),
       where('createdBy', '==', userId),
       where('deleted', '==', true)
     );
-    const groupsSnapshot = await getDocs(groupsQuery);
-    groupsSnapshot.docs.forEach(docSnap => {
-      batch.update(doc(db, 'groups', docSnap.id), {
+    const [recoverGroupsByOwnerIdSnapshot, recoverGroupsByCreatedBySnapshot] = await Promise.all([
+      getDocs(recoverGroupsByOwnerIdQuery),
+      getDocs(recoverGroupsByCreatedByQuery),
+    ]);
+
+    const recoverGroupIds = new Set([
+      ...recoverGroupsByOwnerIdSnapshot.docs.map((d) => d.id),
+      ...recoverGroupsByCreatedBySnapshot.docs.map((d) => d.id),
+    ]);
+
+    recoverGroupIds.forEach((groupId) => {
+      batch.update(doc(db, 'groups', groupId), {
         deleted: false,
         deletedAt: null,
         deletedBy: null,

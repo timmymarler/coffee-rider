@@ -72,11 +72,40 @@ export default function LoginScreen() {
     try {
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
       let role = null;
+      let isDeleted = false;
+      let statusCheckFailed = false;
       try {
         const profileSnap = await getDoc(doc(db, "users", credential.user.uid));
-        role = profileSnap.exists() ? profileSnap.data()?.role : null;
+        if (profileSnap.exists()) {
+          const profileData = profileSnap.data();
+          role = profileData?.role || null;
+          isDeleted = Boolean(profileData?.deleted);
+        } else {
+          statusCheckFailed = true;
+        }
       } catch (profileErr) {
         console.warn("Unable to read user profile role after login:", profileErr);
+        statusCheckFailed = true;
+      }
+
+      if (isDeleted) {
+        await signOut(auth);
+        setSubmitting(false);
+        Alert.alert(
+          "Account deleted",
+          "This account has been deleted and can no longer be used to sign in."
+        );
+        return;
+      }
+
+      if (statusCheckFailed) {
+        await signOut(auth);
+        setSubmitting(false);
+        Alert.alert(
+          "Login unavailable",
+          "We couldn't verify your account status right now. Please try again in a moment."
+        );
+        return;
       }
 
       setSubmitting(false);
@@ -87,11 +116,27 @@ export default function LoginScreen() {
         }, 250);
       }
     } catch (err) {
-      console.error("Login error:", err);
+      const errorCode = err?.code || "";
+      const isExpectedLoginError = [
+        "auth/invalid-email",
+        "auth/invalid-credential",
+        "auth/user-not-found",
+        "auth/wrong-password",
+      ].includes(errorCode);
+
+      if (!isExpectedLoginError) {
+        console.error("Login error:", err);
+      }
+
       setSubmitting(false);
+
+      const loginMessage = isExpectedLoginError
+        ? "Incorrect email or password."
+        : (err.message || "Please check your details and try again.");
+
       Alert.alert(
         "Login failed",
-        err.message || "Please check your details and try again."
+        loginMessage
       );
     }
   }
@@ -148,14 +193,47 @@ export default function LoginScreen() {
     try {
       await signInWithApple();
       let role = null;
+      let isDeleted = false;
+      let statusCheckFailed = false;
       try {
         const uid = auth.currentUser?.uid;
         if (uid) {
           const profileSnap = await getDoc(doc(db, "users", uid));
-          role = profileSnap.exists() ? profileSnap.data()?.role : null;
+          if (profileSnap.exists()) {
+            const profileData = profileSnap.data();
+            role = profileData?.role || null;
+            isDeleted = Boolean(profileData?.deleted);
+          } else {
+            statusCheckFailed = true;
+          }
+        } else {
+          statusCheckFailed = true;
         }
       } catch (profileErr) {
         console.warn("Unable to read user profile role after Apple sign-in:", profileErr);
+        statusCheckFailed = true;
+      }
+
+      if (isDeleted) {
+        await signOut(auth);
+        setSocialSubmitting(false);
+        setSocialProcess(null);
+        Alert.alert(
+          "Account deleted",
+          "This account has been deleted and can no longer be used to sign in."
+        );
+        return;
+      }
+
+      if (statusCheckFailed) {
+        await signOut(auth);
+        setSocialSubmitting(false);
+        setSocialProcess(null);
+        Alert.alert(
+          "Sign-in unavailable",
+          "We couldn't verify your account status right now. Please try again in a moment."
+        );
+        return;
       }
 
       setSocialSubmitting(false);

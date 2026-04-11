@@ -615,11 +615,22 @@ export default function ProfileScreen() {
     try {
       const isAdmin = profile?.role === 'admin';
       await deleteUser(user.uid, user.uid, isAdmin);
-      
-      // User's data is soft-deleted, now log them out
-      setTimeout(() => {
-        logout();
-      }, 500);
+
+      setDeleteConfirmVisible(false);
+      setDeleting(false);
+      Alert.alert(
+        "Account deactivated",
+        "Your account has been deactivated. To reactivate it, contact support@coffee-rider.co.uk.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              logout();
+            },
+          },
+        ],
+        { cancelable: false }
+      );
     } catch (error) {
       console.error("[ProfileScreen] Delete account error:", error);
       Alert.alert("Delete Failed", error.message || "Failed to delete account");
@@ -640,7 +651,7 @@ export default function ProfileScreen() {
       }
       await Linking.openURL(url);
     } catch (error) {
-      console.error("[ProfileScreen] Failed to open issue report email:", error);
+      // Expected on devices without mail handlers or restricted URL handling.
       Alert.alert("Unable to Open Email", "Please email support@coffee-rider.co.uk manually.");
     }
   }
@@ -1149,7 +1160,7 @@ export default function ProfileScreen() {
       <View style={styles.cardWrap}>
       <CRCard>
         <CRButton
-          title="Delete Account"
+          title="Deactivate Account"
           variant="danger"
           onPress={() => setDeleteConfirmVisible(true)}
           style={{ width: '100%' }}
@@ -1160,7 +1171,7 @@ export default function ProfileScreen() {
           marginTop: theme.spacing.sm,
           textAlign: 'center'
         }}>
-          Permanently delete your account and all associated data
+          Deactivate your account. Contact support@coffee-rider.co.uk to request reactivation.
         </Text>
       </CRCard>
       </View>
@@ -1193,7 +1204,7 @@ export default function ProfileScreen() {
               marginBottom: theme.spacing.md,
               textAlign: 'center'
             }}>
-              Delete Account?
+              Deactivate Account?
             </Text>
 
             <Text style={{ 
@@ -1202,12 +1213,12 @@ export default function ProfileScreen() {
               marginBottom: theme.spacing.md,
               lineHeight: 20,
             }}>
-              This action is permanent and cannot be undone. Your account and all associated data (routes, events, groups) will be permanently deleted.
+              Your account will be deactivated and blocked from sign-in. To reactivate this account later, contact support@coffee-rider.co.uk.
             </Text>
 
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <CRButton
-                title={deleting ? "Deleting…" : "Delete"}
+                title={deleting ? "Deactivating..." : "Deactivate"}
                 variant="danger"
                 loading={deleting}
                 disabled={deleting}

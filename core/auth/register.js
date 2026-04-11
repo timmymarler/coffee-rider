@@ -1,7 +1,10 @@
 // core/auth/register.js
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useRouter } from "expo-router";
-import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+} from "firebase/auth";
 import { useContext, useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -21,7 +24,12 @@ import {
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
-import { shouldShowProUpgradePrompt, showProUpgradePrompt } from "@core/utils/proUpgradePrompt";
+import {
+  getBetaProFields,
+  shouldShowProUpgradePrompt,
+  showBetaWelcomePrompt,
+  showProUpgradePrompt,
+} from "@core/utils/proUpgradePrompt";
 import theme from "@themes";
 import { addDoc, collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import AuthLayout from "./AuthLayout";
@@ -129,7 +137,7 @@ export default function RegisterScreen({ onBack }) {
     setSocialSubmitting(true);
     setSocialProcess('apple');
     try {
-      await signInWithApple();
+      const signInResult = await signInWithApple();
       let role = null;
       try {
         const uid = auth.currentUser?.uid;
@@ -144,6 +152,12 @@ export default function RegisterScreen({ onBack }) {
       setSocialSubmitting(false);
       setSocialProcess(null);
       router.replace("map");
+      if (signInResult?.isNewUser) {
+        setTimeout(() => {
+          showBetaWelcomePrompt();
+        }, 250);
+        return;
+      }
       if (shouldShowProUpgradePrompt(role)) {
         setTimeout(() => {
           showProUpgradePrompt(router);
@@ -174,22 +188,26 @@ export default function RegisterScreen({ onBack }) {
       return;
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
     setSubmitting(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
-        email.trim(),
+        normalizedEmail,
         password
       );
       
       const user = userCredential.user;
+      const isBetaUserSignup = selectedRole === "user";
+      const betaProFields = isBetaUserSignup ? getBetaProFields() : {};
 
       const userData = {
         uid: user.uid,
         email: user.email,
-        role: selectedRole,
+        role: isBetaUserSignup ? "pro" : selectedRole,
         displayName: displayName.trim(),
         createdAt: serverTimestamp(),
+        ...betaProFields,
       };
 
       console.log("Creating user with role:", selectedRole, "Full userData:", userData);
@@ -237,10 +255,10 @@ export default function RegisterScreen({ onBack }) {
       }
       
       setSubmitting(false);
-      if (shouldShowProUpgradePrompt(selectedRole)) {
+      if (isBetaUserSignup) {
         router.replace("/map");
         setTimeout(() => {
-          showProUpgradePrompt(router);
+          showBetaWelcomePrompt();
         }, 250);
         return;
       }
@@ -259,6 +277,15 @@ export default function RegisterScreen({ onBack }) {
         ]
       );
     } catch (err) {
+      if (err?.code === "auth/email-already-in-use") {
+        setSubmitting(false);
+        Alert.alert(
+          "Email already in use",
+          "This email is tied to an existing or deactivated account. To request reactivation, contact support@coffee-rider.co.uk."
+        );
+        return;
+      }
+
       console.error("Register error:", err);
       setSubmitting(false);
       Alert.alert(
