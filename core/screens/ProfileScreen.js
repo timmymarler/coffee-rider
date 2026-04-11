@@ -640,16 +640,26 @@ export default function ProfileScreen() {
   }
 
   async function handleReportIssue() {
+    const to = "support@coffee-rider.co.uk";
     const subject = encodeURIComponent("Coffee Rider Issue Report");
-    const url = `mailto:support@coffee-rider.co.uk?subject=${subject}`;
+    const fallbackBody = encodeURIComponent("Please describe the issue or suggestion here.");
+    const urls = [
+      `mailto:${to}?subject=${subject}`,
+      `googlegmail://co?to=${encodeURIComponent(to)}&subject=${subject}&body=${fallbackBody}`,
+      `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${subject}&body=${fallbackBody}`,
+    ];
 
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (!supported) {
-        Alert.alert("No Email App", "Please set up an email app to report an issue.");
-        return;
+      for (const url of urls) {
+        try {
+          await Linking.openURL(url);
+          return;
+        } catch (_err) {
+          // Try next option.
+        }
       }
-      await Linking.openURL(url);
+
+      Alert.alert("No Email App", "Please set up an email app to report an issue.");
     } catch (error) {
       // Expected on devices without mail handlers or restricted URL handling.
       Alert.alert("Unable to Open Email", "Please email support@coffee-rider.co.uk manually.");
