@@ -1,0 +1,53 @@
+# Keep EAS upload lean while still including Android native source needed
+# for Play ownership verification token packaging.
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native build outputs and local caches
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.kotlin/
+.gradle/
+
+# Ignore iOS entirely for Android proof builds
+ios/
+
+# Ignore Android generated outputs, but keep Android source tree
+android/.gradle/
+android/build/
+android/app/build/
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+*.env
+.env.*
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc heavy artifacts
+ipa-temp/
+saved_old_files/
