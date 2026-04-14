@@ -252,9 +252,10 @@ export async function fetchGoogleRoute(origin, destination, waypoints = [], mode
  * @param {Object} routeTypeMap - Map of route type IDs to {tomtomRouteType, hilliness, windingness} (optional)
  * @param {string} customHilliness - Override hilliness for custom routes (optional, 'low', 'normal', 'high')
  * @param {string} customWindingness - Override windingness for custom routes (optional, 'low', 'normal', 'high')
+ * @param {boolean} avoidMotorways - If true, request motorway avoidance in TomTom
  * @returns {Promise<Object>} Route data with polyline, distance, duration
  */
-export async function fetchTomTomRoute(origin, destination, waypoints = [], vehicleType = "car", routeTypeId = null, routeTypeMap = null, customHilliness = null, customWindingness = null, vehicleHeading = null) {
+export async function fetchTomTomRoute(origin, destination, waypoints = [], vehicleType = "car", routeTypeId = null, routeTypeMap = null, customHilliness = null, customWindingness = null, avoidMotorways = false, vehicleHeading = null) {
   // Use Google Maps API for pedestrian routing (better depth of routing)
   if (vehicleType === "pedestrian") {
     console.log('[tomtomRouting] Delegating pedestrian routing to Google Maps API');
@@ -411,6 +412,10 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
     }
     if (windingness && tomtomRouteType === "thrilling") {
       params.append("windingness", windingness);
+    }
+
+    if (avoidMotorways) {
+      params.append("avoid", "motorways");
     }
     
     // Note: TomTom's /calculateRoute/ endpoint includes:

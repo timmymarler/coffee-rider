@@ -23,6 +23,7 @@ import { cacheRoute, getCachedRoute } from "@core/utils/routeCache";
  * @param {Boolean} params.useCache - Whether to check cache (default true, false for Follow Me)
  * @param {String} params.customHilliness - 'low', 'normal', 'high' for custom routes
  * @param {String} params.customWindingness - 'low', 'normal', 'high' for custom routes
+ * @param {Boolean} params.avoidMotorways - When true, avoid motorway segments when supported
  * @returns {Promise<Object>} Route data: {polyline: [...], distanceMeters, durationSeconds, steps: [...]}
  * @throws {Error} If route fetch fails
  */
@@ -36,6 +37,7 @@ export async function fetchRoute({
   useCache = true,
   customHilliness = null,
   customWindingness = null,
+  avoidMotorways = false,
   vehicleHeading = null,
 }) {
   if (!origin || !destination) {
@@ -45,7 +47,7 @@ export async function fetchRoute({
   // Check cache first if enabled
   if (useCache) {
     try {
-      const cached = await getCachedRoute(origin, destination, waypoints, routeType, travelMode);
+      const cached = await getCachedRoute(origin, destination, waypoints, routeType, travelMode, avoidMotorways);
       if (cached) {
         console.log('[routingEngine] Using cached route');
         return cached;
@@ -79,6 +81,7 @@ export async function fetchRoute({
       routeTypeMap,
       customHilliness,
       customWindingness,
+      avoidMotorways,
       vehicleHeading
     );
   }
@@ -90,7 +93,7 @@ export async function fetchRoute({
   // Cache the fresh result
   if (useCache) {
     try {
-      await cacheRoute(origin, destination, waypoints, routeType, travelMode, result);
+      await cacheRoute(origin, destination, waypoints, routeType, travelMode, avoidMotorways, result);
     } catch (error) {
       console.warn('[routingEngine] Failed to cache route:', error.message);
       // Continue anyway - caching is optimization, not critical

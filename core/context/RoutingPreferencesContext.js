@@ -6,6 +6,8 @@ export const RoutingPreferencesContext = createContext({
   setTheme: () => {},
   routeType: "fastest",
   setRouteType: () => {},
+  avoidMotorways: false,
+  setAvoidMotorways: () => {},
   travelMode: "car",
   setTravelMode: () => {},
   customHilliness: "normal",
@@ -89,6 +91,7 @@ const ROUTE_TYPE_MAP = {
 export function RoutingPreferencesProvider({ children, brand = "rider" }) {
   const [theme, setThemeState] = useState("rider");
   const [routeType, setRouteTypeState] = useState("fastest");
+  const [avoidMotorways, setAvoidMotorwaysState] = useState(false);
   const [travelMode, setTravelModeState] = useState("car");
   const [customHilliness, setCustomHillinessState] = useState("normal");
   const [customWindingness, setCustomWindingnessState] = useState("normal");
@@ -138,12 +141,14 @@ export function RoutingPreferencesProvider({ children, brand = "rider" }) {
       const defaults = getDefaultsForBrand(newTheme);
       setTravelModeState(defaults.travelMode);
       setRouteTypeState(defaults.routeType);
+      setAvoidMotorwaysState(false);
       // Save to storage
       AsyncStorage.setItem(
         "routingPreferences",
         JSON.stringify({
           theme: newTheme,
           routeType: defaults.routeType,
+          avoidMotorways: false,
         })
       ).catch((err) => console.error("[RoutingPreferences] Error saving theme:", err));
     }
@@ -158,9 +163,24 @@ export function RoutingPreferencesProvider({ children, brand = "rider" }) {
       JSON.stringify({
         theme: "rider",
         routeType: newRouteType,
+        avoidMotorways,
       })
     ).catch((err) => console.error("[RoutingPreferences] Error saving:", err));
-  }, []);
+  }, [avoidMotorways]);
+
+  const handleSetAvoidMotorways = useCallback((newValue) => {
+    const normalized = Boolean(newValue);
+    setAvoidMotorwaysState(normalized);
+
+    AsyncStorage.setItem(
+      "routingPreferences",
+      JSON.stringify({
+        theme: "rider",
+        routeType,
+        avoidMotorways: normalized,
+      })
+    ).catch((err) => console.error("[RoutingPreferences] Error saving:", err));
+  }, [routeType]);
 
   // Set custom hilliness for thrilling routes
   const handleSetCustomHilliness = useCallback((newHilliness) => {
@@ -177,11 +197,13 @@ export function RoutingPreferencesProvider({ children, brand = "rider" }) {
     setThemeState(theme);
     setRouteTypeState(defaults.routeType);
     setTravelModeState(defaults.travelMode);
+    setAvoidMotorwaysState(false);
     AsyncStorage.setItem(
       "routingPreferences",
       JSON.stringify({
         theme: theme,
         routeType: defaults.routeType,
+        avoidMotorways: false,
       })
     ).catch((err) => console.error("[RoutingPreferences] Error saving:", err));
   }, [theme]);
@@ -191,6 +213,8 @@ export function RoutingPreferencesProvider({ children, brand = "rider" }) {
     setTheme: handleSetTheme,
     routeType,
     setRouteType: handleSetRouteType,
+    avoidMotorways,
+    setAvoidMotorways: handleSetAvoidMotorways,
     travelMode,
     customHilliness,
     setCustomHilliness: handleSetCustomHilliness,

@@ -7,6 +7,8 @@ export default function MapRouteTypeSelector({ visible, onClose }) {
   const { 
     routeType, 
     setRouteType, 
+    avoidMotorways,
+    setAvoidMotorways,
     availableRouteTypes,
     customHilliness,
     setCustomHilliness,
@@ -54,6 +56,20 @@ export default function MapRouteTypeSelector({ visible, onClose }) {
           {!showCustomConfigurator ? (
             <>
               <Text style={styles.title}>Route Optimization</Text>
+              <TouchableOpacity
+                style={styles.toggleRow}
+                onPress={() => setAvoidMotorways(!avoidMotorways)}
+              >
+                <View>
+                  <Text style={styles.toggleLabel}>Avoid motorways</Text>
+                  <Text style={styles.toggleDescription}>Keep route type, but avoid motorway segments</Text>
+                </View>
+                <View style={[styles.togglePill, avoidMotorways && styles.togglePillActive]}>
+                  <Text style={[styles.togglePillText, avoidMotorways && styles.togglePillTextActive]}>
+                    {avoidMotorways ? "ON" : "OFF"}
+                  </Text>
+                </View>
+              </TouchableOpacity>
               <ScrollView
                 style={styles.optionsScroll}
                 showsVerticalScrollIndicator={false}
@@ -198,6 +214,48 @@ const styles = StyleSheet.create({
   optionsScroll: {
     marginHorizontal: -theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
+  },
+  toggleRow: {
+    marginBottom: theme.spacing.md,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.inputBg,
+    borderWidth: 2,
+    borderColor: theme.colors.inputBorder,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  toggleLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  toggleDescription: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+  },
+  togglePill: {
+    minWidth: 52,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: theme.colors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  togglePillActive: {
+    backgroundColor: theme.colors.accentMid,
+  },
+  togglePillText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.textMuted,
+  },
+  togglePillTextActive: {
+    color: theme.colors.primaryDark,
   },
   optionButton: {
     paddingHorizontal: theme.spacing.md,

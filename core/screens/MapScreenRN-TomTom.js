@@ -522,6 +522,7 @@ const EMPTY_FILTERS = {
   suitability: new Set(),
   categories: new Set(),
   amenities: new Set(),
+  matchMode: "all",
   sponsor: false,
   bikeBrew: false,
   visited: false,
@@ -531,6 +532,7 @@ const DEFAULT_FILTERS = {
   suitability: [],
   categories: [],
   amenities: [],
+  matchMode: "all",
   sponsor: false,
   bikeBrew: false,
   visited: false,
@@ -1162,6 +1164,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Get user's routing preferences
   const { 
     routeType: userRouteType, 
+    avoidMotorways: userAvoidMotorways,
     travelMode: userTravelMode, 
     routeTypeMap,
     theme: currentTheme,
@@ -1364,6 +1367,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         destination: routeDestination,
         travelMode: userTravelMode,
         routeType: userRouteType,
+        avoidMotorways: userAvoidMotorways,
         requestId,
         skipFitToView: false,
       }).catch(error => {
@@ -1401,7 +1405,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // Update ref for next comparison
     previousActiveRideRef.current = activeRide;
-  }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType]);
+  }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType, userAvoidMotorways]);
 
   // Load the shared route polyline when joining a ride
   // This is separate from the above effect because we need to load the route first,
@@ -1458,6 +1462,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const positionSmoothingRef = useRef(null); // Smoothed position for Kalman-like filtering
   const lastRouteBuildLocationRef = useRef(null); // Track location used for last route build to avoid excessive rebuilds
   const lastRouteTypeRef = useRef(null); // Track the route type used for last route build to rebuild when it changes
+  const lastAvoidMotorwaysRef = useRef(false); // Track motorway avoidance used for last route build
   const lastWaypoints = useRef([]); // Track waypoints from last route build to rebuild when they change
   const lastManualStartPointRef = useRef(null); // Track manual start point to detect Follow Me transitions
   const lastExplicitBuildRef = useRef({ waypointsId: null, destinationId: null }); // Track last explicit build to prevent duplicate rebuilds
@@ -1618,6 +1623,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         waypoints: routeWaypoints,
         travelMode: userTravelMode,
         routeType: userRouteType,
+        avoidMotorways: userAvoidMotorways,
         routeTypeMap,
         useCache: false, // Always fresh for refresh
         customHilliness,
@@ -2528,6 +2534,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
         },
         travelMode: userTravelMode,
         routeType: userRouteType,
+        avoidMotorways: userAvoidMotorways,
         requestId: requestId,
         skipFitToView: false, // Allow initial fit
       }).catch(error => {
@@ -3147,6 +3154,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 destination: routeDestination,
                 travelMode: userTravelMode,
                 routeType: userRouteType,
+                avoidMotorways: userAvoidMotorways,
                 requestId,
                 skipFitToView: true,
                 vehicleHeading: lastGoodGPSRef.current?.heading || null,
@@ -3165,6 +3173,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
             destination: routeDestination,
             travelMode: userTravelMode,
             routeType: userRouteType,
+            avoidMotorways: userAvoidMotorways,
             requestId,
             skipFitToView: true,
             vehicleHeading: userLocation?.heading || null,
@@ -3288,6 +3297,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       destination: rerouteDestination,
       travelMode: userTravelMode,
       routeType: userRouteType,
+      avoidMotorways: userAvoidMotorways,
       requestId,
       skipFitToView: true,
       vehicleHeading: userLocation?.heading || null,
@@ -3304,6 +3314,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     getNextUnvisitedWaypointIndex,
     userTravelMode,
     userRouteType,
+    userAvoidMotorways,
     hasArrivedAtDestination,
   ]);
 
@@ -4086,8 +4097,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       return;
     }
 
-    // If route type changed, always rebuild (ignore distance threshold)
+    // If route preferences changed, always rebuild (ignore distance threshold)
     const routeTypeChanged = userRouteType !== lastRouteTypeRef.current;
+    const avoidMotorwaysChanged = userAvoidMotorways !== lastAvoidMotorwaysRef.current;
+    const routePreferenceChanged = routeTypeChanged || avoidMotorwaysChanged;
     
     // Helper to safely get lat/lng from waypoint (handles both naming conventions)
     const getWpCoords = (wp) => ({
@@ -4127,7 +4140,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     
     // GUARD: If user is still on the existing polyline heading the correct direction, don't rebuild
     // This prevents unnecessary reroutes when GPS accuracy changes slightly but user is still on track
-    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && routeCoords.length > 0) {
+    if (!routePreferenceChanged && !waypointsChanged && !manualStartPointCleared && routeCoords.length > 0) {
       // Check if user is within 50m of any point on the polyline and heading forward
       let nearestDistance = Infinity;
       let nearestIndex = -1;
@@ -4152,7 +4165,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     // Check if user has moved far enough to warrant a route rebuild
     // This prevents excessive API calls from GPS noise (small accuracy variations)
     // But we skip this check if the route type, waypoints, or manual start point have changed
-    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && lastRouteBuildLocationRef.current) {
+    if (!routePreferenceChanged && !waypointsChanged && !manualStartPointCleared && lastRouteBuildLocationRef.current) {
       const distanceMoved = distanceBetween(lastRouteBuildLocationRef.current, userLocation);
       if (distanceMoved < MIN_ROUTE_REBUILD_DISTANCE_METERS) {
         return; // Skip rebuild if movement is less than threshold
@@ -4164,7 +4177,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       console.warn('[MAP_EFFECT] buildRoute error:', error);
       // Error already handled as toast in buildRoute, no need to display again
     });
-  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, manualStartPoint]);
+  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, userAvoidMotorways, manualStartPoint]);
 
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
@@ -4189,32 +4202,59 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       });
     }
 
-    if (
-      appliedFilters.suitability.size ||
-      appliedFilters.categories.size ||
-      appliedFilters.amenities.size ||
-      appliedFilters.sponsor
-    ) {
+    const hasCoreFilters =
+      appliedFilters.suitability.size > 0 ||
+      appliedFilters.categories.size > 0 ||
+      appliedFilters.amenities.size > 0 ||
+      appliedFilters.bikeBrew;
+    const hasSponsorFilter = appliedFilters.sponsor;
+    const hasVisitedFilter = appliedFilters.visited;
+    const useAnyMode = appliedFilters.matchMode === "any";
+
+    if (hasCoreFilters || hasSponsorFilter || hasVisitedFilter) {
       console.log("[SPONSOR_FILTER] Filter active - sponsored places in list:", Array.from(sponsoredPlaceIds));
       
       list = list.filter((p) => {
-        // Check sponsor filter first
-        if (appliedFilters.sponsor) {
-          const isSponsored = sponsoredPlaceIds.has(p.id);
-          console.log("[SPONSOR_FILTER] Place", p.id, p.title, "- sponsored:", isSponsored);
-          // Only show place if it's in the sponsored list
-          if (!isSponsored) {
+        const sponsorMatch = sponsoredPlaceIds.has(p.id);
+        const visitedMatch = visitedPlaceIds.has(p.id);
+        const coreMatch = applyFilters(p, appliedFilters);
+
+        if (useAnyMode) {
+          const anyMatches = [];
+
+          if (hasSponsorFilter) {
+            anyMatches.push(sponsorMatch);
+          }
+
+          if (hasVisitedFilter) {
+            anyMatches.push(visitedMatch);
+          }
+
+          if (hasCoreFilters) {
+            anyMatches.push(coreMatch);
+          }
+
+          return anyMatches.some(Boolean);
+        }
+
+        // AND mode: every active filter group must match.
+        if (hasSponsorFilter) {
+          console.log("[SPONSOR_FILTER] Place", p.id, p.title, "- sponsored:", sponsorMatch);
+          if (!sponsorMatch) {
             return false;
           }
         }
-        // Then check other filters
-        return applyFilters(p, appliedFilters);
-      });
-    }
 
-    // Visited filter — show only places the user has been to
-    if (appliedFilters.visited) {
-      list = list.filter((p) => visitedPlaceIds.has(p.id));
+        if (hasVisitedFilter && !visitedMatch) {
+          return false;
+        }
+
+        if (hasCoreFilters && !coreMatch) {
+          return false;
+        }
+
+        return true;
+      });
     }
 
     return list;
@@ -4408,6 +4448,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     destination,
     travelMode,
     routeType,
+    avoidMotorways = false,
     requestId,
     skipFitToView = false, // Don't auto-center when in Follow Me mode
     vehicleHeading = null, // User's current heading in degrees (0-359), used for rerouting
@@ -4475,6 +4516,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
         waypoints: normalizedIntermediates,
         travelMode,
         routeType,
+        avoidMotorways,
         routeTypeMap,
         useCache,
         customHilliness,
@@ -4596,6 +4638,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       const startCoord = normalizeCoord(manualStartPoint || userLocation);
       lastRouteBuildLocationRef.current = startCoord;
       lastRouteTypeRef.current = userRouteType;
+      lastAvoidMotorwaysRef.current = userAvoidMotorways;
       lastWaypoints.current = effectiveWaypoints;
       lastManualStartPointRef.current = manualStartPoint;
     }
@@ -4615,6 +4658,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       destination,
       travelMode: userTravelMode,
       routeType: userRouteType,
+      avoidMotorways: userAvoidMotorways,
       requestId: finalRequestId,
       skipFitToView: skipFit,
     });
@@ -5396,6 +5440,53 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
             contentContainerStyle={styles.filterScrollContent}
             showsVerticalScrollIndicator={false}
           >
+            <Text style={styles.filterSection}>Match Mode</Text>
+            <View style={styles.matchModeRow}>
+              <TouchableOpacity
+                style={[
+                  styles.matchModeButton,
+                  draftFilters.matchMode === "all" && styles.matchModeButtonActive,
+                ]}
+                onPress={() =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    matchMode: "all",
+                  }))
+                }
+              >
+                <Text
+                  style={[
+                    styles.matchModeText,
+                    draftFilters.matchMode === "all" && styles.matchModeTextActive,
+                  ]}
+                >
+                  AND
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.matchModeButton,
+                  draftFilters.matchMode === "any" && styles.matchModeButtonActive,
+                ]}
+                onPress={() =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    matchMode: "any",
+                  }))
+                }
+              >
+                <Text
+                  style={[
+                    styles.matchModeText,
+                    draftFilters.matchMode === "any" && styles.matchModeTextActive,
+                  ]}
+                >
+                  OR
+                </Text>
+              </TouchableOpacity>
+            </View>
+
            
             {/* SUITABILITY */}
             <Text style={styles.filterSection}>Meet-ups / Suitability</Text>
@@ -6723,6 +6814,33 @@ const styles = StyleSheet.create({
 
   filterRow: {
     paddingVertical: 10,
+  },
+
+  matchModeRow: {
+    flexDirection: "row",
+    marginBottom: 6,
+    gap: 8,
+  },
+
+  matchModeButton: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: "center",
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+
+  matchModeButtonActive: {
+    backgroundColor: theme.colors.surfaceHighlight,
+  },
+
+  matchModeText: {
+    color: theme.colors.accentDark,
+    fontWeight: "600",
+  },
+
+  matchModeTextActive: {
+    color: theme.colors.accentMid,
   },
 
   filterLabel: {
