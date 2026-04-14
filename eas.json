@@ -115,6 +115,11 @@
           "EXPO_PUBLIC_STRIPE_PRICE_MONTHLY": "price_1TGNzPE1Vx0zrcr8GmZwcjuT",
           "EXPO_PUBLIC_STRIPE_PRICE_ANNUAL": "price_1TGNzPE1Vx0zrcr8AjE1678p"
       }
+    },
+
+    "ownership-proof": {
+      "extends": "production",
+      "android": { "buildType": "apk" }
     }
   },
 

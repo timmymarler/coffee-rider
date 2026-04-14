@@ -122,7 +122,7 @@ export default {
 
     android: {
       package: ANDROID_PACKAGE[APP_NAME],
-      versionCode: 2,
+      versionCode: 3,
       permissions: [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
