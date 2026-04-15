@@ -6,6 +6,12 @@ const DEFAULT_DEVICE_NAME = "CR-Directions";
 const MIN_SEND_INTERVAL_MS = 250;
 
 const bleConfig = Constants.expoConfig?.extra?.bleDirections || {};
+const envBleConfig = {
+  enabled: process.env.EXPO_PUBLIC_BLE_DIRECTIONS_ENABLED,
+  serviceUuid: process.env.EXPO_PUBLIC_BLE_DIRECTIONS_SERVICE_UUID,
+  characteristicUuid: process.env.EXPO_PUBLIC_BLE_DIRECTIONS_CHARACTERISTIC_UUID,
+  deviceName: process.env.EXPO_PUBLIC_BLE_DIRECTIONS_DEVICE_NAME,
+};
 
 let customTransport = null;
 let warnedNoTransport = false;
@@ -13,7 +19,8 @@ let lastPayload = null;
 let lastSentAt = 0;
 
 function isEnabled() {
-  return bleConfig.enabled === true || bleConfig.enabled === "true";
+  const enabled = bleConfig.enabled ?? envBleConfig.enabled;
+  return enabled === true || enabled === "true";
 }
 
 function compact(value, fallback = "") {
@@ -100,9 +107,9 @@ export async function sendBleDirectionsFrame(frame) {
   try {
     await Promise.resolve(
       transport(payload, {
-        serviceUuid: bleConfig.serviceUuid || DEFAULT_SERVICE_UUID,
-        characteristicUuid: bleConfig.characteristicUuid || DEFAULT_CHARACTERISTIC_UUID,
-        deviceName: bleConfig.deviceName || DEFAULT_DEVICE_NAME,
+        serviceUuid: bleConfig.serviceUuid || envBleConfig.serviceUuid || DEFAULT_SERVICE_UUID,
+        characteristicUuid: bleConfig.characteristicUuid || envBleConfig.characteristicUuid || DEFAULT_CHARACTERISTIC_UUID,
+        deviceName: bleConfig.deviceName || envBleConfig.deviceName || DEFAULT_DEVICE_NAME,
       })
     );
     lastPayload = payload;
@@ -117,8 +124,8 @@ export async function sendBleDirectionsFrame(frame) {
 export function getBleDirectionsConfig() {
   return {
     enabled: isEnabled(),
-    serviceUuid: bleConfig.serviceUuid || DEFAULT_SERVICE_UUID,
-    characteristicUuid: bleConfig.characteristicUuid || DEFAULT_CHARACTERISTIC_UUID,
-    deviceName: bleConfig.deviceName || DEFAULT_DEVICE_NAME,
+    serviceUuid: bleConfig.serviceUuid || envBleConfig.serviceUuid || DEFAULT_SERVICE_UUID,
+    characteristicUuid: bleConfig.characteristicUuid || envBleConfig.characteristicUuid || DEFAULT_CHARACTERISTIC_UUID,
+    deviceName: bleConfig.deviceName || envBleConfig.deviceName || DEFAULT_DEVICE_NAME,
   };
 }

@@ -14,7 +14,7 @@
  */
 
 import { BleManager, State } from 'react-native-ble-plx';
-import { Platform } from 'react-native';
+import { PermissionsAndroid, Platform } from 'react-native';
 import { getBleDirectionsConfig } from './directionsTransmitter';
 
 const TAG = '[BLE_TRANSPORT]';
@@ -39,6 +39,31 @@ function warn(...args) {
   console.warn(TAG, ...args);
 }
 
+async function ensureAndroidBlePermissions() {
+  if (Platform.OS !== 'android') return true;
+
+  try {
+    if (Platform.Version >= 31) {
+      const result = await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      ]);
+
+      const scanGranted = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED;
+      const connectGranted = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED;
+      return scanGranted && connectGranted;
+    }
+
+    const location = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+    );
+    return location === PermissionsAndroid.RESULTS.GRANTED;
+  } catch (error) {
+    warn('Permission request failed:', error.message);
+    return false;
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export function initBleTransport() {
@@ -53,7 +78,7 @@ export function initBleTransport() {
   // Wait for BLE to be powered on before scanning.
   stateSubscription = manager.onStateChange((state) => {
     if (state === State.PoweredOn) {
-      log('BLE powered on — starting scan');
+      log('BLE powered on — preparing scan');
       startScan();
     } else if (state === State.PoweredOff || state === State.Unsupported) {
       warn(`BLE state: ${state} — cannot scan`);
@@ -105,10 +130,17 @@ function scheduleReconnect() {
   }, RECONNECT_DELAY_MS);
 }
 
-function startScan() {
+async function startScan() {
   if (!manager || isDestroyed || isScanning || activeDevice) return;
 
-  const { deviceName, serviceUuid } = getBleDirectionsConfig();
+  const hasPermissions = await ensureAndroidBlePermissions();
+  if (!hasPermissions) {
+    warn('Required BLE permissions not granted');
+    scheduleReconnect();
+    return;
+  }
+
+  const { deviceName } = getBleDirectionsConfig();
   log(`Scanning for "${deviceName}"...`);
 
   isScanning = true;
@@ -126,7 +158,7 @@ function startScan() {
   }, SCAN_TIMEOUT_MS);
 
   manager.startDeviceScan(
-    [serviceUuid],   // Filter by service UUID — only wake up for our device.
+    null,
     { allowDuplicates: false },
     (error, device) => {
       if (error) {
