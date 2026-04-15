@@ -2,6 +2,7 @@ import { db } from "@config/firebase";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useTheme } from "@context/ThemeContext";
+import { sendBleDirectionsFrame } from "@core/ble/directionsTransmitter";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
@@ -2756,6 +2757,25 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     stepProgressRef.current.lastStepIdx = nextStepIdx;
     stepProgressRef.current.lastProgressMeters = progressForStepMapping;
   }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex, routeDestination]);
+
+  useEffect(() => {
+    if (!isNavigationMode || routeSteps.length === 0) return;
+    const step = routeSteps[currentStepIndex];
+    if (!step) return;
+    const maneuver = (step.nextManeuver || 'STRAIGHT').trim().toUpperCase();
+    const distance = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : '--';
+    const instruction = getEffectiveInstructionText(step) || step.nextInstruction || step.instruction || 'Continue';
+    const roundaboutAngle = maneuver.includes('ROUNDABOUT')
+      ? getRoundaboutExitAngleDegrees(maneuver, step?.nextRoundaboutExitNumber, step?.nextRoundaboutTurnAngle)
+      : null;
+    sendBleDirectionsFrame({
+      maneuver,
+      distance,
+      instruction,
+      roundaboutAngle,
+      roundaboutExitNumber: step?.nextRoundaboutExitNumber,
+    });
+  }, [isNavigationMode, currentStepIndex, nextJunctionDistance, routeSteps]);
 
   useEffect(() => {
     if (!isNavigationMode || routeSteps.length === 0) return;

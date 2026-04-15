@@ -32,11 +32,27 @@ function normalizeManeuver(maneuver) {
   return "STRAIGHT";
 }
 
-function encodePayload({ maneuver, distance, instruction }) {
+function normalizeAngle(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "";
+  return String(Math.round(((num % 360) + 360) % 360));
+}
+
+function normalizeExitNumber(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) return "";
+  return String(Math.round(num));
+}
+
+function encodePayload({ maneuver, distance, instruction, roundaboutAngle, roundaboutExitNumber }) {
   const safeManeuver = normalizeManeuver(maneuver);
   const safeDistance = compact(distance, "--");
   const safeInstruction = compact(instruction, "Continue");
-  return `${safeManeuver}|${safeDistance}|${safeInstruction}`;
+  const safeRoundaboutAngle = normalizeAngle(roundaboutAngle);
+  const safeRoundaboutExitNumber = normalizeExitNumber(roundaboutExitNumber);
+  // Extended payload format:
+  // MANEUVER|DISTANCE|INSTRUCTION|ROUNDABOUT_ANGLE|ROUNDABOUT_EXIT_NUMBER
+  return `${safeManeuver}|${safeDistance}|${safeInstruction}|${safeRoundaboutAngle}|${safeRoundaboutExitNumber}`;
 }
 
 function resolveTransport() {
