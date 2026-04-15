@@ -3,6 +3,7 @@ import { db } from "@config/firebase";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useTheme } from "@context/ThemeContext";
+import { sendBleDirectionsFrame } from "@core/ble/directionsTransmitter";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
@@ -12,6 +13,41 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "r
 import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+function isRoundaboutManeuver(maneuver = "") {
+  return String(maneuver).toUpperCase().includes("ROUNDABOUT");
+}
+
+function getRoundaboutExitAngleDegrees(maneuver = "", exitNumber, turnAngle = null) {
+  const upper = String(maneuver || "").toUpperCase();
+  const parsedExit = Number(exitNumber);
+  const parsedTurnAngle = Number(turnAngle);
+
+  const isLeftHalf = (angle) => angle >= 90 && angle <= 270;
+
+  if (Number.isFinite(parsedTurnAngle)) {
+    const normalizedTurn = ((parsedTurnAngle % 360) + 360) % 360;
+    const signedCandidate = ((270 + parsedTurnAngle) % 360 + 360) % 360;
+    const absoluteCandidate = normalizedTurn;
+
+    let chosen = signedCandidate;
+
+    if ((upper.includes("LEFT") || upper.includes("EXIT_LEFT")) && !isLeftHalf(chosen) && isLeftHalf(absoluteCandidate)) {
+      chosen = absoluteCandidate;
+    }
+    if ((upper.includes("RIGHT") || upper.includes("EXIT_RIGHT")) && isLeftHalf(chosen) && !isLeftHalf(absoluteCandidate)) {
+      chosen = absoluteCandidate;
+    }
+
+    return chosen;
+  }
+
+  if (Number.isFinite(parsedExit) && parsedExit > 0) {
+    return (180 + ((parsedExit - 1) * 45)) % 360;
+  }
+
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // JunctionView – Beeline-style schematic road diagram for the fullscreen
@@ -1444,19 +1480,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       skipNextRegionChangeRef.current = true;
       skipRegionChangeUntilRef.current = Date.now() + 2500;
       isAnimatingRef.current = false;
+      preferredFollowZoomRef.current = FOLLOW_ZOOM;
 
       if (!followUser) {
         setFollowUser(true);
       }
 
-      recenterOnUser({ zoom: preferredFollowZoomRef.current, pitch: 35, followMode: true }).catch((error) => {
+      recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true }).catch((error) => {
         console.warn('[ACTIVE_RIDE] recenter error:', error);
       });
 
       if (Platform.OS === 'ios') {
         setTimeout(() => {
           if (activeRideRef.current) {
-            recenterOnUser({ zoom: preferredFollowZoomRef.current, pitch: 35, followMode: true }).catch((error) => {
+            recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true }).catch((error) => {
               console.warn('[ACTIVE_RIDE] iOS recenter retry error:', error);
             });
           }
@@ -2512,6 +2549,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     if (followUser) {
       setFollowUser(false);
       clearFollowMeInactivityTimeout();
+      preferredFollowZoomRef.current = FOLLOW_ZOOM;
       // Revert to normal zoom and no tilt
       skipNextRegionChangeRef.current = true;
       skipRegionChangeUntilRef.current = Date.now() + 2000;
@@ -2526,8 +2564,8 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
     skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
     skipRegionChangeUntilRef.current = Date.now() + 2000;
-    const zoomToUse = await captureCurrentMapZoom(FOLLOW_ZOOM);
-    await recenterOnUser({ zoom: zoomToUse, pitch: 35, followMode: true });
+    preferredFollowZoomRef.current = FOLLOW_ZOOM;
+    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true });
 
     // Now enable follow mode and start 15-minute inactivity timer
     // This triggers the AutoReroute effect to rebuild the route from current location
@@ -2621,7 +2659,8 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       // Now enable Follow Me mode to guide to home
       skipNextFollowTickRef.current = true;
       skipNextRegionChangeRef.current = true;
-      await recenterOnUser({ zoom: preferredFollowZoomRef.current, followMode: true });
+      preferredFollowZoomRef.current = FOLLOW_ZOOM;
+      await recenterOnUser({ zoom: FOLLOW_ZOOM, followMode: true });
       setFollowUser(true);
       
       await debugLog("ROUTE_TO_HOME", "Follow Me enabled - tracking route home");
@@ -2833,6 +2872,29 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     stepProgressRef.current.lastStepIdx = nextStepIdx;
     stepProgressRef.current.lastProgressMeters = progressForStepMapping;
   }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex, routeDestination]);
+
+  useEffect(() => {
+    if (!isNavigationMode) {
+      sendBleDirectionsFrame({ maneuver: 'IDLE', distance: '--', instruction: 'Not navigating' });
+      return;
+    }
+    if (routeSteps.length === 0) return;
+    const step = routeSteps[currentStepIndex];
+    if (!step) return;
+    const maneuver = (step.nextManeuver || 'STRAIGHT').trim().toUpperCase();
+    const distance = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : '--';
+    const instruction = getEffectiveInstructionText(step) || step.nextInstruction || step.instruction || 'Continue';
+    const roundaboutAngle = isRoundaboutManeuver(maneuver)
+      ? getRoundaboutExitAngleDegrees(maneuver, step?.nextRoundaboutExitNumber, step?.nextRoundaboutTurnAngle)
+      : null;
+    sendBleDirectionsFrame({
+      maneuver,
+      distance,
+      instruction,
+      roundaboutAngle,
+      roundaboutExitNumber: step?.nextRoundaboutExitNumber,
+    });
+  }, [isNavigationMode, currentStepIndex, nextJunctionDistance, routeSteps]);
 
   useEffect(() => {
     if (!isNavigationMode || routeSteps.length === 0) return;
@@ -3707,9 +3769,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
   const handleRegionChangeComplete = async (region) => {
     setMapRegion(region);
 
-    // Capture the current zoom level so Follow Me can keep the rider's chosen zoom.
-    await captureCurrentMapZoom(preferredFollowZoomRef.current);
-
     // Debounce disables for 2s after programmatic camera moves
     if (skipRegionChangeUntilRef.current && Date.now() < skipRegionChangeUntilRef.current) {
       // Ignore region changes during debounce window
@@ -3721,6 +3780,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     // Only disable if user manually pans AFTER they were in Follow Me
     if (followUser) {
       // Keep Follow Me active, but preserve whatever zoom the rider just chose.
+      await captureCurrentMapZoom(preferredFollowZoomRef.current);
       skipNextRegionChangeRef.current = false;
       return;
     }
