@@ -60,11 +60,10 @@
           "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51TGMiFE1Vx0zrcr8uJ9SXk28RQMRNdrtlqYi8jLXAYxwpU4NzWptyQSmygcUnWFAp1dXshpejZzC2v1wUUEOWoPq00wUa4uIrj",
           "EXPO_PUBLIC_STRIPE_PRICE_DAILY": "price_1THKjLE1Vx0zrcr85qDD92be",
           "EXPO_PUBLIC_STRIPE_PRICE_MONTHLY": "price_1TGNzPE1Vx0zrcr8GmZwcjuT",
-          "EXPO_PUBLIC_STRIPE_PRICE_ANNUAL": "price_1TGNzPE1Vx0zrcr8AjE1678p"
+          "EXPO_PUBLIC_STRIPE_PRICE_ANNUAL": "price_1TGNzPE1Vx0zrcr8AjE1678p",
+          "EXPO_PUBLIC_BLE_DIRECTIONS_ENABLED": "true"
       }
     },
-
-    /* ------------------------------ DRIVER ----------------------------- */
 
     "driver": {
       "env": { "APP_NAME": "driver" }

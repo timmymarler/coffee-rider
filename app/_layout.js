@@ -1,5 +1,7 @@
 // app/_layout.js
 
+import { destroyBleTransport, initBleTransport } from "@core/ble/bleTransport";
+import { getBleDirectionsConfig } from "@core/ble/directionsTransmitter";
 import AuthProvider, { AuthContext } from "@context/AuthContext";
 import { RoutingPreferencesProvider } from "@context/RoutingPreferencesContext";
 import { SubscriptionProvider } from "@context/SubscriptionContext";
@@ -410,6 +412,14 @@ export default function Layout() {
       // Log on cleanup/app background
       getAndResetSummary();
     };
+  }, []);
+
+  // BLE directions transport — only active when feature flag is on
+  useEffect(() => {
+    if (getBleDirectionsConfig().enabled) {
+      initBleTransport();
+      return () => destroyBleTransport();
+    }
   }, []);
 
   const handleSplashComplete = () => {

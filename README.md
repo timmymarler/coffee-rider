@@ -48,3 +48,7 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Project Notes
+
+- Background BLE lock-screen behavior was intentionally deferred for release safety. See [BACKGROUND_BLE_LOCKSCREEN_PLAN.md](BACKGROUND_BLE_LOCKSCREEN_PLAN.md) for rationale and the implementation plan.
