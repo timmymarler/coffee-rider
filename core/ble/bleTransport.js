@@ -15,6 +15,7 @@
 
 import { BleManager, State } from 'react-native-ble-plx';
 import { PermissionsAndroid, Platform } from 'react-native';
+import { encode as base64Encode } from 'base-64';
 import { getBleDirectionsConfig } from './directionsTransmitter';
 
 const TAG = '[BLE_TRANSPORT]';
@@ -37,6 +38,16 @@ function log(...args) {
 
 function warn(...args) {
   console.warn(TAG, ...args);
+}
+
+function encodePayloadToBase64(payload) {
+  // Keep payload ASCII-safe for BLE transport across JS runtimes.
+  try {
+    return base64Encode(String(payload));
+  } catch (error) {
+    warn('Base64 encode failed:', error?.message || error);
+    return null;
+  }
 }
 
 async function ensureAndroidBlePermissions() {
@@ -208,6 +219,9 @@ async function connectToDevice(deviceId) {
     activeCharacteristic = target;
     log('Ready — characteristic discovered');
 
+    // Immediate test frame confirms end-to-end BLE path before navigation events start.
+    await sendPayload('STRAIGHT|--|BLE Connected||');
+
     // Watch for disconnection.
     device.onDisconnected((error, disconnectedDevice) => {
       log(`Disconnected from ${disconnectedDevice?.id || deviceId}${error ? ` — ${error.message}` : ''}`);
@@ -234,9 +248,8 @@ async function sendPayload(payload) {
 
   try {
     // BLE writes require base64 encoding.
-    const encoded = Platform.OS === 'web'
-      ? btoa(payload)
-      : Buffer.from(payload, 'utf8').toString('base64');
+    const encoded = encodePayloadToBase64(payload);
+    if (!encoded) return;
 
     // WRITE_NR (write without response) is faster and sufficient here.
     await activeCharacteristic.writeWithoutResponse(encoded);

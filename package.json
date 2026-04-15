@@ -24,6 +24,7 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "@stripe/stripe-react-native": "0.50.3",
+    "base-64": "^1.0.0",
     "expo": "~54.0.24",
     "expo-apple-authentication": "^8.0.8",
     "expo-av": "~16.0.7",
