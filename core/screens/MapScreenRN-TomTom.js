@@ -2759,7 +2759,11 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
   }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex, routeDestination]);
 
   useEffect(() => {
-    if (!isNavigationMode || routeSteps.length === 0) return;
+    if (!isNavigationMode) {
+      sendBleDirectionsFrame({ maneuver: 'IDLE', distance: '--', instruction: 'Not navigating' });
+      return;
+    }
+    if (routeSteps.length === 0) return;
     const step = routeSteps[currentStepIndex];
     if (!step) return;
     const maneuver = (step.nextManeuver || 'STRAIGHT').trim().toUpperCase();

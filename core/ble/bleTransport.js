@@ -219,8 +219,8 @@ async function connectToDevice(deviceId) {
     activeCharacteristic = target;
     log('Ready — characteristic discovered');
 
-    // Immediate test frame confirms end-to-end BLE path before navigation events start.
-    await sendPayload('STRAIGHT|--|BLE Connected||');
+    // Immediate idle frame confirms end-to-end BLE path and shows correct initial screen.
+    await sendPayload('IDLE|--|Not navigating||');
 
     // Watch for disconnection.
     device.onDisconnected((error, disconnectedDevice) => {

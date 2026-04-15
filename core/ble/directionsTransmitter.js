@@ -31,9 +31,13 @@ function compact(value, fallback = "") {
 
 function normalizeManeuver(maneuver) {
   const upper = compact(maneuver, "STRAIGHT").toUpperCase();
+  if (upper === "IDLE") return "IDLE";
   if (upper.includes("ROUNDABOUT")) return "ROUNDABOUT";
   if (upper.includes("UTURN") || upper.includes("U_TURN")) return "UTURN";
   if (upper.includes("ARRIVE") || upper.includes("DESTINATION")) return "ARRIVE";
+  // Bear/keep/slight must be checked before plain LEFT/RIGHT
+  if (upper.includes("BEAR_LEFT") || upper.includes("KEEP_LEFT") || upper.includes("SLIGHT_LEFT") || upper.includes("MERGE_LEFT")) return "BEAR_LEFT";
+  if (upper.includes("BEAR_RIGHT") || upper.includes("KEEP_RIGHT") || upper.includes("SLIGHT_RIGHT") || upper.includes("MERGE_RIGHT")) return "BEAR_RIGHT";
   if (upper.includes("LEFT")) return "LEFT";
   if (upper.includes("RIGHT")) return "RIGHT";
   return "STRAIGHT";
