@@ -1,4 +1,3 @@
-import { Circle, Path, Polygon, Svg } from "react-native-svg";
 import { db } from "@config/firebase";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
@@ -12,6 +11,7 @@ import { arrayUnion } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
+import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function isRoundaboutManeuver(maneuver = "") {
@@ -49,185 +49,94 @@ function getRoundaboutExitAngleDegrees(maneuver = "", exitNumber, turnAngle = nu
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// JunctionView – Beeline-style schematic road diagram for the fullscreen
-// navigation pod. Renders approach/departure route geometry and side-road rails
-// in monochrome using react-native-svg.
-// ---------------------------------------------------------------------------
-function JunctionView({ maneuver, step, routeCoords, compact = false }) {
-  const C = compact ? 72 : 90; // center X of the canvas
-  const JY = compact ? 42 : 50; // junction Y
-
-  // Primary route stays solid; non-selected roads are dual "rails".
-  const routeWidth = compact ? 6.2 : 7.5;
-  const railOuter = compact ? 4.2 : 5.2;
-  const railInner = compact ? 1.8 : 2.2;
-  const roadColor = "rgba(255,255,255,0.96)";
-  const sideColor = "rgba(255,255,255,0.72)";
-  const cutoutColor = "#000000";
-
-  const m = (maneuver || "STRAIGHT").toUpperCase();
-  const isArrival = m.includes("ARRIVE") || m.includes("ARRIVAL") || m.includes("DESTINATION");
-
-  const buildPath = (pts) => {
-    if (!Array.isArray(pts) || pts.length < 2) return null;
-    return pts.reduce((acc, p, idx) => {
-      const x = Number.isFinite(p.x) ? p.x : 0;
-      const y = Number.isFinite(p.y) ? p.y : 0;
-      return `${acc}${idx === 0 ? "M" : " L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    }, "");
-  };
-
-  const derivedGeometry = useMemo(() => {
-    if (!Array.isArray(routeCoords) || routeCoords.length < 2) return null;
-
-    const anchor = step?.end || step?.position || routeCoords[Math.floor(routeCoords.length * 0.5)];
-    if (!anchor?.latitude || !anchor?.longitude) return null;
-
-    let nearestIndex = 0;
-    let nearestDistSq = Infinity;
-
-    for (let i = 0; i < routeCoords.length; i++) {
-      const local = toLocalMeters(anchor, routeCoords[i]);
-      const d2 = local.x * local.x + local.y * local.y;
-      if (d2 < nearestDistSq) {
-        nearestDistSq = d2;
-        nearestIndex = i;
-      }
-    }
-
-    const start = Math.max(0, nearestIndex - 18);
-    const end = Math.min(routeCoords.length - 1, nearestIndex + 22);
-    const windowPoints = routeCoords.slice(start, end + 1);
-    if (windowPoints.length < 2) return null;
-
-    const inboundA = routeCoords[Math.max(0, nearestIndex - 8)];
-    const inboundB = routeCoords[Math.max(0, nearestIndex - 1)];
-    const inboundALocal = toLocalMeters(anchor, inboundA);
-    const inboundBLocal = toLocalMeters(anchor, inboundB);
-    const vx = inboundBLocal.x - inboundALocal.x;
-    const vy = -(inboundBLocal.y - inboundALocal.y); // y-flip for screen space
-    const mag = Math.sqrt(vx * vx + vy * vy);
-    if (!Number.isFinite(mag) || mag < 0.1) return null;
-
-    const heading = Math.atan2(vy, vx);
-    const target = -Math.PI / 2; // align route travel with upward direction
-    const rot = target - heading;
-    const cos = Math.cos(rot);
-    const sin = Math.sin(rot);
-
-    const rotated = windowPoints.map((coord) => {
-      const local = toLocalMeters(anchor, coord);
-      const sx = local.x;
-      const sy = -local.y;
-      return {
-        x: sx * cos - sy * sin,
-        y: sx * sin + sy * cos,
-      };
-    });
-
-    const maxAbsX = Math.max(...rotated.map((p) => Math.abs(p.x)), 1);
-    const maxAbsY = Math.max(...rotated.map((p) => Math.abs(p.y)), 1);
-    const scaleLimit = compact ? 1.5 : 1.85;
-    const scale = Math.min(scaleLimit, Math.max(0.55, Math.min(70 / maxAbsX, 72 / maxAbsY)));
-
-    const fitted = rotated.map((p) => ({
-      x: C + p.x * scale,
-      y: JY + p.y * scale,
-    }));
-
-    const junctionIdx = Math.min(Math.max(nearestIndex - start, 1), fitted.length - 1);
-    const approachPoints = fitted.slice(0, junctionIdx + 1).map((p, idx, arr) => {
-      // Keep the first section of the chosen route visually straight-up.
-      if (idx <= Math.min(5, Math.floor(arr.length * 0.45))) {
-        return { ...p, x: C };
-      }
-      return p;
-    });
-    const departurePoints = fitted.slice(junctionIdx);
-
-    return {
-      approach: buildPath(approachPoints),
-      departure: buildPath(departurePoints),
-    };
-  }, [routeCoords, step]);
-
-  const fallbackApproach = compact ? `M ${C} 108 L ${C} ${JY}` : `M ${C} 136 L ${C} ${JY}`;
-  const arrowPoints = compact
-    ? `${C},76 ${C - 9},93 ${C + 9},93`
-    : `${C},98 ${C - 11},118 ${C + 11},118`;
-
-  let approach = derivedGeometry?.approach || fallbackApproach;
-  let departure = isArrival ? null : derivedGeometry?.departure;
-  const sides = [];
-
-  if (isArrival) {
-    // Arrival view: no outgoing leg beyond the destination.
-  } else if (m === "TURN_LEFT" || m === "TURN_SHARP_LEFT") {
-    departure = departure || `M ${C} ${JY} L 5 ${JY}`;
-    sides.push(`M ${C} ${JY} L ${C} 5`);
-  } else if (m === "TURN_RIGHT" || m === "TURN_SHARP_RIGHT") {
-    departure = departure || `M ${C} ${JY} L 155 ${JY}`;
-    sides.push(`M ${C} ${JY} L ${C} 5`);
-  } else if (m === "TURN_SLIGHT_LEFT" || m === "BEAR_LEFT" || m === "KEEP_LEFT") {
-    departure = departure || `M ${C} ${JY} Q 46 17 4 3`;
-  } else if (m === "TURN_SLIGHT_RIGHT" || m === "BEAR_RIGHT" || m === "KEEP_RIGHT") {
-    departure = departure || `M ${C} ${JY} Q 114 17 156 3`;
-  } else if (m.includes("U_TURN") || m.includes("UTURN") || m.includes("MAKE_U")) {
-    const goRight = !m.includes("LEFT");
-    const ux = goRight ? C + 34 : C - 34;
-    departure = departure || `M ${C} ${JY} Q ${ux} ${JY} ${ux} ${JY + 28} Q ${ux} ${JY + 56} ${C} ${JY + 56}`;
-  } else if (m.includes("ROUNDABOUT")) {
-    departure = departure || `M ${C} ${JY} L ${C} 59`;
-    sides.push(`M ${C} 23 L ${C} 5`);
-  } else if (m === "MERGE_LEFT") {
-    departure = departure || `M ${C} ${JY} L ${C} 5`;
-    sides.push(`M 5 ${JY + 20} Q ${C - 20} ${JY + 8} ${C} ${JY}`);
-  } else if (m === "MERGE_RIGHT") {
-    departure = departure || `M ${C} ${JY} L ${C} 5`;
-    sides.push(`M 155 ${JY + 20} Q ${C + 20} ${JY + 8} ${C} ${JY}`);
-  } else if (m === "TAKE_EXIT") {
-    departure = departure || `M ${C} ${JY} Q 114 17 156 3`;
-    sides.push(`M ${C} ${JY} L ${C} 5`);
-  } else {
-    // STRAIGHT (default)
-    departure = departure || `M ${C} ${JY} L ${C} 5`;
-  }
-
-  const renderSolidPath = (d, key) => (
-    <Path key={key} d={d} stroke={roadColor} strokeWidth={routeWidth} strokeLinecap="round" fill="none" />
-  );
-
-  const renderDualPath = (d, color, key) => [
-    <Path key={`${key}-outer`} d={d} stroke={color} strokeWidth={railOuter} strokeLinecap="round" fill="none" />,
-    <Path key={`${key}-inner`} d={d} stroke={cutoutColor} strokeWidth={railInner} strokeLinecap="round" fill="none" />,
-  ];
+function RoundaboutManeuverIcon({ size = 80, exitAngleDegrees = null, exitNumber = null, color = "rgba(245, 245, 240, 0.95)" }) {
+  const safeExit = Number.isFinite(Number(exitNumber)) && Number(exitNumber) > 0 ? Math.round(Number(exitNumber)) : null;
+  const fallbackAngle = safeExit ? (180 + ((safeExit - 1) * 45)) % 360 : 0;
+  const angle = Number.isFinite(exitAngleDegrees) ? exitAngleDegrees : fallbackAngle;
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = size * 0.24;
+  const ringStroke = Math.max(4, size * 0.09);
+  const spokeStroke = Math.max(4, size * 0.08);
+  const angleRad = (angle * Math.PI) / 180;
+  const entryEndY = cy + radius + (ringStroke * 0.5);
+  const exitStartRadius = radius + (ringStroke * 0.2);
+  const exitEndRadius = radius + size * 0.22;
+  const lineStartX = cx + (Math.cos(angleRad) * exitStartRadius);
+  const lineStartY = cy + (Math.sin(angleRad) * exitStartRadius);
+  const lineEndX = cx + (Math.cos(angleRad) * exitEndRadius);
+  const lineEndY = cy + (Math.sin(angleRad) * exitEndRadius);
+  const arrowLength = size * 0.09;
+  const arrowSpread = Math.PI / 7;
+  const arrowLeftX = lineEndX - (Math.cos(angleRad - arrowSpread) * arrowLength);
+  const arrowLeftY = lineEndY - (Math.sin(angleRad - arrowSpread) * arrowLength);
+  const arrowRightX = lineEndX - (Math.cos(angleRad + arrowSpread) * arrowLength);
+  const arrowRightY = lineEndY - (Math.sin(angleRad + arrowSpread) * arrowLength);
 
   return (
-    <View
-      style={{
-        marginBottom: compact ? 10 : 18,
-        transform: [{ perspective: compact ? 800 : 900 }, { rotateX: compact ? "20deg" : "28deg" }],
-      }}
-      pointerEvents="none"
-    >
-      <Svg width={compact ? 148 : 188} height={compact ? 116 : 156} viewBox={compact ? "0 0 144 112" : "0 0 180 150"}>
-        {sides.map((d, i) => renderDualPath(d, sideColor, `s${i}`))}
-        {renderSolidPath(approach, "approach")}
-        {departure ? renderSolidPath(departure, "departure") : null}
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <Path
+        d={`M ${cx} ${size * 0.96} L ${cx} ${entryEndY}`}
+        stroke={color}
+        strokeWidth={spokeStroke}
+        strokeLinecap="round"
+        fill="none"
+      />
+      <Circle
+        cx={cx}
+        cy={cy}
+        r={radius}
+        stroke={color}
+        strokeWidth={ringStroke}
+        fill="none"
+      />
+      <Path
+        d={`M ${lineStartX} ${lineStartY} L ${lineEndX} ${lineEndY}`}
+        stroke={color}
+        strokeWidth={spokeStroke}
+        strokeLinecap="round"
+        fill="none"
+      />
+      <Polygon
+        points={`${lineEndX},${lineEndY} ${arrowLeftX},${arrowLeftY} ${arrowRightX},${arrowRightY}`}
+        fill={color}
+      />
+      {safeExit ? (
+        <SvgText
+          x={cx}
+          y={cy + (safeExit >= 10 ? size * 0.055 : size * 0.065)}
+          fill={color}
+          fontSize={safeExit >= 10 ? size * 0.2 : size * 0.26}
+          fontWeight="700"
+          textAnchor="middle"
+        >
+          {String(safeExit)}
+        </SvgText>
+      ) : null}
+    </Svg>
+  );
+}
 
-        {m.includes("ROUNDABOUT") && (
-          <>
-            <Circle cx={C} cy={compact ? 34 : 41} r={compact ? 12 : 15} stroke={roadColor} strokeWidth={routeWidth} fill="none" />
-          </>
-        )}
+function NavigationManeuverIcon({ maneuver, iconName, step, size, color, style }) {
+  const upper = String(maneuver || "").toUpperCase();
+  if (!upper.includes("ROUNDABOUT")) {
+    return <MaterialCommunityIcons name={iconName} size={size} color={color} style={style} />;
+  }
 
-        {isArrival ? (
-          <Circle cx={C} cy={JY} r={compact ? 7 : 9} fill={roadColor} />
-        ) : (
-          <Polygon points={arrowPoints} fill="rgba(255,255,255,0.98)" />
-        )}
-      </Svg>
+  const exitAngleDegrees = getRoundaboutExitAngleDegrees(
+    upper,
+    step?.nextRoundaboutExitNumber,
+    step?.nextRoundaboutTurnAngle
+  );
+
+  return (
+    <View style={style}>
+      <RoundaboutManeuverIcon
+        size={size}
+        exitAngleDegrees={exitAngleDegrees}
+        exitNumber={step?.nextRoundaboutExitNumber}
+        color={color}
+      />
     </View>
   );
 }
@@ -5935,7 +5844,14 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 accessibilityHint="Long press to expand directions"
               >
                 {/* Large direction icon */}
-                <MaterialCommunityIcons name={displayMeta.icon} size={80} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
+                <NavigationManeuverIcon
+                  maneuver={nextManeuver}
+                  iconName={displayMeta.icon}
+                  step={step}
+                  size={80}
+                  color="rgba(245, 245, 240, 0.95)"
+                  style={styles.junctionIcon}
+                />
                 {/* Distance and label section */}
                 <View style={styles.junctionContent}>
                   <View style={styles.junctionHeaderRow}>
@@ -5990,9 +5906,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                       showsVerticalScrollIndicator={false}
                       alwaysBounceVertical={false}
                     >
-                      <JunctionView maneuver={nextManeuver} step={step} routeCoords={routeCoords} compact={isLandscape} />
-                      <MaterialCommunityIcons
-                        name={displayMeta.icon}
+                      <NavigationManeuverIcon
+                        maneuver={nextManeuver}
+                        iconName={displayMeta.icon}
+                        step={step}
                         size={fullscreenIconSize}
                         color="#ffffff"
                         style={styles.fullscreenDirectionsIcon}

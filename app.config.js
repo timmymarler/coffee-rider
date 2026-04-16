@@ -67,7 +67,7 @@ export default {
     name: DISPLAY_NAME[APP_NAME],
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
-    version: "2.22.15",
+    version: "2.23.0",
     icon: `${brandFolder}/icon.png`,
     splash: {
       image: `${brandFolder}/splash.png`,
@@ -103,41 +103,31 @@ export default {
         storageBucket: "coffee-rider-bea88.appspot.com",
         messagingSenderId: "1001945286149",
         appId: "1:1001945286149:web:93cae68a7354a0dd1e7e6c"
-      },
-      bleDirections: {
-        enabled: process.env.EXPO_PUBLIC_BLE_DIRECTIONS_ENABLED || false,
-        deviceName: process.env.EXPO_PUBLIC_BLE_DIRECTIONS_DEVICE_NAME || "CR-Directions",
-        serviceUuid: process.env.EXPO_PUBLIC_BLE_DIRECTIONS_SERVICE_UUID || "12345678-1234-1234-1234-1234567890ab",
-        characteristicUuid: process.env.EXPO_PUBLIC_BLE_DIRECTIONS_CHARACTERISTIC_UUID || "12345678-1234-1234-1234-1234567890ac",
       }
     },
 
     ios: {
       bundleIdentifier: IOS_BUNDLE[APP_NAME],
-      buildNumber: "2",
+      buildNumber: "1",
       googleServicesFile: "./GoogleService-Info.plist",
       infoPlist: {
         NSLocationWhenInUseUsageDescription: "Coffee Rider needs your location to show nearby places and help with group rides.",
         NSLocationAlwaysAndWhenInUseUsageDescription: "Coffee Rider needs your location for group rides and navigation, including background location tracking.",
         NSLocationAlwaysUsageDescription: "Coffee Rider needs your location for group rides and navigation, including background location tracking.",
         NSMotionUsageDescription: "Coffee Rider uses motion data to improve location accuracy.",
-        NSBluetoothAlwaysUsageDescription: "Coffee Rider uses Bluetooth to send turn-by-turn directions to a connected display device.",
-        NSBluetoothPeripheralUsageDescription: "Coffee Rider uses Bluetooth to send turn-by-turn directions to a connected display device.",
-        UIBackgroundModes: ["location", "fetch", "bluetooth-central"],
+        UIBackgroundModes: ["location", "fetch"],
         ITSAppUsesNonExemptEncryption: false
       }
     },
 
     android: {
       package: ANDROID_PACKAGE[APP_NAME],
-      versionCode: 3,
+      versionCode: 1,
       permissions: [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.BLUETOOTH_SCAN",
-        "android.permission.BLUETOOTH_CONNECT"
+        "android.permission.READ_EXTERNAL_STORAGE"
       ],
 
       config: {
@@ -160,14 +150,6 @@ export default {
           merchantIdentifier: stripeMerchantIdentifier,
           enableGooglePay: true,
           enableApplePay: true
-        }
-      ],
-      [
-        "react-native-ble-plx",
-        {
-          isBackgroundEnabled: true,
-          modes: ["central"],
-          bluetoothAlwaysPermission: "Coffee Rider uses Bluetooth to send turn-by-turn directions to a connected display device."
         }
       ]
     ]
