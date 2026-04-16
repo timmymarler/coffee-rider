@@ -108,12 +108,14 @@ export default {
 
     ios: {
       bundleIdentifier: IOS_BUNDLE[APP_NAME],
-      buildNumber: "1",
+      buildNumber: "4",
       googleServicesFile: "./GoogleService-Info.plist",
       infoPlist: {
         NSLocationWhenInUseUsageDescription: "Coffee Rider needs your location to show nearby places and help with group rides.",
         NSLocationAlwaysAndWhenInUseUsageDescription: "Coffee Rider needs your location for group rides and navigation, including background location tracking.",
         NSLocationAlwaysUsageDescription: "Coffee Rider needs your location for group rides and navigation, including background location tracking.",
+        NSBluetoothAlwaysUsageDescription: "Coffee Rider uses Bluetooth to connect to your navigation pod and send turn-by-turn directions while you ride.",
+        NSBluetoothPeripheralUsageDescription: "Coffee Rider uses Bluetooth to connect to your navigation pod and compatible riding accessories.",
         NSMotionUsageDescription: "Coffee Rider uses motion data to improve location accuracy.",
         UIBackgroundModes: ["location", "fetch"],
         ITSAppUsesNonExemptEncryption: false
@@ -122,7 +124,7 @@ export default {
 
     android: {
       package: ANDROID_PACKAGE[APP_NAME],
-      versionCode: 1,
+      versionCode: 4,
       permissions: [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
