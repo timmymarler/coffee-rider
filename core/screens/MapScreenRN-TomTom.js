@@ -3546,7 +3546,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     setMapActions({
       recenter: handleRecentre,
       toggleFollow: toggleFollowMe,
-      isFollowing: () => followUser,
+      isFollowing: () => isNavigationMode,
       showRefreshMenu: () => setShowRefreshRouteMenu(true),
       canRefreshRoute: () => userLocation && (waypoints.length > 0 || routeDestination),
       refreshRoute: handleRefreshRouteToNextWaypoint,
@@ -3560,7 +3560,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     return () => {
       setMapActions(null);
     };
-  }, [followUser, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress, endRide, selectedPlace, selectedPlaceId]);
+  }, [isNavigationMode, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress, endRide, selectedPlace, selectedPlaceId]);
 
   useEffect(() => {
     let subscription;
