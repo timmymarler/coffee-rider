@@ -6,12 +6,13 @@ import { sendBleDirectionsFrame } from "@core/ble/directionsTransmitter";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
-import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
+import { arrayUnion } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function isRoundaboutManeuver(maneuver = "") {
   return String(maneuver).toUpperCase().includes("ROUNDABOUT");
@@ -23,22 +24,18 @@ function getRoundaboutExitAngleDegrees(maneuver = "", exitNumber, turnAngle = nu
   const parsedTurnAngle = Number(turnAngle);
 
   const isLeftHalf = (angle) => angle >= 90 && angle <= 270;
-  const isRightHalf = (angle) => angle <= 90 || angle >= 270;
 
   if (Number.isFinite(parsedTurnAngle)) {
-    // TomTom can provide signed delta angles (common), so map from "straight ahead" (up=270).
-    // Fallback interpretation uses absolute compass-like angles if values are outside signed range.
     const normalizedTurn = ((parsedTurnAngle % 360) + 360) % 360;
     const signedCandidate = ((270 + parsedTurnAngle) % 360 + 360) % 360;
     const absoluteCandidate = normalizedTurn;
 
     let chosen = signedCandidate;
 
-    // If maneuver semantics contradict the candidate side, try the alternate interpretation.
     if ((upper.includes("LEFT") || upper.includes("EXIT_LEFT")) && !isLeftHalf(chosen) && isLeftHalf(absoluteCandidate)) {
       chosen = absoluteCandidate;
     }
-    if ((upper.includes("RIGHT") || upper.includes("EXIT_RIGHT")) && !isRightHalf(chosen) && isRightHalf(absoluteCandidate)) {
+    if ((upper.includes("RIGHT") || upper.includes("EXIT_RIGHT")) && isLeftHalf(chosen) && !isLeftHalf(absoluteCandidate)) {
       chosen = absoluteCandidate;
     }
 
@@ -46,88 +43,101 @@ function getRoundaboutExitAngleDegrees(maneuver = "", exitNumber, turnAngle = nu
   }
 
   if (Number.isFinite(parsedExit) && parsedExit > 0) {
-    // Left-driving style reference: exit 1 should appear to the LEFT.
-    // Angles are screen-space (0=right, 90=down, 180=left, 270=up).
-    const normalized = (Math.round(parsedExit) - 1) % 8;
-    return (180 + normalized * 45) % 360;
+    return (180 + ((parsedExit - 1) * 45)) % 360;
   }
 
-  if (upper.includes("EXIT_LEFT") || upper.includes("ENTER_LEFT")) return 180;
-  if (upper.includes("EXIT_RIGHT") || upper.includes("ENTER_RIGHT")) return 0;
-  if (upper.includes("CROSS")) return 270;
-  return 225;
+  return null;
 }
 
-function polarToCartesian(cx, cy, radius, angleDegrees) {
-  const radians = (angleDegrees * Math.PI) / 180;
-  return {
-    x: cx + radius * Math.cos(radians),
-    y: cy + radius * Math.sin(radians),
-  };
-}
-
-function RoundaboutExitIcon({ size = 80, exitNumber, turnAngle, maneuver, color = "rgba(245, 245, 240, 0.95)" }) {
-  const center = size / 2;
-  const ringRadius = size * 0.26;
-  const ringStroke = Math.max(3, size * 0.075);
-  const exitAngle = getRoundaboutExitAngleDegrees(maneuver, exitNumber, turnAngle);
-
-  // Draw a short directional arc close to the selected exit so the icon
-  // does not appear to originate from the top for low exit numbers.
-  const arcSpan = 84;
-  const arcStartAngle = ((exitAngle - arcSpan) % 360 + 360) % 360;
-  const arcStart = polarToCartesian(center, center, ringRadius, arcStartAngle);
-  const arcEnd = polarToCartesian(center, center, ringRadius, exitAngle);
-  const largeArcFlag = 0;
-
-  const exitOuter = polarToCartesian(center, center, ringRadius + size * 0.24, exitAngle);
-  const exitInner = polarToCartesian(center, center, ringRadius + ringStroke * 0.6, exitAngle);
-
-  const arrowTip = exitOuter;
-  const arrowBase = polarToCartesian(center, center, ringRadius + size * 0.18, exitAngle);
-  const arrowLeft = polarToCartesian(arrowBase.x, arrowBase.y, size * 0.07, exitAngle + 145);
-  const arrowRight = polarToCartesian(arrowBase.x, arrowBase.y, size * 0.07, exitAngle - 145);
+function RoundaboutManeuverIcon({ size = 80, exitAngleDegrees = null, exitNumber = null, color = "rgba(245, 245, 240, 0.95)" }) {
+  const safeExit = Number.isFinite(Number(exitNumber)) && Number(exitNumber) > 0 ? Math.round(Number(exitNumber)) : null;
+  const fallbackAngle = safeExit ? (180 + ((safeExit - 1) * 45)) % 360 : 0;
+  const angle = Number.isFinite(exitAngleDegrees) ? exitAngleDegrees : fallbackAngle;
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = size * 0.24;
+  const ringStroke = Math.max(4, size * 0.09);
+  const spokeStroke = Math.max(4, size * 0.08);
+  const angleRad = (angle * Math.PI) / 180;
+  const entryEndY = cy + radius + (ringStroke * 0.5);
+  const exitStartRadius = radius + (ringStroke * 0.2);
+  const exitEndRadius = radius + size * 0.22;
+  const lineStartX = cx + (Math.cos(angleRad) * exitStartRadius);
+  const lineStartY = cy + (Math.sin(angleRad) * exitStartRadius);
+  const lineEndX = cx + (Math.cos(angleRad) * exitEndRadius);
+  const lineEndY = cy + (Math.sin(angleRad) * exitEndRadius);
+  const arrowLength = size * 0.09;
+  const arrowSpread = Math.PI / 7;
+  const arrowLeftX = lineEndX - (Math.cos(angleRad - arrowSpread) * arrowLength);
+  const arrowLeftY = lineEndY - (Math.sin(angleRad - arrowSpread) * arrowLength);
+  const arrowRightX = lineEndX - (Math.cos(angleRad + arrowSpread) * arrowLength);
+  const arrowRightY = lineEndY - (Math.sin(angleRad + arrowSpread) * arrowLength);
 
   return (
-    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ marginBottom: 2 }}>
-      <Circle cx={center} cy={center} r={ringRadius} stroke={color} strokeWidth={ringStroke} fill="none" />
-
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <Path
-        d={`M ${arcStart.x.toFixed(1)} ${arcStart.y.toFixed(1)} A ${ringRadius.toFixed(1)} ${ringRadius.toFixed(1)} 0 ${largeArcFlag} 1 ${arcEnd.x.toFixed(1)} ${arcEnd.y.toFixed(1)}`}
+        d={`M ${cx} ${size * 0.96} L ${cx} ${entryEndY}`}
         stroke={color}
-        strokeWidth={Math.max(2, size * 0.06)}
+        strokeWidth={spokeStroke}
         strokeLinecap="round"
         fill="none"
       />
-
-      <Path
-        d={`M ${exitInner.x.toFixed(1)} ${exitInner.y.toFixed(1)} L ${exitOuter.x.toFixed(1)} ${exitOuter.y.toFixed(1)}`}
+      <Circle
+        cx={cx}
+        cy={cy}
+        r={radius}
         stroke={color}
-        strokeWidth={Math.max(2, size * 0.06)}
-        strokeLinecap="round"
+        strokeWidth={ringStroke}
+        fill="none"
       />
-
+      <Path
+        d={`M ${lineStartX} ${lineStartY} L ${lineEndX} ${lineEndY}`}
+        stroke={color}
+        strokeWidth={spokeStroke}
+        strokeLinecap="round"
+        fill="none"
+      />
       <Polygon
-        points={`${arrowTip.x.toFixed(1)},${arrowTip.y.toFixed(1)} ${arrowLeft.x.toFixed(1)},${arrowLeft.y.toFixed(1)} ${arrowRight.x.toFixed(1)},${arrowRight.y.toFixed(1)}`}
+        points={`${lineEndX},${lineEndY} ${arrowLeftX},${arrowLeftY} ${arrowRightX},${arrowRightY}`}
         fill={color}
       />
-
-      {Number.isFinite(Number(exitNumber)) && Number(exitNumber) > 0 ? (
-        <>
-          <Circle cx={center} cy={center} r={size * 0.15} fill="rgba(0,0,0,0.28)" />
-          <SvgText
-            x={center}
-            y={center + size * 0.045}
-            textAnchor="middle"
-            fontSize={Math.max(10, size * 0.16)}
-            fontWeight="700"
-            fill={color}
-          >
-            {String(Math.round(Number(exitNumber)))}
-          </SvgText>
-        </>
+      {safeExit ? (
+        <SvgText
+          x={cx}
+          y={cy + (safeExit >= 10 ? size * 0.055 : size * 0.065)}
+          fill={color}
+          fontSize={safeExit >= 10 ? size * 0.2 : size * 0.26}
+          fontWeight="700"
+          textAnchor="middle"
+        >
+          {String(safeExit)}
+        </SvgText>
       ) : null}
     </Svg>
+  );
+}
+
+function NavigationManeuverIcon({ maneuver, iconName, step, size, color, style }) {
+  const upper = String(maneuver || "").toUpperCase();
+  if (!upper.includes("ROUNDABOUT")) {
+    return <MaterialCommunityIcons name={iconName} size={size} color={color} style={style} />;
+  }
+
+  const exitAngleDegrees = getRoundaboutExitAngleDegrees(
+    upper,
+    step?.nextRoundaboutExitNumber,
+    step?.nextRoundaboutTurnAngle
+  );
+
+  return (
+    <View style={style}>
+      <RoundaboutManeuverIcon
+        size={size}
+        exitAngleDegrees={exitAngleDegrees}
+        exitNumber={step?.nextRoundaboutExitNumber}
+        color={color}
+      />
+    </View>
   );
 }
 
@@ -194,7 +204,6 @@ import useWaypoints from "@core/map/waypoints/useWaypoints";
 import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
-import { showProUpgradePrompt } from "@core/utils/proUpgradePrompt";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
@@ -226,6 +235,10 @@ const SPEECH_DISTANCE_STAGES = [
 const POST_TURN_SUPPRESSION_METERS = 30; // Wait until rider clears junction before next-step callout
 const POST_TURN_SUPPRESSION_TIMEOUT_MS = 6000;
 const POST_TURN_SUPPRESSION_NEXT_LIMIT_METERS = 250;
+const STEP_COMPLETION_PROGRESS_METERS = 8;
+const STEP_COMPLETION_CLEARANCE_METERS = 14;
+const ROUNDABOUT_COMPLETION_PROGRESS_METERS = 14;
+const ROUNDABOUT_COMPLETION_CLEARANCE_METERS = 22;
 const ARRIVAL_ANNOUNCE_DISTANCE_METERS = 35;
 const ARRIVAL_PANEL_DISTANCE_METERS = 45;
 const ARRIVAL_ONROUTE_TOLERANCE_METERS = 30;
@@ -250,6 +263,23 @@ function localMetersToLatLng(base, offsetX, offsetY) {
   const latitude = base.latitude + offsetY / METERS_PER_DEGREE_LAT;
   const longitude = metersPerLon ? base.longitude + offsetX / metersPerLon : base.longitude;
   return { latitude, longitude };
+}
+
+function formatEtaFromNow(seconds) {
+  const totalSeconds = Number(seconds);
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return null;
+
+  const eta = new Date(Date.now() + totalSeconds * 1000);
+  try {
+    return eta.toLocaleTimeString([], {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    const hours = String(eta.getHours()).padStart(2, '0');
+    const minutes = String(eta.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
 }
 
 function offsetCoordinateByHeadingMeters(baseCoord, headingDegrees, meters) {
@@ -523,7 +553,6 @@ const EMPTY_FILTERS = {
   suitability: new Set(),
   categories: new Set(),
   amenities: new Set(),
-  matchMode: "all",
   sponsor: false,
   bikeBrew: false,
   visited: false,
@@ -533,7 +562,6 @@ const DEFAULT_FILTERS = {
   suitability: [],
   categories: [],
   amenities: [],
-  matchMode: "all",
   sponsor: false,
   bikeBrew: false,
   visited: false,
@@ -1165,7 +1193,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Get user's routing preferences
   const { 
     routeType: userRouteType, 
-    avoidMotorways: userAvoidMotorways,
     travelMode: userTravelMode, 
     routeTypeMap,
     theme: currentTheme,
@@ -1207,6 +1234,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
   const previousFollowUserRef = useRef(false); // Track previous Follow Me state to detect when it turn off
   const lastFollowHeadingRef = useRef(null); // Cache last usable heading for stable Follow Me offset
+  const preferredFollowZoomRef = useRef(FOLLOW_ZOOM); // Remember rider-selected zoom while Follow Me is active
   const pendingFlushRef = useRef(null); // Track pending polyline flush to cancel on clearRoute
   const pendingDisplayTimeoutRef = useRef(null); // Track pending instruction display timeout
   const {
@@ -1268,7 +1296,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastKnownDistanceRef = useRef(null);
   const routeFittedRef = useRef(false);
   const arrivalPolylineLockRef = useRef(false);
-  const routeTransitionGuardUntilRef = useRef(0);
   
   // Active ride & location sharing
   const { activeRide, endRide } = useActiveRide(user);
@@ -1368,7 +1395,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         destination: routeDestination,
         travelMode: userTravelMode,
         routeType: userRouteType,
-        avoidMotorways: userAvoidMotorways,
         requestId,
         skipFitToView: false,
       }).catch(error => {
@@ -1384,6 +1410,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       skipNextRegionChangeRef.current = true;
       skipRegionChangeUntilRef.current = Date.now() + 2500;
       isAnimatingRef.current = false;
+      preferredFollowZoomRef.current = FOLLOW_ZOOM;
 
       if (!followUser) {
         setFollowUser(true);
@@ -1406,7 +1433,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // Update ref for next comparison
     previousActiveRideRef.current = activeRide;
-  }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType, userAvoidMotorways]);
+  }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType]);
 
   // Load the shared route polyline when joining a ride
   // This is separate from the above effect because we need to load the route first,
@@ -1463,7 +1490,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const positionSmoothingRef = useRef(null); // Smoothed position for Kalman-like filtering
   const lastRouteBuildLocationRef = useRef(null); // Track location used for last route build to avoid excessive rebuilds
   const lastRouteTypeRef = useRef(null); // Track the route type used for last route build to rebuild when it changes
-  const lastAvoidMotorwaysRef = useRef(false); // Track motorway avoidance used for last route build
   const lastWaypoints = useRef([]); // Track waypoints from last route build to rebuild when they change
   const lastManualStartPointRef = useRef(null); // Track manual start point to detect Follow Me transitions
   const lastExplicitBuildRef = useRef({ waypointsId: null, destinationId: null }); // Track last explicit build to prevent duplicate rebuilds
@@ -1624,7 +1650,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         waypoints: routeWaypoints,
         travelMode: userTravelMode,
         routeType: userRouteType,
-        avoidMotorways: userAvoidMotorways,
         routeTypeMap,
         useCache: false, // Always fresh for refresh
         customHilliness,
@@ -1652,7 +1677,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       
       setCurrentStepIndex(0);
 
-      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0 };
+      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0, closestStepEndDistance: Infinity };
 
     } catch (error) {
       console.error("[REFRESH] Error refreshing route:", error);
@@ -1939,7 +1964,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   async function handleSaveRoute(routeName) {
     if (!routeCoords.length || !user) return;
     if (!capabilities.canSaveRoutes) {
-      showProUpgradePrompt(router);
+      setPostbox({ type: "info", message: "Your account cannot save routes." });
       return;
     }
     if (!user) {
@@ -2019,6 +2044,23 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
 
   return steps.length - 1;
 }
+
+function getStepCompletionThresholds(step = null) {
+  const maneuver = String(step?.nextManeuver || step?.maneuver || '').toUpperCase();
+  if (isRoundaboutManeuver(maneuver)) {
+    return {
+      minProgressPastEnd: ROUNDABOUT_COMPLETION_PROGRESS_METERS,
+      minClearanceFromEnd: ROUNDABOUT_COMPLETION_CLEARANCE_METERS,
+      minDistanceIncrease: 8,
+    };
+  }
+
+  return {
+    minProgressPastEnd: STEP_COMPLETION_PROGRESS_METERS,
+    minClearanceFromEnd: STEP_COMPLETION_CLEARANCE_METERS,
+    minDistanceIncrease: 5,
+  };
+}
   function getFinalDestination() {
     if (routeDestination) return routeDestination;
     if (waypoints.length > 0) return waypoints[waypoints.length - 1];
@@ -2055,7 +2097,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     }
     
     if (!capabilities?.canSaveRoutes) {
-      showProUpgradePrompt(router);
+      setPostbox({ type: "info", message: "Your account cannot save rides." });
       return;
     }
 
@@ -2308,6 +2350,90 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     }
   }
 
+  function clampMapZoom(zoom) {
+    const num = Number(zoom);
+    if (!Number.isFinite(num)) return FOLLOW_ZOOM;
+    const minZoom = Platform.OS === "ios" ? 1 : 0;
+    const maxZoom = Platform.OS === "ios" ? 28 : 18;
+    return Math.max(minZoom, Math.min(maxZoom, num));
+  }
+
+  function altitudeToZoom(altitude) {
+    const num = Number(altitude);
+    if (!Number.isFinite(num) || num <= 0) return null;
+    return clampMapZoom(13 - Math.log2(num / 10));
+  }
+
+  function regionToApproxZoom(region) {
+    const delta = Number(region?.longitudeDelta || region?.latitudeDelta);
+    if (!Number.isFinite(delta) || delta <= 0) return null;
+    return clampMapZoom(Math.log2(360 / delta));
+  }
+
+  function zoomToMetersPerPixel(latitude, zoom) {
+    const lat = Number(latitude);
+    const level = Number(zoom);
+    if (!Number.isFinite(lat) || !Number.isFinite(level)) return null;
+    return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, level);
+  }
+
+  function getFollowAheadMeters(coords, zoom) {
+    const fallback = isLandscape
+      ? FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE
+      : FOLLOW_CENTER_AHEAD_METERS_PORTRAIT;
+
+    const metersPerPixel = zoomToMetersPerPixel(coords?.latitude, zoom);
+    if (!Number.isFinite(metersPerPixel) || metersPerPixel <= 0) {
+      return fallback;
+    }
+
+    const visibleHeight = Math.max(
+      240,
+      dimensions.height - insets.top - insets.bottom - TAB_BAR_HEIGHT - 12
+    );
+    const targetMarkerScreenY = Platform.OS === "ios"
+      ? (isLandscape ? 0.74 : 0.80)
+      : (isLandscape ? 0.68 : 0.74);
+    const pixelOffsetFromCenter = Math.max(0, (targetMarkerScreenY - 0.5) * visibleHeight);
+    const platformCompensation = Platform.OS === "ios" ? 1.2 : 1;
+    const desiredMeters = pixelOffsetFromCenter * metersPerPixel * platformCompensation;
+    const maxAhead = Platform.OS === "ios"
+      ? (isLandscape ? 1100 : 1700)
+      : (isLandscape ? 900 : 1500);
+
+    return Math.max(fallback, Math.min(maxAhead, desiredMeters));
+  }
+
+  async function captureCurrentMapZoom(fallback = FOLLOW_ZOOM, region = null) {
+    try {
+      if (mapRef.current?.getCamera) {
+        const camera = await mapRef.current.getCamera();
+        if (Number.isFinite(camera?.zoom)) {
+          const nextZoom = clampMapZoom(camera.zoom);
+          preferredFollowZoomRef.current = nextZoom;
+          return nextZoom;
+        }
+        if (Platform.OS === "ios") {
+          const nextZoom = altitudeToZoom(camera?.altitude);
+          if (Number.isFinite(nextZoom)) {
+            preferredFollowZoomRef.current = nextZoom;
+            return nextZoom;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("[FollowMe] Unable to read current zoom:", error?.message || error);
+    }
+
+    const regionZoom = regionToApproxZoom(region);
+    if (Number.isFinite(regionZoom)) {
+      preferredFollowZoomRef.current = regionZoom;
+      return regionZoom;
+    }
+
+    return clampMapZoom(preferredFollowZoomRef.current || fallback);
+  }
+
   async function recenterOnUser({ zoom = null, heading = null, pitch = null, followMode = false } = {}) {
     if (!mapRef.current) return;
 
@@ -2356,8 +2482,13 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       lastFollowHeadingRef.current = effectiveHeading;
     }
 
+    // iOS uses altitude (in meters), Android uses zoom level
+    const effectiveZoom = zoom !== null
+      ? clampMapZoom(zoom)
+      : (followMode ? clampMapZoom(preferredFollowZoomRef.current) : null);
+
     const aheadMeters = followMode
-      ? (isLandscape ? FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE : FOLLOW_CENTER_AHEAD_METERS_PORTRAIT)
+      ? getFollowAheadMeters(coords, effectiveZoom ?? preferredFollowZoomRef.current)
       : 0;
 
     const centerPoint = followMode && Number.isFinite(effectiveHeading)
@@ -2370,16 +2501,19 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       ...(Number.isFinite(effectiveHeading) ? { heading: effectiveHeading } : {}),
       ...(pitch !== null ? { pitch } : {}),
     };
-    
-    // iOS uses altitude (in meters), Android uses zoom level
-    if (zoom !== null) {
+
+    if (followMode && effectiveZoom !== null) {
+      preferredFollowZoomRef.current = effectiveZoom;
+    }
+
+    if (effectiveZoom !== null) {
       if (Platform.OS === "ios") {
         // Convert zoom level to altitude for iOS
         // Lower altitude = closer/more zoomed in
         // zoom 28 ≈ ~100m altitude, zoom 12 ≈ ~5000m altitude
-        cameraConfig.altitude = Math.pow(2, 13 - zoom) * 10;
+        cameraConfig.altitude = Math.pow(2, 13 - effectiveZoom) * 10;
       } else {
-        cameraConfig.zoom = zoom;
+        cameraConfig.zoom = effectiveZoom;
       }
     }
     
@@ -2413,15 +2547,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     }
   }
 
-  function beginRouteTransitionGuard(durationMs = 2500) {
-    routeTransitionGuardUntilRef.current = Date.now() + durationMs;
-    setHasArrivedAtDestination(false);
-    if (arrivalPolylineLockRef.current) {
-      arrivalPolylineLockRef.current = false;
-      setHidePolylines(false);
-    }
-  }
-
   /* ------------------------------------------------------------ */
   /* FOLLOW MODE                                                  */
   /* ------------------------------------------------------------ */
@@ -2430,6 +2555,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     if (followUser) {
       setFollowUser(false);
       clearFollowMeInactivityTimeout();
+      preferredFollowZoomRef.current = FOLLOW_ZOOM;
       // Revert to normal zoom and no tilt
       skipNextRegionChangeRef.current = true;
       skipRegionChangeUntilRef.current = Date.now() + 2000;
@@ -2444,6 +2570,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
     skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
     skipRegionChangeUntilRef.current = Date.now() + 2000;
+    preferredFollowZoomRef.current = FOLLOW_ZOOM;
     await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true });
 
     // Now enable follow mode and start 15-minute inactivity timer
@@ -2499,17 +2626,11 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       }
 
       // Clear existing waypoints and route
-      beginRouteTransitionGuard(4000);
       clearWaypoints();
       setRouteCoords([]);
       setRouteVersion(v => v + 1);  // Ensure old Polyline components unmount
       routeFittedRef.current = false;
       setRouteClearedByUser(false); // Ensure route building is not blocked
-      setCurrentStepIndex(0);
-      setRouteSteps([]);
-      routeStepsLoggedRef.current = false;
-      setNextJunctionDistance(null);
-      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0 };
 
       // Set home as destination
       await debugLog("ROUTE_TO_HOME", "Route to home initiated", { lat: homeCoords.lat, lng: homeCoords.lng });
@@ -2535,7 +2656,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
         },
         travelMode: userTravelMode,
         routeType: userRouteType,
-        avoidMotorways: userAvoidMotorways,
         requestId: requestId,
         skipFitToView: false, // Allow initial fit
       }).catch(error => {
@@ -2545,6 +2665,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       // Now enable Follow Me mode to guide to home
       skipNextFollowTickRef.current = true;
       skipNextRegionChangeRef.current = true;
+      preferredFollowZoomRef.current = FOLLOW_ZOOM;
       await recenterOnUser({ zoom: FOLLOW_ZOOM, followMode: true });
       setFollowUser(true);
       
@@ -2579,10 +2700,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     // Update camera during navigation (Follow Me or active ride)
     // If we have heading, use it for orientation; otherwise just center on location
     if (userLocation.heading !== undefined && userLocation.heading !== -1) {
-      recenterOnUser({ heading: userLocation.heading, pitch: 35, zoom: FOLLOW_ZOOM, followMode: true });
+      recenterOnUser({ heading: userLocation.heading, pitch: 35, zoom: preferredFollowZoomRef.current, followMode: true });
     } else {
       // Fallback: center on location without heading (for active rides or when heading unavailable)
-      recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 0, followMode: true });
+      recenterOnUser({ zoom: preferredFollowZoomRef.current, pitch: 0, followMode: true });
     }
   }, [userLocation, isNavigationMode]);
 
@@ -2593,7 +2714,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
 
     const timeoutId = setTimeout(() => {
       recenterOnUser({
-        zoom: FOLLOW_ZOOM,
+        zoom: preferredFollowZoomRef.current,
         pitch: 35,
         followMode: true,
         heading: Number.isFinite(lastFollowHeadingRef.current) ? lastFollowHeadingRef.current : null,
@@ -2610,6 +2731,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     lastStepIdx: 0,
     lastDistToEnd: Infinity,
     lastProgressMeters: 0,
+    closestStepEndDistance: Infinity,
   });
   const instructionsSuppressedRef = useRef(false);
   const lastSpokenInstructionRef = useRef({ text: null, timestamp: 0 });
@@ -2654,6 +2776,21 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     const previousStepIdx = stepProgressRef.current.lastStepIdx || 0;
     let progressForStepMapping = rawProgressMeters;
     let allowStepBacktrack = false;
+
+    const trackedStep = routeSteps[Math.min(previousStepIdx, routeSteps.length - 1)] || null;
+    const trackedStepEnd = trackedStep?.end;
+    const trackedStepEndDistance =
+      trackedStepEnd &&
+      Number.isFinite(trackedStepEnd.latitude) &&
+      Number.isFinite(trackedStepEnd.longitude)
+        ? distanceBetweenMeters(navigationPosition, trackedStepEnd)
+        : Infinity;
+    const previousClosestStepEndDistance = Number.isFinite(stepProgressRef.current.closestStepEndDistance)
+      ? stepProgressRef.current.closestStepEndDistance
+      : Infinity;
+    const closestStepEndDistance = Number.isFinite(trackedStepEndDistance)
+      ? Math.min(previousClosestStepEndDistance, trackedStepEndDistance)
+      : previousClosestStepEndDistance;
 
     if (lastProgressMeters > 0 && rawProgressMeters + PROGRESS_TOLERANCE_METERS < lastProgressMeters) {
       const regressionMeters = lastProgressMeters - rawProgressMeters;
@@ -2709,6 +2846,33 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       }
     }
 
+    if (!allowStepBacktrack && nextStepIdx > previousStepIdx + 1) {
+      nextStepIdx = previousStepIdx + 1;
+    }
+
+    if (!allowStepBacktrack && nextStepIdx > previousStepIdx && trackedStep) {
+      const currentStepProgress = Number(trackedStep?.polylineProgress);
+      const { minProgressPastEnd, minClearanceFromEnd, minDistanceIncrease } = getStepCompletionThresholds(trackedStep);
+      const progressPastEnd = Number.isFinite(currentStepProgress)
+        ? progressForStepMapping - currentStepProgress
+        : Infinity;
+      const hasClearedByProgress = progressPastEnd >= minProgressPastEnd;
+      const hasMovedAwayFromEnd = Number.isFinite(trackedStepEndDistance)
+        ? trackedStepEndDistance >= Math.max(minClearanceFromEnd, closestStepEndDistance + minDistanceIncrease)
+        : true;
+
+      if (!(hasClearedByProgress && hasMovedAwayFromEnd)) {
+        console.log('[Navigation] Holding current maneuver until cleared', {
+          currentStepIndex: previousStepIdx,
+          attemptedStepIndex: nextStepIdx,
+          progressPastEnd: Math.round(progressPastEnd),
+          trackedStepEndDistance: Math.round(trackedStepEndDistance),
+          closestStepEndDistance: Math.round(closestStepEndDistance),
+        });
+        nextStepIdx = previousStepIdx;
+      }
+    }
+
     if (nextStepIdx !== currentStepIndex) {
       console.log('[Navigation] Step index updated (progress-based):', {
         from: currentStepIndex,
@@ -2756,6 +2920,9 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
 
     stepProgressRef.current.lastStepIdx = nextStepIdx;
     stepProgressRef.current.lastProgressMeters = progressForStepMapping;
+    stepProgressRef.current.closestStepEndDistance = nextStepIdx === previousStepIdx
+      ? closestStepEndDistance
+      : Infinity;
   }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex, routeDestination]);
 
   useEffect(() => {
@@ -2769,7 +2936,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     const maneuver = (step.nextManeuver || 'STRAIGHT').trim().toUpperCase();
     const distance = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : '--';
     const instruction = getEffectiveInstructionText(step) || step.nextInstruction || step.instruction || 'Continue';
-    const roundaboutAngle = maneuver.includes('ROUNDABOUT')
+    const roundaboutAngle = isRoundaboutManeuver(maneuver)
       ? getRoundaboutExitAngleDegrees(maneuver, step?.nextRoundaboutExitNumber, step?.nextRoundaboutTurnAngle)
       : null;
     sendBleDirectionsFrame({
@@ -2992,10 +3159,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       return;
     }
 
-    if (Date.now() < routeTransitionGuardUntilRef.current) {
-      return;
-    }
-
     // Only consider arrival if we have reached the final step
     const onFinalStep = currentStepIndex >= routeSteps.length - 1;
     if (!onFinalStep) {
@@ -3028,25 +3191,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       return;
     }
 
-    const projectedProgressMeters = polylineProjection?.progressMeters;
-    const routeLengthMeters = Number.isFinite(routeDistanceMeters)
-      ? routeDistanceMeters
-      : routeCoords.reduce((total, point, idx) => {
-          if (idx === 0) return 0;
-          return total + distanceBetweenMeters(routeCoords[idx - 1], point);
-        }, 0);
-    const projectedRemainingMeters =
-      Number.isFinite(projectedProgressMeters) && Number.isFinite(routeLengthMeters)
-        ? Math.max(routeLengthMeters - projectedProgressMeters, 0)
-        : Infinity;
-    const isNearRouteEndByProgress =
-      Number.isFinite(projectedRemainingMeters) &&
-      projectedRemainingMeters <= Math.max(ARRIVAL_PANEL_DISTANCE_METERS + 15, 60);
-
-    if (!isNearRouteEndByProgress) {
-      return;
-    }
-
     if (!hasArrivedAtDestination) {
       setHasArrivedAtDestination(true);
       if (!arrivalPolylineLockRef.current) {
@@ -3069,7 +3213,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     waypoints.length,
     userLocation,
     routeCoords,
-    routeDistanceMeters,
     hasArrivedAtDestination,
   ]);
 
@@ -3178,7 +3321,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 destination: routeDestination,
                 travelMode: userTravelMode,
                 routeType: userRouteType,
-                avoidMotorways: userAvoidMotorways,
                 requestId,
                 skipFitToView: true,
                 vehicleHeading: lastGoodGPSRef.current?.heading || null,
@@ -3197,7 +3339,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
             destination: routeDestination,
             travelMode: userTravelMode,
             routeType: userRouteType,
-            avoidMotorways: userAvoidMotorways,
             requestId,
             skipFitToView: true,
             vehicleHeading: userLocation?.heading || null,
@@ -3321,7 +3462,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       destination: rerouteDestination,
       travelMode: userTravelMode,
       routeType: userRouteType,
-      avoidMotorways: userAvoidMotorways,
       requestId,
       skipFitToView: true,
       vehicleHeading: userLocation?.heading || null,
@@ -3338,7 +3478,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     getNextUnvisitedWaypointIndex,
     userTravelMode,
     userRouteType,
-    userAvoidMotorways,
     hasArrivedAtDestination,
   ]);
 
@@ -3447,49 +3586,61 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     };
   }, [followUser, routeCoords, userLocation]);
 
-  // Calculate remaining distance and time during Follow Me
+  // Calculate remaining distance and ETA during navigation using live progress on the route.
   const { remainingDistanceMeters, remainingDurationSeconds } = useMemo(() => {
-    if (!followUser || !remainingPolyline || remainingPolyline.length === 0 || !routeDistanceMeters || !routeMeta?.durationSeconds) {
-      if (!followUser) {
-        return { remainingDistanceMeters: routeDistanceMeters, remainingDurationSeconds: routeMeta?.durationSeconds };
-      }
-      if (!remainingPolyline || remainingPolyline.length === 0) {
-        console.warn('[RemainingDistance] Polyline issue:', { hasRemainingPolyline: !!remainingPolyline, length: remainingPolyline?.length });
-        return { remainingDistanceMeters: routeDistanceMeters, remainingDurationSeconds: routeMeta?.durationSeconds };
-      }
-      if (!routeDistanceMeters || !routeMeta?.durationSeconds) {
-        console.warn('[RemainingDistance] Missing route metadata:', { routeDistanceMeters, durationSeconds: routeMeta?.durationSeconds });
-        return { remainingDistanceMeters: routeDistanceMeters, remainingDurationSeconds: routeMeta?.durationSeconds };
-      }
+    const totalDistanceMeters = Number(routeDistanceMeters ?? routeMeta?.distanceMeters);
+    const totalDurationSeconds = Number(routeMeta?.durationSeconds);
+
+    if (!Number.isFinite(totalDistanceMeters) || totalDistanceMeters <= 0) {
+      return { remainingDistanceMeters: null, remainingDurationSeconds: null };
     }
 
-    // Calculate remaining polyline distance
-    let remainingDist = 0;
-    for (let i = 0; i < remainingPolyline.length - 1; i++) {
-      remainingDist += distanceBetweenMeters(remainingPolyline[i], remainingPolyline[i + 1]);
+    if (!Number.isFinite(totalDurationSeconds) || totalDurationSeconds <= 0) {
+      return { remainingDistanceMeters: totalDistanceMeters, remainingDurationSeconds: null };
     }
 
-    // Calculate traveled distance
-    const traveledDist = routeDistanceMeters - remainingDist;
-    
-    // Scale remaining time proportionally based on distance ratio
-    const timeRatio = routeDistanceMeters > 0 ? remainingDist / routeDistanceMeters : 0;
-    const remainingTime = Math.round(routeMeta.durationSeconds * timeRatio);
+    if (!isNavigationMode || !userLocation || !routeCoords || routeCoords.length < 2) {
+      return {
+        remainingDistanceMeters: totalDistanceMeters,
+        remainingDurationSeconds: totalDurationSeconds,
+      };
+    }
 
-    console.log('[RemainingDistance] Calculated:', { 
-      remainingDist: Math.round(remainingDist),
-      traveledDist: Math.round(traveledDist),
-      totalDist: routeDistanceMeters,
-      polylinePointsRemaining: remainingPolyline.length,
-      timeRatios: timeRatio.toFixed(2),
-      remainingTime,
-    });
+    let totalPolylineMeters = 0;
+    for (let i = 0; i < routeCoords.length - 1; i++) {
+      totalPolylineMeters += distanceBetweenMeters(routeCoords[i], routeCoords[i + 1]);
+    }
+
+    if (!Number.isFinite(totalPolylineMeters) || totalPolylineMeters <= 0) {
+      return {
+        remainingDistanceMeters: totalDistanceMeters,
+        remainingDurationSeconds: totalDurationSeconds,
+      };
+    }
+
+    const lastProgressMeters = Number(stepProgressRef.current?.lastProgressMeters) || 0;
+    const projection = projectPointToPolylineDetailed(
+      userLocation,
+      routeCoords,
+      250,
+      Math.max(0, lastProgressMeters - PROGRESS_BACKTRACK_TOLERANCE_METERS)
+    );
+
+    const progressMeters = Number.isFinite(projection?.progressMeters)
+      ? projection.progressMeters
+      : lastProgressMeters;
+    const progressRatio = Math.max(0, Math.min(1, progressMeters / totalPolylineMeters));
+    const remainingDist = Math.max(0, totalDistanceMeters * (1 - progressRatio));
+    const remainingTime = Math.max(
+      0,
+      Math.round(totalDurationSeconds * (remainingDist / totalDistanceMeters))
+    );
 
     return {
       remainingDistanceMeters: remainingDist,
       remainingDurationSeconds: remainingTime,
     };
-  }, [followUser, remainingPolyline, routeDistanceMeters, routeMeta]);
+  }, [isNavigationMode, userLocation, routeCoords, routeDistanceMeters, routeMeta?.distanceMeters, routeMeta?.durationSeconds]);
 
   // Detect when Follow Me is turned off with a tracked ride
   useEffect(() => {
@@ -3550,7 +3701,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     setMapActions({
       recenter: handleRecentre,
       toggleFollow: toggleFollowMe,
-      isFollowing: () => followUser,
+      isFollowing: () => isNavigationMode,
       showRefreshMenu: () => setShowRefreshRouteMenu(true),
       canRefreshRoute: () => userLocation && (waypoints.length > 0 || routeDestination),
       refreshRoute: handleRefreshRouteToNextWaypoint,
@@ -3564,7 +3715,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     return () => {
       setMapActions(null);
     };
-  }, [followUser, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress, endRide, selectedPlace, selectedPlaceId]);
+  }, [isNavigationMode, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress, endRide, selectedPlace, selectedPlaceId]);
 
   useEffect(() => {
     let subscription;
@@ -3692,8 +3843,8 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     // All camera updates during Follow Me are programmatic (from location updates)
     // Only disable if user manually pans AFTER they were in Follow Me
     if (followUser) {
-      // Skip pan detection entirely while Follow Me is active - 
-      // map will update continuously as user location changes
+      // Keep Follow Me active, but preserve whatever zoom the rider just chose.
+      await captureCurrentMapZoom(preferredFollowZoomRef.current, region);
       skipNextRegionChangeRef.current = false;
       return;
     }
@@ -3820,8 +3971,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     routeRequestId.current += 1;   // invalidate in-flight requests
     
     try {
-      beginRouteTransitionGuard(2500);
-
       // Hide polylines temporarily for visual clearness (extra failsafe for Android)
       setHidePolylines(true);
       
@@ -3864,7 +4013,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       routeStepsLoggedRef.current = false;
 
       setNextJunctionDistance(null); // Clear junction distance
-      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0 }; // Reset step progress tracker
+      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0, closestStepEndDistance: Infinity }; // Reset step progress tracker
       
       // Cancel any pending instruction display update
       if (pendingDisplayTimeoutRef?.current) {
@@ -4004,7 +4153,10 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     if (!capabilities.canSearchGoogle) {
       console.log("[SEARCH] Google search blocked for role");
       setGooglePois([]); // ensure no stale results linger
-      showProUpgradePrompt(router);
+      setSearchNotice({
+        title: "Search restricted",
+        message: "You must log in to use the search function.",
+      });      
       return;
     }    
     // Prevent duplicate searches
@@ -4121,10 +4273,8 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       return;
     }
 
-    // If route preferences changed, always rebuild (ignore distance threshold)
+    // If route type changed, always rebuild (ignore distance threshold)
     const routeTypeChanged = userRouteType !== lastRouteTypeRef.current;
-    const avoidMotorwaysChanged = userAvoidMotorways !== lastAvoidMotorwaysRef.current;
-    const routePreferenceChanged = routeTypeChanged || avoidMotorwaysChanged;
     
     // Helper to safely get lat/lng from waypoint (handles both naming conventions)
     const getWpCoords = (wp) => ({
@@ -4164,7 +4314,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     
     // GUARD: If user is still on the existing polyline heading the correct direction, don't rebuild
     // This prevents unnecessary reroutes when GPS accuracy changes slightly but user is still on track
-    if (!routePreferenceChanged && !waypointsChanged && !manualStartPointCleared && routeCoords.length > 0) {
+    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && routeCoords.length > 0) {
       // Check if user is within 50m of any point on the polyline and heading forward
       let nearestDistance = Infinity;
       let nearestIndex = -1;
@@ -4189,7 +4339,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     // Check if user has moved far enough to warrant a route rebuild
     // This prevents excessive API calls from GPS noise (small accuracy variations)
     // But we skip this check if the route type, waypoints, or manual start point have changed
-    if (!routePreferenceChanged && !waypointsChanged && !manualStartPointCleared && lastRouteBuildLocationRef.current) {
+    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && lastRouteBuildLocationRef.current) {
       const distanceMoved = distanceBetween(lastRouteBuildLocationRef.current, userLocation);
       if (distanceMoved < MIN_ROUTE_REBUILD_DISTANCE_METERS) {
         return; // Skip rebuild if movement is less than threshold
@@ -4201,7 +4351,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       console.warn('[MAP_EFFECT] buildRoute error:', error);
       // Error already handled as toast in buildRoute, no need to display again
     });
-  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, userAvoidMotorways, manualStartPoint]);
+  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, manualStartPoint]);
 
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
@@ -4226,59 +4376,32 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       });
     }
 
-    const hasCoreFilters =
-      appliedFilters.suitability.size > 0 ||
-      appliedFilters.categories.size > 0 ||
-      appliedFilters.amenities.size > 0 ||
-      appliedFilters.bikeBrew;
-    const hasSponsorFilter = appliedFilters.sponsor;
-    const hasVisitedFilter = appliedFilters.visited;
-    const useAnyMode = appliedFilters.matchMode === "any";
-
-    if (hasCoreFilters || hasSponsorFilter || hasVisitedFilter) {
+    if (
+      appliedFilters.suitability.size ||
+      appliedFilters.categories.size ||
+      appliedFilters.amenities.size ||
+      appliedFilters.sponsor
+    ) {
       console.log("[SPONSOR_FILTER] Filter active - sponsored places in list:", Array.from(sponsoredPlaceIds));
       
       list = list.filter((p) => {
-        const sponsorMatch = sponsoredPlaceIds.has(p.id);
-        const visitedMatch = visitedPlaceIds.has(p.id);
-        const coreMatch = applyFilters(p, appliedFilters);
-
-        if (useAnyMode) {
-          const anyMatches = [];
-
-          if (hasSponsorFilter) {
-            anyMatches.push(sponsorMatch);
-          }
-
-          if (hasVisitedFilter) {
-            anyMatches.push(visitedMatch);
-          }
-
-          if (hasCoreFilters) {
-            anyMatches.push(coreMatch);
-          }
-
-          return anyMatches.some(Boolean);
-        }
-
-        // AND mode: every active filter group must match.
-        if (hasSponsorFilter) {
-          console.log("[SPONSOR_FILTER] Place", p.id, p.title, "- sponsored:", sponsorMatch);
-          if (!sponsorMatch) {
+        // Check sponsor filter first
+        if (appliedFilters.sponsor) {
+          const isSponsored = sponsoredPlaceIds.has(p.id);
+          console.log("[SPONSOR_FILTER] Place", p.id, p.title, "- sponsored:", isSponsored);
+          // Only show place if it's in the sponsored list
+          if (!isSponsored) {
             return false;
           }
         }
-
-        if (hasVisitedFilter && !visitedMatch) {
-          return false;
-        }
-
-        if (hasCoreFilters && !coreMatch) {
-          return false;
-        }
-
-        return true;
+        // Then check other filters
+        return applyFilters(p, appliedFilters);
       });
+    }
+
+    // Visited filter — show only places the user has been to
+    if (appliedFilters.visited) {
+      list = list.filter((p) => visitedPlaceIds.has(p.id));
     }
 
     return list;
@@ -4472,7 +4595,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     destination,
     travelMode,
     routeType,
-    avoidMotorways = false,
     requestId,
     skipFitToView = false, // Don't auto-center when in Follow Me mode
     vehicleHeading = null, // User's current heading in degrees (0-359), used for rerouting
@@ -4540,7 +4662,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
         waypoints: normalizedIntermediates,
         travelMode,
         routeType,
-        avoidMotorways,
         routeTypeMap,
         useCache,
         customHilliness,
@@ -4608,7 +4729,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
     });
     
     setCurrentStepIndex(0);
-    stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0 };
+    stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0, closestStepEndDistance: Infinity };
 
     // Auto-fit view if not in Follow Me and not already fitted
     if (!skipFitToView && !routeFittedRef.current && !followUser) {
@@ -4662,7 +4783,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       const startCoord = normalizeCoord(manualStartPoint || userLocation);
       lastRouteBuildLocationRef.current = startCoord;
       lastRouteTypeRef.current = userRouteType;
-      lastAvoidMotorwaysRef.current = userAvoidMotorways;
       lastWaypoints.current = effectiveWaypoints;
       lastManualStartPointRef.current = manualStartPoint;
     }
@@ -4682,7 +4802,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       destination,
       travelMode: userTravelMode,
       routeType: userRouteType,
-      avoidMotorways: userAvoidMotorways,
       requestId: finalRequestId,
       skipFitToView: skipFit,
     });
@@ -5118,10 +5237,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
       
 
       if (poi.source === "google") {
-        if (!capabilities.canSearchGoogle) {
-          showProUpgradePrompt(router);
-          return;
-        }
+        if (!capabilities.canSearchGoogle) return;
 
         // Check for CR place at this location (proximity or Google Place ID)
         const PROXIMITY_THRESHOLD = 40; // meters
@@ -5155,10 +5271,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
 
     const handleMarkerLongPress = () => {
       console.log("[MARKER] Long press on:", poi.title || poi.name);
-      if (!capabilities.canCreateRoutes) {
-        showProUpgradePrompt(router);
-        return;
-      }
+      if (!capabilities.canCreateRoutes) return;
       
       setPendingMarker(poi);
       setShowMarkerMenu(true);
@@ -5213,10 +5326,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
             }
           }}
           onLongPress={async (e) => {
-            if (!capabilities.canCreateRoutes) {
-              showProUpgradePrompt(router);
-              return;
-            }
+            if (!capabilities.canCreateRoutes) return;
 
             const { latitude, longitude } = e.nativeEvent.coordinate;
 
@@ -5381,7 +5491,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
             {/* Remaining route - outline layer for pedestrians and cyclists */}
               <Polyline
                 key="active-outline"
-                coordinates={followUser ? remainingPolyline : routeCoords}
+                coordinates={routeCoords}
                 strokeWidth={hidePolylines ? 0 : (shouldRenderOutline(userTravelMode) && routeCoords.length > 0 ? (isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)) : 0)}
                 strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                 zIndex={999}
@@ -5389,7 +5499,7 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
               {/* Remaining route */}
               <Polyline
                 key="active-route"
-                coordinates={followUser ? remainingPolyline : routeCoords}
+                coordinates={routeCoords}
                 strokeWidth={hidePolylines ? 0 : (routeCoords.length > 0 ? (isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)) : 0)}
                 strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                 zIndex={1000}
@@ -5464,53 +5574,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
             contentContainerStyle={styles.filterScrollContent}
             showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.filterSection}>Match Mode</Text>
-            <View style={styles.matchModeRow}>
-              <TouchableOpacity
-                style={[
-                  styles.matchModeButton,
-                  draftFilters.matchMode === "all" && styles.matchModeButtonActive,
-                ]}
-                onPress={() =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    matchMode: "all",
-                  }))
-                }
-              >
-                <Text
-                  style={[
-                    styles.matchModeText,
-                    draftFilters.matchMode === "all" && styles.matchModeTextActive,
-                  ]}
-                >
-                  AND
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.matchModeButton,
-                  draftFilters.matchMode === "any" && styles.matchModeButtonActive,
-                ]}
-                onPress={() =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    matchMode: "any",
-                  }))
-                }
-              >
-                <Text
-                  style={[
-                    styles.matchModeText,
-                    draftFilters.matchMode === "any" && styles.matchModeTextActive,
-                  ]}
-                >
-                  OR
-                </Text>
-              </TouchableOpacity>
-            </View>
-
            
             {/* SUITABILITY */}
             <Text style={styles.filterSection}>Meet-ups / Suitability</Text>
@@ -5733,15 +5796,22 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           
           if (!step) return null;
 
-          const isRouteTransitioning = Date.now() < routeTransitionGuardUntilRef.current;
+          // Check if we've reached the destination (at the last step)
+          // Only show if we have an actual route and have reached final step with proximity check
+          const hasRouteIntent = routeDestination || waypoints.length > 0;
+          const hasValidRouteSteps = routeSteps && routeSteps.length >= 1;
+          const isAtFinalStep = currentStepIndex >= routeSteps.length - 1;
           
           let distToDestinationMeters = null;
+          let isCloseToDestination = false;
           if (routeDestination && routeCoords.length > 0 && userLocation) {
             const lastCoord = routeCoords[routeCoords.length - 1];
             distToDestinationMeters = distanceBetweenMeters(userLocation, lastCoord);
+            isCloseToDestination = typeof distToDestinationMeters === 'number' && distToDestinationMeters <= ARRIVAL_PANEL_DISTANCE_METERS;
           }
           
-          const shouldShowArrivalPanel = hasArrivedAtDestination && !isRouteTransitioning;
+          const hasReachedDestination = hasRouteIntent && hasValidRouteSteps && isAtFinalStep && isCloseToDestination;
+          const shouldShowArrivalPanel = hasArrivedAtDestination || hasReachedDestination;
           const fullscreenPaddingTop = (isLandscape ? insets.top + 8 : insets.top + 32);
           const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 8 : insets.bottom + 32);
           const fullscreenPaddingHorizontal = isLandscape ? 32 : 24;
@@ -5880,12 +5950,24 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           });
 
           let remainingSummary = null;
-          if (remainingDistanceMeters && remainingDurationSeconds) {
-            const totalMins = Math.round(remainingDurationSeconds / 60);
-            const hours = Math.floor(totalMins / 60);
-            const mins = totalMins % 60;
-            const durationText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-            remainingSummary = `${formatDistanceImperial(remainingDistanceMeters)} • ${durationText} remaining`;
+          if (Number.isFinite(remainingDistanceMeters) && remainingDistanceMeters >= 0) {
+            const totalMins = Number.isFinite(remainingDurationSeconds)
+              ? Math.max(0, Math.round(remainingDurationSeconds / 60))
+              : null;
+            const hours = totalMins != null ? Math.floor(totalMins / 60) : 0;
+            const mins = totalMins != null ? totalMins % 60 : 0;
+            const durationText = totalMins == null
+              ? null
+              : (hours > 0 ? `${hours}h ${mins}m` : `${totalMins} min`);
+            const etaText = Number.isFinite(remainingDurationSeconds)
+              ? formatEtaFromNow(remainingDurationSeconds)
+              : null;
+
+            remainingSummary = [
+              formatDistanceImperial(remainingDistanceMeters),
+              durationText,
+              etaText ? `ETA ${etaText}` : null,
+            ].filter(Boolean).join(' • ');
           }
 
           const continueCheckSource = (label || effectiveInstruction || rawNextInstruction || '').trim();
@@ -5929,19 +6011,14 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                 accessibilityHint="Long press to expand directions"
               >
                 {/* Large direction icon */}
-                {isRoundaboutManeuver(nextManeuver) ? (
-                  <View style={styles.junctionIcon}>
-                    <RoundaboutExitIcon
-                      size={80}
-                      exitNumber={step?.nextRoundaboutExitNumber}
-                      turnAngle={step?.nextRoundaboutTurnAngle}
-                      maneuver={nextManeuver}
-                      color="rgba(245, 245, 240, 0.95)"
-                    />
-                  </View>
-                ) : (
-                  <MaterialCommunityIcons name={displayMeta.icon} size={80} color="rgba(245, 245, 240, 0.95)" style={styles.junctionIcon} />
-                )}
+                <NavigationManeuverIcon
+                  maneuver={nextManeuver}
+                  iconName={displayMeta.icon}
+                  step={step}
+                  size={80}
+                  color="rgba(245, 245, 240, 0.95)"
+                  style={styles.junctionIcon}
+                />
                 {/* Distance and label section */}
                 <View style={styles.junctionContent}>
                   <View style={styles.junctionHeaderRow}>
@@ -5996,22 +6073,14 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
                       showsVerticalScrollIndicator={false}
                       alwaysBounceVertical={false}
                     >
-                      {isRoundaboutManeuver(nextManeuver) ? (
-                        <RoundaboutExitIcon
-                          size={fullscreenIconSize}
-                          exitNumber={step?.nextRoundaboutExitNumber}
-                          turnAngle={step?.nextRoundaboutTurnAngle}
-                          maneuver={nextManeuver}
-                          color="#ffffff"
-                        />
-                      ) : (
-                        <MaterialCommunityIcons
-                          name={displayMeta.icon}
-                          size={fullscreenIconSize}
-                          color="#ffffff"
-                          style={styles.fullscreenDirectionsIcon}
-                        />
-                      )}
+                      <NavigationManeuverIcon
+                        maneuver={nextManeuver}
+                        iconName={displayMeta.icon}
+                        step={step}
+                        size={fullscreenIconSize}
+                        color="#ffffff"
+                        style={styles.fullscreenDirectionsIcon}
+                      />
                       {shouldShowDistance ? (
                         <Text style={[styles.fullscreenDirectionsDistance, isLandscape && styles.fullscreenDirectionsDistanceLandscape]}>{distText}</Text>
                       ) : null}
@@ -6087,10 +6156,6 @@ function getStepIndexForProgress(steps = [], progressMeters = 0) {
           value={searchInput}
           onChange={setSearchInput}
           onSubmit={(query) => {
-            if (!capabilities.canSearchGoogle) {
-              showProUpgradePrompt(router);
-              return;
-            }
             setActiveQuery(query);
             setSearchOrigin(mapRegion);
           }}
@@ -6838,33 +6903,6 @@ const styles = StyleSheet.create({
 
   filterRow: {
     paddingVertical: 10,
-  },
-
-  matchModeRow: {
-    flexDirection: "row",
-    marginBottom: 6,
-    gap: 8,
-  },
-
-  matchModeButton: {
-    flex: 1,
-    borderRadius: 10,
-    paddingVertical: 8,
-    alignItems: "center",
-    backgroundColor: theme.colors.surfaceMuted,
-  },
-
-  matchModeButtonActive: {
-    backgroundColor: theme.colors.surfaceHighlight,
-  },
-
-  matchModeText: {
-    color: theme.colors.accentDark,
-    fontWeight: "600",
-  },
-
-  matchModeTextActive: {
-    color: theme.colors.accentMid,
   },
 
   filterLabel: {

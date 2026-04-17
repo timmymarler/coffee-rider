@@ -203,15 +203,13 @@ function FloatingTabBar({ state }) {
           {/* Follow Me */}
           <LongPressGestureHandler
             onActivated={() => {
-              // Long press: if not following, route to home and start follow me
-              // If already following, open current route in native maps
-              if (mapActions?.isFollowing && mapActions.isFollowing()) {
-                // Already in follow me - open in maps
+              // Long press: if already navigating, open current route in native maps.
+              // Otherwise route to home and start Follow Me.
+              if (activeRide || (mapActions?.isFollowing && mapActions.isFollowing())) {
                 if (mapActions?.openInMaps) {
                   mapActions.openInMaps();
                 }
               } else {
-                // Not in follow me - route to home and start follow me
                 if (mapActions?.routeToHome && mapActions?.toggleFollow) {
                   mapActions.routeToHome().then(() => {
                     setTimeout(() => {
@@ -231,7 +229,7 @@ function FloatingTabBar({ state }) {
                 name={"navigation-variant"}
                 size={28}
                 color={
-                  mapActions?.isFollowing()
+                  activeRide || mapActions?.isFollowing?.()
                     ? theme.colors.danger
                     : "#2196F3"
                 }
