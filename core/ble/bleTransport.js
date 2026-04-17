@@ -13,8 +13,9 @@
  * so directionsTransmitter.js picks it up automatically.
  */
 
+import Constants from 'expo-constants';
 import { BleManager, State } from 'react-native-ble-plx';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import { encode as base64Encode } from 'base-64';
 import { getBleDirectionsConfig } from './directionsTransmitter';
 
@@ -50,6 +51,22 @@ function encodePayloadToBase64(payload) {
   }
 }
 
+function isBleSupportedRuntime() {
+  const hasNativeBleModule = Boolean(
+    NativeModules?.BleClientManager || NativeModules?.BlePlx
+  );
+
+  if (!hasNativeBleModule) {
+    return false;
+  }
+
+  if (Platform.OS === 'ios' && Constants.isDevice === false) {
+    return false;
+  }
+
+  return true;
+}
+
 async function ensureAndroidBlePermissions() {
   if (Platform.OS !== 'android') return true;
 
@@ -81,10 +98,22 @@ export function initBleTransport() {
   if (manager) return; // Already running.
 
   isDestroyed = false;
-  manager = new BleManager();
 
   // Register transport so directionsTransmitter picks it up.
   globalThis.__CR_BLE_DIRECTIONS_SEND__ = sendPayload;
+
+  if (!isBleSupportedRuntime()) {
+    warn('BLE unavailable in this runtime — transport disabled');
+    return;
+  }
+
+  try {
+    manager = new BleManager();
+  } catch (error) {
+    warn('BLE manager init failed:', error?.message || error);
+    manager = null;
+    return;
+  }
 
   // Wait for BLE to be powered on before scanning.
   stateSubscription = manager.onStateChange((state) => {
@@ -101,6 +130,10 @@ export function initBleTransport() {
 export function destroyBleTransport() {
   isDestroyed = true;
   stopEverything();
+  if (stateSubscription?.remove) {
+    stateSubscription.remove();
+    stateSubscription = null;
+  }
   if (manager) {
     manager.destroy();
     manager = null;
