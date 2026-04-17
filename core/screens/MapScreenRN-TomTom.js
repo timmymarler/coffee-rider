@@ -265,6 +265,23 @@ function localMetersToLatLng(base, offsetX, offsetY) {
   return { latitude, longitude };
 }
 
+function formatEtaFromNow(seconds) {
+  const totalSeconds = Number(seconds);
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return null;
+
+  const eta = new Date(Date.now() + totalSeconds * 1000);
+  try {
+    return eta.toLocaleTimeString([], {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    const hours = String(eta.getHours()).padStart(2, '0');
+    const minutes = String(eta.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
+}
+
 function offsetCoordinateByHeadingMeters(baseCoord, headingDegrees, meters) {
   if (!baseCoord || !Number.isFinite(headingDegrees) || !Number.isFinite(meters) || meters === 0) {
     return baseCoord;
@@ -3569,49 +3586,61 @@ function getStepCompletionThresholds(step = null) {
     };
   }, [followUser, routeCoords, userLocation]);
 
-  // Calculate remaining distance and time during Follow Me
+  // Calculate remaining distance and ETA during navigation using live progress on the route.
   const { remainingDistanceMeters, remainingDurationSeconds } = useMemo(() => {
-    if (!followUser || !remainingPolyline || remainingPolyline.length === 0 || !routeDistanceMeters || !routeMeta?.durationSeconds) {
-      if (!followUser) {
-        return { remainingDistanceMeters: routeDistanceMeters, remainingDurationSeconds: routeMeta?.durationSeconds };
-      }
-      if (!remainingPolyline || remainingPolyline.length === 0) {
-        console.warn('[RemainingDistance] Polyline issue:', { hasRemainingPolyline: !!remainingPolyline, length: remainingPolyline?.length });
-        return { remainingDistanceMeters: routeDistanceMeters, remainingDurationSeconds: routeMeta?.durationSeconds };
-      }
-      if (!routeDistanceMeters || !routeMeta?.durationSeconds) {
-        console.warn('[RemainingDistance] Missing route metadata:', { routeDistanceMeters, durationSeconds: routeMeta?.durationSeconds });
-        return { remainingDistanceMeters: routeDistanceMeters, remainingDurationSeconds: routeMeta?.durationSeconds };
-      }
+    const totalDistanceMeters = Number(routeDistanceMeters ?? routeMeta?.distanceMeters);
+    const totalDurationSeconds = Number(routeMeta?.durationSeconds);
+
+    if (!Number.isFinite(totalDistanceMeters) || totalDistanceMeters <= 0) {
+      return { remainingDistanceMeters: null, remainingDurationSeconds: null };
     }
 
-    // Calculate remaining polyline distance
-    let remainingDist = 0;
-    for (let i = 0; i < remainingPolyline.length - 1; i++) {
-      remainingDist += distanceBetweenMeters(remainingPolyline[i], remainingPolyline[i + 1]);
+    if (!Number.isFinite(totalDurationSeconds) || totalDurationSeconds <= 0) {
+      return { remainingDistanceMeters: totalDistanceMeters, remainingDurationSeconds: null };
     }
 
-    // Calculate traveled distance
-    const traveledDist = routeDistanceMeters - remainingDist;
-    
-    // Scale remaining time proportionally based on distance ratio
-    const timeRatio = routeDistanceMeters > 0 ? remainingDist / routeDistanceMeters : 0;
-    const remainingTime = Math.round(routeMeta.durationSeconds * timeRatio);
+    if (!isNavigationMode || !userLocation || !routeCoords || routeCoords.length < 2) {
+      return {
+        remainingDistanceMeters: totalDistanceMeters,
+        remainingDurationSeconds: totalDurationSeconds,
+      };
+    }
 
-    console.log('[RemainingDistance] Calculated:', { 
-      remainingDist: Math.round(remainingDist),
-      traveledDist: Math.round(traveledDist),
-      totalDist: routeDistanceMeters,
-      polylinePointsRemaining: remainingPolyline.length,
-      timeRatios: timeRatio.toFixed(2),
-      remainingTime,
-    });
+    let totalPolylineMeters = 0;
+    for (let i = 0; i < routeCoords.length - 1; i++) {
+      totalPolylineMeters += distanceBetweenMeters(routeCoords[i], routeCoords[i + 1]);
+    }
+
+    if (!Number.isFinite(totalPolylineMeters) || totalPolylineMeters <= 0) {
+      return {
+        remainingDistanceMeters: totalDistanceMeters,
+        remainingDurationSeconds: totalDurationSeconds,
+      };
+    }
+
+    const lastProgressMeters = Number(stepProgressRef.current?.lastProgressMeters) || 0;
+    const projection = projectPointToPolylineDetailed(
+      userLocation,
+      routeCoords,
+      250,
+      Math.max(0, lastProgressMeters - PROGRESS_BACKTRACK_TOLERANCE_METERS)
+    );
+
+    const progressMeters = Number.isFinite(projection?.progressMeters)
+      ? projection.progressMeters
+      : lastProgressMeters;
+    const progressRatio = Math.max(0, Math.min(1, progressMeters / totalPolylineMeters));
+    const remainingDist = Math.max(0, totalDistanceMeters * (1 - progressRatio));
+    const remainingTime = Math.max(
+      0,
+      Math.round(totalDurationSeconds * (remainingDist / totalDistanceMeters))
+    );
 
     return {
       remainingDistanceMeters: remainingDist,
       remainingDurationSeconds: remainingTime,
     };
-  }, [followUser, remainingPolyline, routeDistanceMeters, routeMeta]);
+  }, [isNavigationMode, userLocation, routeCoords, routeDistanceMeters, routeMeta?.distanceMeters, routeMeta?.durationSeconds]);
 
   // Detect when Follow Me is turned off with a tracked ride
   useEffect(() => {
@@ -5921,12 +5950,24 @@ function getStepCompletionThresholds(step = null) {
           });
 
           let remainingSummary = null;
-          if (remainingDistanceMeters && remainingDurationSeconds) {
-            const totalMins = Math.round(remainingDurationSeconds / 60);
-            const hours = Math.floor(totalMins / 60);
-            const mins = totalMins % 60;
-            const durationText = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-            remainingSummary = `${formatDistanceImperial(remainingDistanceMeters)} • ${durationText} remaining`;
+          if (Number.isFinite(remainingDistanceMeters) && remainingDistanceMeters >= 0) {
+            const totalMins = Number.isFinite(remainingDurationSeconds)
+              ? Math.max(0, Math.round(remainingDurationSeconds / 60))
+              : null;
+            const hours = totalMins != null ? Math.floor(totalMins / 60) : 0;
+            const mins = totalMins != null ? totalMins % 60 : 0;
+            const durationText = totalMins == null
+              ? null
+              : (hours > 0 ? `${hours}h ${mins}m` : `${totalMins} min`);
+            const etaText = Number.isFinite(remainingDurationSeconds)
+              ? formatEtaFromNow(remainingDurationSeconds)
+              : null;
+
+            remainingSummary = [
+              formatDistanceImperial(remainingDistanceMeters),
+              durationText,
+              etaText ? `ETA ${etaText}` : null,
+            ].filter(Boolean).join(' • ');
           }
 
           const continueCheckSource = (label || effectiveInstruction || rawNextInstruction || '').trim();
