@@ -13,10 +13,10 @@
  * so directionsTransmitter.js picks it up automatically.
  */
 
-import Constants from 'expo-constants';
-import { BleManager, State } from 'react-native-ble-plx';
-import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import { encode as base64Encode } from 'base-64';
+import Constants from 'expo-constants';
+import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
+import { BleManager, State } from 'react-native-ble-plx';
 import { getBleDirectionsConfig } from './directionsTransmitter';
 
 const TAG = '[BLE_TRANSPORT]';

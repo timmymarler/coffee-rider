@@ -6,13 +6,12 @@ import { sendBleDirectionsFrame } from "@core/ble/directionsTransmitter";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import Constants from "expo-constants";
-import { collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
-import { arrayUnion } from "firebase/firestore";
+import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
 
 function isRoundaboutManeuver(maneuver = "") {
   return String(maneuver).toUpperCase().includes("ROUNDABOUT");

@@ -2,6 +2,45 @@ import { createContext, useContext, useState } from "react";
 
 export const WaypointsContext = createContext(null);
 
+let waypointIdCounter = 0;
+
+function ensureWaypointId(waypoint) {
+  if (!waypoint) return waypoint;
+  if (waypoint._wpId) return waypoint;
+
+  waypointIdCounter += 1;
+  return {
+    ...waypoint,
+    _wpId: `wp-${Date.now()}-${waypointIdCounter}`,
+  };
+}
+
+function remapVisitedIndicesAfterRemoval(prevVisited, removedIndex) {
+  return prevVisited
+    .filter((index) => index !== removedIndex)
+    .map((index) => (index > removedIndex ? index - 1 : index));
+}
+
+function remapVisitedIndicesAfterReorder(prevVisited, fromIndex, toIndex) {
+  if (fromIndex === toIndex) return prevVisited;
+
+  return [...prevVisited]
+    .map((index) => {
+      if (index === fromIndex) return toIndex;
+
+      if (fromIndex < toIndex && index > fromIndex && index <= toIndex) {
+        return index - 1;
+      }
+
+      if (toIndex < fromIndex && index >= toIndex && index < fromIndex) {
+        return index + 1;
+      }
+
+      return index;
+    })
+    .sort((a, b) => a - b);
+}
+
 export function WaypointsProvider({ children }) {
   const [waypoints, setWaypoints] = useState([]);
   const [visitedWaypointIndices, setVisitedWaypointIndices] = useState([]); // Track which waypoints we've reached
@@ -9,35 +48,42 @@ export function WaypointsProvider({ children }) {
   const [enableFollowMeAfterLoad, setEnableFollowMeAfterLoad] = useState(false);
 
   function addWaypoint(waypoint) {
-    setWaypoints(prev => [...prev, waypoint]);
+    setWaypoints((prev) => [...prev, ensureWaypointId(waypoint)]);
   }
 
   function addWaypointAtStart(waypoint) {
-    setWaypoints(prev => {
-      const newWaypoints = [waypoint, ...prev];
+    setWaypoints((prev) => {
+      const newWaypoints = [ensureWaypointId(waypoint), ...prev.map(ensureWaypointId)];
       return newWaypoints;
     });
+    setVisitedWaypointIndices((prev) => prev.map((index) => index + 1));
   }
 
   function insertWaypoint(waypoint, index) {
-    setWaypoints(prev => {
-      const newWaypoints = [...prev];
-      newWaypoints.splice(index, 0, waypoint);
+    setWaypoints((prev) => {
+      const newWaypoints = prev.map(ensureWaypointId);
+      newWaypoints.splice(index, 0, ensureWaypointId(waypoint));
       return newWaypoints;
     });
+    setVisitedWaypointIndices((prev) => prev.map((visitedIndex) => (visitedIndex >= index ? visitedIndex + 1 : visitedIndex)));
   }
 
   function removeWaypoint(index) {
-    setWaypoints(prev => prev.filter((_, i) => i !== index));
+    setWaypoints((prev) => prev.filter((_, i) => i !== index));
+    setVisitedWaypointIndices((prev) => remapVisitedIndicesAfterRemoval(prev, index));
   }
 
   function reorderWaypoints(fromIndex, toIndex) {
-    setWaypoints(prev => {
-      const copy = [...prev];
+    if (fromIndex === toIndex) return;
+
+    setWaypoints((prev) => {
+      const copy = prev.map(ensureWaypointId);
       const [moved] = copy.splice(fromIndex, 1);
+      if (!moved) return copy;
       copy.splice(toIndex, 0, moved);
       return copy;
     });
+    setVisitedWaypointIndices((prev) => remapVisitedIndicesAfterReorder(prev, fromIndex, toIndex));
   }
 
   function clearWaypoints() {

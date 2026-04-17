@@ -5,6 +5,15 @@ import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-nati
 import DraggableFlatList from "react-native-draggable-flatlist";
 import useWaypoints from "./useWaypoints";
 
+function getWaypointKey(item) {
+  if (!item) return "waypoint-unknown";
+  return String(
+    item._wpId ||
+    item.id ||
+    `${item.title || "Dropped pin"}-${item.lat ?? item.latitude}-${item.lng ?? item.longitude}`
+  );
+}
+
 // IMPORTANT:
 // This component is display-first.
 // It receives `waypoints` as a prop (which may include destination).
@@ -68,14 +77,14 @@ export default function WaypointsList({ waypoints, onClearAll, routeOrigin, rout
       {!collapsed && (
         <DraggableFlatList
           data={reorderableWaypoints}
-          keyExtractor={(item, index) =>
-            `${item.latitude}-${item.longitude}-${index}`
-          }
+          extraData={reorderableWaypoints.map(getWaypointKey).join("|")}
+          keyExtractor={getWaypointKey}
           onDragEnd={({ from, to }) => {
             if (from !== to) reorderWaypoints(from, to);
           }}
           renderItem={({ item, drag, isActive, getIndex }) => {
-            const index = getIndex();
+            const fallbackIndex = reorderableWaypoints.findIndex((wp) => getWaypointKey(wp) === getWaypointKey(item));
+            const index = typeof getIndex() === "number" ? getIndex() : fallbackIndex;
             return (
               <View
                 style={[styles.row, isActive && { opacity: 0.7 }]}
