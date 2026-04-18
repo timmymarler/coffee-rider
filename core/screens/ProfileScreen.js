@@ -53,6 +53,7 @@ export default function ProfileScreen() {
 
   const [displayName, setDisplayName] = useState(profile?.displayName || user?.displayName || "");
   const [contactEmail, setContactEmail] = useState(profile?.contactEmail || user?.email || "");
+  const [excludeFromUserSearch, setExcludeFromUserSearch] = useState(Boolean(profile?.excludeFromUserSearch));
   const [bio, setBio] = useState(profile?.bio || "");
   const [bike, setBike] = useState(profile?.bike || "");
   const [homeLocation, setHomeLocation] = useState(profile?.homeLocation || "");
@@ -87,6 +88,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     setDisplayName(profile?.displayName || user?.displayName || "");
     setContactEmail(profile?.contactEmail || user?.email || "");
+    setExcludeFromUserSearch(Boolean(profile?.excludeFromUserSearch));
     
     // Load different fields based on role
     if (profile?.role === "place-owner") {
@@ -112,6 +114,7 @@ export default function ProfileScreen() {
     setInitialValues({
       displayName: profile.displayName || "",
       contactEmail: profile.contactEmail || "",
+      excludeFromUserSearch: Boolean(profile.excludeFromUserSearch),
       bio: profile.bio || "",
       bike: profile.bike || "",
       homeLocation: profile.homeLocation || "",
@@ -148,6 +151,8 @@ export default function ProfileScreen() {
         // Set initial values for change tracking
         setInitialValues({
           displayName: displayName,
+          contactEmail: profile?.contactEmail || user?.email || "",
+          excludeFromUserSearch: Boolean(profile?.excludeFromUserSearch),
           placeName: data.name || "",
           placeCategory: data.category || "cafe",
           placeAddress: data.address || "",
@@ -437,6 +442,8 @@ export default function ProfileScreen() {
     if (role === "place-owner") {
       return (
         displayName !== initialValues.displayName ||
+        contactEmail !== initialValues.contactEmail ||
+        excludeFromUserSearch !== initialValues.excludeFromUserSearch ||
         placeName !== initialValues.placeName ||
         placeCategory !== initialValues.placeCategory ||
         placeAddress !== initialValues.placeAddress ||
@@ -447,6 +454,7 @@ export default function ProfileScreen() {
       return (
         displayName !== initialValues.displayName ||
         contactEmail !== initialValues.contactEmail ||
+        excludeFromUserSearch !== initialValues.excludeFromUserSearch ||
         bio !== initialValues.bio ||
         bike !== initialValues.bike ||
         homeLocation !== initialValues.homeLocation ||
@@ -468,10 +476,12 @@ export default function ProfileScreen() {
       const email = user?.email || "";
       const role = profile?.role || "user";
       const userRef = doc(db, "users", user.uid);
+      const normalizedContactEmail = contactEmail.trim().toLowerCase();
       
       const updateData = {
         displayName: displayName.trim(),
-        contactEmail: contactEmail.trim() || null,
+        contactEmail: normalizedContactEmail || null,
+        excludeFromUserSearch,
         updatedAt: Date.now(),
       };
 
@@ -504,19 +514,27 @@ export default function ProfileScreen() {
         console.warn("[ProfileScreen] ⚠️  Place owner but no placeId:", { role, placeId });
       }
 
-      // Only save displayName for place owners (rest goes to place doc)
-      if (role !== "place-owner" || displayName !== initialValues.displayName) {
+      // Save the user document whenever user-level profile fields change.
+      const shouldUpdateUserDoc =
+        role !== "place-owner" ||
+        displayName !== initialValues.displayName ||
+        normalizedContactEmail !== (initialValues.contactEmail || "") ||
+        excludeFromUserSearch !== Boolean(initialValues.excludeFromUserSearch);
+
+      if (shouldUpdateUserDoc) {
         console.log("[ProfileScreen] Updating user document");
         console.log("[ProfileScreen] User data:", updateData);
         await updateDoc(userRef, updateData);
         console.log("[ProfileScreen] ✓ User document updated successfully");
       } else {
-        console.log("[ProfileScreen] Skipping user update (place owner, no name change)");
+        console.log("[ProfileScreen] Skipping user update (no user-level changes)");
       }
 
       // Update initial values to match current state
       setInitialValues({
         displayName: displayName,
+        contactEmail: normalizedContactEmail,
+        excludeFromUserSearch,
         ...(role === "place-owner" ? {
           placeName: placeName,
           placeCategory: placeCategory,
@@ -524,7 +542,6 @@ export default function ProfileScreen() {
           placeAmenities: placeAmenities,
           placeSuitability: placeSuitability,
         } : {
-          contactEmail: contactEmail,
           bio: bio,
           bike: bike,
           homeLocation: homeLocation,
@@ -769,6 +786,31 @@ export default function ProfileScreen() {
         <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 4 }}>
           Used for group invitations (Apple users will need to set this)
         </Text>
+
+        <TouchableOpacity
+          onPress={() => setExcludeFromUserSearch((prev) => !prev)}
+          style={{
+            flexDirection: "row",
+            alignItems: "flex-start",
+            gap: 10,
+            marginTop: theme.spacing.md,
+            paddingVertical: 6,
+          }}
+        >
+          <MaterialCommunityIcons
+            name={excludeFromUserSearch ? "checkbox-marked-outline" : "checkbox-blank-outline"}
+            size={22}
+            color={excludeFromUserSearch ? theme.colors.accentMid : theme.colors.textMuted}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
+              Exclude from user search
+            </Text>
+            <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
+              Hides you from Group invite search by display name or email.
+            </Text>
+          </View>
+        </TouchableOpacity>
 
         {role === "place-owner" ? (
           <>

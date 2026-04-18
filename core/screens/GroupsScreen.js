@@ -7,6 +7,7 @@ import { TabBarContext } from "@context/TabBarContext";
 import { useTheme } from "@context/ThemeContext";
 import { deleteGroup } from "@core/groups/deleteGroup";
 import { useAllUserGroups, useGroupEvents, useGroupMembers, useInvitesEnriched, useSentInvitesEnriched } from "@core/groups/hooks";
+import { searchUsersByNameOrEmail } from "@firebaseLocal/users";
 import { acceptInvite, createGroup, declineInvite, leaveGroup, removeGroupMember, revokeInvite, sendInvite } from "@core/groups/service";
 import useActiveRide from "@core/map/routes/useActiveRide";
 import { useGroupSharedRoutes, useMembersActiveRides } from "@core/map/routes/useSharedRides";
@@ -29,6 +30,10 @@ export default function GroupsScreen() {
   const [revokingInvite, setRevokingInvite] = useState(null);
   const [inviteeInput, setInviteeInput] = useState("");
   const [sendingInvite, setSendingInvite] = useState(false);
+  const [searchingInvitees, setSearchingInvitees] = useState(false);
+  const [inviteSearchResults, setInviteSearchResults] = useState([]);
+  const [showInviteSearchModal, setShowInviteSearchModal] = useState(false);
+  const [selectedInviteeUser, setSelectedInviteeUser] = useState(null);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [groupName, setGroupName] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -96,6 +101,36 @@ export default function GroupsScreen() {
   const { members, loading: membersLoading } = useGroupMembers(selectedGroupId);
   const { activeRide, isStarting, startRide, endRide } = useActiveRide(user);
   const { activeRides } = useMembersActiveRides(members?.map(m => m.uid) || []);
+
+  async function handleSearchInvitees() {
+    const searchTerm = inviteeInput.trim();
+    if (!searchTerm) {
+      Alert.alert("Search required", "Enter a display name or email first.");
+      return;
+    }
+
+    try {
+      setSearchingInvitees(true);
+      const results = await searchUsersByNameOrEmail(searchTerm, {
+        excludeUid: user?.uid,
+        excludeUids: (members || []).map((member) => member.uid).filter(Boolean),
+      });
+      setInviteSearchResults(results);
+      setShowInviteSearchModal(true);
+    } catch (err) {
+      Alert.alert("Unable to search users", err?.message || "Unexpected error");
+    } finally {
+      setSearchingInvitees(false);
+    }
+  }
+
+  function handleSelectInvitee(candidate) {
+    if (!candidate?.uid) return;
+
+    setSelectedInviteeUser(candidate);
+    setInviteeInput(candidate.contactEmail || candidate.email || candidate.displayName || candidate.name || "");
+    setShowInviteSearchModal(false);
+  }
 
   // Auto-select first group when list loads and none selected
   useEffect(() => {
@@ -248,13 +283,33 @@ export default function GroupsScreen() {
           <CRCard>
             <CRLabel>Send Invite</CRLabel>
             <CRInput
-              placeholder="Enter email address"
+              placeholder="Enter email or search display name"
               value={inviteeInput}
-              onChangeText={setInviteeInput}
+              onChangeText={(text) => {
+                setInviteeInput(text);
+                setSelectedInviteeUser(null);
+              }}
               autoCapitalize="none"
               keyboardType="email-address"
             />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md }}>
+            <Text style={styles.inviteHelpText}>
+              Type an email, or search by display name and select a user. Search excludes you, current group members, and anyone who opted out in Profile.
+            </Text>
+            {selectedInviteeUser ? (
+              <Text style={styles.inviteSelectionText}>
+                Selected: {selectedInviteeUser.displayName || selectedInviteeUser.name || selectedInviteeUser.email || selectedInviteeUser.uid}
+              </Text>
+            ) : null}
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: theme.spacing.md, gap: 8, flexWrap: 'wrap' }}>
+              <TouchableOpacity
+                style={styles.searchInviteButton}
+                onPress={handleSearchInvitees}
+                disabled={searchingInvitees || !inviteeInput.trim()}
+              >
+                <Text style={styles.searchInviteButtonText}>
+                  {searchingInvitees ? "Searching…" : "Search Users"}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={{
                   backgroundColor: theme.colors.accentMid,
@@ -278,11 +333,13 @@ export default function GroupsScreen() {
                   }
                   await sendInvite({
                     groupId: selectedGroupId,
+                    inviteeUid: selectedInviteeUser?.uid,
                     inviteeEmail: inviteeInput.trim(),
                     inviterId: user.uid,
                     capabilities,
                   });
                   setInviteeInput("");
+                  setSelectedInviteeUser(null);
                   Alert.alert("Invite sent", "Pending until accepted or expiry (30 days).");
                 } catch (err) {
                   Alert.alert("Unable to send invite", err?.message || "Unexpected error");
@@ -858,6 +915,47 @@ export default function GroupsScreen() {
         }}
         scrollEnabled={true}
       />
+      <Modal
+        visible={showInviteSearchModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowInviteSearchModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.userSearchModalCard}>
+            <View style={styles.userSearchHeader}>
+              <Text style={styles.userSearchTitle}>Select user</Text>
+              <TouchableOpacity onPress={() => setShowInviteSearchModal(false)}>
+                <MaterialCommunityIcons name="close" size={24} color={theme.colors.accentMid} />
+              </TouchableOpacity>
+            </View>
+
+            {searchingInvitees ? (
+              <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: theme.spacing.lg }} />
+            ) : inviteSearchResults.length === 0 ? (
+              <Text style={styles.userSearchEmpty}>No matching users found.</Text>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {inviteSearchResults.map((candidate) => (
+                  <TouchableOpacity
+                    key={candidate.uid}
+                    style={styles.userSearchResult}
+                    onPress={() => handleSelectInvitee(candidate)}
+                  >
+                    <Text style={styles.userSearchName}>
+                      {candidate.displayName || candidate.name || candidate.contactEmail || candidate.email || candidate.uid}
+                    </Text>
+                    <Text style={styles.userSearchEmail}>
+                      {candidate.contactEmail || candidate.email || "No email available"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Event Details Modal (matches CalendarScreen) */}
       <Modal
         visible={eventModalVisible}
@@ -974,6 +1072,82 @@ const styles = StyleSheet.create({
   modalContentContainer: {
     backgroundColor: theme.colors.background,
     flex: 1,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  inviteHelpText: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  inviteSelectionText: {
+    color: theme.colors.accentMid,
+    fontSize: 12,
+    marginTop: 6,
+    fontWeight: '600',
+  },
+  searchInviteButton: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    minWidth: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchInviteButtonText: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  userSearchModalCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '75%',
+    padding: 16,
+  },
+  userSearchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  userSearchTitle: {
+    color: theme.colors.accentMid,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  userSearchEmpty: {
+    color: theme.colors.textMuted,
+    paddingVertical: 12,
+  },
+  userSearchResult: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.background,
+    marginBottom: 8,
+  },
+  userSearchName: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  userSearchEmail: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    marginTop: 4,
   },
   dropdownContainer: {
     marginTop: theme.spacing.sm,

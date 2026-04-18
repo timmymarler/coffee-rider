@@ -130,10 +130,11 @@ export const signInWithGoogle = async () => {
           userDocRef,
           {
             uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            contactEmail: firebaseUser.email, // Use real email for group invites
+            email: firebaseUser.email?.toLowerCase?.() || firebaseUser.email,
+            contactEmail: firebaseUser.email?.toLowerCase?.() || firebaseUser.email, // Use real email for group invites
             displayName: firebaseUser.displayName || "Google User",
             photoURL: firebaseUser.photoURL,
+            excludeFromUserSearch: false,
             ...betaProFields,
             authProvider: "google",
             createdAt: serverTimestamp(),
@@ -258,9 +259,10 @@ export const signInWithApple = async () => {
           userDocRef,
           {
             uid: firebaseUser.uid,
-            email: firebaseUser.email,
+            email: firebaseUser.email?.toLowerCase?.() || firebaseUser.email,
             contactEmail: null, // Apple users will set this in Profile when upgrading
             displayName: displayName,
+            excludeFromUserSearch: false,
             ...betaProFields,
             authProvider: "apple",
             createdAt: serverTimestamp(),

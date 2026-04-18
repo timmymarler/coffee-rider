@@ -207,6 +207,7 @@ export default function RegisterScreen({ onBack }) {
         contactEmail: normalizedEmail,
         role: isBetaUserSignup ? "pro" : selectedRole,
         displayName: displayName.trim(),
+        excludeFromUserSearch: false,
         createdAt: serverTimestamp(),
         ...betaProFields,
       };

@@ -202,7 +202,12 @@ service cloud.firestore {
       match /members/{memberId} {
         allow read: if isAuthed();
         allow create: if isGroupOwner(groupId) || (isAuthed() && request.auth.uid == memberId);
-        allow update, delete: if isGroupOwner(groupId);
+        allow update: if isGroupOwner(groupId);
+        allow delete: if isGroupOwner(groupId) || (
+          isAuthed() &&
+          request.auth.uid == memberId &&
+          resource.data.role != 'owner'
+        );
       }
     }
 
