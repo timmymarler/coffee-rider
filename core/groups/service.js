@@ -68,7 +68,14 @@ export async function sendInvite({
   assertGroupsAccess(capabilities);
   if (!groupId) throw new Error("groupId is required");
   if (!inviterId) throw new Error("inviterId is required");
-  if (!inviteeUid && !inviteeEmail) throw new Error("inviteeUid or contactEmail is required");
+
+  const normalizedInviteeEmail = typeof inviteeEmail === "string"
+    ? inviteeEmail.trim().toLowerCase()
+    : "";
+
+  if (!inviteeUid && !normalizedInviteeEmail) {
+    throw new Error("inviteeUid or contactEmail is required");
+  }
 
   // Verify inviter is the group owner
   const groupRef = doc(db, GROUPS_COLLECTION, groupId);
@@ -80,8 +87,8 @@ export async function sendInvite({
 
   // If email provided, look up user by contactEmail to get UID
   let finalUid = inviteeUid;
-  if (inviteeEmail && !inviteeUid) {
-    const foundUser = await findUserByContactEmail(inviteeEmail);
+  if (normalizedInviteeEmail && !inviteeUid) {
+    const foundUser = await findUserByContactEmail(normalizedInviteeEmail);
     if (!foundUser) {
       throw new Error(`No user found with email: ${inviteeEmail}`);
     }
@@ -94,7 +101,7 @@ export async function sendInvite({
     groupId,
     inviterId,
     inviteeUid: finalUid || null,
-    inviteeEmail: inviteeEmail || null,
+    inviteeEmail: normalizedInviteeEmail || null,
     role,
     status: GROUP_INVITE_STATUS.PENDING,
     createdAt: serverTimestamp(),

@@ -64,7 +64,9 @@ export function usePendingInvites(userId, userEmail) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!userId && !userEmail) {
+    const normalizedUserEmail = typeof userEmail === "string" ? userEmail.trim().toLowerCase() : "";
+
+    if (!userId && !normalizedUserEmail) {
       setInvites([]);
       setLoading(false);
       return undefined;
@@ -107,10 +109,10 @@ export function usePendingInvites(userId, userEmail) {
     }
 
     // Query by email if available
-    if (userEmail) {
+    if (normalizedUserEmail) {
       const qEmail = query(
         collection(db, GROUP_INVITES_COLLECTION),
-        where("inviteeEmail", "==", userEmail),
+        where("inviteeEmail", "==", normalizedUserEmail),
         where("status", "==", GROUP_INVITE_STATUS.PENDING)
       );
 
