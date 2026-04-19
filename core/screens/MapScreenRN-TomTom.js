@@ -1243,6 +1243,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     addFromMapPress,
     formatPoint,
     clearWaypoints,
+    removeWaypoint,
     markWaypointVisited,
     getNextUnvisitedWaypointIndex,
   } = useWaypoints();
@@ -1683,6 +1684,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   };
 
+  function isSameRoutePoint(a, b, toleranceMeters = 20) {
+    const pointA = normalizeCoord(a);
+    const pointB = normalizeCoord(b);
+    if (!pointA || !pointB) return false;
+    return distanceBetweenMeters(pointA, pointB) <= toleranceMeters;
+  }
+
   /**
    * UNIFIED ROUTE STRUCTURE LOGIC
    * 
@@ -1705,11 +1713,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     console.log(`  currentDestination: ${currentDestination?.title || 'none'}`);
     console.log(`  isExplicitStart: ${isExplicitStart}, isExplicitDestination: ${isExplicitDestination}`);
 
-    // Rule 1: If user explicitly sets a start point, use that
+    // Rule 1: If user explicitly sets a start point, promote it to waypoint[0]
     if (isExplicitStart) {
+      const filteredWaypoints = currentWaypoints.filter((wp) => {
+        if (isSameRoutePoint(wp, newPlace)) return false;
+        if (currentStart && isSameRoutePoint(wp, currentStart)) return false;
+        return true;
+      });
+
       const result = {
         start: newPlace,
-        waypoints: currentWaypoints,
+        waypoints: [newPlace, ...filteredWaypoints],
         destination: currentDestination,
         action: 'set-start',
       };
@@ -1760,6 +1774,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
       if (action === 'set-start') {
         console.log('[updateRouteUIState] Setting manual start point');
+
+        for (let idx = waypoints.length - 1; idx >= 0; idx -= 1) {
+          if (isSameRoutePoint(waypoints[idx], start) || (manualStartPoint && isSameRoutePoint(waypoints[idx], manualStartPoint))) {
+            removeWaypoint(idx);
+          }
+        }
+
+        addWaypointAtStart({
+          lat: start.latitude,
+          lng: start.longitude,
+          title: start.title || 'Start point',
+          source: start.source || 'manual-start',
+        });
+
         setManualStartPoint(start);
       } else if (action === 'add-waypoint') {
         // ONLY add the new waypoint, don't rebuild the entire list
@@ -1813,6 +1841,26 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }
 
+  function applyExplicitStartPoint(startPoint) {
+    if (!startPoint?.latitude || !startPoint?.longitude) return;
+
+    const structure = determineRouteAction(startPoint, {
+      currentStart: manualStartPoint,
+      currentWaypoints: waypoints,
+      currentDestination: routeDestination,
+      currentUserLocation: userLocation,
+      isExplicitStart: true,
+      isExplicitDestination: false,
+    });
+
+    updateRouteUIState(structure);
+
+    buildRoute({
+      waypointsOverride: structure.waypoints,
+      destinationOverride: structure.destination,
+    }).catch((error) => console.warn('[applyExplicitStartPoint] Build error:', error));
+  }
+
   const handleAddWaypoint = () => {
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
@@ -1854,17 +1902,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       longitude: pendingMapPoint.longitude,
       title: pendingMapPoint.name || 'Custom Location',
     };
-    
-    const structure = determineRouteAction(newPlace, {
-      currentStart: manualStartPoint,
-      currentWaypoints: waypoints,
-      currentDestination: routeDestination,
-      currentUserLocation: userLocation,
-      isExplicitStart: true,
-      isExplicitDestination: false,
-    });
 
-    updateRouteUIState(structure);
+    applyExplicitStartPoint(newPlace);
     closeAddPointMenu();
   };
 
@@ -1925,6 +1964,24 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     console.log('[clearNavigationIntent] Called - clear all');
     clearRoute();
   }
+
+  useEffect(() => {
+    if ((!followUser && !activeRide) || !manualStartPoint) return;
+    if (waypoints.length > 0 && isSameRoutePoint(waypoints[0], manualStartPoint)) return;
+
+    for (let idx = waypoints.length - 1; idx >= 0; idx -= 1) {
+      if (isSameRoutePoint(waypoints[idx], manualStartPoint)) {
+        removeWaypoint(idx);
+      }
+    }
+
+    addWaypointAtStart({
+      lat: manualStartPoint.latitude,
+      lng: manualStartPoint.longitude,
+      title: manualStartPoint.title || 'Start point',
+      source: manualStartPoint.source || 'manual-start',
+    });
+  }, [followUser, activeRide, manualStartPoint, waypoints, removeWaypoint, addWaypointAtStart]);
 
   useFocusEffect(
     useCallback(() => {
@@ -4786,9 +4843,26 @@ function getStepCompletionThresholds(step = null) {
       lastManualStartPointRef.current = manualStartPoint;
     }
 
-    // During Follow Me, ALWAYS use current location as origin, never the manual start point
-    // Also for active rides, ALWAYS use current location since user is joining mid-ride
+    // During Follow Me / joined rides, route from current location and keep the
+    // original chosen start point as waypoint[0]. In planning mode, avoid duplicating
+    // the manual start point as both origin and waypoint[0].
     const origin = (followUser || activeRide) ? userLocation : (manualStartPoint || userLocation);
+    const promotedStartWaypoint = manualStartPoint
+      ? {
+          latitude: manualStartPoint.latitude,
+          longitude: manualStartPoint.longitude,
+          title: manualStartPoint.title || 'Start point',
+          source: manualStartPoint.source || 'manual-start',
+        }
+      : null;
+    const hasPromotedStart = promotedStartWaypoint && effectiveWaypoints.length > 0 && isSameRoutePoint(effectiveWaypoints[0], promotedStartWaypoint);
+    const waypointsForRoute = (followUser || activeRide)
+      ? (promotedStartWaypoint && !hasPromotedStart
+          ? [promotedStartWaypoint, ...effectiveWaypoints.filter((wp) => !isSameRoutePoint(wp, promotedStartWaypoint))]
+          : effectiveWaypoints)
+      : (manualStartPoint && hasPromotedStart
+          ? effectiveWaypoints.slice(1)
+          : effectiveWaypoints);
 
     // For active rides and Follow Me, always fetch fresh to ensure polyline from current location
     // is included and correct travel mode is used (not a cached route from different mode)
@@ -4797,7 +4871,7 @@ function getStepCompletionThresholds(step = null) {
     // Call the core mapRoute function
     await mapRoute({
       origin,
-      waypoints: effectiveWaypoints,
+      waypoints: waypointsForRoute,
       destination,
       travelMode: userTravelMode,
       routeType: userRouteType,
@@ -6241,9 +6315,10 @@ function getStepCompletionThresholds(step = null) {
               onPress={() => {
                 closeMarkerMenu();
                 if (pendingMarker) {
-                  setManualStartPoint({
+                  applyExplicitStartPoint({
                     latitude: pendingMarker.latitude,
                     longitude: pendingMarker.longitude,
+                    title: pendingMarker.title || pendingMarker.name || 'Custom Location',
                   });
                 }
               }}
