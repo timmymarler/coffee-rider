@@ -281,6 +281,18 @@ function formatEtaFromNow(seconds) {
   }
 }
 
+function metersPerSecondToMph(value) {
+  const speed = Number(value);
+  if (!Number.isFinite(speed) || speed <= 0) return 0;
+  return Math.round(speed * 2.2369362921);
+}
+
+function kmhToMph(value) {
+  const speed = Number(value);
+  if (!Number.isFinite(speed) || speed <= 0) return null;
+  return Math.round(speed * 0.6213711922);
+}
+
 function offsetCoordinateByHeadingMeters(baseCoord, headingDegrees, meters) {
   if (!baseCoord || !Number.isFinite(headingDegrees) || !Number.isFinite(meters) || meters === 0) {
     return baseCoord;
@@ -1104,7 +1116,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     return {
       left: 16,
       right: undefined,
-      width: dimensions.width * 0.32,
+      width: Math.min(dimensions.width * 0.34, 360),
     };
   };
 
@@ -1494,6 +1506,36 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastManualStartPointRef = useRef(null); // Track manual start point to detect Follow Me transitions
   const lastExplicitBuildRef = useRef({ waypointsId: null, destinationId: null }); // Track last explicit build to prevent duplicate rebuilds
   const MIN_ROUTE_REBUILD_DISTANCE_METERS = 10; // Only rebuild routes if user moves more than 10 meters
+
+  const currentSpeedMph = useMemo(() => {
+    const gpsSpeed = Number(userLocation?.speed);
+    if (Number.isFinite(gpsSpeed) && gpsSpeed >= 0) {
+      return metersPerSecondToMph(gpsSpeed);
+    }
+    return metersPerSecondToMph(estimatedSpeedRef.current);
+  }, [userLocation?.speed, userLocation?.latitude, userLocation?.longitude]);
+
+  const currentSpeedLimitMph = useMemo(() => {
+    const speedLimits = routeMeta?.speedLimits;
+    if (!Array.isArray(speedLimits) || speedLimits.length === 0 || !userLocation || !routeCoords || routeCoords.length < 2) {
+      return null;
+    }
+
+    const snapped = projectPointToPolylineDetailed(userLocation, routeCoords, 100, 0);
+    if (!snapped) {
+      return null;
+    }
+
+    const pointIndex = Number.isFinite(snapped.segmentIndex) ? snapped.segmentIndex : 0;
+    const activeSection = speedLimits.find(
+      (section) => pointIndex >= section.startPointIndex && pointIndex <= section.endPointIndex
+    ) || speedLimits.find((section) => pointIndex <= section.endPointIndex) || speedLimits[speedLimits.length - 1];
+
+    return kmhToMph(activeSection?.speedLimitKmh);
+  }, [userLocation?.latitude, userLocation?.longitude, routeCoords, routeMeta?.speedLimits]);
+
+  const isSpeeding = Number.isFinite(currentSpeedLimitMph) && currentSpeedLimitMph > 0 && currentSpeedMph > currentSpeedLimitMph + 2;
+
   const displayWaypoints = useMemo(() => {
     if (!routeDestination) return waypoints;
     return [
@@ -1673,6 +1715,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setRouteMeta({
         distanceMeters: result.distanceMeters ?? result.distance,
         durationSeconds: result.durationSeconds ?? result.duration,
+        speedLimits: result.speedLimits ?? [],
       });
       
       setCurrentStepIndex(0);
@@ -4038,6 +4081,7 @@ function getStepCompletionThresholds(step = null) {
       setRouteDestination(null);
       setIsHomeDestination(false);
       setRouteDistanceMeters(null);
+      setRouteMeta(null);
       setManualStartPoint(null);
       setPersistentTravelledPath([]);  // Clear tracked ride polyline
       setHasArrivedAtDestination(false);
@@ -4782,6 +4826,7 @@ function getStepCompletionThresholds(step = null) {
     setRouteMeta({
       distanceMeters: distance,
       durationSeconds: result.durationSeconds ?? result.duration,
+      speedLimits: result.speedLimits ?? [],
     });
     
     setCurrentStepIndex(0);
@@ -6077,6 +6122,7 @@ function getStepCompletionThresholds(step = null) {
                 delayLongPress={450}
                 style={({ pressed }) => [
                   styles.junctionPanel,
+                  isLandscape && styles.junctionPanelLandscape,
                   getJunctionPanelStyle(),
                   pressed && styles.junctionPanelPressed,
                 ]}
@@ -6088,41 +6134,64 @@ function getStepCompletionThresholds(step = null) {
                   maneuver={nextManeuver}
                   iconName={displayMeta.icon}
                   step={step}
-                  size={80}
+                  size={isLandscape ? 62 : 80}
                   color="rgba(245, 245, 240, 0.95)"
-                  style={styles.junctionIcon}
+                  style={[styles.junctionIcon, isLandscape && styles.junctionIconLandscape]}
                 />
                 {/* Distance and label section */}
-                <View style={styles.junctionContent}>
+                <View style={[styles.junctionContent, isLandscape && styles.junctionContentLandscape]}>
                   <View style={styles.junctionHeaderRow}>
                     {shouldShowDistance ? (
-                      <Text style={styles.junctionDistance}>{distText}</Text>
+                      <Text style={[styles.junctionDistance, isLandscape && styles.junctionDistanceLandscape]}>{distText}</Text>
                     ) : (
                       <View style={styles.junctionHeaderSpacer} />
                     )}
                     <TouchableOpacity
                       onPress={handleTtsToggle}
-                      style={styles.ttsToggleButton}
+                      style={styles.ttsToggleButtonCompact}
                       accessibilityRole="button"
                       accessibilityLabel={isTtsEnabled ? "Mute navigation voice" : "Unmute navigation voice"}
                     >
                       <MaterialCommunityIcons
                         name={isTtsEnabled ? "volume-high" : "volume-mute"}
-                        size={24}
+                        size={22}
                         color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.6)"}
                       />
                     </TouchableOpacity>
                   </View>
-                  <Text style={styles.junctionLabel}>{label}</Text>
-                  {/* Show the specific instruction detail (e.g., "Take exit 4", street name, etc.) */}
+                  <Text
+                    style={[styles.junctionLabel, isLandscape && styles.junctionLabelLandscape]}
+                    numberOfLines={isLandscape ? 2 : 3}
+                  >
+                    {label}
+                  </Text>
                   {!suppressInstruction &&
                     instructionForDisplay &&
                     instructionForDisplay !== label && (
-                      <Text style={styles.junctionInstruction}>{instructionForDisplay}</Text>
+                      <Text
+                        style={[styles.junctionInstruction, isLandscape && styles.junctionInstructionLandscape]}
+                        numberOfLines={isLandscape ? 2 : 3}
+                      >
+                        {instructionForDisplay}
+                      </Text>
                   )}
                   {remainingSummary && (
-                    <Text style={styles.junctionRemaining}>{remainingSummary}</Text>
+                    <Text
+                      style={[styles.junctionRemaining, isLandscape && styles.junctionRemainingLandscape]}
+                      numberOfLines={isLandscape ? 2 : 3}
+                    >
+                      {remainingSummary}
+                    </Text>
                   )}
+                  <View style={styles.junctionInlineStatsRow}>
+                    <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeCompact, isLandscape && styles.currentSpeedBadgeCompactLandscape, isSpeeding && styles.currentSpeedBadgeWarning]}>
+                      <Text style={styles.currentSpeedBadgeValue}>{currentSpeedMph}</Text>
+                      <Text style={styles.currentSpeedBadgeUnit}>mph</Text>
+                    </View>
+                    <View style={[styles.speedLimitBadge, isLandscape && styles.speedLimitBadgeLandscape]}>
+                      <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
+                    </View>
+                  </View>
                 </View>
               </Pressable>
 
@@ -6163,6 +6232,15 @@ function getStepCompletionThresholds(step = null) {
                         instructionForDisplay !== label && (
                           <Text style={[styles.fullscreenDirectionsInstruction, isLandscape && styles.fullscreenDirectionsInstructionLandscape]}>{instructionForDisplay}</Text>
                       )}
+                      <View style={styles.junctionStatsRow}>
+                        <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeFullscreen, isSpeeding && styles.currentSpeedBadgeWarningFullscreen]}>
+                          <Text style={[styles.currentSpeedBadgeValue, styles.currentSpeedBadgeValueFullscreen]}>{currentSpeedMph}</Text>
+                          <Text style={[styles.currentSpeedBadgeUnit, styles.currentSpeedBadgeUnitFullscreen]}>mph</Text>
+                        </View>
+                        <View style={styles.speedLimitBadge}>
+                          <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
+                        </View>
+                      </View>
                       {remainingSummary && (
                         <Text style={[styles.fullscreenDirectionsRemaining, isLandscape && styles.fullscreenDirectionsRemainingLandscape]}>{remainingSummary}</Text>
                       )}
@@ -6778,7 +6856,7 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 16,
@@ -6787,7 +6865,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(245, 245, 240, 0.95)",
     zIndex: 2000,
     elevation: 8,
-    gap: 16,
+    gap: 14,
+  },
+  junctionPanelLandscape: {
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    gap: 12,
   },
   junctionPanelPressed: {
     opacity: 0.92,
@@ -6795,10 +6878,18 @@ const styles = StyleSheet.create({
   junctionIcon: {
     marginRight: 4,
   },
+  junctionIconLandscape: {
+    marginTop: 4,
+  },
   junctionContent: {
     justifyContent: "center",
     flex: 1,
     flexShrink: 1,
+    paddingRight: 4,
+  },
+  junctionContentLandscape: {
+    minWidth: 0,
+    paddingRight: 0,
   },
   junctionDistance: {
     fontSize: 44,
@@ -6806,11 +6897,121 @@ const styles = StyleSheet.create({
     color: "rgba(245, 245, 240, 0.95)",
     lineHeight: 52,
   },
+  junctionDistanceLandscape: {
+    fontSize: 32,
+    lineHeight: 36,
+  },
   junctionRemaining: {
     fontSize: 12,
     fontWeight: "500",
     color: "rgba(245, 245, 240, 0.8)",
     marginTop: 4,
+  },
+  junctionRemainingLandscape: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 6,
+  },
+  junctionStatsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    flexWrap: "nowrap",
+  },
+  junctionInlineStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 10,
+    marginBottom: 2,
+  },
+  junctionMetaRail: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    alignSelf: "stretch",
+  },
+  junctionMetaRailLandscape: {
+    gap: 6,
+    alignSelf: "center",
+  },
+  currentSpeedBadge: {
+    minWidth: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#111111",
+    borderWidth: 3,
+    borderColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  currentSpeedBadgeCompact: {
+    minWidth: 58,
+    height: 58,
+    borderRadius: 29,
+  },
+  currentSpeedBadgeCompactLandscape: {
+    minWidth: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  currentSpeedBadgeWarning: {
+    borderColor: "#fca5a5",
+    backgroundColor: "#7f1d1d",
+  },
+  currentSpeedBadgeFullscreen: {
+    backgroundColor: "#ffffff",
+    borderColor: "#111111",
+  },
+  currentSpeedBadgeWarningFullscreen: {
+    backgroundColor: "#fee2e2",
+    borderColor: "#b91c1c",
+  },
+  currentSpeedBadgeValue: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#ffffff",
+    lineHeight: 24,
+    textAlign: "center",
+  },
+  currentSpeedBadgeValueFullscreen: {
+    color: "#111111",
+  },
+  currentSpeedBadgeUnit: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.92)",
+    marginTop: 2,
+    textTransform: "lowercase",
+  },
+  currentSpeedBadgeUnitFullscreen: {
+    color: "#111111",
+  },
+  speedLimitBadge: {
+    minWidth: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#ffffff",
+    borderWidth: 4,
+    borderColor: "#dc2626",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  speedLimitBadgeLandscape: {
+    minWidth: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
+  },
+  speedLimitBadgeValue: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#111111",
+    textAlign: "center",
   },
   junctionLabel: {
     fontSize: 18,
@@ -6819,12 +7020,22 @@ const styles = StyleSheet.create({
     marginTop: 4,
     flexWrap: "wrap",
   },
+  junctionLabelLandscape: {
+    fontSize: 15,
+    lineHeight: 19,
+    marginTop: 2,
+  },
   junctionInstruction: {
     fontSize: 12,
     fontWeight: "400",
     color: "rgba(245, 245, 240, 0.80)",
     marginTop: 3,
     flexWrap: "wrap",
+  },
+  junctionInstructionLandscape: {
+    fontSize: 11,
+    lineHeight: 14,
+    marginTop: 2,
   },
   junctionHeaderRow: {
     flexDirection: "row",
@@ -6838,6 +7049,16 @@ const styles = StyleSheet.create({
   ttsToggleButton: {
     paddingHorizontal: 8,
     paddingVertical: 4,
+  },
+  ttsToggleButtonCompact: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
   fullscreenDirectionsContainer: {
     flex: 1,

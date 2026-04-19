@@ -57,6 +57,66 @@ const extractRoundaboutTurnAngle = (instruction = {}) => {
   return null;
 };
 
+const normalizeSectionType = (value = "") => String(value).replace(/[_\s-]/g, "").toLowerCase();
+
+const extractSpeedLimitValueKmh = (section = {}) => {
+  const candidates = [
+    section?.speedLimitInKmh,
+    section?.maxSpeedLimitInKmh,
+    section?.postedSpeedLimitInKmh,
+    section?.speedLimit,
+  ];
+
+  for (const value of candidates) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const extractSpeedLimitSections = (route = {}, legs = []) => {
+  const collectSections = (sections = [], pointOffset = 0) => {
+    if (!Array.isArray(sections)) return [];
+
+    return sections
+      .filter((section) => normalizeSectionType(section?.sectionType) === "speedlimit")
+      .map((section) => {
+        const speedLimitKmh = extractSpeedLimitValueKmh(section);
+        if (!speedLimitKmh) return null;
+
+        const rawStart = Number(section?.startPointIndex);
+        const rawEnd = Number(section?.endPointIndex);
+        const startPointIndex = Number.isFinite(rawStart) ? rawStart + pointOffset : pointOffset;
+        const endPointIndex = Number.isFinite(rawEnd) ? rawEnd + pointOffset : startPointIndex;
+
+        return {
+          startPointIndex,
+          endPointIndex,
+          speedLimitKmh,
+        };
+      })
+      .filter(Boolean);
+  };
+
+  const routeSections = collectSections(route?.sections, 0);
+  if (routeSections.length > 0) {
+    return routeSections.sort((a, b) => a.startPointIndex - b.startPointIndex);
+  }
+
+  let pointOffset = 0;
+  const legSections = [];
+
+  legs.forEach((leg) => {
+    legSections.push(...collectSections(leg?.sections, pointOffset));
+    pointOffset += Array.isArray(leg?.points) ? leg.points.length : 0;
+  });
+
+  return legSections.sort((a, b) => a.startPointIndex - b.startPointIndex);
+};
+
 /**
  * Fetch route from Google Directions API (best for pedestrian and cycling routing)
  * @param {Object} origin - {latitude, longitude}
@@ -399,6 +459,7 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       instructionsType: "coded",  // Get structured instruction codes (e.g., ROUNDABOUT_1, ROUNDABOUT_2)
       language: "en-GB",
     });
+    params.append("sectionType", "speedLimit");
     
     // Add vehicle heading if provided (helps prevent backtracking during reroutes)
     // Heading is in degrees: 0=North, 90=East, 180=South, 270=West
@@ -475,6 +536,9 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       legKeys: legs[0] ? Object.keys(legs[0]) : [],
       guidanceKeys: route.guidance ? Object.keys(route.guidance) : [],
     });
+
+    const speedLimitSections = extractSpeedLimitSections(route, legs);
+    console.log('[tomtomRouting] Speed limit sections:', speedLimitSections.length);
     
     // Log all instructions with full details
     console.log('[tomtomRouting] ALL INSTRUCTIONS FROM TOMTOM:');
@@ -708,6 +772,7 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       legs: legs,
       guidance: instructions, // Array of TomTom instruction objects
       steps: steps, // Converted instructions into steps format for navigation
+      speedLimits: speedLimitSections,
       rawRoute: route, // Store raw data for reference
     };
   } catch (error) {
