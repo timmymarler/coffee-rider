@@ -1511,20 +1511,30 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   const currentSpeedMph = useMemo(() => {
     const gpsSpeed = Number(userLocation?.speed);
-    if (Number.isFinite(gpsSpeed) && gpsSpeed >= 0) {
-      return metersPerSecondToMph(gpsSpeed);
+    const baseSpeed = Number.isFinite(gpsSpeed) && gpsSpeed >= 0
+      ? metersPerSecondToMph(gpsSpeed)
+      : metersPerSecondToMph(estimatedSpeedRef.current);
+
+    if (!Number.isFinite(baseSpeed)) {
+      return null;
     }
-    return metersPerSecondToMph(estimatedSpeedRef.current);
+
+    const adjustedSpeed = baseSpeed + 2;
+    if (adjustedSpeed <= 3) {
+      return null;
+    }
+
+    return adjustedSpeed;
   }, [userLocation?.speed, userLocation?.latitude, userLocation?.longitude]);
 
-  const rawSpeedLimitMph = useMemo(() => {
+  const speedLimitDebug = useMemo(() => {
     const speedLimits = routeMeta?.speedLimits;
     const speedLimitPolyline = Array.isArray(lastEncodedPolyline) && lastEncodedPolyline.length > 1
       ? lastEncodedPolyline
       : routeCoords;
 
     if (!Array.isArray(speedLimits) || speedLimits.length === 0 || !userLocation || !speedLimitPolyline || speedLimitPolyline.length < 2) {
-      return null;
+      return { status: "no-data" };
     }
 
     const snapped = projectPointToPolylineDetailed(
@@ -1534,33 +1544,104 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       speedLimitProgressRef.current || 0
     );
     if (!snapped) {
-      return null;
+      return { status: "no-snap" };
     }
 
     const routeProgressMeters = Number(snapped.progressMeters);
+    const segmentIndex = Number.isFinite(snapped.segmentIndex) ? snapped.segmentIndex : null;
     if (Number.isFinite(routeProgressMeters)) {
       speedLimitProgressRef.current = Math.max(speedLimitProgressRef.current || 0, routeProgressMeters);
     }
 
-    const activeSection = speedLimits.find((section) => {
-      if (Number.isFinite(section.startProgressMeters) && Number.isFinite(section.endProgressMeters) && Number.isFinite(routeProgressMeters)) {
-        return routeProgressMeters >= section.startProgressMeters - 15 && routeProgressMeters <= section.endProgressMeters + 15;
-      }
+    let activeSection = null;
+    let activeIndex = -1;
+    let matchedBy = null;
 
-      const pointIndex = Number.isFinite(snapped.segmentIndex) ? snapped.segmentIndex : 0;
-      return pointIndex >= section.startPointIndex && pointIndex <= section.endPointIndex;
-    }) || speedLimits.find((section) => {
-      if (Number.isFinite(section.endProgressMeters) && Number.isFinite(routeProgressMeters)) {
-        return routeProgressMeters <= section.endProgressMeters + 15;
+    if (Number.isFinite(routeProgressMeters)) {
+      for (let i = 0; i < speedLimits.length; i += 1) {
+        const section = speedLimits[i];
+        if (Number.isFinite(section.startProgressMeters) && Number.isFinite(section.endProgressMeters)) {
+          if (routeProgressMeters >= section.startProgressMeters - 15 && routeProgressMeters <= section.endProgressMeters + 15) {
+            activeSection = section;
+            activeIndex = i;
+            matchedBy = "progress";
+            break;
+          }
+        }
       }
-      const pointIndex = Number.isFinite(snapped.segmentIndex) ? snapped.segmentIndex : 0;
-      return pointIndex <= section.endPointIndex;
-    }) || speedLimits[speedLimits.length - 1];
+    }
 
-    return kmhToMph(activeSection?.speedLimitKmh);
+    if (!activeSection && Number.isFinite(segmentIndex)) {
+      for (let i = 0; i < speedLimits.length; i += 1) {
+        const section = speedLimits[i];
+        if (Number.isFinite(section.startPointIndex) && Number.isFinite(section.endPointIndex)) {
+          if (segmentIndex >= section.startPointIndex && segmentIndex <= section.endPointIndex) {
+            activeSection = section;
+            activeIndex = i;
+            matchedBy = "index";
+            break;
+          }
+        }
+      }
+    }
+
+    if (!activeSection && Number.isFinite(routeProgressMeters)) {
+      for (let i = 0; i < speedLimits.length; i += 1) {
+        const section = speedLimits[i];
+        if (Number.isFinite(section.endProgressMeters) && routeProgressMeters <= section.endProgressMeters + 15) {
+          activeSection = section;
+          activeIndex = i;
+          matchedBy = "next";
+          break;
+        }
+      }
+    }
+
+    if (!activeSection && Number.isFinite(segmentIndex)) {
+      for (let i = 0; i < speedLimits.length; i += 1) {
+        const section = speedLimits[i];
+        if (Number.isFinite(section.endPointIndex) && segmentIndex <= section.endPointIndex) {
+          activeSection = section;
+          activeIndex = i;
+          matchedBy = "next-index";
+          break;
+        }
+      }
+    }
+
+    if (!activeSection && speedLimits.length > 0) {
+      activeSection = speedLimits[speedLimits.length - 1];
+      activeIndex = speedLimits.length - 1;
+      matchedBy = "last";
+    }
+
+    return {
+      status: "ok",
+      totalSections: speedLimits.length,
+      routeProgressMeters: Number.isFinite(routeProgressMeters) ? Math.round(routeProgressMeters) : null,
+      segmentIndex,
+      matchedBy,
+      activeIndex,
+      section: activeSection
+        ? {
+            speedLimitKmh: activeSection.speedLimitKmh,
+            startProgressMeters: activeSection.startProgressMeters,
+            endProgressMeters: activeSection.endProgressMeters,
+            startPointIndex: activeSection.startPointIndex,
+            endPointIndex: activeSection.endPointIndex,
+          }
+        : null,
+      speedLimitMph: kmhToMph(activeSection?.speedLimitKmh),
+    };
   }, [userLocation?.latitude, userLocation?.longitude, routeCoords, routeMeta?.speedLimits, lastEncodedPolyline]);
 
+  const rawSpeedLimitMph = useMemo(() => {
+    const mph = speedLimitDebug?.speedLimitMph;
+    return Number.isFinite(mph) ? mph : null;
+  }, [speedLimitDebug]);
+
   const [currentSpeedLimitMph, setCurrentSpeedLimitMph] = useState(null);
+  const [showSpeedLimitDebug, setShowSpeedLimitDebug] = useState(false);
 
   useEffect(() => {
     const state = speedLimitDisplayRef.current;
@@ -1609,7 +1690,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [rawSpeedLimitMph, routeMeta?.speedLimits, currentSpeedLimitMph]);
 
-  const isSpeeding = Number.isFinite(currentSpeedLimitMph) && currentSpeedLimitMph > 0 && currentSpeedMph > currentSpeedLimitMph + 2;
+  const isSpeeding = Number.isFinite(currentSpeedLimitMph)
+    && currentSpeedLimitMph > 0
+    && Number.isFinite(currentSpeedMph)
+    && currentSpeedMph > currentSpeedLimitMph + 2;
 
   const displayWaypoints = useMemo(() => {
     if (!routeDestination) return waypoints;
@@ -6277,12 +6361,18 @@ function getStepCompletionThresholds(step = null) {
                   )}
                   <View style={styles.junctionInlineStatsRow}>
                     <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeCompact, isLandscape && styles.currentSpeedBadgeCompactLandscape, isSpeeding && styles.currentSpeedBadgeWarning]}>
-                      <Text style={styles.currentSpeedBadgeValue}>{currentSpeedMph}</Text>
+                      <Text style={styles.currentSpeedBadgeValue}>{Number.isFinite(currentSpeedMph) ? Math.round(currentSpeedMph) : '--'}</Text>
                       <Text style={styles.currentSpeedBadgeUnit}>mph</Text>
                     </View>
-                    <View style={[styles.speedLimitBadge, isLandscape && styles.speedLimitBadgeLandscape]}>
+                    <Pressable
+                      onLongPress={() => setShowSpeedLimitDebug((prev) => !prev)}
+                      delayLongPress={350}
+                      style={[styles.speedLimitBadge, isLandscape && styles.speedLimitBadgeLandscape]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Toggle speed limit debug"
+                    >
                       <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
-                    </View>
+                    </Pressable>
                   </View>
                 </View>
               </Pressable>
@@ -6326,12 +6416,18 @@ function getStepCompletionThresholds(step = null) {
                       )}
                       <View style={styles.junctionStatsRow}>
                         <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeFullscreen, isSpeeding && styles.currentSpeedBadgeWarningFullscreen]}>
-                          <Text style={[styles.currentSpeedBadgeValue, styles.currentSpeedBadgeValueFullscreen]}>{currentSpeedMph}</Text>
+                          <Text style={[styles.currentSpeedBadgeValue, styles.currentSpeedBadgeValueFullscreen]}>{Number.isFinite(currentSpeedMph) ? Math.round(currentSpeedMph) : '--'}</Text>
                           <Text style={[styles.currentSpeedBadgeUnit, styles.currentSpeedBadgeUnitFullscreen]}>mph</Text>
                         </View>
-                        <View style={styles.speedLimitBadge}>
+                        <Pressable
+                          onLongPress={() => setShowSpeedLimitDebug((prev) => !prev)}
+                          delayLongPress={350}
+                          style={styles.speedLimitBadge}
+                          accessibilityRole="button"
+                          accessibilityLabel="Toggle speed limit debug"
+                        >
                           <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
-                        </View>
+                        </Pressable>
                       </View>
                       {remainingSummary && (
                         <Text style={[styles.fullscreenDirectionsRemaining, isLandscape && styles.fullscreenDirectionsRemainingLandscape]}>{remainingSummary}</Text>
@@ -6354,6 +6450,30 @@ function getStepCompletionThresholds(step = null) {
         ]}>
           {postbox.title && <Text style={styles.postboxTitle}>{postbox.title}</Text>}
           <Text style={styles.postboxText}>{postbox.message}</Text>
+        </View>
+      )}
+
+      {showSpeedLimitDebug && (
+        <View style={styles.speedLimitDebugPanel} pointerEvents="none">
+          <Text style={styles.speedLimitDebugTitle}>Speed limit debug</Text>
+          <Text style={styles.speedLimitDebugRow}>
+            raw {Number.isFinite(rawSpeedLimitMph) ? Math.round(rawSpeedLimitMph) : '--'} mph | shown {Number.isFinite(currentSpeedLimitMph) ? currentSpeedLimitMph : '--'}
+          </Text>
+          <Text style={styles.speedLimitDebugRow}>
+            progress {Number.isFinite(speedLimitDebug?.routeProgressMeters) ? speedLimitDebug.routeProgressMeters : '--'} m | seg {Number.isFinite(speedLimitDebug?.segmentIndex) ? speedLimitDebug.segmentIndex : '--'}
+          </Text>
+          <Text style={styles.speedLimitDebugRow}>
+            section {Number.isFinite(speedLimitDebug?.activeIndex) ? speedLimitDebug.activeIndex + 1 : '--'}/{Number.isFinite(speedLimitDebug?.totalSections) ? speedLimitDebug.totalSections : '--'} ({speedLimitDebug?.matchedBy || '--'})
+          </Text>
+          <Text style={styles.speedLimitDebugRow}>
+            limit {Number.isFinite(speedLimitDebug?.section?.speedLimitKmh) ? Math.round(speedLimitDebug.section.speedLimitKmh) : '--'} kmh
+          </Text>
+          <Text style={styles.speedLimitDebugRow}>
+            range {Number.isFinite(speedLimitDebug?.section?.startProgressMeters) ? Math.round(speedLimitDebug.section.startProgressMeters) : '--'}-{Number.isFinite(speedLimitDebug?.section?.endProgressMeters) ? Math.round(speedLimitDebug.section.endProgressMeters) : '--'} m
+          </Text>
+          <Text style={styles.speedLimitDebugRow}>
+            points {Number.isFinite(speedLimitDebug?.section?.startPointIndex) ? speedLimitDebug.section.startPointIndex : '--'}-{Number.isFinite(speedLimitDebug?.section?.endPointIndex) ? speedLimitDebug.section.endPointIndex : '--'}
+          </Text>
         </View>
       )}
 
@@ -6873,6 +6993,30 @@ const styles = StyleSheet.create({
     padding: 12,
   },
 
+
+  speedLimitDebugPanel: {
+    position: "absolute",
+    top: 110,
+    left: 12,
+    maxWidth: 300,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: "rgba(10, 15, 25, 0.85)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    zIndex: 3500,
+  },
+  speedLimitDebugTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#e5e7eb",
+    marginBottom: 4,
+  },
+  speedLimitDebugRow: {
+    fontSize: 11,
+    color: "#cbd5f5",
+    marginBottom: 2,
+  },
   noticeBox: {
     position: "absolute",
     top: 70,
@@ -7402,7 +7546,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.accentMid,
     justifyContent: "center",
     alignItems: "center",
   },

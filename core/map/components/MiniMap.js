@@ -342,7 +342,9 @@ export default function MiniMap({
             zIndex={255}
             tracksViewChanges={markerTracksViewChanges}
           >
-            <View style={styles.waypointMarker} />
+            <View style={styles.waypointMarker}>
+              <Text style={styles.waypointIndex}>{idx + 1}</Text>
+            </View>
           </Marker>
         ))}
 
@@ -425,12 +427,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   waypointMarker: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#f59e0b',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#7dd3fc',
     borderWidth: 2,
     borderColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waypointIndex: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   markerContainer: {
     alignItems: 'center',
