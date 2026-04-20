@@ -1645,7 +1645,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   useEffect(() => {
     const state = speedLimitDisplayRef.current;
-    const candidate = Number.isFinite(rawSpeedLimitMph) ? rawSpeedLimitMph : null;
+    const candidate = Number.isFinite(rawSpeedLimitMph) ? Math.round(rawSpeedLimitMph) : null;
 
     if (candidate == null) {
       if (!routeMeta?.speedLimits?.length) {
@@ -1676,13 +1676,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return;
     }
 
+    const delta = Math.abs(candidate - state.current);
+    if (delta >= 5) {
+      state.current = candidate;
+      state.pending = null;
+      state.pendingSince = now;
+      setCurrentSpeedLimitMph(candidate);
+      return;
+    }
+
     if (candidate !== state.pending) {
       state.pending = candidate;
       state.pendingSince = now;
       return;
     }
 
-    if (now - state.pendingSince >= 1200) {
+    if (now - state.pendingSince >= 500) {
       state.current = candidate;
       state.pending = null;
       state.pendingSince = now;
@@ -3691,8 +3700,7 @@ function getStepCompletionThresholds(step = null) {
     lastRerouteAttemptRef.current = now;
     
     // Build the reroute using the remaining forward list only.
-    // If the rider has gone off route, the current active waypoint is treated as missed
-    // and removed from the remaining sequence before rebuilding.
+    // Skip the current waypoint only if it is clearly missed.
     let nextWaypoint = null;
     let remainingWaypoints = [];
 
@@ -3700,14 +3708,58 @@ function getStepCompletionThresholds(step = null) {
       .map((waypoint, index) => ({ waypoint, index }))
       .filter(({ index }) => !visitedWaypointIndices.includes(index));
 
-    if (unvisitedEntries.length > 0) {
-      const [missedEntry, ...futureEntries] = unvisitedEntries;
-      console.log(`[AutoReroute] Skipping missed current waypoint ${missedEntry.index}: ${missedEntry.waypoint?.title || 'untitled waypoint'}`);
-      markWaypointVisited(missedEntry.index);
+    let shouldSkipMissedWaypoint = false;
+    const nextWaypointIdx = getNextUnvisitedWaypointIndex();
 
-      if (futureEntries.length > 0) {
-        nextWaypoint = futureEntries[0].waypoint;
-        remainingWaypoints = futureEntries.slice(1).map(({ waypoint }) => waypoint);
+    if (nextWaypointIdx >= 0 && nextWaypointIdx < waypoints.length) {
+      const currentWaypoint = waypoints[nextWaypointIdx];
+      const followingWaypoint = nextWaypointIdx + 1 < waypoints.length ? waypoints[nextWaypointIdx + 1] : null;
+      const currentCoord = normalizeCoord(currentWaypoint);
+      const followingCoord = normalizeCoord(followingWaypoint);
+
+      if (currentCoord) {
+        const userProjection = projectPointToPolylineDetailed(
+          userLocation,
+          routeCoords,
+          250,
+          stepProgressRef.current.lastProgressMeters || 0
+        );
+        const waypointProjection = projectPointToPolylineDetailed(
+          currentCoord,
+          routeCoords,
+          250,
+          0
+        );
+
+        const userProgress = Number(userProjection?.progressMeters);
+        const waypointProgress = Number(waypointProjection?.progressMeters);
+
+        if (Number.isFinite(userProgress) && Number.isFinite(waypointProgress) && userProgress > waypointProgress + 35) {
+          shouldSkipMissedWaypoint = true;
+        }
+
+        if (!shouldSkipMissedWaypoint && followingCoord) {
+          const distanceToCurrent = distanceBetweenMeters(userLocation, currentCoord);
+          const distanceToNext = distanceBetweenMeters(userLocation, followingCoord);
+
+          if (Number.isFinite(distanceToCurrent) && Number.isFinite(distanceToNext) && distanceToNext + 40 < distanceToCurrent) {
+            shouldSkipMissedWaypoint = true;
+          }
+        }
+      }
+    }
+
+    if (unvisitedEntries.length > 0) {
+      const nextEntry = unvisitedEntries[0];
+      if (shouldSkipMissedWaypoint && nextEntry && nextEntry.index === nextWaypointIdx) {
+        console.log(`[AutoReroute] Skipping missed current waypoint ${nextEntry.index}: ${nextEntry.waypoint?.title || 'untitled waypoint'}`);
+        markWaypointVisited(nextEntry.index);
+        unvisitedEntries.shift();
+      }
+
+      if (unvisitedEntries.length > 0) {
+        nextWaypoint = unvisitedEntries[0].waypoint;
+        remainingWaypoints = unvisitedEntries.slice(1).map(({ waypoint }) => waypoint);
         console.log(`[AutoReroute] Routing to next remaining waypoint: ${nextWaypoint.title}, remaining: ${remainingWaypoints.length}`);
       } else {
         console.log(`[AutoReroute] No more waypoints remaining, routing to final destination`);
@@ -5700,19 +5752,23 @@ function getStepCompletionThresholds(step = null) {
           {/* Waypoint markers - show all waypoints in the route */}
           {waypoints.length > 0 && (
             (() => {
-              return waypoints.map((wp, index) => (
-                <Marker
-                  key={`wp-${index}`}
-                  coordinate={{ latitude: wp.lat, longitude: wp.lng }}
-                  anchor={{ x: 0.5, y: 0.5 }}
-                  zIndex={950}
-                  tracksViewChanges={false}
-                >
-                  <View style={styles.waypointPin}>
-                    <Text style={styles.waypointIndex}>{index + 1}</Text>
-                  </View>
-                </Marker>
-              ));
+              return waypoints.map((wp, index) => {
+                const waypointCoord = normalizeCoord(wp);
+                if (!waypointCoord) return null;
+                return (
+                  <Marker
+                    key={`wp-${index}`}
+                    coordinate={waypointCoord}
+                    anchor={{ x: 0.5, y: 0.5 }}
+                    zIndex={950}
+                    tracksViewChanges={false}
+                  >
+                    <View style={styles.waypointPin}>
+                      <Text style={styles.waypointIndex}>{index + 1}</Text>
+                    </View>
+                  </Marker>
+                );
+              });
             })()
           )}
 
@@ -6193,6 +6249,19 @@ function getStepCompletionThresholds(step = null) {
               console.log('[Roundabout] Using nextInstruction as label:', label);
             }
           }
+
+          const uTurnInstruction = /u[-\s]?turn/i.test(effectiveInstruction || rawNextInstruction || "");
+          if (!label && (nextManeuver.includes("UTURN") || uTurnInstruction)) {
+            label = "Make a U-turn";
+            suppressInstruction = true;
+            if (nextManeuver.includes("RIGHT")) {
+              displayMeta = U_TURN_RIGHT_META;
+            } else if (nextManeuver.includes("LEFT")) {
+              displayMeta = U_TURN_LEFT_META;
+            } else {
+              displayMeta = U_TURN_LEFT_META;
+            }
+          }
           
           // If we didn't handle it as a roundabout with exit, use normal logic
           if (!label) {
@@ -6200,7 +6269,7 @@ function getStepCompletionThresholds(step = null) {
               label = `Take Exit ${step.nextRoundaboutExitNumber}`;
             } else {
               // Use the maneuver icon map label for consistency, fallback to nextInstruction
-              label = displayMeta?.label || nextInstruction;
+              label = displayMeta?.label || rawNextInstruction;
             }
           }
           
@@ -7546,7 +7615,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: theme.colors.accentMid,
+    backgroundColor: "#7dd3fc",
     justifyContent: "center",
     alignItems: "center",
   },
