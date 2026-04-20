@@ -77,7 +77,41 @@ const extractSpeedLimitValueKmh = (section = {}) => {
   return null;
 };
 
-const extractSpeedLimitSections = (route = {}, legs = []) => {
+const distanceBetweenMeters = (a, b) => {
+  if (!a || !b) return 0;
+
+  const lat1 = (a.latitude * Math.PI) / 180;
+  const lat2 = (b.latitude * Math.PI) / 180;
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const dLng = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const hav = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLng * sinLng;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(hav), Math.sqrt(1 - hav));
+};
+
+const buildPointProgressLookup = (points = []) => {
+  if (!Array.isArray(points) || points.length === 0) return [];
+
+  const progress = [0];
+  let total = 0;
+
+  for (let i = 1; i < points.length; i += 1) {
+    total += distanceBetweenMeters(points[i - 1], points[i]);
+    progress.push(total);
+  }
+
+  return progress;
+};
+
+const extractSpeedLimitSections = (route = {}, legs = [], routePoints = []) => {
+  const progressLookup = buildPointProgressLookup(routePoints);
+  const getProgressMeters = (pointIndex) => {
+    if (!progressLookup.length || !Number.isFinite(pointIndex)) return null;
+    const clampedIndex = Math.max(0, Math.min(pointIndex, progressLookup.length - 1));
+    return progressLookup[clampedIndex];
+  };
+
   const collectSections = (sections = [], pointOffset = 0) => {
     if (!Array.isArray(sections)) return [];
 
@@ -95,6 +129,8 @@ const extractSpeedLimitSections = (route = {}, legs = []) => {
         return {
           startPointIndex,
           endPointIndex,
+          startProgressMeters: getProgressMeters(startPointIndex),
+          endProgressMeters: getProgressMeters(endPointIndex),
           speedLimitKmh,
         };
       })
@@ -536,9 +572,6 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       legKeys: legs[0] ? Object.keys(legs[0]) : [],
       guidanceKeys: route.guidance ? Object.keys(route.guidance) : [],
     });
-
-    const speedLimitSections = extractSpeedLimitSections(route, legs);
-    console.log('[tomtomRouting] Speed limit sections:', speedLimitSections.length);
     
     // Log all instructions with full details
     console.log('[tomtomRouting] ALL INSTRUCTIONS FROM TOMTOM:');
@@ -761,6 +794,9 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
     if (allPoints.length === 0 && route.summary) {
       allPoints = [origin, destination];
     }
+
+    const speedLimitSections = extractSpeedLimitSections(route, legs, allPoints);
+    console.log('[tomtomRouting] Speed limit sections:', speedLimitSections.length);
 
     console.log('[tomtomRouting] Returning result with polyline points:', allPoints.length);
 

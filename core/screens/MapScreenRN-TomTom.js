@@ -1505,6 +1505,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastWaypoints = useRef([]); // Track waypoints from last route build to rebuild when they change
   const lastManualStartPointRef = useRef(null); // Track manual start point to detect Follow Me transitions
   const lastExplicitBuildRef = useRef({ waypointsId: null, destinationId: null }); // Track last explicit build to prevent duplicate rebuilds
+  const speedLimitDisplayRef = useRef({ current: null, pending: null, pendingSince: 0 });
+  const speedLimitProgressRef = useRef(0);
   const MIN_ROUTE_REBUILD_DISTANCE_METERS = 10; // Only rebuild routes if user moves more than 10 meters
 
   const currentSpeedMph = useMemo(() => {
@@ -1515,24 +1517,97 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     return metersPerSecondToMph(estimatedSpeedRef.current);
   }, [userLocation?.speed, userLocation?.latitude, userLocation?.longitude]);
 
-  const currentSpeedLimitMph = useMemo(() => {
+  const rawSpeedLimitMph = useMemo(() => {
     const speedLimits = routeMeta?.speedLimits;
-    if (!Array.isArray(speedLimits) || speedLimits.length === 0 || !userLocation || !routeCoords || routeCoords.length < 2) {
+    const speedLimitPolyline = Array.isArray(lastEncodedPolyline) && lastEncodedPolyline.length > 1
+      ? lastEncodedPolyline
+      : routeCoords;
+
+    if (!Array.isArray(speedLimits) || speedLimits.length === 0 || !userLocation || !speedLimitPolyline || speedLimitPolyline.length < 2) {
       return null;
     }
 
-    const snapped = projectPointToPolylineDetailed(userLocation, routeCoords, 100, 0);
+    const snapped = projectPointToPolylineDetailed(
+      userLocation,
+      speedLimitPolyline,
+      100,
+      speedLimitProgressRef.current || 0
+    );
     if (!snapped) {
       return null;
     }
 
-    const pointIndex = Number.isFinite(snapped.segmentIndex) ? snapped.segmentIndex : 0;
-    const activeSection = speedLimits.find(
-      (section) => pointIndex >= section.startPointIndex && pointIndex <= section.endPointIndex
-    ) || speedLimits.find((section) => pointIndex <= section.endPointIndex) || speedLimits[speedLimits.length - 1];
+    const routeProgressMeters = Number(snapped.progressMeters);
+    if (Number.isFinite(routeProgressMeters)) {
+      speedLimitProgressRef.current = Math.max(speedLimitProgressRef.current || 0, routeProgressMeters);
+    }
+
+    const activeSection = speedLimits.find((section) => {
+      if (Number.isFinite(section.startProgressMeters) && Number.isFinite(section.endProgressMeters) && Number.isFinite(routeProgressMeters)) {
+        return routeProgressMeters >= section.startProgressMeters - 15 && routeProgressMeters <= section.endProgressMeters + 15;
+      }
+
+      const pointIndex = Number.isFinite(snapped.segmentIndex) ? snapped.segmentIndex : 0;
+      return pointIndex >= section.startPointIndex && pointIndex <= section.endPointIndex;
+    }) || speedLimits.find((section) => {
+      if (Number.isFinite(section.endProgressMeters) && Number.isFinite(routeProgressMeters)) {
+        return routeProgressMeters <= section.endProgressMeters + 15;
+      }
+      const pointIndex = Number.isFinite(snapped.segmentIndex) ? snapped.segmentIndex : 0;
+      return pointIndex <= section.endPointIndex;
+    }) || speedLimits[speedLimits.length - 1];
 
     return kmhToMph(activeSection?.speedLimitKmh);
-  }, [userLocation?.latitude, userLocation?.longitude, routeCoords, routeMeta?.speedLimits]);
+  }, [userLocation?.latitude, userLocation?.longitude, routeCoords, routeMeta?.speedLimits, lastEncodedPolyline]);
+
+  const [currentSpeedLimitMph, setCurrentSpeedLimitMph] = useState(null);
+
+  useEffect(() => {
+    const state = speedLimitDisplayRef.current;
+    const candidate = Number.isFinite(rawSpeedLimitMph) ? rawSpeedLimitMph : null;
+
+    if (candidate == null) {
+      if (!routeMeta?.speedLimits?.length) {
+        state.current = null;
+        state.pending = null;
+        state.pendingSince = 0;
+        setCurrentSpeedLimitMph(null);
+      }
+      return;
+    }
+
+    const now = Date.now();
+
+    if (state.current == null) {
+      state.current = candidate;
+      state.pending = null;
+      state.pendingSince = now;
+      setCurrentSpeedLimitMph(candidate);
+      return;
+    }
+
+    if (candidate === state.current) {
+      state.pending = null;
+      state.pendingSince = now;
+      if (currentSpeedLimitMph !== candidate) {
+        setCurrentSpeedLimitMph(candidate);
+      }
+      return;
+    }
+
+    if (candidate !== state.pending) {
+      state.pending = candidate;
+      state.pendingSince = now;
+      return;
+    }
+
+    if (now - state.pendingSince >= 1200) {
+      state.current = candidate;
+      state.pending = null;
+      state.pendingSince = now;
+      setCurrentSpeedLimitMph(candidate);
+    }
+  }, [rawSpeedLimitMph, routeMeta?.speedLimits, currentSpeedLimitMph]);
 
   const isSpeeding = Number.isFinite(currentSpeedLimitMph) && currentSpeedLimitMph > 0 && currentSpeedMph > currentSpeedLimitMph + 2;
 
@@ -3531,24 +3606,34 @@ function getStepCompletionThresholds(step = null) {
     console.log(`[AutoReroute] User off-route (${effectiveDistance.toFixed(0)}m effective), rerouting...`);
     lastRerouteAttemptRef.current = now;
     
-    // Find next unvisited waypoint
+    // Build the reroute using the remaining forward list only.
+    // If the rider has gone off route, the current active waypoint is treated as missed
+    // and removed from the remaining sequence before rebuilding.
     let nextWaypoint = null;
     let remainingWaypoints = [];
-    let nextWaypointIdx = getNextUnvisitedWaypointIndex();
-    
-    if (nextWaypointIdx >= 0 && nextWaypointIdx < waypoints.length) {
-      // Found unvisited waypoint - route to it
-      nextWaypoint = waypoints[nextWaypointIdx];
-      remainingWaypoints = waypoints.slice(nextWaypointIdx + 1);
-      console.log(`[AutoReroute] Routing to unvisited waypoint ${nextWaypointIdx}: ${nextWaypoint.title}, remaining: ${remainingWaypoints.length}`);
+
+    const unvisitedEntries = waypoints
+      .map((waypoint, index) => ({ waypoint, index }))
+      .filter(({ index }) => !visitedWaypointIndices.includes(index));
+
+    if (unvisitedEntries.length > 0) {
+      const [missedEntry, ...futureEntries] = unvisitedEntries;
+      console.log(`[AutoReroute] Skipping missed current waypoint ${missedEntry.index}: ${missedEntry.waypoint?.title || 'untitled waypoint'}`);
+      markWaypointVisited(missedEntry.index);
+
+      if (futureEntries.length > 0) {
+        nextWaypoint = futureEntries[0].waypoint;
+        remainingWaypoints = futureEntries.slice(1).map(({ waypoint }) => waypoint);
+        console.log(`[AutoReroute] Routing to next remaining waypoint: ${nextWaypoint.title}, remaining: ${remainingWaypoints.length}`);
+      } else {
+        console.log(`[AutoReroute] No more waypoints remaining, routing to final destination`);
+      }
     } else if (waypoints.length > 0) {
-      // All waypoints visited, route to final destination
-      console.log(`[AutoReroute] All waypoints visited, routing to final destination`);
+      console.log(`[AutoReroute] All waypoints already completed, routing to final destination`);
     } else {
-      // No waypoints, route to destination
       console.log(`[AutoReroute] No waypoints, routing to final destination`);
     }
-    
+
     const rerouteDestination = nextWaypoint || routeDestination;
     
     console.log(`[AutoReroute] Rerouting to: ${rerouteDestination?.title || 'destination'}, remaining waypoints: ${remainingWaypoints.length}`);
@@ -3575,6 +3660,7 @@ function getStepCompletionThresholds(step = null) {
     waypoints,
     visitedWaypointIndices,
     getNextUnvisitedWaypointIndex,
+    markWaypointVisited,
     userTravelMode,
     userRouteType,
     hasArrivedAtDestination,
@@ -4082,6 +4168,9 @@ function getStepCompletionThresholds(step = null) {
       setIsHomeDestination(false);
       setRouteDistanceMeters(null);
       setRouteMeta(null);
+      speedLimitProgressRef.current = 0;
+      speedLimitDisplayRef.current = { current: null, pending: null, pendingSince: 0 };
+      setCurrentSpeedLimitMph(null);
       setManualStartPoint(null);
       setPersistentTravelledPath([]);  // Clear tracked ride polyline
       setHasArrivedAtDestination(false);
@@ -4148,6 +4237,9 @@ function getStepCompletionThresholds(step = null) {
     
     // Simple: Just update coordinates. Polyline component stays mounted.
     // React detects coordinates changed and updates native layer properly.
+    speedLimitProgressRef.current = 0;
+    speedLimitDisplayRef.current = { current: null, pending: null, pendingSince: 0 };
+    setCurrentSpeedLimitMph(null);
     setRouteCoords(newCoords);
     
     // Update metadata if provided
