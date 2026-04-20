@@ -119,7 +119,15 @@ function RoundaboutManeuverIcon({ size = 80, exitAngleDegrees = null, exitNumber
 function NavigationManeuverIcon({ maneuver, iconName, step, size, color, style }) {
   const upper = String(maneuver || "").toUpperCase();
   if (!upper.includes("ROUNDABOUT")) {
-    return <MaterialCommunityIcons name={iconName} size={size} color={color} style={style} />;
+    const needsUturnRotation = upper.includes("UTURN");
+    const uturnRotationStyle = needsUturnRotation
+      ? { transform: [{ rotate: "-90deg" }] }
+      : null;
+    const iconStyle = needsUturnRotation
+      ? (style ? [style, uturnRotationStyle] : uturnRotationStyle)
+      : style;
+
+    return <MaterialCommunityIcons name={iconName} size={size} color={color} style={iconStyle} />;
   }
 
   const exitAngleDegrees = getRoundaboutExitAngleDegrees(
@@ -495,8 +503,8 @@ const AMENITY_ICON_MAP = {
   ev_charger: "ev-plug-ccs2",
 };
 
-const U_TURN_LEFT_META = { icon: "u-turn-left", label: "Make a U-turn" };
-const U_TURN_RIGHT_META = { icon: "u-turn-right", label: "Make a U-turn" };
+const U_TURN_LEFT_META = { icon: "undo-variant", label: "Make a U-turn" };
+const U_TURN_RIGHT_META = { icon: "redo-variant", label: "Make a U-turn" };
 const ARRIVAL_META = { icon: "flag-checkered", label: "Destination ahead" };
 const ARRIVAL_LEFT_META = { icon: "flag-checkered", label: "Destination on the left" };
 const ARRIVAL_RIGHT_META = { icon: "flag-checkered", label: "Destination on the right" };
@@ -6431,7 +6439,6 @@ function getStepCompletionThresholds(step = null) {
                   <View style={styles.junctionInlineStatsRow}>
                     <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeCompact, isLandscape && styles.currentSpeedBadgeCompactLandscape, isSpeeding && styles.currentSpeedBadgeWarning]}>
                       <Text style={styles.currentSpeedBadgeValue}>{Number.isFinite(currentSpeedMph) ? Math.round(currentSpeedMph) : '--'}</Text>
-                      <Text style={styles.currentSpeedBadgeUnit}>mph</Text>
                     </View>
                     <Pressable
                       onLongPress={() => setShowSpeedLimitDebug((prev) => !prev)}
@@ -6486,7 +6493,6 @@ function getStepCompletionThresholds(step = null) {
                       <View style={styles.junctionStatsRow}>
                         <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeFullscreen, isSpeeding && styles.currentSpeedBadgeWarningFullscreen]}>
                           <Text style={[styles.currentSpeedBadgeValue, styles.currentSpeedBadgeValueFullscreen]}>{Number.isFinite(currentSpeedMph) ? Math.round(currentSpeedMph) : '--'}</Text>
-                          <Text style={[styles.currentSpeedBadgeUnit, styles.currentSpeedBadgeUnitFullscreen]}>mph</Text>
                         </View>
                         <Pressable
                           onLongPress={() => setShowSpeedLimitDebug((prev) => !prev)}
