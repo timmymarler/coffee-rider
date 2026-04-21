@@ -19,7 +19,7 @@ function getWaypointKey(item) {
 // It receives `waypoints` as a prop (which may include destination).
 // It may still call useWaypoints() ONLY for mutations during transition.
 
-export default function WaypointsList({ waypoints, onClearAll, routeOrigin, routedTotalMeters, routedTotalDurationSeconds, isLandscape = false }) {
+export default function WaypointsList({ waypoints, onClearAll, routeOrigin, routedTotalMeters, routedTotalDurationSeconds, isLandscape = false, distanceUnit = "imperial" }) {
   // ⚠️ DO NOT destructure `waypoints` from context here
   const [collapsed, setCollapsed] = useState(true);
   const styles = createStyles(isLandscape);
@@ -39,6 +39,20 @@ export default function WaypointsList({ waypoints, onClearAll, routeOrigin, rout
     }
     const yards = meters * 1.09361;
     return `${Math.round(yards)} yd`;
+  }
+
+  function formatDistanceMetric(meters) {
+    if (meters == null) return "";
+    if (meters >= 1000) {
+      const km = meters / 1000;
+      const digits = km >= 10 ? 0 : 1;
+      return `${km.toFixed(digits)} km`;
+    }
+    return `${Math.round(meters)} m`;
+  }
+
+  function formatDistanceForUnit(meters) {
+    return distanceUnit === "metric" ? formatDistanceMetric(meters) : formatDistanceImperial(meters);
   }
 
   function formatDurationHMS(seconds) {
@@ -128,7 +142,7 @@ export default function WaypointsList({ waypoints, onClearAll, routeOrigin, rout
           {(typeof routedTotalMeters === 'number' && routedTotalMeters > 0) || (typeof routedTotalDurationSeconds === 'number' && routedTotalDurationSeconds > 0) ? (
             <Text style={styles.distance}>
               {[
-                formatDistanceImperial(routedTotalMeters),
+                formatDistanceForUnit(routedTotalMeters),
                 formatDurationHMS(routedTotalDurationSeconds),
               ].filter(Boolean).join(' • ')} routed
             </Text>

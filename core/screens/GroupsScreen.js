@@ -242,7 +242,8 @@ export default function GroupsScreen() {
                 }}
                 placeholder="Select a group..."
                 listMode="SCROLLVIEW"
-                maxHeight={200}
+                maxHeight={320}
+                scrollViewProps={{ nestedScrollEnabled: true, showsVerticalScrollIndicator: true }}
                 listItemLabelStyle={styles.listItemLabel}
                 containerStyle={styles.dropdownContainer}
                 style={styles.dropdownStyle}
@@ -1173,6 +1174,7 @@ const styles = StyleSheet.create({
     top: '100%',
     zIndex: 1000,
     elevation: 10,
+    maxHeight: 320,
   },
   dropdownPlaceholder: {
     color: theme.colors.textMuted,

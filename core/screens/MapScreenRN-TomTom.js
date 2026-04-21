@@ -295,6 +295,12 @@ function metersPerSecondToMph(value) {
   return Math.round(speed * 2.2369362921);
 }
 
+function metersPerSecondToKph(value) {
+  const speed = Number(value);
+  if (!Number.isFinite(speed) || speed <= 0) return 0;
+  return Math.round(speed * 3.6);
+}
+
 function kmhToMph(value) {
   const speed = Number(value);
   if (!Number.isFinite(speed) || speed <= 0) return null;
@@ -658,8 +664,44 @@ function formatDistanceImperial(meters) {
   return `${Math.round(yards)} yd`;
 }
 
-function formatDistanceForSpeech(meters) {
+function formatDistanceMetric(meters) {
+  if (meters == null) return "";
+  if (meters >= 1000) {
+    const km = meters / 1000;
+    const digits = km >= 10 ? 0 : 1;
+    return `${km.toFixed(digits)} km`;
+  }
+  return `${Math.round(meters)} m`;
+}
+
+function formatDistanceForUnit(meters, units) {
+  return units === "metric" ? formatDistanceMetric(meters) : formatDistanceImperial(meters);
+}
+
+function formatDistanceForSpeech(meters, units) {
   if (meters == null || meters <= 0) return null;
+  if (units === "metric") {
+    if (meters < 30) {
+      return "now";
+    }
+    if (meters < 100) {
+      const rounded = Math.round(meters / 10) * 10;
+      return `in ${rounded} meters`;
+    }
+    if (meters < 500) {
+      const rounded = Math.round(meters / 25) * 25;
+      return `in ${rounded} meters`;
+    }
+    const km = meters / 1000;
+    if (km < 1) {
+      return `in ${Math.round(km * 10) / 10} kilometers`;
+    }
+    if (km < 10) {
+      return `in ${km.toFixed(1)} kilometers`;
+    }
+    return `in ${Math.round(km)} kilometers`;
+  }
+
   const yards = meters * 1.09361;
   if (yards < 40) {
     return "now";
@@ -685,9 +727,9 @@ function formatDistanceForSpeech(meters) {
   return `in ${Math.round(miles)} miles`;
 }
 
-function buildSpokenInstruction(baseInstruction, distanceMeters) {
+function buildSpokenInstruction(baseInstruction, distanceMeters, units) {
   if (!baseInstruction) return null;
-  const distancePhrase = formatDistanceForSpeech(distanceMeters);
+  const distancePhrase = formatDistanceForSpeech(distanceMeters, units);
   if (!distancePhrase || distancePhrase === "now") {
     return baseInstruction;
   }
@@ -1516,24 +1558,28 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const speedLimitDisplayRef = useRef({ current: null, pending: null, pendingSince: 0 });
   const speedLimitProgressRef = useRef(0);
   const MIN_ROUTE_REBUILD_DISTANCE_METERS = 10; // Only rebuild routes if user moves more than 10 meters
+  const distanceUnits = auth?.profile?.unitsPreference === "metric" ? "metric" : "imperial";
+  const speedBias = distanceUnits === "metric" ? 3 : 2;
+  const minDisplaySpeed = distanceUnits === "metric" ? 5 : 3;
+  const speedUnitLabel = distanceUnits === "metric" ? "km/h" : "mph";
 
   const currentSpeedMph = useMemo(() => {
     const gpsSpeed = Number(userLocation?.speed);
     const baseSpeed = Number.isFinite(gpsSpeed) && gpsSpeed >= 0
-      ? metersPerSecondToMph(gpsSpeed)
-      : metersPerSecondToMph(estimatedSpeedRef.current);
+      ? (distanceUnits === "metric" ? metersPerSecondToKph(gpsSpeed) : metersPerSecondToMph(gpsSpeed))
+      : (distanceUnits === "metric" ? metersPerSecondToKph(estimatedSpeedRef.current) : metersPerSecondToMph(estimatedSpeedRef.current));
 
     if (!Number.isFinite(baseSpeed)) {
       return null;
     }
 
-    const adjustedSpeed = baseSpeed + 2;
-    if (adjustedSpeed <= 3) {
+    const adjustedSpeed = baseSpeed + speedBias;
+    if (adjustedSpeed <= minDisplaySpeed) {
       return null;
     }
 
     return adjustedSpeed;
-  }, [userLocation?.speed, userLocation?.latitude, userLocation?.longitude]);
+  }, [userLocation?.speed, userLocation?.latitude, userLocation?.longitude, distanceUnits, speedBias, minDisplaySpeed]);
 
   const speedLimitDebug = useMemo(() => {
     const speedLimits = routeMeta?.speedLimits;
@@ -1623,6 +1669,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       matchedBy = "last";
     }
 
+    const speedLimitValue = activeSection
+      ? (distanceUnits === "metric" ? activeSection.speedLimitKmh : kmhToMph(activeSection.speedLimitKmh))
+      : null;
+
     return {
       status: "ok",
       totalSections: speedLimits.length,
@@ -1639,13 +1689,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             endPointIndex: activeSection.endPointIndex,
           }
         : null,
-      speedLimitMph: kmhToMph(activeSection?.speedLimitKmh),
+      speedLimitValue,
     };
-  }, [userLocation?.latitude, userLocation?.longitude, routeCoords, routeMeta?.speedLimits, lastEncodedPolyline]);
+  }, [userLocation?.latitude, userLocation?.longitude, routeCoords, routeMeta?.speedLimits, lastEncodedPolyline, distanceUnits]);
 
   const rawSpeedLimitMph = useMemo(() => {
-    const mph = speedLimitDebug?.speedLimitMph;
-    return Number.isFinite(mph) ? mph : null;
+    const value = speedLimitDebug?.speedLimitValue;
+    return Number.isFinite(value) ? value : null;
   }, [speedLimitDebug]);
 
   const [currentSpeedLimitMph, setCurrentSpeedLimitMph] = useState(null);
@@ -3209,7 +3259,7 @@ function getStepCompletionThresholds(step = null) {
     const step = routeSteps[currentStepIndex];
     if (!step) return;
     const maneuver = (step.nextManeuver || 'STRAIGHT').trim().toUpperCase();
-    const distance = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : '--';
+    const distance = nextJunctionDistance != null ? formatDistanceForUnit(nextJunctionDistance, distanceUnits) : '--';
     const instruction = getEffectiveInstructionText(step) || step.nextInstruction || step.instruction || 'Continue';
     const roundaboutAngle = isRoundaboutManeuver(maneuver)
       ? getRoundaboutExitAngleDegrees(maneuver, step?.nextRoundaboutExitNumber, step?.nextRoundaboutTurnAngle)
@@ -3221,7 +3271,7 @@ function getStepCompletionThresholds(step = null) {
       roundaboutAngle,
       roundaboutExitNumber: step?.nextRoundaboutExitNumber,
     });
-  }, [isNavigationMode, currentStepIndex, nextJunctionDistance, routeSteps]);
+  }, [isNavigationMode, currentStepIndex, nextJunctionDistance, routeSteps, distanceUnits]);
 
   useEffect(() => {
     if (!isNavigationMode || routeSteps.length === 0) return;
@@ -3291,7 +3341,7 @@ function getStepCompletionThresholds(step = null) {
         if (!baseInstruction) return false;
 
         const distanceForSpeech = nextJunctionDistance ?? lastKnownDistanceRef.current;
-        spokenInstruction = buildSpokenInstruction(baseInstruction, distanceForSpeech);
+        spokenInstruction = buildSpokenInstruction(baseInstruction, distanceForSpeech, distanceUnits);
         if (!spokenInstruction) return false;
       }
 
@@ -3389,6 +3439,7 @@ function getStepCompletionThresholds(step = null) {
     nextJunctionDistance,
     userLocation,
     routeDestination,
+    distanceUnits,
   ]);
 
   // Track waypoint arrivals and mark them as visited
@@ -6240,7 +6291,7 @@ function getStepCompletionThresholds(step = null) {
               : MANEUVER_ICON_MAP.STRAIGHT;
           }
 
-          const distText = nextJunctionDistance != null ? formatDistanceImperial(nextJunctionDistance) : "";
+          const distText = nextJunctionDistance != null ? formatDistanceForUnit(nextJunctionDistance, distanceUnits) : "";
           
           // Special handling for roundabouts: if instruction already says "Take exit X", use it directly
           let label;
@@ -6335,7 +6386,7 @@ function getStepCompletionThresholds(step = null) {
               : null;
 
             remainingSummary = [
-              formatDistanceImperial(remainingDistanceMeters),
+              formatDistanceForUnit(remainingDistanceMeters, distanceUnits),
               durationText,
               etaText ? `ETA ${etaText}` : null,
             ].filter(Boolean).join(' • ');
@@ -6532,7 +6583,7 @@ function getStepCompletionThresholds(step = null) {
         <View style={styles.speedLimitDebugPanel} pointerEvents="none">
           <Text style={styles.speedLimitDebugTitle}>Speed limit debug</Text>
           <Text style={styles.speedLimitDebugRow}>
-            raw {Number.isFinite(rawSpeedLimitMph) ? Math.round(rawSpeedLimitMph) : '--'} mph | shown {Number.isFinite(currentSpeedLimitMph) ? currentSpeedLimitMph : '--'}
+            raw {Number.isFinite(rawSpeedLimitMph) ? Math.round(rawSpeedLimitMph) : '--'} {speedUnitLabel} | shown {Number.isFinite(currentSpeedLimitMph) ? currentSpeedLimitMph : '--'}
           </Text>
           <Text style={styles.speedLimitDebugRow}>
             progress {Number.isFinite(speedLimitDebug?.routeProgressMeters) ? speedLimitDebug.routeProgressMeters : '--'} m | seg {Number.isFinite(speedLimitDebug?.segmentIndex) ? speedLimitDebug.segmentIndex : '--'}
@@ -6541,7 +6592,7 @@ function getStepCompletionThresholds(step = null) {
             section {Number.isFinite(speedLimitDebug?.activeIndex) ? speedLimitDebug.activeIndex + 1 : '--'}/{Number.isFinite(speedLimitDebug?.totalSections) ? speedLimitDebug.totalSections : '--'} ({speedLimitDebug?.matchedBy || '--'})
           </Text>
           <Text style={styles.speedLimitDebugRow}>
-            limit {Number.isFinite(speedLimitDebug?.section?.speedLimitKmh) ? Math.round(speedLimitDebug.section.speedLimitKmh) : '--'} kmh
+            limit {Number.isFinite(rawSpeedLimitMph) ? Math.round(rawSpeedLimitMph) : '--'} {speedUnitLabel}
           </Text>
           <Text style={styles.speedLimitDebugRow}>
             range {Number.isFinite(speedLimitDebug?.section?.startProgressMeters) ? Math.round(speedLimitDebug.section.startProgressMeters) : '--'}-{Number.isFinite(speedLimitDebug?.section?.endProgressMeters) ? Math.round(speedLimitDebug.section.endProgressMeters) : '--'} m
@@ -6558,6 +6609,7 @@ function getStepCompletionThresholds(step = null) {
           onClearAll={clearNavigationIntent}
           routeOrigin={manualStartPoint || userLocation}
           isLandscape={isLandscape}
+          distanceUnit={distanceUnits}
           // Always pass routedTotalMeters from state, fallback to routeMeta if needed
           routedTotalMeters={
             typeof routeDistanceMeters === 'number' && routeDistanceMeters > 0

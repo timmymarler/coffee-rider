@@ -58,6 +58,7 @@ export default function ProfileScreen() {
   const [bike, setBike] = useState(profile?.bike || "");
   const [homeLocation, setHomeLocation] = useState(profile?.homeLocation || "");
   const [homeAddress, setHomeAddress] = useState(profile?.homeAddress || "");
+  const [unitsPreference, setUnitsPreference] = useState(profile?.unitsPreference || "imperial");
   const [debugLogs, setDebugLogs] = useState([]);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -89,6 +90,7 @@ export default function ProfileScreen() {
     setDisplayName(profile?.displayName || user?.displayName || "");
     setContactEmail(profile?.contactEmail || user?.email || "");
     setExcludeFromUserSearch(Boolean(profile?.excludeFromUserSearch));
+    setUnitsPreference(profile?.unitsPreference || "imperial");
     
     // Load different fields based on role
     if (profile?.role === "place-owner") {
@@ -115,6 +117,7 @@ export default function ProfileScreen() {
       displayName: profile.displayName || "",
       contactEmail: profile.contactEmail || "",
       excludeFromUserSearch: Boolean(profile.excludeFromUserSearch),
+      unitsPreference: profile.unitsPreference || "imperial",
       bio: profile.bio || "",
       bike: profile.bike || "",
       homeLocation: profile.homeLocation || "",
@@ -153,6 +156,7 @@ export default function ProfileScreen() {
           displayName: displayName,
           contactEmail: profile?.contactEmail || user?.email || "",
           excludeFromUserSearch: Boolean(profile?.excludeFromUserSearch),
+          unitsPreference: profile?.unitsPreference || "imperial",
           placeName: data.name || "",
           placeCategory: data.category || "cafe",
           placeAddress: data.address || "",
@@ -444,6 +448,7 @@ export default function ProfileScreen() {
         displayName !== initialValues.displayName ||
         contactEmail !== initialValues.contactEmail ||
         excludeFromUserSearch !== initialValues.excludeFromUserSearch ||
+        unitsPreference !== initialValues.unitsPreference ||
         placeName !== initialValues.placeName ||
         placeCategory !== initialValues.placeCategory ||
         placeAddress !== initialValues.placeAddress ||
@@ -455,6 +460,7 @@ export default function ProfileScreen() {
         displayName !== initialValues.displayName ||
         contactEmail !== initialValues.contactEmail ||
         excludeFromUserSearch !== initialValues.excludeFromUserSearch ||
+        unitsPreference !== initialValues.unitsPreference ||
         bio !== initialValues.bio ||
         bike !== initialValues.bike ||
         homeLocation !== initialValues.homeLocation ||
@@ -482,6 +488,7 @@ export default function ProfileScreen() {
         displayName: displayName.trim(),
         contactEmail: normalizedContactEmail || null,
         excludeFromUserSearch,
+        unitsPreference,
         updatedAt: Date.now(),
       };
 
@@ -519,7 +526,8 @@ export default function ProfileScreen() {
         role !== "place-owner" ||
         displayName !== initialValues.displayName ||
         normalizedContactEmail !== (initialValues.contactEmail || "") ||
-        excludeFromUserSearch !== Boolean(initialValues.excludeFromUserSearch);
+        excludeFromUserSearch !== Boolean(initialValues.excludeFromUserSearch) ||
+        unitsPreference !== initialValues.unitsPreference;
 
       if (shouldUpdateUserDoc) {
         console.log("[ProfileScreen] Updating user document");
@@ -535,6 +543,7 @@ export default function ProfileScreen() {
         displayName: displayName,
         contactEmail: normalizedContactEmail,
         excludeFromUserSearch,
+        unitsPreference,
         ...(role === "place-owner" ? {
           placeName: placeName,
           placeCategory: placeCategory,
@@ -811,6 +820,47 @@ export default function ProfileScreen() {
             </Text>
           </View>
         </TouchableOpacity>
+
+        <CRLabel style={{ marginTop: theme.spacing.md }}>Units</CRLabel>
+        <View
+          style={{
+            flexDirection: "row",
+            gap: theme.spacing.sm,
+            marginVertical: theme.spacing.sm,
+          }}
+        >
+          {[
+            { id: "imperial", label: "Miles" },
+            { id: "metric", label: "Kms" },
+          ].map((option) => {
+            const isActive = unitsPreference === option.id;
+            return (
+              <TouchableOpacity
+                key={option.id}
+                onPress={() => setUnitsPreference(option.id)}
+                style={{
+                  flex: 1,
+                  paddingVertical: theme.spacing.sm,
+                  borderRadius: theme.radius.md,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: isActive ? theme.colors.accentMid : theme.colors.inputBg,
+                  borderWidth: 1,
+                  borderColor: isActive ? theme.colors.accentMid : theme.colors.inputBorder,
+                }}
+              >
+                <Text
+                  style={{
+                    color: isActive ? theme.colors.primaryDark : theme.colors.text,
+                    fontWeight: "600",
+                  }}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
         {role === "place-owner" ? (
           <>
