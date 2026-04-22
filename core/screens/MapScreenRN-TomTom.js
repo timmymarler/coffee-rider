@@ -226,7 +226,6 @@ const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17; // Android: 17, iOS: 7 - Mor
 const FOLLOW_CENTER_AHEAD_METERS_PORTRAIT = 120;
 const FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE = 55;
 const ENABLE_GOOGLE_AUTO_FETCH = true;
-const DEBUG_FOLLOWME_CAMERA = __DEV__ && Platform.OS === "ios";
 
 // Follow Me smoothing constants
 const MAX_LOCATION_ACCURACY = 25; // Meters - ignore readings worse than this
@@ -1550,7 +1549,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const markerPressedRef = useRef(false); // Track if a marker was just pressed
   const lastMovementHeadingRef = useRef(null);
   const lastMovementLocationRef = useRef(null);
-  const lastCameraDebugRef = useRef(0);
   
   // Dead reckoning: estimate position based on heading when GPS is poor
   const lastGoodGPSRef = useRef(null); // Last accurate GPS reading
@@ -2838,20 +2836,6 @@ function getStepCompletionThresholds(step = null) {
     
     mapRef.current.animateCamera(cameraConfig, { duration: 350 });
 
-    if (DEBUG_FOLLOWME_CAMERA) {
-      const now = Date.now();
-      if (now - lastCameraDebugRef.current > 1200) {
-        lastCameraDebugRef.current = now;
-        console.log("[FollowMeCamera] recenter", {
-          followMode,
-          headingSource,
-          heading: Number.isFinite(effectiveHeading) ? Math.round(effectiveHeading) : null,
-          zoom: effectiveZoom,
-          altitude: cameraConfig.altitude || null,
-          pitch: cameraConfig.pitch ?? null,
-        });
-      }
-    }
     
     // Reset flag after animation completes
     setTimeout(() => { isAnimatingRef.current = false; }, 500);
@@ -4242,20 +4226,6 @@ function getStepCompletionThresholds(step = null) {
   const handleRegionChangeComplete = async (region) => {
     setMapRegion(region);
 
-    if (DEBUG_FOLLOWME_CAMERA) {
-      const now = Date.now();
-      if (now - lastCameraDebugRef.current > 1200) {
-        lastCameraDebugRef.current = now;
-        console.log("[FollowMeCamera] region", {
-          followUser,
-          isAnimating: isAnimatingRef.current,
-          skipNextRegion: skipNextRegionChangeRef.current,
-          latitudeDelta: Number(region?.latitudeDelta?.toFixed(5)),
-          longitudeDelta: Number(region?.longitudeDelta?.toFixed(5)),
-          preferredZoom: preferredFollowZoomRef.current,
-        });
-      }
-    }
 
     // Debounce disables for 2s after programmatic camera moves
     if (skipRegionChangeUntilRef.current && Date.now() < skipRegionChangeUntilRef.current) {
