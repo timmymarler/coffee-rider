@@ -19,6 +19,7 @@ import { cancelSubscription } from "@core/payments/stripeService";
 import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
@@ -73,6 +74,7 @@ export default function ProfileScreen() {
   const [placeAddress, setPlaceAddress] = useState("");
   const [placeAmenities, setPlaceAmenities] = useState([]);
   const [placeSuitability, setPlaceSuitability] = useState([]);
+  const UNITS_PREFERENCE_KEY = "@coffee_rider_units_preference";
 
   // Delete account
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
@@ -91,6 +93,10 @@ export default function ProfileScreen() {
     setContactEmail(profile?.contactEmail || user?.email || "");
     setExcludeFromUserSearch(Boolean(profile?.excludeFromUserSearch));
     setUnitsPreference(profile?.unitsPreference || "imperial");
+
+    if (profile?.routingTheme && profile.routingTheme !== userTheme) {
+      setUserTheme(profile.routingTheme);
+    }
     
     // Load different fields based on role
     if (profile?.role === "place-owner") {
@@ -102,6 +108,10 @@ export default function ProfileScreen() {
       setHomeAddress(profile?.homeAddress || "");
     }
   }, [profile]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(UNITS_PREFERENCE_KEY, unitsPreference).catch(() => {});
+  }, [unitsPreference]);
 
   // Initialize initialValues when profile first loads (only once per profile change)
   useEffect(() => {
@@ -118,6 +128,7 @@ export default function ProfileScreen() {
       contactEmail: profile.contactEmail || "",
       excludeFromUserSearch: Boolean(profile.excludeFromUserSearch),
       unitsPreference: profile.unitsPreference || "imperial",
+      routingTheme: profile.routingTheme || userTheme,
       bio: profile.bio || "",
       bike: profile.bike || "",
       homeLocation: profile.homeLocation || "",
@@ -157,6 +168,7 @@ export default function ProfileScreen() {
           contactEmail: profile?.contactEmail || user?.email || "",
           excludeFromUserSearch: Boolean(profile?.excludeFromUserSearch),
           unitsPreference: profile?.unitsPreference || "imperial",
+          routingTheme: profile?.routingTheme || userTheme,
           placeName: data.name || "",
           placeCategory: data.category || "cafe",
           placeAddress: data.address || "",
@@ -449,6 +461,7 @@ export default function ProfileScreen() {
         contactEmail !== initialValues.contactEmail ||
         excludeFromUserSearch !== initialValues.excludeFromUserSearch ||
         unitsPreference !== initialValues.unitsPreference ||
+        userTheme !== initialValues.routingTheme ||
         placeName !== initialValues.placeName ||
         placeCategory !== initialValues.placeCategory ||
         placeAddress !== initialValues.placeAddress ||
@@ -461,6 +474,7 @@ export default function ProfileScreen() {
         contactEmail !== initialValues.contactEmail ||
         excludeFromUserSearch !== initialValues.excludeFromUserSearch ||
         unitsPreference !== initialValues.unitsPreference ||
+        userTheme !== initialValues.routingTheme ||
         bio !== initialValues.bio ||
         bike !== initialValues.bike ||
         homeLocation !== initialValues.homeLocation ||
@@ -489,6 +503,7 @@ export default function ProfileScreen() {
         contactEmail: normalizedContactEmail || null,
         excludeFromUserSearch,
         unitsPreference,
+        routingTheme: userTheme,
         updatedAt: Date.now(),
       };
 
@@ -527,7 +542,8 @@ export default function ProfileScreen() {
         displayName !== initialValues.displayName ||
         normalizedContactEmail !== (initialValues.contactEmail || "") ||
         excludeFromUserSearch !== Boolean(initialValues.excludeFromUserSearch) ||
-        unitsPreference !== initialValues.unitsPreference;
+        unitsPreference !== initialValues.unitsPreference ||
+        userTheme !== initialValues.routingTheme;
 
       if (shouldUpdateUserDoc) {
         console.log("[ProfileScreen] Updating user document");
@@ -544,6 +560,7 @@ export default function ProfileScreen() {
         contactEmail: normalizedContactEmail,
         excludeFromUserSearch,
         unitsPreference,
+        routingTheme: userTheme,
         ...(role === "place-owner" ? {
           placeName: placeName,
           placeCategory: placeCategory,
@@ -821,47 +838,6 @@ export default function ProfileScreen() {
           </View>
         </TouchableOpacity>
 
-        <CRLabel style={{ marginTop: theme.spacing.md }}>Units</CRLabel>
-        <View
-          style={{
-            flexDirection: "row",
-            gap: theme.spacing.sm,
-            marginVertical: theme.spacing.sm,
-          }}
-        >
-          {[
-            { id: "imperial", label: "Miles" },
-            { id: "metric", label: "Kms" },
-          ].map((option) => {
-            const isActive = unitsPreference === option.id;
-            return (
-              <TouchableOpacity
-                key={option.id}
-                onPress={() => setUnitsPreference(option.id)}
-                style={{
-                  flex: 1,
-                  paddingVertical: theme.spacing.sm,
-                  borderRadius: theme.radius.md,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: isActive ? theme.colors.accentMid : theme.colors.inputBg,
-                  borderWidth: 1,
-                  borderColor: isActive ? theme.colors.accentMid : theme.colors.inputBorder,
-                }}
-              >
-                <Text
-                  style={{
-                    color: isActive ? theme.colors.primaryDark : theme.colors.text,
-                    fontWeight: "600",
-                  }}
-                >
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
         {role === "place-owner" ? (
           <>
             {/* Place Owner Fields */}
@@ -1068,6 +1044,33 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+
+            <CRLabel style={{ marginTop: theme.spacing.md }}>Units</CRLabel>
+            <TouchableOpacity
+              onPress={() => setUnitsPreference(unitsPreference === "metric" ? "imperial" : "metric")}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                marginVertical: theme.spacing.sm,
+                paddingVertical: theme.spacing.md,
+                paddingHorizontal: theme.spacing.md,
+                backgroundColor: theme.colors.primaryDark,
+                borderRadius: theme.radius.md,
+              }}
+            >
+              <MaterialCommunityIcons
+                name={unitsPreference === "metric" ? "radiobox-marked" : "radiobox-blank"}
+                size={20}
+                color={unitsPreference === "metric" ? theme.colors.accentMid : "#635021"}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.colors.primaryLight, fontWeight: "600" }}>Use KMS</Text>
+                <Text style={{ fontSize: 12, color: theme.colors.primaryMid, marginTop: 2 }}>
+                  Unchecked uses miles
+                </Text>
+              </View>
+            </TouchableOpacity>
 
             <CRLabel style={{ marginTop: theme.spacing.md }}>Rider Bio</CRLabel>
             <CRInput value={bio} onChangeText={setBio} multiline />

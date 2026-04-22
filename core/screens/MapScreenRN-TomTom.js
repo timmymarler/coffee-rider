@@ -5,6 +5,7 @@ import { useTheme } from "@context/ThemeContext";
 import { sendBleDirectionsFrame } from "@core/ble/directionsTransmitter";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -225,6 +226,7 @@ const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17; // Android: 17, iOS: 7 - Mor
 const FOLLOW_CENTER_AHEAD_METERS_PORTRAIT = 120;
 const FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE = 55;
 const ENABLE_GOOGLE_AUTO_FETCH = true;
+const DEBUG_FOLLOWME_CAMERA = __DEV__ && Platform.OS === "ios";
 
 // Follow Me smoothing constants
 const MAX_LOCATION_ACCURACY = 25; // Meters - ignore readings worse than this
@@ -514,6 +516,7 @@ const U_TURN_RIGHT_META = { icon: "redo-variant", label: "Make a U-turn" };
 const ARRIVAL_META = { icon: "flag-checkered", label: "Destination ahead" };
 const ARRIVAL_LEFT_META = { icon: "flag-checkered", label: "Destination on the left" };
 const ARRIVAL_RIGHT_META = { icon: "flag-checkered", label: "Destination on the right" };
+const UNITS_PREFERENCE_KEY = "@coffee_rider_units_preference";
 
   // Maneuver → icon + label map (simplified)
   const MANEUVER_ICON_MAP = {
@@ -1220,6 +1223,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const user = auth?.user || null;
   const role = auth?.profile?.role || "guest";
   const capabilities = getCapabilities(role);
+  const [localUnitsPreference, setLocalUnitsPreference] = useState(null);
 
   // Visited places — derived from user profile (auto-updates via AuthContext's real-time listener)
   const visitedPlaceIds = useMemo(
@@ -1544,6 +1548,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const activeRideRef = useRef(null);
   const endRideRef = useRef(null);
   const markerPressedRef = useRef(false); // Track if a marker was just pressed
+  const lastMovementHeadingRef = useRef(null);
+  const lastMovementLocationRef = useRef(null);
+  const lastCameraDebugRef = useRef(0);
   
   // Dead reckoning: estimate position based on heading when GPS is poor
   const lastGoodGPSRef = useRef(null); // Last accurate GPS reading
@@ -1558,7 +1565,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const speedLimitDisplayRef = useRef({ current: null, pending: null, pendingSince: 0 });
   const speedLimitProgressRef = useRef(0);
   const MIN_ROUTE_REBUILD_DISTANCE_METERS = 10; // Only rebuild routes if user moves more than 10 meters
-  const distanceUnits = auth?.profile?.unitsPreference === "metric" ? "metric" : "imperial";
+  const effectiveUnitsPreference = auth?.profile?.unitsPreference || localUnitsPreference || "imperial";
+  const distanceUnits = effectiveUnitsPreference === "metric" ? "metric" : "imperial";
   const speedBias = distanceUnits === "metric" ? 3 : 2;
   const minDisplaySpeed = distanceUnits === "metric" ? 5 : 3;
   const speedUnitLabel = distanceUnits === "metric" ? "km/h" : "mph";
@@ -2258,6 +2266,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }, [])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      AsyncStorage.getItem(UNITS_PREFERENCE_KEY)
+        .then((value) => {
+          if (isActive && value) {
+            setLocalUnitsPreference(value);
+          }
+        })
+        .catch(() => {});
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
   // End active ride when leaving map screen
   useFocusEffect(
     useCallback(() => {
@@ -2275,6 +2299,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // End active ride when app goes to background or is closed
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        AsyncStorage.getItem(UNITS_PREFERENCE_KEY)
+          .then((value) => {
+            if (value) {
+              setLocalUnitsPreference(value);
+            }
+          })
+          .catch(() => {});
+      }
       if (nextAppState === 'background' || nextAppState === 'inactive') {
         if (activeRideRef.current && endRideRef.current) {
           endRideRef.current();
@@ -2683,53 +2716,7 @@ function getStepCompletionThresholds(step = null) {
     return Math.max(minZoom, Math.min(maxZoom, num));
   }
 
-  function altitudeToZoom(altitude) {
-    const num = Number(altitude);
-    if (!Number.isFinite(num) || num <= 0) return null;
-    return clampMapZoom(13 - Math.log2(num / 10));
-  }
-
-  function regionToApproxZoom(region) {
-    const delta = Number(region?.longitudeDelta || region?.latitudeDelta);
-    if (!Number.isFinite(delta) || delta <= 0) return null;
-    return clampMapZoom(Math.log2(360 / delta));
-  }
-
-  function zoomToMetersPerPixel(latitude, zoom) {
-    const lat = Number(latitude);
-    const level = Number(zoom);
-    if (!Number.isFinite(lat) || !Number.isFinite(level)) return null;
-    return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, level);
-  }
-
-  function getFollowAheadMeters(coords, zoom) {
-    const fallback = isLandscape
-      ? FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE
-      : FOLLOW_CENTER_AHEAD_METERS_PORTRAIT;
-
-    const metersPerPixel = zoomToMetersPerPixel(coords?.latitude, zoom);
-    if (!Number.isFinite(metersPerPixel) || metersPerPixel <= 0) {
-      return fallback;
-    }
-
-    const visibleHeight = Math.max(
-      240,
-      dimensions.height - insets.top - insets.bottom - TAB_BAR_HEIGHT - 12
-    );
-    const targetMarkerScreenY = Platform.OS === "ios"
-      ? (isLandscape ? 0.74 : 0.80)
-      : (isLandscape ? 0.68 : 0.74);
-    const pixelOffsetFromCenter = Math.max(0, (targetMarkerScreenY - 0.5) * visibleHeight);
-    const platformCompensation = Platform.OS === "ios" ? 1.2 : 1;
-    const desiredMeters = pixelOffsetFromCenter * metersPerPixel * platformCompensation;
-    const maxAhead = Platform.OS === "ios"
-      ? (isLandscape ? 1100 : 1700)
-      : (isLandscape ? 900 : 1500);
-
-    return Math.max(fallback, Math.min(maxAhead, desiredMeters));
-  }
-
-  async function captureCurrentMapZoom(fallback = FOLLOW_ZOOM, region = null) {
+  async function captureCurrentMapZoom(fallback = FOLLOW_ZOOM) {
     try {
       if (mapRef.current?.getCamera) {
         const camera = await mapRef.current.getCamera();
@@ -2738,22 +2725,9 @@ function getStepCompletionThresholds(step = null) {
           preferredFollowZoomRef.current = nextZoom;
           return nextZoom;
         }
-        if (Platform.OS === "ios") {
-          const nextZoom = altitudeToZoom(camera?.altitude);
-          if (Number.isFinite(nextZoom)) {
-            preferredFollowZoomRef.current = nextZoom;
-            return nextZoom;
-          }
-        }
       }
     } catch (error) {
       console.warn("[FollowMe] Unable to read current zoom:", error?.message || error);
-    }
-
-    const regionZoom = regionToApproxZoom(region);
-    if (Number.isFinite(regionZoom)) {
-      preferredFollowZoomRef.current = regionZoom;
-      return regionZoom;
     }
 
     return clampMapZoom(preferredFollowZoomRef.current || fallback);
@@ -2769,18 +2743,25 @@ function getStepCompletionThresholds(step = null) {
 
     const hasExplicitHeading = Number.isFinite(heading) && heading !== -1;
     let effectiveHeading = null;
+    let headingSource = "none";
 
     if (followMode) {
-      effectiveHeading = hasExplicitHeading
-        ? heading
-        : (Number.isFinite(coords?.heading) && coords.heading !== -1 ? coords.heading : null);
+      if (hasExplicitHeading) {
+        effectiveHeading = heading;
+        headingSource = "gps";
+      } else if (Number.isFinite(coords?.heading) && coords.heading !== -1) {
+        effectiveHeading = coords.heading;
+        headingSource = "gps";
+      }
 
       if (!Number.isFinite(effectiveHeading) && Number.isFinite(lastFollowHeadingRef.current)) {
         effectiveHeading = lastFollowHeadingRef.current;
+        headingSource = "cache";
       }
     } else {
       // Normal recenter should always return to north-up unless a heading is explicitly provided.
       effectiveHeading = hasExplicitHeading ? heading : 0;
+      headingSource = hasExplicitHeading ? "gps" : "north";
     }
 
     // Simulator and some GPS readings often provide no heading.
@@ -2800,7 +2781,20 @@ function getStepCompletionThresholds(step = null) {
 
       if (segStart && segEnd) {
         effectiveHeading = calculateBearing(segStart, segEnd);
+        if (Number.isFinite(effectiveHeading)) {
+          headingSource = "route";
+        }
       }
+    }
+
+    if (followMode && !Number.isFinite(effectiveHeading) && Number.isFinite(lastMovementHeadingRef.current)) {
+      effectiveHeading = lastMovementHeadingRef.current;
+      headingSource = "movement";
+    }
+
+    if (followMode && !Number.isFinite(effectiveHeading) && (!routeCoords || routeCoords.length < 2)) {
+      effectiveHeading = 0;
+      headingSource = "default";
     }
 
     if (Number.isFinite(effectiveHeading)) {
@@ -2813,7 +2807,7 @@ function getStepCompletionThresholds(step = null) {
       : (followMode ? clampMapZoom(preferredFollowZoomRef.current) : null);
 
     const aheadMeters = followMode
-      ? getFollowAheadMeters(coords, effectiveZoom ?? preferredFollowZoomRef.current)
+      ? (isLandscape ? FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE : FOLLOW_CENTER_AHEAD_METERS_PORTRAIT)
       : 0;
 
     const centerPoint = followMode && Number.isFinite(effectiveHeading)
@@ -2843,6 +2837,21 @@ function getStepCompletionThresholds(step = null) {
     }
     
     mapRef.current.animateCamera(cameraConfig, { duration: 350 });
+
+    if (DEBUG_FOLLOWME_CAMERA) {
+      const now = Date.now();
+      if (now - lastCameraDebugRef.current > 1200) {
+        lastCameraDebugRef.current = now;
+        console.log("[FollowMeCamera] recenter", {
+          followMode,
+          headingSource,
+          heading: Number.isFinite(effectiveHeading) ? Math.round(effectiveHeading) : null,
+          zoom: effectiveZoom,
+          altitude: cameraConfig.altitude || null,
+          pitch: cameraConfig.pitch ?? null,
+        });
+      }
+    }
     
     // Reset flag after animation completes
     setTimeout(() => { isAnimatingRef.current = false; }, 500);
@@ -3025,10 +3034,19 @@ function getStepCompletionThresholds(step = null) {
     // Update camera during navigation (Follow Me or active ride)
     // If we have heading, use it for orientation; otherwise just center on location
     if (userLocation.heading !== undefined && userLocation.heading !== -1) {
-      recenterOnUser({ heading: userLocation.heading, pitch: 35, zoom: preferredFollowZoomRef.current, followMode: true });
+      recenterOnUser({
+        heading: userLocation.heading,
+        pitch: 35,
+        zoom: preferredFollowZoomRef.current,
+        followMode: true,
+      });
     } else {
       // Fallback: center on location without heading (for active rides or when heading unavailable)
-      recenterOnUser({ zoom: preferredFollowZoomRef.current, pitch: 0, followMode: true });
+      recenterOnUser({
+        zoom: preferredFollowZoomRef.current,
+        pitch: 0,
+        followMode: true,
+      });
     }
   }, [userLocation, isNavigationMode]);
 
@@ -4160,6 +4178,17 @@ function getStepCompletionThresholds(step = null) {
                 estimatedSpeedRef.current = estimatedSpeedRef.current * 0.7 + speed * 0.3; // Exponential moving average
               }
             }
+
+            if (lastMovementLocationRef.current) {
+              const movementDistance = distanceBetween(lastMovementLocationRef.current, coordsToUse);
+              if (Number.isFinite(movementDistance) && movementDistance >= 5) {
+                lastMovementHeadingRef.current = calculateBearing(
+                  lastMovementLocationRef.current,
+                  coordsToUse
+                );
+              }
+            }
+            lastMovementLocationRef.current = coordsToUse;
             
             // Track good GPS readings for dead reckoning
             if (location.coords.accuracy && location.coords.accuracy <= MAX_LOCATION_ACCURACY) {
@@ -4213,6 +4242,21 @@ function getStepCompletionThresholds(step = null) {
   const handleRegionChangeComplete = async (region) => {
     setMapRegion(region);
 
+    if (DEBUG_FOLLOWME_CAMERA) {
+      const now = Date.now();
+      if (now - lastCameraDebugRef.current > 1200) {
+        lastCameraDebugRef.current = now;
+        console.log("[FollowMeCamera] region", {
+          followUser,
+          isAnimating: isAnimatingRef.current,
+          skipNextRegion: skipNextRegionChangeRef.current,
+          latitudeDelta: Number(region?.latitudeDelta?.toFixed(5)),
+          longitudeDelta: Number(region?.longitudeDelta?.toFixed(5)),
+          preferredZoom: preferredFollowZoomRef.current,
+        });
+      }
+    }
+
     // Debounce disables for 2s after programmatic camera moves
     if (skipRegionChangeUntilRef.current && Date.now() < skipRegionChangeUntilRef.current) {
       // Ignore region changes during debounce window
@@ -4224,7 +4268,11 @@ function getStepCompletionThresholds(step = null) {
     // Only disable if user manually pans AFTER they were in Follow Me
     if (followUser) {
       // Keep Follow Me active, but preserve whatever zoom the rider just chose.
-      await captureCurrentMapZoom(preferredFollowZoomRef.current, region);
+      if (isAnimatingRef.current || skipNextRegionChangeRef.current) {
+        skipNextRegionChangeRef.current = false;
+        return;
+      }
+      await captureCurrentMapZoom(preferredFollowZoomRef.current);
       skipNextRegionChangeRef.current = false;
       return;
     }

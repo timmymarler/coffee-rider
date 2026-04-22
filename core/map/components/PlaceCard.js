@@ -166,6 +166,7 @@ export default function PlaceCard({
   const user = auth?.user || null;
   const role = auth?.profile?.role || "guest"; // or auth.role if that’s what you store
   const capabilities = getCapabilities(role);
+  const distanceUnits = auth?.profile?.unitsPreference === "metric" ? "metric" : "imperial";
   const canNavigate = capabilities.canNavigate === true;
   const canRate = capabilities.canRate === true;
   const currentUid = user?.uid || null;
@@ -401,7 +402,7 @@ export default function PlaceCard({
       myCrPhotos.length < MAX_USER_PHOTOS_PER_PLACE // User
     );
   const canPreviewSingleRoute = capabilities.canPreviewSingleRoute;
-  const distanceMiles = useMemo(() => {
+  const distanceMeters = useMemo(() => {
     if (
       !userLocation ||
       typeof safePlace.latitude !== "number" ||
@@ -411,7 +412,7 @@ export default function PlaceCard({
     }
 
     const toRad = (v) => (v * Math.PI) / 180;
-    const R = 6371;
+    const R = 6371000;
 
     const dLat = toRad(safePlace.latitude - userLocation.latitude);
     const dLng = toRad(safePlace.longitude - userLocation.longitude);
@@ -422,25 +423,26 @@ export default function PlaceCard({
       Math.sin(dLat / 2) ** 2 +
       Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
 
-    return ((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))) * 0.62).toFixed(1);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }, [userLocation, safePlace.latitude, safePlace.longitude]);
   
   const distanceText = useMemo(() => {
     if (hasRoute && routeMeta?.distanceMeters && routeMeta?.durationSeconds) {
-      const miles = metersToMiles(routeMeta.distanceMeters);
+      const distance = formatDistanceForUnit(routeMeta.distanceMeters, distanceUnits);
       const mins = secondsToMinutes(routeMeta.durationSeconds);
 
-      if (miles && mins) {
-        return `${miles} miles • ${mins} mins (via route)`;
+      if (distance && mins) {
+        return `${distance} • ${mins} mins (via route)`;
       }
     }
 
-    if (distanceMiles) {
-      return `${distanceMiles} miles • (as the crow flies)`;
+    if (distanceMeters) {
+      const distance = formatDistanceForUnit(distanceMeters, distanceUnits);
+      return `${distance} • (as the crow flies)`;
     }
 
     return null;
-  }, [hasRoute, routeMeta, distanceMiles]);
+  }, [hasRoute, routeMeta, distanceMeters, distanceUnits]);
 
 
   const googleRating =
@@ -512,8 +514,29 @@ export default function PlaceCard({
     return `https://places.googleapis.com/v1/${name}/media?maxWidthPx=${width}&key=${GOOGLE_KEY}`;
   }
 
-  function metersToMiles(meters) {
-    return meters ? (meters / 1609.34).toFixed(1) : null;
+  function formatDistanceImperial(meters) {
+    if (meters == null) return null;
+    const miles = meters / 1609.344;
+    if (miles >= 0.1) {
+      const digits = miles >= 10 ? 0 : 1;
+      return `${miles.toFixed(digits)} mi`;
+    }
+    const yards = meters * 1.09361;
+    return `${Math.round(yards)} yd`;
+  }
+
+  function formatDistanceMetric(meters) {
+    if (meters == null) return null;
+    if (meters >= 1000) {
+      const km = meters / 1000;
+      const digits = km >= 10 ? 0 : 1;
+      return `${km.toFixed(digits)} km`;
+    }
+    return `${Math.round(meters)} m`;
+  }
+
+  function formatDistanceForUnit(meters, units) {
+    return units === "metric" ? formatDistanceMetric(meters) : formatDistanceImperial(meters);
   }
 
   function secondsToMinutes(seconds) {
