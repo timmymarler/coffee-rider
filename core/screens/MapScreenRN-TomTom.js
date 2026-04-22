@@ -5727,7 +5727,7 @@ function getStepCompletionThresholds(step = null) {
           key={mapKey}
           style={StyleSheet.absoluteFill}
           customMapStyle={null}
-          showsUserLocation={true}
+          showsUserLocation={followUser}
           pitchEnabled
           showsMyLocationButton={false}
           minZoomLevel={Platform.OS === "ios" ? 1 : 0}
@@ -5792,6 +5792,39 @@ function getStepCompletionThresholds(step = null) {
             attemptRouteFit();
           }}
         >
+          {!followUser && userLocation && (
+            <Marker
+              coordinate={{
+                latitude: userLocation.latitude,
+                longitude: userLocation.longitude,
+              }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              zIndex={2000}
+              tracksViewChanges={false}
+            >
+              <View
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  backgroundColor: "rgba(255, 255, 255, 0.95)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 1,
+                  borderColor: "rgba(0, 0, 0, 0.15)",
+                }}
+              >
+                <View
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 5,
+                    backgroundColor: "#2F80ED",
+                  }}
+                />
+              </View>
+            </Marker>
+          )}
           {activeQuery ? searchMarkers.map(renderMarker) : crMarkers.map(renderMarker)}
           {manualStartPoint && (
             <Marker

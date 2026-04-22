@@ -1245,7 +1245,7 @@ export default function PlaceCard({
           )}
 
 
-          {distanceMiles && (
+          {distanceMeters && (
             <Text style={styles.subText}>
               {/* {distanceMiles} miles away (straight line distance) */}
               {distanceText}
