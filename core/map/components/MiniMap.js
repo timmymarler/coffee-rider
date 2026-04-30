@@ -338,12 +338,20 @@ export default function MiniMap({
           <Marker
             key={`waypoint-${idx}-${coord.latitude}-${coord.longitude}`}
             coordinate={coord}
-            anchor={{ x: 0.5, y: 0.5 }}
+            anchor={{ x: 0.5, y: 1 }}
             zIndex={255}
             tracksViewChanges={markerTracksViewChanges}
           >
-            <View style={styles.waypointMarker}>
-              <Text style={styles.waypointIndex}>{idx + 1}</Text>
+            <View style={[styles.waypointMarker, { width: 20, height: 20 }]} collapsable={false}>
+              <SvgPin
+                size={20}
+                fill="#ffffff"
+                circle="#2F80ED"
+                stroke="#ffffff"
+                icon="map-marker"
+                iconColor="transparent"
+              />
+              <Text style={[styles.waypointIndex, { top: 4, fontSize: 8 }]}>{idx + 1}</Text>
             </View>
           </Marker>
         ))}
@@ -427,19 +435,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   waypointMarker: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#7dd3fc',
-    borderWidth: 2,
-    borderColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
   },
   waypointIndex: {
-    fontSize: 8,
+    position: 'absolute',
     fontWeight: '700',
     color: '#ffffff',
+    textAlign: 'center',
+    left: 0,
+    right: 0,
   },
   markerContainer: {
     alignItems: 'center',

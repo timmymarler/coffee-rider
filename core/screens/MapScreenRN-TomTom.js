@@ -1257,6 +1257,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Get user's routing preferences
   const { 
     routeType: userRouteType, 
+    avoidMotorways,
     travelMode: userTravelMode, 
     routeTypeMap,
     theme: currentTheme,
@@ -1438,6 +1439,29 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [routeCoords.length, routeDestination, waypoints.length, followUser, userLocation]);
 
+  const handleAvoidMotorwaysChange = useCallback(() => {
+    if (lastAvoidMotorwaysRef.current === null) {
+      lastAvoidMotorwaysRef.current = avoidMotorways;
+      return;
+    }
+    if (lastAvoidMotorwaysRef.current === avoidMotorways) {
+      return;
+    }
+    lastAvoidMotorwaysRef.current = avoidMotorways;
+
+    if (routeCoords.length > 0 && (routeDestination || waypoints.length > 0) && !followUser && userLocation) {
+      console.log('[AVOID_MOTORWAYS_CHANGE] User toggled avoid motorways, rebuilding route...');
+      const requestId = ++routeRequestId.current;
+      buildRoute({ requestId }).catch(error => {
+        console.warn('[AVOID_MOTORWAYS_CHANGE] buildRoute error:', error);
+      });
+    }
+  }, [avoidMotorways, routeCoords.length, routeDestination, waypoints.length, followUser, userLocation]);
+
+  useEffect(() => {
+    handleAvoidMotorwaysChange();
+  }, [avoidMotorways, handleAvoidMotorwaysChange]);
+
   // IMPORTANT: activeRide syncing and rebuild
   // Use regular useEffect (not useFocusEffect) so it responds to activeRide changes immediately
   // Only rebuild if ride is NEWLY started (previousActiveRideRef.current was null)
@@ -1460,6 +1484,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         destination: routeDestination,
         travelMode: userTravelMode,
         routeType: userRouteType,
+        avoidMotorways,
         requestId,
         skipFitToView: false,
       }).catch(error => {
@@ -1557,6 +1582,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const positionSmoothingRef = useRef(null); // Smoothed position for Kalman-like filtering
   const lastRouteBuildLocationRef = useRef(null); // Track location used for last route build to avoid excessive rebuilds
   const lastRouteTypeRef = useRef(null); // Track the route type used for last route build to rebuild when it changes
+  const lastAvoidMotorwaysRef = useRef(null);
   const lastWaypoints = useRef([]); // Track waypoints from last route build to rebuild when they change
   const lastManualStartPointRef = useRef(null); // Track manual start point to detect Follow Me transitions
   const lastExplicitBuildRef = useRef({ waypointsId: null, destinationId: null }); // Track last explicit build to prevent duplicate rebuilds
@@ -2974,6 +3000,7 @@ function getStepCompletionThresholds(step = null) {
         },
         travelMode: userTravelMode,
         routeType: userRouteType,
+        avoidMotorways,
         requestId: requestId,
         skipFitToView: false, // Allow initial fit
       }).catch(error => {
@@ -3649,6 +3676,7 @@ function getStepCompletionThresholds(step = null) {
                 destination: routeDestination,
                 travelMode: userTravelMode,
                 routeType: userRouteType,
+                avoidMotorways,
                 requestId,
                 skipFitToView: true,
                 vehicleHeading: lastGoodGPSRef.current?.heading || null,
@@ -3667,6 +3695,7 @@ function getStepCompletionThresholds(step = null) {
             destination: routeDestination,
             travelMode: userTravelMode,
             routeType: userRouteType,
+            avoidMotorways,
             requestId,
             skipFitToView: true,
             vehicleHeading: userLocation?.heading || null,
@@ -3843,6 +3872,7 @@ function getStepCompletionThresholds(step = null) {
       destination: rerouteDestination,
       travelMode: userTravelMode,
       routeType: userRouteType,
+      avoidMotorways,
       requestId,
       skipFitToView: true,
       vehicleHeading: userLocation?.heading || null,
@@ -5000,6 +5030,7 @@ function getStepCompletionThresholds(step = null) {
     destination,
     travelMode,
     routeType,
+    avoidMotorways: avoidMotorwaysOverride = avoidMotorways,
     requestId,
     skipFitToView = false, // Don't auto-center when in Follow Me mode
     vehicleHeading = null, // User's current heading in degrees (0-359), used for rerouting
@@ -5071,6 +5102,7 @@ function getStepCompletionThresholds(step = null) {
         useCache,
         customHilliness,
         customWindingness,
+        avoidMotorways: avoidMotorwaysOverride,
         vehicleHeading, // Pass heading to prevent backward rerouting
       });
     } catch (error) {
@@ -5225,6 +5257,7 @@ function getStepCompletionThresholds(step = null) {
       destination,
       travelMode: userTravelMode,
       routeType: userRouteType,
+      avoidMotorways,
       requestId: finalRequestId,
       skipFitToView: skipFit,
     });
@@ -5807,22 +5840,13 @@ function getStepCompletionThresholds(step = null) {
                   width: 18,
                   height: 18,
                   borderRadius: 9,
-                  backgroundColor: "rgba(255, 255, 255, 0.95)",
+                  backgroundColor: "#2F80ED",
                   alignItems: "center",
                   justifyContent: "center",
-                  borderWidth: 1,
-                  borderColor: "rgba(0, 0, 0, 0.15)",
+                  borderWidth: 2,
+                  borderColor: "rgba(255, 255, 255, 0.95)",
                 }}
-              >
-                <View
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 5,
-                    backgroundColor: "#2F80ED",
-                  }}
-                />
-              </View>
+              />
             </Marker>
           )}
           {activeQuery ? searchMarkers.map(renderMarker) : crMarkers.map(renderMarker)}
@@ -5862,6 +5886,8 @@ function getStepCompletionThresholds(step = null) {
           {/* Waypoint markers - show all waypoints in the route */}
           {waypoints.length > 0 && (
             (() => {
+              const waypointPinSize = 32;
+              const waypointCircleColor = "#2F80ED";
               return waypoints.map((wp, index) => {
                 const waypointCoord = normalizeCoord(wp);
                 if (!waypointCoord) return null;
@@ -5869,12 +5895,30 @@ function getStepCompletionThresholds(step = null) {
                   <Marker
                     key={`wp-${index}`}
                     coordinate={waypointCoord}
-                    anchor={{ x: 0.5, y: 0.5 }}
+                    anchor={{ x: 0.5, y: 1 }}
                     zIndex={950}
-                    tracksViewChanges={false}
+                    tracksViewChanges={Platform.OS === "android"}
                   >
-                    <View style={styles.waypointPin}>
-                      <Text style={styles.waypointIndex}>{index + 1}</Text>
+                    <View
+                      style={[styles.waypointPinWrap, { width: waypointPinSize, height: waypointPinSize }]}
+                      collapsable={false}
+                    >
+                      <SvgPin
+                        size={waypointPinSize}
+                        fill="#ffffff"
+                        circle={waypointCircleColor}
+                        stroke="#ffffff"
+                        icon="map-marker"
+                        iconColor="transparent"
+                      />
+                      <Text
+                        style={[
+                          styles.waypointIndex,
+                          { top: waypointPinSize * 0.18, fontSize: 11 },
+                        ]}
+                      >
+                        {index + 1}
+                      </Text>
                     </View>
                   </Marker>
                 );
@@ -7720,19 +7764,18 @@ const styles = StyleSheet.create({
     color: theme.colors.primaryDark,
   },
 
-  waypointPin: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#7dd3fc",
-    justifyContent: "center",
+  waypointPinWrap: {
     alignItems: "center",
+    justifyContent: "center",
   },
 
   waypointIndex: {
-    fontSize: 10,
-    fontWeight: "600",
+    position: "absolute",
+    fontWeight: "700",
     color: "#ffffff",
+    textAlign: "center",
+    left: 0,
+    right: 0,
   },
 
   pointMenuOverlay: {
