@@ -1,6 +1,10 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
-import { Linking, Modal, Text, TouchableOpacity, View } from "react-native";
+import { Linking, Modal, Platform, Text, TouchableOpacity, View } from "react-native";
+
+const ANDROID_STORE_URL = "https://play.google.com/store/apps/details?id=com.timmy.marler.coffeerider";
+const IOS_TESTFLIGHT_WEB_URL = "https://testflight.apple.com";
+const IOS_TESTFLIGHT_APP_URL = "itms-beta://";
 
 export function VersionUpgradeModal({
   visible,
@@ -9,11 +13,24 @@ export function VersionUpgradeModal({
   newVersion,
   releaseNotes,
   onDismiss,
-  storeUrl = "https://drive.google.com/drive/folders/1w6FK9Vp7J3m2lgY7z9LRl2h8RxPFEuC8",
+  storeUrl,
 }) {
+  const resolveStoreUrl = async () => {
+    if (storeUrl) return storeUrl;
+    if (Platform.OS === "android") return ANDROID_STORE_URL;
+
+    try {
+      const canOpenTestFlight = await Linking.canOpenURL(IOS_TESTFLIGHT_APP_URL);
+      return canOpenTestFlight ? IOS_TESTFLIGHT_APP_URL : IOS_TESTFLIGHT_WEB_URL;
+    } catch {
+      return IOS_TESTFLIGHT_WEB_URL;
+    }
+  };
+
   const handleUpdate = async () => {
     try {
-      await Linking.openURL(storeUrl);
+      const targetUrl = await resolveStoreUrl();
+      await Linking.openURL(targetUrl);
     } catch (error) {
       console.error("[VERSION] Failed to open store URL:", error);
     }
