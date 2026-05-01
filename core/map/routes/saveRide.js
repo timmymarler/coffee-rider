@@ -77,6 +77,9 @@ export async function saveRide({
   origin,
   destination,
   routeMeta,
+  tomtomSteps,
+  tomtomGuidance,
+  tomtomRawRoute,
   completedAt,
   travelMode,
   waypoints = [],
@@ -136,6 +139,10 @@ export async function saveRide({
     createdAt: serverTimestamp(),
     // Type identifier: 'ride' for tracked rides, 'route' for planned routes
     type: "ride",
+    // Debug fields for TomTom
+    tomtomSteps: tomtomSteps ?? null,
+    tomtomGuidance: tomtomGuidance ?? null,
+    tomtomRawRoute: tomtomRawRoute ?? null,
     // Travel mode stored for metadata/analytics
     travelMode: travelMode || null,
     // Store waypoints so they can be displayed when viewing the ride

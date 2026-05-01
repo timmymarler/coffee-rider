@@ -146,6 +146,9 @@ service cloud.firestore {
         // Owner updates
         (
           isRouteOwner(resource.data) && (
+            // Soft-delete always allowed for owner (visibility-independent)
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleted', 'deletedAt', 'deletedBy']) ||
+
             // If changing visibility to public/group, require Pro/Admin
             (
               resource.data.visibility != request.resource.data.visibility &&

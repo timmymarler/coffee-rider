@@ -4,6 +4,7 @@ import { CRScreen } from "@core/components/ui/CRScreen";
 import { AuthContext } from "@core/context/AuthContext";
 import { useTheme } from "@core/context/ThemeContext";
 import { useAllUserGroups } from "@core/groups/hooks";
+import { deleteRide } from "@core/map/routes/deleteRide";
 import { deleteRoute } from "@core/map/routes/deleteRoute";
 import { recoverRoute } from "@core/map/routes/recoverRoute";
 import { RIDE_VISIBILITY, shareRoute } from "@core/map/routes/sharedRides";
@@ -141,6 +142,53 @@ export default function SavedRoutesScreen() {
     sortPillTextActive: {
       color: theme.colors.primaryLight,
       fontWeight: "600",
+    },
+    headerActionsRow: {
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 4,
+    },
+    headerActionButton: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    headerActionLabel: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    headerActionValue: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    optionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      marginBottom: 8,
+      borderRadius: 10,
+      backgroundColor: "rgba(255, 255, 255, 0.05)",
+      borderWidth: 1,
+      borderColor: "transparent",
+    },
+    optionRowSelected: {
+      backgroundColor: hexToRgba(theme.colors.accentMid, 0.1),
+      borderColor: theme.colors.accentMid,
+    },
+    optionRowText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.text,
     },
     cardContainer: {
       marginHorizontal: 16,
@@ -355,9 +403,14 @@ export default function SavedRoutesScreen() {
   const [viewMode, setViewMode] = useState("routes"); // 'routes' or 'rides'
   const [sortBy, setSortBy] = useState("created");
   const [filterBy, setFilterBy] = useState("all");
+  const [sortModalVisible, setSortModalVisible] = useState(false);
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [routeToDelete, setRouteToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [rideDeleteConfirmVisible, setRideDeleteConfirmVisible] = useState(false);
+  const [rideToDelete, setRideToDelete] = useState(null);
+  const [deletingRide, setDeletingRide] = useState(false);
   const [recoverConfirmVisible, setRecoverConfirmVisible] = useState(false);
   const [routeToRecover, setRouteToRecover] = useState(null);
   const [recovering, setRecovering] = useState(false);
@@ -509,6 +562,22 @@ export default function SavedRoutesScreen() {
     }
   }
 
+  async function handleDeleteRide() {
+    if (!rideToDelete) return;
+    setDeletingRide(true);
+    try {
+      await deleteRide(rideToDelete.id, rideToDelete._source);
+      Alert.alert("Success", "Ride deleted.");
+      setRideDeleteConfirmVisible(false);
+      setRideToDelete(null);
+    } catch (error) {
+      console.error("Error deleting ride:", error);
+      Alert.alert("Error", error.message || "Failed to delete ride");
+    } finally {
+      setDeletingRide(false);
+    }
+  }
+
   async function handleRecoverRoute() {
     if (!routeToRecover || !user?.uid) return;
     setRecovering(true);
@@ -529,6 +598,11 @@ export default function SavedRoutesScreen() {
   function confirmDeleteRoute(route) {
     setRouteToDelete(route.id);
     setDeleteConfirmVisible(true);
+  }
+
+  function confirmDeleteRide(ride) {
+    setRideToDelete(ride);
+    setRideDeleteConfirmVisible(true);
   }
 
   function confirmRecoverRoute(route) {
@@ -578,50 +652,31 @@ export default function SavedRoutesScreen() {
         {/* Only show sort/filter for routes view */}
         {viewMode === "routes" && (
           <>
-            <Text style={dynamicStyles.headerLabel}>Sort by:</Text>
-            <View style={dynamicStyles.sortRow}>
-              {SORT_OPTIONS.map((opt) => (
-                <TouchableOpacity
-                  key={opt.key}
-                  onPress={() => setSortBy(opt.key)}
-                  style={[
-                    dynamicStyles.sortPill,
-                    sortBy === opt.key && dynamicStyles.sortPillActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      dynamicStyles.sortPillText,
-                      sortBy === opt.key && dynamicStyles.sortPillTextActive,
-                    ]}
-                  >
-                    {opt.label}
+            <View style={dynamicStyles.headerActionsRow}>
+              <TouchableOpacity
+                style={dynamicStyles.headerActionButton}
+                onPress={() => setSortModalVisible(true)}
+              >
+                <View>
+                  <Text style={dynamicStyles.headerActionLabel}>Sort</Text>
+                  <Text style={dynamicStyles.headerActionValue}>
+                    {SORT_OPTIONS.find((opt) => opt.key === sortBy)?.label || "Created"}
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={dynamicStyles.headerLabel}>Filter:</Text>
-            <View style={dynamicStyles.sortRow}>
-              {FILTER_OPTIONS.map((opt) => (
-                <TouchableOpacity
-                  key={opt.key}
-                  onPress={() => setFilterBy(opt.key)}
-                  style={[
-                    dynamicStyles.sortPill,
-                    filterBy === opt.key && dynamicStyles.sortPillActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      dynamicStyles.sortPillText,
-                      filterBy === opt.key && dynamicStyles.sortPillTextActive,
-                    ]}
-                  >
-                    {opt.label}
+                </View>
+                <Ionicons name="chevron-down" size={18} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={dynamicStyles.headerActionButton}
+                onPress={() => setFilterModalVisible(true)}
+              >
+                <View>
+                  <Text style={dynamicStyles.headerActionLabel}>Filter</Text>
+                  <Text style={dynamicStyles.headerActionValue}>
+                    {FILTER_OPTIONS.find((opt) => opt.key === filterBy)?.label || "All"}
                   </Text>
-                </TouchableOpacity>
-              ))}
+                </View>
+                <Ionicons name="chevron-down" size={18} color={theme.colors.textMuted} />
+              </TouchableOpacity>
             </View>
           </>
         )}
@@ -728,20 +783,33 @@ export default function SavedRoutesScreen() {
           </TouchableOpacity>
 
           {isRide ? (
-            <TouchableOpacity
-              style={dynamicStyles.actionButton}
-              onPress={() => {
-                // Open ride on map and show save route option
-                handleOpenRide(item.id);
-              }}
-            >
-              <MaterialCommunityIcons
-                name="content-save-outline"
-                size={18}
-                color={theme.colors.accentMid}
-              />
-              <Text style={dynamicStyles.actionLabel}>Save Route</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={dynamicStyles.actionButton}
+                onPress={() => {
+                  // Open ride on map and show save route option
+                  handleOpenRide(item.id);
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="content-save-outline"
+                  size={18}
+                  color={theme.colors.accentMid}
+                />
+                <Text style={dynamicStyles.actionLabel}>Save Route</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={dynamicStyles.actionButton}
+                onPress={() => confirmDeleteRide(item)}
+              >
+                <MaterialCommunityIcons
+                  name="delete-outline"
+                  size={18}
+                  color={theme.colors.error}
+                />
+                <Text style={dynamicStyles.actionLabel}>Delete</Text>
+              </TouchableOpacity>
+            </>
           ) : item.deleted ? (
             <TouchableOpacity
               style={dynamicStyles.actionButton}
@@ -1014,6 +1082,94 @@ export default function SavedRoutesScreen() {
         </View>
       </Modal>
 
+      <Modal
+        visible={sortModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSortModalVisible(false)}
+      >
+        <View style={dynamicStyles.modalOverlay}>
+          <View style={dynamicStyles.modalContent}>
+            <Text style={dynamicStyles.modalTitle}>Sort Routes</Text>
+            <Text style={dynamicStyles.modalSubtitle}>Choose how routes are ordered</Text>
+
+            <ScrollView style={dynamicStyles.optionsContainer}>
+              {SORT_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[
+                    dynamicStyles.optionRow,
+                    sortBy === opt.key && dynamicStyles.optionRowSelected,
+                  ]}
+                  onPress={() => {
+                    setSortBy(opt.key);
+                    setSortModalVisible(false);
+                  }}
+                >
+                  <Text style={dynamicStyles.optionRowText}>{opt.label}</Text>
+                  {sortBy === opt.key && (
+                    <Ionicons name="checkmark" size={18} color={theme.colors.accentMid} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <View style={dynamicStyles.buttonRow}>
+              <CRButton
+                onPress={() => setSortModalVisible(false)}
+                title="Close"
+                style={[dynamicStyles.modalButton, dynamicStyles.cancelButton]}
+                textStyle={dynamicStyles.cancelButtonText}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={filterModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFilterModalVisible(false)}
+      >
+        <View style={dynamicStyles.modalOverlay}>
+          <View style={dynamicStyles.modalContent}>
+            <Text style={dynamicStyles.modalTitle}>Filter Routes</Text>
+            <Text style={dynamicStyles.modalSubtitle}>Show only matching routes</Text>
+
+            <ScrollView style={dynamicStyles.optionsContainer}>
+              {FILTER_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[
+                    dynamicStyles.optionRow,
+                    filterBy === opt.key && dynamicStyles.optionRowSelected,
+                  ]}
+                  onPress={() => {
+                    setFilterBy(opt.key);
+                    setFilterModalVisible(false);
+                  }}
+                >
+                  <Text style={dynamicStyles.optionRowText}>{opt.label}</Text>
+                  {filterBy === opt.key && (
+                    <Ionicons name="checkmark" size={18} color={theme.colors.accentMid} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <View style={dynamicStyles.buttonRow}>
+              <CRButton
+                onPress={() => setFilterModalVisible(false)}
+                title="Close"
+                style={[dynamicStyles.modalButton, dynamicStyles.cancelButton]}
+                textStyle={dynamicStyles.cancelButtonText}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Delete Confirmation Modal */}
       <Modal
         visible={deleteConfirmVisible}
@@ -1036,6 +1192,36 @@ export default function SavedRoutesScreen() {
               />
               <CRButton
                 onPress={() => !deleting && setDeleteConfirmVisible(false)}
+                title="Cancel"
+                style={[dynamicStyles.modalButton, dynamicStyles.cancelButton]}
+                textStyle={dynamicStyles.cancelButtonText}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={rideDeleteConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !deletingRide && setRideDeleteConfirmVisible(false)}
+      >
+        <View style={dynamicStyles.modalOverlay}>
+          <View style={dynamicStyles.confirmModal}>
+            <Text style={dynamicStyles.confirmTitle}>Delete Ride?</Text>
+            <Text style={dynamicStyles.confirmMessage}>
+              This ride will be deleted and cannot be recovered.
+            </Text>
+            <View style={dynamicStyles.buttonRow}>
+              <CRButton
+                onPress={handleDeleteRide}
+                title="Delete"
+                loading={deletingRide}
+                style={[dynamicStyles.modalButton, { backgroundColor: theme.colors.error }]}
+              />
+              <CRButton
+                onPress={() => !deletingRide && setRideDeleteConfirmVisible(false)}
                 title="Cancel"
                 style={[dynamicStyles.modalButton, dynamicStyles.cancelButton]}
                 textStyle={dynamicStyles.cancelButtonText}

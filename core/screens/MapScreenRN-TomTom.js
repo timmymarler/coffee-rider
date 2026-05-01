@@ -1592,7 +1592,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const effectiveUnitsPreference = auth?.profile?.unitsPreference || localUnitsPreference || "imperial";
   const distanceUnits = effectiveUnitsPreference === "metric" ? "metric" : "imperial";
   const speedBias = distanceUnits === "metric" ? 3 : 2;
-  const minDisplaySpeed = distanceUnits === "metric" ? 5 : 3;
+  const minDisplaySpeed = distanceUnits === "metric" ? 8 : 5;
   const speedUnitLabel = distanceUnits === "metric" ? "km/h" : "mph";
 
   const currentSpeedMph = useMemo(() => {
@@ -1605,10 +1605,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return null;
     }
 
-    const adjustedSpeed = baseSpeed + speedBias;
-    if (adjustedSpeed <= minDisplaySpeed) {
+    if (baseSpeed <= minDisplaySpeed) {
       return null;
     }
+
+    const adjustedSpeed = baseSpeed + speedBias;
 
     return adjustedSpeed;
   }, [userLocation?.speed, userLocation?.latitude, userLocation?.longitude, distanceUnits, speedBias, minDisplaySpeed]);
@@ -2523,6 +2524,9 @@ function getStepCompletionThresholds(step = null) {
             durationSeconds: routeMeta?.durationSeconds,
           },
           waypoints: [], // Rides don't have waypoints, just the polyline
+          tomtomSteps: routeSteps,
+          tomtomGuidance: undefined,
+          tomtomRawRoute: undefined,
         });
 
         setPostbox({
@@ -2560,6 +2564,9 @@ function getStepCompletionThresholds(step = null) {
           travelMode: userTravelMode,
           // Save waypoints so they're displayed when viewing the ride
           waypoints: waypoints,
+          tomtomSteps: routeSteps,
+          tomtomGuidance: undefined,
+          tomtomRawRoute: undefined,
         });
         
         console.log("[handleSaveRide] Ride saved successfully with ID:", result.id);
