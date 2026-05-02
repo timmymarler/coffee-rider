@@ -2764,7 +2764,7 @@ function getStepCompletionThresholds(step = null) {
     return clampMapZoom(preferredFollowZoomRef.current || fallback);
   }
 
-  async function recenterOnUser({ zoom = null, heading = null, pitch = null, followMode = false } = {}) {
+  async function recenterOnUser({ zoom = null, heading = null, pitch = null, followMode = false, preserveZoom = false } = {}) {
     if (!mapRef.current) return;
 
     const coords = await ensureUserLocation();
@@ -2833,9 +2833,11 @@ function getStepCompletionThresholds(step = null) {
     }
 
     // iOS uses altitude (in meters), Android uses zoom level
-    const effectiveZoom = zoom !== null
-      ? clampMapZoom(zoom)
-      : (followMode ? clampMapZoom(preferredFollowZoomRef.current) : null);
+    const effectiveZoom = preserveZoom
+      ? null
+      : (zoom !== null
+        ? clampMapZoom(zoom)
+        : (followMode ? clampMapZoom(preferredFollowZoomRef.current) : null));
 
     const aheadMeters = followMode
       ? (isLandscape ? FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE : FOLLOW_CENTER_AHEAD_METERS_PORTRAIT)
@@ -2906,11 +2908,11 @@ function getStepCompletionThresholds(step = null) {
     if (followUser) {
       setFollowUser(false);
       clearFollowMeInactivityTimeout();
-      preferredFollowZoomRef.current = FOLLOW_ZOOM;
+      const exitZoom = await captureCurrentMapZoom(preferredFollowZoomRef.current);
       // Revert to normal zoom and no tilt
       skipNextRegionChangeRef.current = true;
       skipRegionChangeUntilRef.current = Date.now() + 2000;
-      await recenterOnUser({ zoom: RECENTER_ZOOM, pitch: 0, heading: 0 });
+      await recenterOnUser({ zoom: exitZoom, pitch: 0, heading: 0 });
       return;
     }
 
@@ -2921,8 +2923,8 @@ function getStepCompletionThresholds(step = null) {
     skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
     skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
     skipRegionChangeUntilRef.current = Date.now() + 2000;
-    preferredFollowZoomRef.current = FOLLOW_ZOOM;
-    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true });
+    const entryZoom = await captureCurrentMapZoom(FOLLOW_ZOOM);
+    await recenterOnUser({ zoom: entryZoom, pitch: 35, followMode: true });
 
     // Now enable follow mode and start 15-minute inactivity timer
     // This triggers the AutoReroute effect to rebuild the route from current location
@@ -3017,8 +3019,8 @@ function getStepCompletionThresholds(step = null) {
       // Now enable Follow Me mode to guide to home
       skipNextFollowTickRef.current = true;
       skipNextRegionChangeRef.current = true;
-      preferredFollowZoomRef.current = FOLLOW_ZOOM;
-      await recenterOnUser({ zoom: FOLLOW_ZOOM, followMode: true });
+      const entryZoom = await captureCurrentMapZoom(FOLLOW_ZOOM);
+      await recenterOnUser({ zoom: entryZoom, followMode: true });
       setFollowUser(true);
       
       await debugLog("ROUTE_TO_HOME", "Follow Me enabled - tracking route home");
@@ -3055,15 +3057,15 @@ function getStepCompletionThresholds(step = null) {
       recenterOnUser({
         heading: userLocation.heading,
         pitch: 35,
-        zoom: preferredFollowZoomRef.current,
         followMode: true,
+        preserveZoom: true,
       });
     } else {
       // Fallback: center on location without heading (for active rides or when heading unavailable)
       recenterOnUser({
-        zoom: preferredFollowZoomRef.current,
         pitch: 0,
         followMode: true,
+        preserveZoom: true,
       });
     }
   }, [userLocation, isNavigationMode]);
@@ -3075,10 +3077,10 @@ function getStepCompletionThresholds(step = null) {
 
     const timeoutId = setTimeout(() => {
       recenterOnUser({
-        zoom: preferredFollowZoomRef.current,
         pitch: 35,
         followMode: true,
         heading: Number.isFinite(lastFollowHeadingRef.current) ? lastFollowHeadingRef.current : null,
+        preserveZoom: true,
       }).catch((error) => {
         console.warn('[FollowMe] Orientation/route recenter error:', error);
       });
