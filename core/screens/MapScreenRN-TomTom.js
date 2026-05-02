@@ -2923,8 +2923,8 @@ function getStepCompletionThresholds(step = null) {
     skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
     skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
     skipRegionChangeUntilRef.current = Date.now() + 2000;
-    const entryZoom = await captureCurrentMapZoom(FOLLOW_ZOOM);
-    await recenterOnUser({ zoom: entryZoom, pitch: 35, followMode: true });
+    preferredFollowZoomRef.current = FOLLOW_ZOOM;
+    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true });
 
     // Now enable follow mode and start 15-minute inactivity timer
     // This triggers the AutoReroute effect to rebuild the route from current location
@@ -3019,8 +3019,8 @@ function getStepCompletionThresholds(step = null) {
       // Now enable Follow Me mode to guide to home
       skipNextFollowTickRef.current = true;
       skipNextRegionChangeRef.current = true;
-      const entryZoom = await captureCurrentMapZoom(FOLLOW_ZOOM);
-      await recenterOnUser({ zoom: entryZoom, followMode: true });
+      preferredFollowZoomRef.current = FOLLOW_ZOOM;
+      await recenterOnUser({ zoom: FOLLOW_ZOOM, followMode: true });
       setFollowUser(true);
       
       await debugLog("ROUTE_TO_HOME", "Follow Me enabled - tracking route home");
