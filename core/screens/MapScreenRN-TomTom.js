@@ -2839,8 +2839,9 @@ function getStepCompletionThresholds(step = null) {
         ? clampMapZoom(zoom)
         : (followMode ? clampMapZoom(preferredFollowZoomRef.current) : null));
 
+    const followOffsetMultiplier = followMode && Number.isFinite(pitch) && pitch > 0 ? 1.35 : 1;
     const aheadMeters = followMode
-      ? (isLandscape ? FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE : FOLLOW_CENTER_AHEAD_METERS_PORTRAIT)
+      ? (isLandscape ? FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE : FOLLOW_CENTER_AHEAD_METERS_PORTRAIT) * followOffsetMultiplier
       : 0;
 
     const centerPoint = followMode && Number.isFinite(effectiveHeading)
