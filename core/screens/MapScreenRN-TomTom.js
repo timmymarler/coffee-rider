@@ -2835,9 +2835,11 @@ function getStepCompletionThresholds(step = null) {
     // iOS uses altitude (in meters), Android uses zoom level
     let effectiveZoom = null;
     if (preserveZoom && followMode) {
-      const preferredZoom = Number(preferredFollowZoomRef.current);
-      if (Number.isFinite(preferredZoom)) {
-        effectiveZoom = clampMapZoom(preferredZoom);
+      if (Platform.OS === "android") {
+        const preferredZoom = Number(preferredFollowZoomRef.current);
+        if (Number.isFinite(preferredZoom)) {
+          effectiveZoom = clampMapZoom(preferredZoom);
+        }
       }
     } else {
       effectiveZoom = zoom !== null
