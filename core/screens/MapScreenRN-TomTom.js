@@ -2845,9 +2845,19 @@ function getStepCompletionThresholds(step = null) {
         : (followMode ? clampMapZoom(preferredFollowZoomRef.current) : null);
     }
 
+    let zoomDamp = 1;
+    if (followMode) {
+      const zoomForOffset = Number.isFinite(effectiveZoom)
+        ? effectiveZoom
+        : Number(preferredFollowZoomRef.current);
+      if (Number.isFinite(zoomForOffset)) {
+        // Reduce offset as you zoom in so the dot stays on-screen.
+        zoomDamp = Math.min(1, Math.max(0.6, (18 - zoomForOffset) / 8 + 0.6));
+      }
+    }
     const followOffsetMultiplier = followMode && Number.isFinite(pitch) && pitch > 0 ? 1.35 : 1;
     const aheadMeters = followMode
-      ? (isLandscape ? FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE : FOLLOW_CENTER_AHEAD_METERS_PORTRAIT) * followOffsetMultiplier
+      ? (isLandscape ? FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE : FOLLOW_CENTER_AHEAD_METERS_PORTRAIT) * followOffsetMultiplier * zoomDamp
       : 0;
 
     const centerPoint = followMode && Number.isFinite(effectiveHeading)
