@@ -2833,11 +2833,17 @@ function getStepCompletionThresholds(step = null) {
     }
 
     // iOS uses altitude (in meters), Android uses zoom level
-    const effectiveZoom = preserveZoom
-      ? null
-      : (zoom !== null
+    let effectiveZoom = null;
+    if (preserveZoom && followMode) {
+      const preferredZoom = Number(preferredFollowZoomRef.current);
+      if (Number.isFinite(preferredZoom)) {
+        effectiveZoom = clampMapZoom(preferredZoom);
+      }
+    } else {
+      effectiveZoom = zoom !== null
         ? clampMapZoom(zoom)
-        : (followMode ? clampMapZoom(preferredFollowZoomRef.current) : null));
+        : (followMode ? clampMapZoom(preferredFollowZoomRef.current) : null);
+    }
 
     const followOffsetMultiplier = followMode && Number.isFinite(pitch) && pitch > 0 ? 1.35 : 1;
     const aheadMeters = followMode
