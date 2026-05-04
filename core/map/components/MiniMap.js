@@ -91,6 +91,9 @@ export default function MiniMap({
 }) {
   const theme = useTheme();
   const markerTracksViewChanges = Platform.OS !== 'ios';
+  const lastRiderPositionsRef = useRef(new Map());
+  const STATIONARY_DISTANCE_METERS = 6;
+  const stationaryLabelColor = theme.colors?.error ?? '#ef4444';
 
   const mapRef = useRef(null);
   const fitTimeoutRef = useRef(null);
@@ -169,9 +172,16 @@ export default function MiniMap({
   const renderRiders = useMemo(() => {
     const adjusted = [];
 
+    const stationaryMap = new Map();
     riderLocations.forEach((rider, index) => {
       const coord = normalizeCoord(rider);
       if (!coord) return;
+
+      const riderKey = rider?.id ?? `${index}`;
+      const lastEntry = lastRiderPositionsRef.current.get(riderKey);
+      if (lastEntry?.coord && lastEntry?.seen && distanceMeters(coord, lastEntry.coord) <= STATIONARY_DISTANCE_METERS) {
+        stationaryMap.set(riderKey, true);
+      }
 
       let renderedCoord = coord;
       const nearUser = userCoord && distanceMeters(coord, userCoord) < 6;
@@ -192,11 +202,27 @@ export default function MiniMap({
         ...rider,
         renderIndex: index,
         coordinate: renderedCoord,
+        isStationary: stationaryMap.get(riderKey) === true,
       });
     });
 
     return adjusted;
   }, [riderLocations, userCoord]);
+
+  useEffect(() => {
+    const nextPositions = new Map();
+    riderLocations.forEach((rider, index) => {
+      const coord = normalizeCoord(rider);
+      if (!coord) return;
+      const riderKey = rider?.id ?? `${index}`;
+      const lastEntry = lastRiderPositionsRef.current.get(riderKey);
+      nextPositions.set(riderKey, {
+        coord,
+        seen: lastEntry?.seen === true || lastEntry?.coord != null,
+      });
+    });
+    lastRiderPositionsRef.current = nextPositions;
+  }, [riderLocations]);
 
   const fitCoordinates = useMemo(() => {
     const destinationPoints = showDestination && destinationCoord ? [destinationCoord] : [];
@@ -367,7 +393,13 @@ export default function MiniMap({
             tracksViewChanges={markerTracksViewChanges}
           >
             <View style={styles.markerContainer} collapsable={false}>
-              <View style={[styles.labelBubble, styles.markerLabel]}> 
+              <View
+                style={[
+                  styles.labelBubble,
+                  styles.markerLabel,
+                  rider.isStationary && { backgroundColor: stationaryLabelColor },
+                ]}
+              > 
                 <Text style={styles.labelText} numberOfLines={1}>
                   {rider.userName || `Rider ${rider.renderIndex + 1}`}
                 </Text>
