@@ -3,6 +3,7 @@ import { useTheme } from '@react-navigation/native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
+import SvgPin from '@core/map/components/SvgPin';
 
 // Color palette for users
 const USER_COLORS = [

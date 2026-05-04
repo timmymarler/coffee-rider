@@ -2414,18 +2414,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
 function getStepIndexForProgress(steps = [], progressMeters = 0) {
   if (!Array.isArray(steps) || steps.length === 0) return 0;
+  let lastValidIndex = 0;
 
   for (let i = 0; i < steps.length; i++) {
     const stepProgress = steps[i]?.polylineProgress;
     if (typeof stepProgress !== "number") {
-      return i;
+      continue;
     }
+    lastValidIndex = i;
     if (progressMeters + PROGRESS_TOLERANCE_METERS < stepProgress) {
       return i;
     }
   }
 
-  return steps.length - 1;
+  return lastValidIndex;
 }
 
 function getStepCompletionThresholds(step = null) {
@@ -3148,6 +3150,23 @@ function getStepCompletionThresholds(step = null) {
       }
       setNextJunctionDistance(null);
       stepProgressRef.current.lastDistToEnd = Infinity;
+
+      let fallbackStepIdx = null;
+      let fallbackDistance = Infinity;
+      for (let i = 0; i < routeSteps.length; i += 1) {
+        const end = routeSteps[i]?.end;
+        if (!end || !Number.isFinite(end.latitude) || !Number.isFinite(end.longitude)) continue;
+        const dist = distanceBetweenMeters(userLocation, end);
+        if (Number.isFinite(dist) && dist < fallbackDistance) {
+          fallbackDistance = dist;
+          fallbackStepIdx = i;
+        }
+      }
+      if (fallbackStepIdx != null && fallbackStepIdx !== currentStepIndex) {
+        setCurrentStepIndex(fallbackStepIdx);
+        stepProgressRef.current.lastStepIdx = fallbackStepIdx;
+        stepProgressRef.current.closestStepEndDistance = fallbackDistance;
+      }
       return; // Skip instruction updates until we are near the route again
     }
     instructionsSuppressedRef.current = false;
