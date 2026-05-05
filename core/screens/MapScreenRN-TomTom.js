@@ -236,9 +236,10 @@ const PROGRESS_BACKTRACK_TOLERANCE_METERS = 60; // Allow intentional U-turns but
 const SPEECH_REPEAT_WINDOW_MS = 8000; // Minimum time between repeating the same spoken instruction
 const INITIAL_SPEECH_DELAY_MS = 2500; // Wait a moment after maneuver before announcing next one
 const SPEECH_DISTANCE_STAGES = [
-  { id: 'halfMile', triggerMeters: 804.672, minMeters: 450 }, // ~0.5 mi
-  { id: 'threeHundredYards', triggerMeters: 274.32, minMeters: 120 }, // ~300 yd
-  { id: 'fiftyYards', triggerMeters: 55, minMeters: 10 },
+  { id: 'oneMile', triggerMeters: 1609.344, minMeters: 1400 }, // ~1 mi
+  { id: 'halfMile', triggerMeters: 804.672, minMeters: 640 }, // ~0.5 mi
+  { id: 'threeHundredYards', triggerMeters: 274.32, minMeters: 200 }, // ~300 yd
+  { id: 'fiftyYards', triggerMeters: 55, minMeters: 35, noDistance: true },
 ];
 const POST_TURN_SUPPRESSION_METERS = 30; // Wait until rider clears junction before next-step callout
 const POST_TURN_SUPPRESSION_TIMEOUT_MS = 6000;
@@ -3502,6 +3503,15 @@ function getStepCompletionThresholds(step = null) {
       const crossedThreshold =
         previousDistance != null && previousDistance > stage.triggerMeters && distanceNow <= stage.triggerMeters;
       if (!withinWindow && !crossedThreshold) continue;
+      if (stage.noDistance) {
+        const currentStep = routeSteps[currentStepIndex];
+        const effectiveInstruction = getEffectiveInstructionText(currentStep);
+        const baseInstruction = effectiveInstruction || currentStep?.nextInstruction || currentStep?.instruction;
+        if (baseInstruction && speakInstruction(baseInstruction)) {
+          schedule.spokenStages.add(stage.id);
+        }
+        break;
+      }
       if (speakInstruction()) {
         schedule.spokenStages.add(stage.id);
       }

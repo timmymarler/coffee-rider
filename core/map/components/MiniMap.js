@@ -1,9 +1,9 @@
+import SvgPin from '@core/map/components/SvgPin';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@react-navigation/native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
-import SvgPin from '@core/map/components/SvgPin';
 
 // Color palette for users
 const USER_COLORS = [
@@ -18,6 +18,8 @@ const USER_COLORS = [
   '#F8B88B', // Peach
   '#52B788', // Green
 ];
+
+const sharedRiderPositions = new Map();
 
 /**
  * Get a consistent color for a user based on their ID
@@ -91,7 +93,9 @@ export default function MiniMap({
 }) {
   const theme = useTheme();
   const markerTracksViewChanges = Platform.OS !== 'ios';
-  const lastRiderPositionsRef = useRef(new Map());
+  const lastRiderPositionsRef = useRef(sharedRiderPositions);
+  const stationaryStatusRef = useRef(new Map());
+  const [forceMarkerRedraw, setForceMarkerRedraw] = useState(false);
   const STATIONARY_DISTANCE_METERS = 6;
   const stationaryLabelColor = theme.colors?.error ?? '#ef4444';
 
@@ -208,6 +212,29 @@ export default function MiniMap({
 
     return adjusted;
   }, [riderLocations, userCoord]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+
+    let shouldRedraw = false;
+    const nextStatus = new Map();
+
+    renderRiders.forEach((rider) => {
+      const riderKey = rider?.id ?? `${rider.renderIndex}`;
+      nextStatus.set(riderKey, rider.isStationary === true);
+      if (stationaryStatusRef.current.get(riderKey) !== rider.isStationary) {
+        shouldRedraw = true;
+      }
+    });
+
+    stationaryStatusRef.current = nextStatus;
+
+    if (shouldRedraw) {
+      setForceMarkerRedraw(true);
+      const timeoutId = setTimeout(() => setForceMarkerRedraw(false), 250);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [renderRiders]);
 
   useEffect(() => {
     const nextPositions = new Map();
@@ -390,7 +417,7 @@ export default function MiniMap({
             coordinate={rider.coordinate}
             anchor={{ x: 0.5, y: 0.5 }}
             zIndex={300}
-            tracksViewChanges={markerTracksViewChanges}
+            tracksViewChanges={markerTracksViewChanges || forceMarkerRedraw}
           >
             <View style={styles.markerContainer} collapsable={false}>
               <View
