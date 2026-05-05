@@ -237,6 +237,13 @@ export default function MiniMap({
   }, [renderRiders]);
 
   useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    setForceMarkerRedraw(true);
+    const timeoutId = setTimeout(() => setForceMarkerRedraw(false), 300);
+    return () => clearTimeout(timeoutId);
+  }, [isModal]);
+
+  useEffect(() => {
     const nextPositions = new Map();
     riderLocations.forEach((rider, index) => {
       const coord = normalizeCoord(rider);
