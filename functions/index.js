@@ -3,4 +3,5 @@ export {
     cancelStripeSubscription, createSubscriptionPaymentSheet, ensureStripeCustomer, stripeWebhook
 } from './stripeSubscriptions.js';
 export { uploadImage } from './uploadImage.js';
+export { cleanupActiveRides } from './cleanupActiveRides.js';
 

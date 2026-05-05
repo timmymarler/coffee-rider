@@ -5,8 +5,8 @@ import { db } from '../../../config/firebase';
 import { incMetric } from '../../utils/devMetrics';
 
 // Validate if an active ride record is still fresh
-// Rides older than 15 minutes are considered stale (likely abandoned)
-const STALE_RIDE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+// Rides older than 30 minutes are considered stale (likely abandoned)
+const STALE_RIDE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 export function isRideStale(activeRideData) {
   if (!activeRideData) return true;
