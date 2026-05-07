@@ -3697,6 +3697,7 @@ function getStepCompletionThresholds(step = null) {
   const followUserPrevRef = useRef(false); // Track previous follow user state to detect transitions
   const consecutiveOffRouteRef = useRef(0);
   const lastOffRouteDistanceRef = useRef(null);
+  const lastGpsRerouteLogRef = useRef(0);
   const REROUTE_COOLDOWN_SECONDS = 5; // Minimum seconds between reroute attempts
   const MIN_MOVEMENT_BEFORE_CHECK = 20; // Only check off-route after user moves 20m
   const MIN_GPS_ACCURACY = 35; // Ignore off-route checks if GPS accuracy is worse than this (meters)
@@ -3781,9 +3782,28 @@ function getStepCompletionThresholds(step = null) {
     const checkPosition = canUseLastGood ? lastGoodGPSRef.current : userLocation;
     const checkAccuracy = canUseLastGood ? (lastGoodGPSRef.current?.accuracy || 0) : accuracy;
 
+    if (canUseLastGood && nowMs - lastGpsRerouteLogRef.current > 15000) {
+      lastGpsRerouteLogRef.current = nowMs;
+      debugLog(
+        'GPS_REROUTE',
+        'Using last good GPS fix for reroute checks',
+        {
+          liveAccuracy: Math.round(accuracy),
+          lastGoodAccuracy: Math.round(lastGoodGPSRef.current?.accuracy || 0),
+          lastGoodAgeSec: Math.round(lastGoodAgeMs / 1000),
+        }
+      );
+    }
+
     // Skip off-route check if GPS accuracy is poor and no recent good fix exists
     if (checkAccuracy > MIN_GPS_ACCURACY) {
       console.log(`[AutoReroute] GPS accuracy poor (${checkAccuracy.toFixed(0)}m), skipping off-route check`);
+      if (nowMs - lastGpsRerouteLogRef.current > 15000) {
+        lastGpsRerouteLogRef.current = nowMs;
+        debugLog('GPS_REROUTE', 'Skipping off-route check (poor GPS accuracy)', {
+          accuracy: Math.round(checkAccuracy),
+        });
+      }
       return;
     }
 
