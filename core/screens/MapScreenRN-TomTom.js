@@ -3769,38 +3769,51 @@ function getStepCompletionThresholds(step = null) {
       return;
     }
 
-    // Skip off-route check if GPS accuracy is poor
-    if (userLocation.accuracy && userLocation.accuracy > MIN_GPS_ACCURACY) {
-      console.log(`[AutoReroute] GPS accuracy poor (${userLocation.accuracy.toFixed(0)}m), skipping off-route check`);
+    const nowMs = Date.now();
+    const accuracy = Math.max(0, userLocation.accuracy || 0);
+    const lastGoodAgeMs = lastGPSTimeRef.current ? nowMs - lastGPSTimeRef.current : Infinity;
+    const canUseLastGood =
+      accuracy > MIN_GPS_ACCURACY &&
+      lastGoodGPSRef.current &&
+      Number.isFinite(lastGoodAgeMs) &&
+      lastGoodAgeMs <= 15000;
+
+    const checkPosition = canUseLastGood ? lastGoodGPSRef.current : userLocation;
+    const checkAccuracy = canUseLastGood ? (lastGoodGPSRef.current?.accuracy || 0) : accuracy;
+
+    // Skip off-route check if GPS accuracy is poor and no recent good fix exists
+    if (checkAccuracy > MIN_GPS_ACCURACY) {
+      console.log(`[AutoReroute] GPS accuracy poor (${checkAccuracy.toFixed(0)}m), skipping off-route check`);
       return;
     }
 
 
     // Only check off-route if user has moved significantly since last check
     if (lastOffRouteCheckPos.current) {
-      const distFromLastCheck = distanceBetweenMeters(userLocation, lastOffRouteCheckPos.current);
+      const distFromLastCheck = distanceBetweenMeters(checkPosition, lastOffRouteCheckPos.current);
       if (distFromLastCheck < MIN_MOVEMENT_BEFORE_CHECK) {
         return; // User hasn't moved enough to warrant another check
       }
     }
-    lastOffRouteCheckPos.current = userLocation;
+    lastOffRouteCheckPos.current = checkPosition;
 
 
     // Forward-biased projection: measure distance to the UPCOMING route, not an old segment
     const projection = projectPointToPolylineDetailed(
-      userLocation, routeCoords, 200,
+      checkPosition,
+      routeCoords,
+      200,
       stepProgressRef.current.lastProgressMeters || 0
     );
     const distanceToRoute = typeof projection?.distanceMeters === 'number'
       ? projection.distanceMeters
-      : distanceBetweenMeters(userLocation, routeCoords[0]);
+      : distanceBetweenMeters(checkPosition, routeCoords[0]);
     const distanceFromRoute = Number.isFinite(distanceToRoute) ? distanceToRoute : Infinity;
 
-    const speed = Math.max(0, userLocation.speed || 0); // m/s
+    const speed = Math.max(0, checkPosition.speed || 0); // m/s
     const speedBuffer = Math.min(MAX_SPEED_BUFFER_METERS, speed * 1.2);
-    const accuracy = Math.max(0, userLocation.accuracy || 0);
     const rerouteThreshold = BASE_OFF_ROUTE_THRESHOLD_METERS + speedBuffer;
-    const effectiveDistance = Math.max(0, distanceFromRoute - accuracy);
+    const effectiveDistance = Math.max(0, distanceFromRoute - checkAccuracy);
     const monitorThreshold = rerouteThreshold + OFF_ROUTE_MONITOR_PADDING;
 
     if (effectiveDistance <= rerouteThreshold) {
@@ -3866,7 +3879,7 @@ function getStepCompletionThresholds(step = null) {
 
       if (currentCoord) {
         const userProjection = projectPointToPolylineDetailed(
-          userLocation,
+          checkPosition,
           routeCoords,
           250,
           stepProgressRef.current.lastProgressMeters || 0
@@ -3886,8 +3899,8 @@ function getStepCompletionThresholds(step = null) {
         }
 
         if (!shouldSkipMissedWaypoint && followingCoord) {
-          const distanceToCurrent = distanceBetweenMeters(userLocation, currentCoord);
-          const distanceToNext = distanceBetweenMeters(userLocation, followingCoord);
+          const distanceToCurrent = distanceBetweenMeters(checkPosition, currentCoord);
+          const distanceToNext = distanceBetweenMeters(checkPosition, followingCoord);
 
           if (Number.isFinite(distanceToCurrent) && Number.isFinite(distanceToNext) && distanceToNext + 40 < distanceToCurrent) {
             shouldSkipMissedWaypoint = true;
@@ -3924,7 +3937,7 @@ function getStepCompletionThresholds(step = null) {
     // Rebuild route from current location to next waypoint (or destination if no waypoints)
     const requestId = ++routeRequestId.current;
     mapRoute({
-      origin: userLocation,
+      origin: checkPosition,
       waypoints: remainingWaypoints,
       destination: rerouteDestination,
       travelMode: userTravelMode,
@@ -3932,7 +3945,7 @@ function getStepCompletionThresholds(step = null) {
       avoidMotorways,
       requestId,
       skipFitToView: true,
-      vehicleHeading: userLocation?.heading || null,
+      vehicleHeading: checkPosition?.heading || null,
     }).catch(error => {
       console.warn('[AutoReroute] mapRoute reroute error:', error);
     });
@@ -4267,9 +4280,10 @@ function getStepCompletionThresholds(step = null) {
               lastGPSTimeRef.current = now;
             }
             
-            // Snap to polyline if on active route
+            // Snap to polyline only when GPS accuracy is reasonable
             let coords = coordsToUse;
-            if (isNavigationMode && routeCoords && routeCoords.length > 0) {
+            const snapAccuracy = Math.max(0, coordsToUse.accuracy || 0);
+            if (isNavigationMode && routeCoords && routeCoords.length > 0 && snapAccuracy <= MIN_GPS_ACCURACY) {
               const snappedPoint = projectPointToPolyline(coords, routeCoords);
               if (snappedPoint) {
                 coords = { ...coords, ...snappedPoint };
