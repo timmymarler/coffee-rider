@@ -96,12 +96,15 @@ export default function MiniMap({
   const lastRiderPositionsRef = useRef(sharedRiderPositions);
   const stationaryStatusRef = useRef(new Map());
   const [forceMarkerRedraw, setForceMarkerRedraw] = useState(false);
+  const [stationaryTick, setStationaryTick] = useState(0);
   const STATIONARY_DISTANCE_METERS = 6;
+  const STATIONARY_TIME_MS = 45000;
   const stationaryLabelColor = theme.colors?.error ?? '#ef4444';
 
   const mapRef = useRef(null);
   const fitTimeoutRef = useRef(null);
   const hasFittedRef = useRef(false);
+  const userInteractedRef = useRef(false);
   const [isMapReady, setIsMapReady] = useState(false);
 
   // Initial region: center on user or fallback
@@ -175,6 +178,7 @@ export default function MiniMap({
 
   const renderRiders = useMemo(() => {
     const adjusted = [];
+    const nowMs = Date.now();
 
     const stationaryMap = new Map();
     riderLocations.forEach((rider, index) => {
@@ -183,7 +187,12 @@ export default function MiniMap({
 
       const riderKey = rider?.id ?? `${index}`;
       const lastEntry = lastRiderPositionsRef.current.get(riderKey);
-      if (lastEntry?.coord && lastEntry?.seen && distanceMeters(coord, lastEntry.coord) <= STATIONARY_DISTANCE_METERS) {
+      const lastUpdatedMs = rider?.lastUpdated?.toMillis?.() || rider?.lastLocationUpdate?.toMillis?.() || null;
+      const stationaryByDistance =
+        lastEntry?.coord && lastEntry?.seen && distanceMeters(coord, lastEntry.coord) <= STATIONARY_DISTANCE_METERS;
+      const stationaryByTime =
+        Number.isFinite(lastUpdatedMs) && nowMs - lastUpdatedMs >= STATIONARY_TIME_MS;
+      if (stationaryByDistance || stationaryByTime) {
         stationaryMap.set(riderKey, true);
       }
 
@@ -211,7 +220,14 @@ export default function MiniMap({
     });
 
     return adjusted;
-  }, [riderLocations, userCoord]);
+  }, [riderLocations, userCoord, stationaryTick]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setStationaryTick((tick) => tick + 1);
+    }, 15000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
@@ -295,6 +311,8 @@ export default function MiniMap({
   useEffect(() => {
     if (!mapRef.current || !isMapReady || fitCoordinates.length < 2) return;
 
+    if (isModal && userInteractedRef.current) return;
+
     if (fitTimeoutRef.current) {
       clearTimeout(fitTimeoutRef.current);
     }
@@ -323,6 +341,7 @@ export default function MiniMap({
   useEffect(() => {
     // Each mount/mode switch should allow a fresh first-fit for this map instance.
     hasFittedRef.current = false;
+    userInteractedRef.current = false;
   }, [isModal]);
 
 
@@ -334,6 +353,9 @@ export default function MiniMap({
         initialRegion={initialRegion}
         customMapStyle={null}
         onMapReady={() => setIsMapReady(true)}
+        onTouchStart={() => {
+          if (isModal) userInteractedRef.current = true;
+        }}
         zoomEnabled={isModal}
         scrollEnabled={isModal}
         pitchEnabled={false}

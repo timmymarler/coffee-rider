@@ -17,7 +17,6 @@ import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
 function isRoundaboutManeuver(maneuver = "") {
   return String(maneuver).toUpperCase().includes("ROUNDABOUT");
 }
-
 function getRoundaboutExitAngleDegrees(maneuver = "", exitNumber, turnAngle = null) {
   const upper = String(maneuver || "").toUpperCase();
   const parsedExit = Number(exitNumber);
@@ -1341,6 +1340,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     };
     lastKnownDistanceRef.current = null;
     lastSpokenInstructionRef.current = { text: null, timestamp: 0 };
+    waypointAnnouncedRef.current = new Set();
   }, [routeVersion]);
 
   useEffect(() => {
@@ -1363,6 +1363,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastKnownDistanceRef = useRef(null);
   const routeFittedRef = useRef(false);
   const arrivalPolylineLockRef = useRef(false);
+  const waypointAnnouncedRef = useRef(new Set());
   
   // Active ride & location sharing
   const { activeRide, endRide } = useActiveRide(user);
@@ -1595,24 +1596,30 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const speedBias = distanceUnits === "metric" ? 3 : 2;
   const minDisplaySpeed = distanceUnits === "metric" ? 8 : 5;
   const speedUnitLabel = distanceUnits === "metric" ? "km/h" : "mph";
+  const minStationarySpeedMps = 0.5;
 
   const currentSpeedMph = useMemo(() => {
     const gpsSpeed = Number(userLocation?.speed);
-    const baseSpeed = Number.isFinite(gpsSpeed) && gpsSpeed >= 0
-      ? (distanceUnits === "metric" ? metersPerSecondToKph(gpsSpeed) : metersPerSecondToMph(gpsSpeed))
-      : (distanceUnits === "metric" ? metersPerSecondToKph(estimatedSpeedRef.current) : metersPerSecondToMph(estimatedSpeedRef.current));
+    const hasGpsSpeed = Number.isFinite(gpsSpeed) && gpsSpeed >= 0;
+    const rawSpeedMps = hasGpsSpeed ? gpsSpeed : estimatedSpeedRef.current;
 
-    if (!Number.isFinite(baseSpeed)) {
+    if (!Number.isFinite(rawSpeedMps)) {
       return null;
     }
 
-    if (baseSpeed <= minDisplaySpeed) {
+    if (rawSpeedMps <= minStationarySpeedMps) {
       return null;
     }
 
-    const adjustedSpeed = baseSpeed + speedBias;
+    const baseSpeed = distanceUnits === "metric"
+      ? metersPerSecondToKph(rawSpeedMps)
+      : metersPerSecondToMph(rawSpeedMps);
 
-    return adjustedSpeed;
+    if (!Number.isFinite(baseSpeed) || baseSpeed <= minDisplaySpeed) {
+      return null;
+    }
+
+    return baseSpeed + speedBias;
   }, [userLocation?.speed, userLocation?.latitude, userLocation?.longitude, distanceUnits, speedBias, minDisplaySpeed]);
 
   const speedLimitDebug = useMemo(() => {
@@ -3531,6 +3538,7 @@ function getStepCompletionThresholds(step = null) {
   // Track waypoint arrivals and mark them as visited
   useEffect(() => {
     if (!isNavigationMode || !userLocation || waypoints.length === 0) return;
+    const waypointSpeechMeters = SPEECH_DISTANCE_STAGES[SPEECH_DISTANCE_STAGES.length - 1]?.triggerMeters ?? 55;
     
     // Check each unvisited waypoint to see if we've reached it
     waypoints.forEach((waypoint, idx) => {
@@ -3544,6 +3552,24 @@ function getStepCompletionThresholds(step = null) {
           { latitude: waypoint.lat, longitude: waypoint.lng }
         );
         
+        const waypointKey = String(idx);
+        if (distToWaypoint <= waypointSpeechMeters && isTtsEnabled && !waypointAnnouncedRef.current.has(waypointKey)) {
+          const waypointLabel = typeof waypoint.title === 'string' && waypoint.title.trim().length > 0
+            ? waypoint.title.trim()
+            : `Waypoint ${idx + 1}`;
+          try {
+            Speech.stop();
+            Speech.speak(`You have reached ${waypointLabel}`, {
+              language: "en-GB",
+              pitch: 1,
+              rate: 0.95,
+            });
+            waypointAnnouncedRef.current.add(waypointKey);
+          } catch (error) {
+            console.warn('[Waypoints] Failed to speak waypoint arrival:', error);
+          }
+        }
+
         // Mark as visited if within 20m (generous radius for GPS accuracy)
         if (distToWaypoint < 20) {
           console.log(`[Waypoints] Reached waypoint ${idx}: ${waypoint.title} (${distToWaypoint.toFixed(0)}m away)`);
@@ -3551,7 +3577,7 @@ function getStepCompletionThresholds(step = null) {
         }
       }
     });
-  }, [isNavigationMode, userLocation, waypoints, visitedWaypointIndices, markWaypointVisited]);
+  }, [isNavigationMode, userLocation, waypoints, visitedWaypointIndices, markWaypointVisited, isTtsEnabled]);
 
   // Detect when user reaches destination and capture traveled polyline for saving
   useEffect(() => {
@@ -5843,6 +5869,356 @@ function getStepCompletionThresholds(step = null) {
     );
   };
 
+  const renderDirectionsPanel = () => {
+    if (!isNavigationMode || !hasRoute || !routeSteps || routeSteps.length === 0) {
+      return null;
+    }
+
+    let step = routeSteps[currentStepIndex];
+    if (!step) return null;
+
+    const hasRouteIntent = routeDestination || waypoints.length > 0;
+    const hasValidRouteSteps = routeSteps && routeSteps.length >= 1;
+    const isAtFinalStep = currentStepIndex >= routeSteps.length - 1;
+
+    let distToDestinationMeters = null;
+    let isCloseToDestination = false;
+    if (routeDestination && routeCoords.length > 0 && userLocation) {
+      const lastCoord = routeCoords[routeCoords.length - 1];
+      distToDestinationMeters = distanceBetweenMeters(userLocation, lastCoord);
+      isCloseToDestination = typeof distToDestinationMeters === 'number' && distToDestinationMeters <= ARRIVAL_PANEL_DISTANCE_METERS;
+    }
+
+    const hasReachedDestination = hasRouteIntent && hasValidRouteSteps && isAtFinalStep && isCloseToDestination;
+    const shouldShowArrivalPanel = hasArrivedAtDestination || hasReachedDestination;
+    const fullscreenPaddingTop = (isLandscape ? insets.top + 8 : insets.top + 32);
+    const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 8 : insets.bottom + 32);
+    const fullscreenPaddingHorizontal = isLandscape ? 32 : 24;
+    const fullscreenIconSize = isLandscape ? 80 : 160;
+
+    if (shouldShowArrivalPanel) {
+      return (
+        <>
+          <View style={[styles.junctionPanel, getJunctionPanelStyle()]}> 
+            <MaterialCommunityIcons name="check-circle" size={80} color="rgba(76, 175, 80, 0.95)" style={styles.junctionIcon} />
+            <View style={styles.junctionContent}>
+              <Text style={styles.junctionLabel}>You have</Text>
+              <Text style={styles.junctionLabel}>reached your</Text>
+              <Text style={styles.junctionLabel}>destination</Text>
+            </View>
+          </View>
+
+          <Modal
+            visible={showDirectionsFullscreen}
+            animationType="fade"
+            transparent={false}
+            supportedOrientations={["portrait", "portrait-upside-down", "landscape", "landscape-left", "landscape-right"]}
+            onRequestClose={closeDirectionsFullscreen}
+          >
+            <Pressable style={styles.fullscreenDirectionsContainer} onPress={closeDirectionsFullscreen}>
+              <ScrollView
+                contentContainerStyle={[
+                  styles.fullscreenDirectionsContent,
+                  isLandscape && styles.fullscreenDirectionsContentLandscape,
+                  {
+                    paddingTop: fullscreenPaddingTop,
+                    paddingBottom: fullscreenPaddingBottom,
+                    paddingHorizontal: fullscreenPaddingHorizontal,
+                  },
+                ]}
+                showsVerticalScrollIndicator={false}
+                alwaysBounceVertical={false}
+              >
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={fullscreenIconSize}
+                  color="rgba(76, 175, 80, 0.95)"
+                  style={styles.fullscreenDirectionsIcon}
+                />
+                <Text style={[styles.fullscreenDirectionsLabel, isLandscape && styles.fullscreenDirectionsLabelLandscape]}>You have reached your destination</Text>
+                <Text style={[styles.fullscreenDirectionsInstruction, isLandscape && styles.fullscreenDirectionsInstructionLandscape]}>Tap anywhere to exit navigation.</Text>
+                <Text style={[styles.fullscreenDirectionsHint, isLandscape && styles.fullscreenDirectionsHintLandscape]}>Tap anywhere to exit fullscreen</Text>
+              </ScrollView>
+            </Pressable>
+          </Modal>
+        </>
+      );
+    }
+
+    const nextManeuver = (step?.nextManeuver || "STRAIGHT").trim().toUpperCase();
+    const rawNextInstruction = step?.nextInstruction || "Continue";
+    const normalizedNextInstruction = getEffectiveInstructionText(step);
+    const effectiveInstruction = normalizedNextInstruction || rawNextInstruction;
+    let meta = MANEUVER_ICON_MAP[nextManeuver];
+
+    if (!meta) {
+      meta = nextManeuver.includes("ROUNDABOUT")
+        ? MANEUVER_ICON_MAP.ROUNDABOUT_ENTER
+        : MANEUVER_ICON_MAP.STRAIGHT;
+    }
+
+    const distText = nextJunctionDistance != null ? formatDistanceForUnit(nextJunctionDistance, distanceUnits) : "";
+    let label;
+    let displayMeta = meta;
+    let suppressInstruction = false;
+
+    if (nextManeuver.includes("ROUNDABOUT")) {
+      if (rawNextInstruction && rawNextInstruction.toLowerCase().includes("exit")) {
+        label = rawNextInstruction;
+        suppressInstruction = true;
+        displayMeta = MANEUVER_ICON_MAP.ROUNDABOUT_EXIT;
+        console.log('[Roundabout] Using nextInstruction as label:', label);
+      }
+    }
+
+    const uTurnInstruction = /u[-\s]?turn/i.test(effectiveInstruction || rawNextInstruction || "");
+    if (!label && (nextManeuver.includes("UTURN") || uTurnInstruction)) {
+      label = "Make a U-turn";
+      suppressInstruction = true;
+      if (nextManeuver.includes("RIGHT")) {
+        displayMeta = U_TURN_RIGHT_META;
+      } else if (nextManeuver.includes("LEFT")) {
+        displayMeta = U_TURN_LEFT_META;
+      } else {
+        displayMeta = U_TURN_LEFT_META;
+      }
+    }
+
+    if (!label) {
+      if (nextManeuver.includes("ROUNDABOUT_EXIT") && step?.nextRoundaboutExitNumber) {
+        label = `Take Exit ${step.nextRoundaboutExitNumber}`;
+      } else {
+        label = displayMeta?.label || rawNextInstruction;
+      }
+    }
+
+    if (nextManeuver === "STRAIGHT" && step?.start && step?.end && currentStepIndex > 0) {
+      const prevStep = routeSteps[currentStepIndex - 1];
+      if (prevStep?.end) {
+        const arrivalBearing = calculateBearing(prevStep.end, step.start);
+        const courseHeading = calculateBearing(step.start, step.end);
+
+        let diff = courseHeading - arrivalBearing;
+        const normalizedDiff = diff > 180 ? diff - 360 : (diff < -180 ? diff + 360 : diff);
+
+        if (Math.abs(normalizedDiff) > 20) {
+          if (normalizedDiff > 0) {
+            displayMeta = MANEUVER_ICON_MAP.BEAR_LEFT;
+            label = "Bear left";
+          } else {
+            displayMeta = MANEUVER_ICON_MAP.BEAR_RIGHT;
+            label = "Bear right";
+          }
+        }
+      }
+    }
+
+    console.log('[DirectionsPanel] Step:', {
+      stepIndex: currentStepIndex,
+      nextManeuver,
+      nextInstruction: rawNextInstruction,
+      displayLabel: label,
+      nextRoundaboutExitNumber: step?.nextRoundaboutExitNumber,
+      distance: Math.round(nextJunctionDistance || 0),
+      currentInstruction: step?.instruction,
+      currentManeuver: step?.maneuver,
+      normalizedInstruction: effectiveInstruction,
+    });
+
+    let remainingSummary = null;
+    if (Number.isFinite(remainingDistanceMeters) && remainingDistanceMeters >= 0) {
+      const totalMins = Number.isFinite(remainingDurationSeconds)
+        ? Math.max(0, Math.round(remainingDurationSeconds / 60))
+        : null;
+      const hours = totalMins != null ? Math.floor(totalMins / 60) : 0;
+      const mins = totalMins != null ? totalMins % 60 : 0;
+      const durationText = totalMins == null
+        ? null
+        : (hours > 0 ? `${hours}h ${mins}m` : `${totalMins} min`);
+      const etaText = Number.isFinite(remainingDurationSeconds)
+        ? formatEtaFromNow(remainingDurationSeconds)
+        : null;
+
+      remainingSummary = [
+        formatDistanceForUnit(remainingDistanceMeters, distanceUnits),
+        durationText,
+        etaText ? `ETA ${etaText}` : null,
+      ].filter(Boolean).join(' • ');
+    }
+
+    const continueCheckSource = (label || effectiveInstruction || rawNextInstruction || '').trim();
+    const nextArrivalDetails = step?.nextArrivalDetails || null;
+    const isArrivalApproach = nextManeuver.includes('ARRIVE');
+    const isContinueInstruction = continueCheckSource.length > 0 && GENERIC_CONTINUE_REGEX.test(continueCheckSource);
+    const shouldShowDistance = Boolean(distText) && (!isContinueInstruction || isArrivalApproach);
+
+    let arrivalInstructionDisplay = null;
+    if (isArrivalApproach) {
+      const baseInstruction = nextArrivalDetails?.side
+        ? `Your destination will be on the ${nextArrivalDetails.side}`
+        : (nextArrivalDetails?.text || 'Your destination is ahead');
+      if (distText) {
+        const lowered = baseInstruction.length > 0
+          ? baseInstruction.charAt(0).toLowerCase() + baseInstruction.slice(1)
+          : baseInstruction;
+        arrivalInstructionDisplay = `In ${distText}, ${lowered}`;
+      } else {
+        arrivalInstructionDisplay = baseInstruction;
+      }
+      label = nextArrivalDetails?.side
+        ? `Destination on the ${nextArrivalDetails.side}`
+        : 'Destination ahead';
+      displayMeta = MANEUVER_ICON_MAP[nextManeuver] || MANEUVER_ICON_MAP.ARRIVE || displayMeta;
+    }
+
+    const instructionForDisplay = arrivalInstructionDisplay || effectiveInstruction;
+
+    return (
+      <>
+        <Pressable
+          onLongPress={openDirectionsFullscreen}
+          delayLongPress={450}
+          style={({ pressed }) => [
+            styles.junctionPanel,
+            isLandscape && styles.junctionPanelLandscape,
+            getJunctionPanelStyle(),
+            showMiniMapFullscreen && { top: Math.max(insets.top + 8, 16) },
+            pressed && styles.junctionPanelPressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityHint="Long press to expand directions"
+        >
+          <NavigationManeuverIcon
+            maneuver={nextManeuver}
+            iconName={displayMeta.icon}
+            step={step}
+            size={isLandscape ? 62 : 80}
+            color="rgba(245, 245, 240, 0.95)"
+            style={[styles.junctionIcon, isLandscape && styles.junctionIconLandscape]}
+          />
+          <View style={[styles.junctionContent, isLandscape && styles.junctionContentLandscape]}>
+            <View style={styles.junctionHeaderRow}>
+              {shouldShowDistance ? (
+                <Text style={[styles.junctionDistance, isLandscape && styles.junctionDistanceLandscape]}>{distText}</Text>
+              ) : (
+                <View style={styles.junctionHeaderSpacer} />
+              )}
+              <TouchableOpacity
+                onPress={handleTtsToggle}
+                style={styles.ttsToggleButtonCompact}
+                accessibilityRole="button"
+                accessibilityLabel={isTtsEnabled ? "Mute navigation voice" : "Unmute navigation voice"}
+              >
+                <MaterialCommunityIcons
+                  name={isTtsEnabled ? "volume-high" : "volume-mute"}
+                  size={22}
+                  color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.6)"}
+                />
+              </TouchableOpacity>
+            </View>
+            <Text
+              style={[styles.junctionLabel, isLandscape && styles.junctionLabelLandscape]}
+              numberOfLines={isLandscape ? 2 : 3}
+            >
+              {label}
+            </Text>
+            {!suppressInstruction &&
+              instructionForDisplay &&
+              instructionForDisplay !== label && (
+                <Text
+                  style={[styles.junctionInstruction, isLandscape && styles.junctionInstructionLandscape]}
+                  numberOfLines={isLandscape ? 2 : 3}
+                >
+                  {instructionForDisplay}
+                </Text>
+            )}
+            {remainingSummary && (
+              <Text
+                style={[styles.junctionRemaining, isLandscape && styles.junctionRemainingLandscape]}
+                numberOfLines={isLandscape ? 2 : 3}
+              >
+                {remainingSummary}
+              </Text>
+            )}
+            <View style={styles.junctionInlineStatsRow}>
+              <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeCompact, isLandscape && styles.currentSpeedBadgeCompactLandscape, isSpeeding && styles.currentSpeedBadgeWarning]}>
+                <Text style={styles.currentSpeedBadgeValue}>{Number.isFinite(currentSpeedMph) ? Math.round(currentSpeedMph) : '--'}</Text>
+              </View>
+              <Pressable
+                onLongPress={() => setShowSpeedLimitDebug((prev) => !prev)}
+                delayLongPress={350}
+                style={[styles.speedLimitBadge, isLandscape && styles.speedLimitBadgeLandscape]}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle speed limit debug"
+              >
+                <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Pressable>
+
+        <Modal
+          visible={showDirectionsFullscreen}
+          animationType="fade"
+          transparent={false}
+          supportedOrientations={["portrait", "portrait-upside-down", "landscape", "landscape-left", "landscape-right"]}
+          onRequestClose={closeDirectionsFullscreen}
+        >
+          <Pressable style={styles.fullscreenDirectionsContainer} onPress={closeDirectionsFullscreen}>
+            <ScrollView
+              contentContainerStyle={[
+                styles.fullscreenDirectionsContent,
+                {
+                  paddingTop: fullscreenPaddingTop,
+                  paddingBottom: fullscreenPaddingBottom,
+                  paddingHorizontal: fullscreenPaddingHorizontal,
+                },
+              ]}
+              showsVerticalScrollIndicator={false}
+              alwaysBounceVertical={false}
+            >
+              <NavigationManeuverIcon
+                maneuver={nextManeuver}
+                iconName={displayMeta.icon}
+                step={step}
+                size={fullscreenIconSize}
+                color="#ffffff"
+                style={styles.fullscreenDirectionsIcon}
+              />
+              {shouldShowDistance ? (
+                <Text style={[styles.fullscreenDirectionsDistance, isLandscape && styles.fullscreenDirectionsDistanceLandscape]}>{distText}</Text>
+              ) : null}
+              <Text style={[styles.fullscreenDirectionsLabel, isLandscape && styles.fullscreenDirectionsLabelLandscape]}>{label}</Text>
+              {!suppressInstruction &&
+                instructionForDisplay &&
+                instructionForDisplay !== label && (
+                  <Text style={[styles.fullscreenDirectionsInstruction, isLandscape && styles.fullscreenDirectionsInstructionLandscape]}>{instructionForDisplay}</Text>
+              )}
+              <View style={styles.junctionStatsRow}>
+                <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeFullscreen, isSpeeding && styles.currentSpeedBadgeWarningFullscreen]}>
+                  <Text style={[styles.currentSpeedBadgeValue, styles.currentSpeedBadgeValueFullscreen]}>{Number.isFinite(currentSpeedMph) ? Math.round(currentSpeedMph) : '--'}</Text>
+                </View>
+                <Pressable
+                  onLongPress={() => setShowSpeedLimitDebug((prev) => !prev)}
+                  delayLongPress={350}
+                  style={styles.speedLimitBadge}
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle speed limit debug"
+                >
+                  <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
+                </Pressable>
+              </View>
+              {remainingSummary && (
+                <Text style={[styles.fullscreenDirectionsRemaining, isLandscape && styles.fullscreenDirectionsRemainingLandscape]}>{remainingSummary}</Text>
+              )}
+              <Text style={[styles.fullscreenDirectionsHint, isLandscape && styles.fullscreenDirectionsHintLandscape]}>Tap anywhere to exit fullscreen</Text>
+            </ScrollView>
+          </Pressable>
+        </Modal>
+      </>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {userLocation ? (
@@ -6130,21 +6506,11 @@ function getStepCompletionThresholds(step = null) {
         visible={showMiniMapFullscreen}
         transparent
         animationType="fade"
+        supportedOrientations={["portrait", "portrait-upside-down", "landscape", "landscape-left", "landscape-right"]}
         onRequestClose={() => setShowMiniMapFullscreen(false)}
       >
         <View style={styles.miniMapModalOverlay}>
           <View style={styles.miniMapModalCard}>
-            <View style={styles.miniMapModalHeader}>
-              <Text style={styles.miniMapModalTitle}>Group Ride Overview</Text>
-              <TouchableOpacity
-                onPress={() => setShowMiniMapFullscreen(false)}
-                style={styles.miniMapModalCloseButton}
-                accessibilityRole="button"
-                accessibilityLabel="Close mini map"
-              >
-                <MaterialCommunityIcons name="close" size={24} color={theme.colors.text} />
-              </TouchableOpacity>
-            </View>
             <View style={styles.miniMapModalMapWrap}>
               <MiniMap
                 riderLocations={riderLocations}
@@ -6158,6 +6524,15 @@ function getStepCompletionThresholds(step = null) {
                 isModal
               />
             </View>
+            {renderDirectionsPanel()}
+            <TouchableOpacity
+              onPress={() => setShowMiniMapFullscreen(false)}
+              style={styles.miniMapModalDismiss}
+              accessibilityRole="button"
+              accessibilityLabel="Collapse mini map"
+            >
+              <MaterialCommunityIcons name="chevron-down" size={28} color={theme.colors.text} />
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -6383,375 +6758,7 @@ function getStepCompletionThresholds(step = null) {
         </View>
       )}
 
-      {/* Junction panel (top-left) during navigation - helmet visible */}
-      {isNavigationMode && hasRoute && routeSteps && routeSteps.length > 0 && (
-        (() => {
-          let step = routeSteps[currentStepIndex];
-          let displayStepIndex = currentStepIndex;
-          
-          if (!step) return null;
-
-          // Check if we've reached the destination (at the last step)
-          // Only show if we have an actual route and have reached final step with proximity check
-          const hasRouteIntent = routeDestination || waypoints.length > 0;
-          const hasValidRouteSteps = routeSteps && routeSteps.length >= 1;
-          const isAtFinalStep = currentStepIndex >= routeSteps.length - 1;
-          
-          let distToDestinationMeters = null;
-          let isCloseToDestination = false;
-          if (routeDestination && routeCoords.length > 0 && userLocation) {
-            const lastCoord = routeCoords[routeCoords.length - 1];
-            distToDestinationMeters = distanceBetweenMeters(userLocation, lastCoord);
-            isCloseToDestination = typeof distToDestinationMeters === 'number' && distToDestinationMeters <= ARRIVAL_PANEL_DISTANCE_METERS;
-          }
-          
-          const hasReachedDestination = hasRouteIntent && hasValidRouteSteps && isAtFinalStep && isCloseToDestination;
-          const shouldShowArrivalPanel = hasArrivedAtDestination || hasReachedDestination;
-          const fullscreenPaddingTop = (isLandscape ? insets.top + 8 : insets.top + 32);
-          const fullscreenPaddingBottom = (isLandscape ? insets.bottom + 8 : insets.bottom + 32);
-          const fullscreenPaddingHorizontal = isLandscape ? 32 : 24;
-          const fullscreenIconSize = isLandscape ? 80 : 160;
-          
-          if (shouldShowArrivalPanel) {
-            // Show destination reached message with Save Ride button
-            return (
-              <>
-                <View style={[styles.junctionPanel, getJunctionPanelStyle()]}> 
-                  <MaterialCommunityIcons name="check-circle" size={80} color="rgba(76, 175, 80, 0.95)" style={styles.junctionIcon} />
-                  <View style={styles.junctionContent}>
-                    <Text style={styles.junctionLabel}>You have</Text>
-                    <Text style={styles.junctionLabel}>reached your</Text>
-                    <Text style={styles.junctionLabel}>destination</Text>
-                  </View>
-                </View>
-
-                <Modal
-                  visible={showDirectionsFullscreen}
-                  animationType="fade"
-                  transparent={false}
-                  supportedOrientations={["portrait", "portrait-upside-down", "landscape", "landscape-left", "landscape-right"]}
-                  onRequestClose={closeDirectionsFullscreen}
-                >
-                  <Pressable style={styles.fullscreenDirectionsContainer} onPress={closeDirectionsFullscreen}>
-                    <ScrollView
-                      contentContainerStyle={[
-                        styles.fullscreenDirectionsContent,
-                        isLandscape && styles.fullscreenDirectionsContentLandscape,
-                        {
-                          paddingTop: fullscreenPaddingTop,
-                          paddingBottom: fullscreenPaddingBottom,
-                          paddingHorizontal: fullscreenPaddingHorizontal,
-                        },
-                      ]}
-                      showsVerticalScrollIndicator={false}
-                      alwaysBounceVertical={false}
-                    >
-                      <MaterialCommunityIcons
-                        name="check-circle"
-                        size={fullscreenIconSize}
-                        color="rgba(76, 175, 80, 0.95)"
-                        style={styles.fullscreenDirectionsIcon}
-                      />
-                      <Text style={[styles.fullscreenDirectionsLabel, isLandscape && styles.fullscreenDirectionsLabelLandscape]}>You have reached your destination</Text>
-                      <Text style={[styles.fullscreenDirectionsInstruction, isLandscape && styles.fullscreenDirectionsInstructionLandscape]}>Tap anywhere to exit navigation.</Text>
-                      <Text style={[styles.fullscreenDirectionsHint, isLandscape && styles.fullscreenDirectionsHintLandscape]}>Tap anywhere to exit fullscreen</Text>
-                    </ScrollView>
-                  </Pressable>
-                </Modal>
-              </>
-            );
-          }
-          
-          // Get the NEXT instruction (what comes after the current step)
-          // This is embedded in the step during route creation, so it's always correct
-          const nextManeuver = (step?.nextManeuver || "STRAIGHT").trim().toUpperCase();
-          const rawNextInstruction = step?.nextInstruction || "Continue";
-          const normalizedNextInstruction = getEffectiveInstructionText(step);
-          const effectiveInstruction = normalizedNextInstruction || rawNextInstruction;
-          let meta = MANEUVER_ICON_MAP[nextManeuver];
-          
-          // Fallback for unrecognized maneuvers
-          if (!meta) {
-            meta = nextManeuver.includes("ROUNDABOUT") 
-              ? MANEUVER_ICON_MAP.ROUNDABOUT_ENTER 
-              : MANEUVER_ICON_MAP.STRAIGHT;
-          }
-
-          const distText = nextJunctionDistance != null ? formatDistanceForUnit(nextJunctionDistance, distanceUnits) : "";
-          
-          // Special handling for roundabouts: if instruction already says "Take exit X", use it directly
-          let label;
-          let displayMeta = meta;
-          let suppressInstruction = false; // Track if we've fully handled the instruction
-          
-          // Check if this is any roundabout maneuver with exit info in the instruction
-          if (nextManeuver.includes("ROUNDABOUT")) {
-            if (rawNextInstruction && rawNextInstruction.toLowerCase().includes("exit")) {
-              // The instruction already has the exit info (e.g., "Take exit 1")
-              label = rawNextInstruction;
-              suppressInstruction = true;
-              displayMeta = MANEUVER_ICON_MAP.ROUNDABOUT_EXIT;
-              console.log('[Roundabout] Using nextInstruction as label:', label);
-            }
-          }
-
-          const uTurnInstruction = /u[-\s]?turn/i.test(effectiveInstruction || rawNextInstruction || "");
-          if (!label && (nextManeuver.includes("UTURN") || uTurnInstruction)) {
-            label = "Make a U-turn";
-            suppressInstruction = true;
-            if (nextManeuver.includes("RIGHT")) {
-              displayMeta = U_TURN_RIGHT_META;
-            } else if (nextManeuver.includes("LEFT")) {
-              displayMeta = U_TURN_LEFT_META;
-            } else {
-              displayMeta = U_TURN_LEFT_META;
-            }
-          }
-          
-          // If we didn't handle it as a roundabout with exit, use normal logic
-          if (!label) {
-            if (nextManeuver.includes("ROUNDABOUT_EXIT") && step?.nextRoundaboutExitNumber) {
-              label = `Take Exit ${step.nextRoundaboutExitNumber}`;
-            } else {
-              // Use the maneuver icon map label for consistency, fallback to nextInstruction
-              label = displayMeta?.label || rawNextInstruction;
-            }
-          }
-          
-          // Adjust STRAIGHT instructions if the road actually curves significantly
-          if (nextManeuver === "STRAIGHT" && step?.start && step?.end && currentStepIndex > 0) {
-            const prevStep = routeSteps[currentStepIndex - 1];
-            if (prevStep?.end) {
-              const arrivalBearing = calculateBearing(prevStep.end, step.start);
-              const courseHeading = calculateBearing(step.start, step.end);
-              
-              // Calculate the difference (-180 to 180)
-              let diff = courseHeading - arrivalBearing;
-              const normalizedDiff = diff > 180 ? diff - 360 : (diff < -180 ? diff + 360 : diff);
-              
-              // If the road curves significantly (>20 degrees), adjust the instruction
-              if (Math.abs(normalizedDiff) > 20) {
-                if (normalizedDiff > 0) {
-                  // Road curves right, we need to bear left to follow it
-                  displayMeta = MANEUVER_ICON_MAP.BEAR_LEFT;
-                  label = "Bear left";
-                } else {
-                  // Road curves left, we need to bear right to follow it
-                  displayMeta = MANEUVER_ICON_MAP.BEAR_RIGHT;
-                  label = "Bear right";
-                }
-              }
-            }
-          }
-          
-          // DEBUG: Log what we're showing
-          console.log('[DirectionsPanel] Step:', {
-            stepIndex: currentStepIndex,
-            nextManeuver,
-            nextInstruction: rawNextInstruction,
-            displayLabel: label,
-            nextRoundaboutExitNumber: step?.nextRoundaboutExitNumber,
-            distance: Math.round(nextJunctionDistance || 0),
-            currentInstruction: step?.instruction,
-            currentManeuver: step?.maneuver,
-            normalizedInstruction: effectiveInstruction,
-          });
-
-          let remainingSummary = null;
-          if (Number.isFinite(remainingDistanceMeters) && remainingDistanceMeters >= 0) {
-            const totalMins = Number.isFinite(remainingDurationSeconds)
-              ? Math.max(0, Math.round(remainingDurationSeconds / 60))
-              : null;
-            const hours = totalMins != null ? Math.floor(totalMins / 60) : 0;
-            const mins = totalMins != null ? totalMins % 60 : 0;
-            const durationText = totalMins == null
-              ? null
-              : (hours > 0 ? `${hours}h ${mins}m` : `${totalMins} min`);
-            const etaText = Number.isFinite(remainingDurationSeconds)
-              ? formatEtaFromNow(remainingDurationSeconds)
-              : null;
-
-            remainingSummary = [
-              formatDistanceForUnit(remainingDistanceMeters, distanceUnits),
-              durationText,
-              etaText ? `ETA ${etaText}` : null,
-            ].filter(Boolean).join(' • ');
-          }
-
-          const continueCheckSource = (label || effectiveInstruction || rawNextInstruction || '').trim();
-          const nextArrivalDetails = step?.nextArrivalDetails || null;
-          const isArrivalApproach = nextManeuver.includes('ARRIVE');
-          const isContinueInstruction = continueCheckSource.length > 0 && GENERIC_CONTINUE_REGEX.test(continueCheckSource);
-          const shouldShowDistance = Boolean(distText) && (!isContinueInstruction || isArrivalApproach);
-
-          let arrivalInstructionDisplay = null;
-          if (isArrivalApproach) {
-            const baseInstruction = nextArrivalDetails?.side
-              ? `Your destination will be on the ${nextArrivalDetails.side}`
-              : (nextArrivalDetails?.text || 'Your destination is ahead');
-            if (distText) {
-              const lowered = baseInstruction.length > 0
-                ? baseInstruction.charAt(0).toLowerCase() + baseInstruction.slice(1)
-                : baseInstruction;
-              arrivalInstructionDisplay = `In ${distText}, ${lowered}`;
-            } else {
-              arrivalInstructionDisplay = baseInstruction;
-            }
-            label = nextArrivalDetails?.side
-              ? `Destination on the ${nextArrivalDetails.side}`
-              : 'Destination ahead';
-            displayMeta = MANEUVER_ICON_MAP[nextManeuver] || MANEUVER_ICON_MAP.ARRIVE || displayMeta;
-          }
-
-          const instructionForDisplay = arrivalInstructionDisplay || effectiveInstruction;
-
-          return (
-            <>
-              <Pressable
-                onLongPress={openDirectionsFullscreen}
-                delayLongPress={450}
-                style={({ pressed }) => [
-                  styles.junctionPanel,
-                  isLandscape && styles.junctionPanelLandscape,
-                  getJunctionPanelStyle(),
-                  pressed && styles.junctionPanelPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityHint="Long press to expand directions"
-              >
-                {/* Large direction icon */}
-                <NavigationManeuverIcon
-                  maneuver={nextManeuver}
-                  iconName={displayMeta.icon}
-                  step={step}
-                  size={isLandscape ? 62 : 80}
-                  color="rgba(245, 245, 240, 0.95)"
-                  style={[styles.junctionIcon, isLandscape && styles.junctionIconLandscape]}
-                />
-                {/* Distance and label section */}
-                <View style={[styles.junctionContent, isLandscape && styles.junctionContentLandscape]}>
-                  <View style={styles.junctionHeaderRow}>
-                    {shouldShowDistance ? (
-                      <Text style={[styles.junctionDistance, isLandscape && styles.junctionDistanceLandscape]}>{distText}</Text>
-                    ) : (
-                      <View style={styles.junctionHeaderSpacer} />
-                    )}
-                    <TouchableOpacity
-                      onPress={handleTtsToggle}
-                      style={styles.ttsToggleButtonCompact}
-                      accessibilityRole="button"
-                      accessibilityLabel={isTtsEnabled ? "Mute navigation voice" : "Unmute navigation voice"}
-                    >
-                      <MaterialCommunityIcons
-                        name={isTtsEnabled ? "volume-high" : "volume-mute"}
-                        size={22}
-                        color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.6)"}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                  <Text
-                    style={[styles.junctionLabel, isLandscape && styles.junctionLabelLandscape]}
-                    numberOfLines={isLandscape ? 2 : 3}
-                  >
-                    {label}
-                  </Text>
-                  {!suppressInstruction &&
-                    instructionForDisplay &&
-                    instructionForDisplay !== label && (
-                      <Text
-                        style={[styles.junctionInstruction, isLandscape && styles.junctionInstructionLandscape]}
-                        numberOfLines={isLandscape ? 2 : 3}
-                      >
-                        {instructionForDisplay}
-                      </Text>
-                  )}
-                  {remainingSummary && (
-                    <Text
-                      style={[styles.junctionRemaining, isLandscape && styles.junctionRemainingLandscape]}
-                      numberOfLines={isLandscape ? 2 : 3}
-                    >
-                      {remainingSummary}
-                    </Text>
-                  )}
-                  <View style={styles.junctionInlineStatsRow}>
-                    <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeCompact, isLandscape && styles.currentSpeedBadgeCompactLandscape, isSpeeding && styles.currentSpeedBadgeWarning]}>
-                      <Text style={styles.currentSpeedBadgeValue}>{Number.isFinite(currentSpeedMph) ? Math.round(currentSpeedMph) : '--'}</Text>
-                    </View>
-                    <Pressable
-                      onLongPress={() => setShowSpeedLimitDebug((prev) => !prev)}
-                      delayLongPress={350}
-                      style={[styles.speedLimitBadge, isLandscape && styles.speedLimitBadgeLandscape]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Toggle speed limit debug"
-                    >
-                      <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </Pressable>
-
-                <Modal
-                  visible={showDirectionsFullscreen}
-                  animationType="fade"
-                  transparent={false}
-                  supportedOrientations={["portrait", "portrait-upside-down", "landscape", "landscape-left", "landscape-right"]}
-                  onRequestClose={closeDirectionsFullscreen}
-                >
-                  <Pressable style={styles.fullscreenDirectionsContainer} onPress={closeDirectionsFullscreen}>
-                    <ScrollView
-                      contentContainerStyle={[
-                        styles.fullscreenDirectionsContent,
-                        {
-                          paddingTop: fullscreenPaddingTop,
-                          paddingBottom: fullscreenPaddingBottom,
-                          paddingHorizontal: fullscreenPaddingHorizontal,
-                        },
-                      ]}
-                      showsVerticalScrollIndicator={false}
-                      alwaysBounceVertical={false}
-                    >
-                      <NavigationManeuverIcon
-                        maneuver={nextManeuver}
-                        iconName={displayMeta.icon}
-                        step={step}
-                        size={fullscreenIconSize}
-                        color="#ffffff"
-                        style={styles.fullscreenDirectionsIcon}
-                      />
-                      {shouldShowDistance ? (
-                        <Text style={[styles.fullscreenDirectionsDistance, isLandscape && styles.fullscreenDirectionsDistanceLandscape]}>{distText}</Text>
-                      ) : null}
-                      <Text style={[styles.fullscreenDirectionsLabel, isLandscape && styles.fullscreenDirectionsLabelLandscape]}>{label}</Text>
-                      {!suppressInstruction &&
-                        instructionForDisplay &&
-                        instructionForDisplay !== label && (
-                          <Text style={[styles.fullscreenDirectionsInstruction, isLandscape && styles.fullscreenDirectionsInstructionLandscape]}>{instructionForDisplay}</Text>
-                      )}
-                      <View style={styles.junctionStatsRow}>
-                        <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeFullscreen, isSpeeding && styles.currentSpeedBadgeWarningFullscreen]}>
-                          <Text style={[styles.currentSpeedBadgeValue, styles.currentSpeedBadgeValueFullscreen]}>{Number.isFinite(currentSpeedMph) ? Math.round(currentSpeedMph) : '--'}</Text>
-                        </View>
-                        <Pressable
-                          onLongPress={() => setShowSpeedLimitDebug((prev) => !prev)}
-                          delayLongPress={350}
-                          style={styles.speedLimitBadge}
-                          accessibilityRole="button"
-                          accessibilityLabel="Toggle speed limit debug"
-                        >
-                          <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
-                        </Pressable>
-                      </View>
-                      {remainingSummary && (
-                        <Text style={[styles.fullscreenDirectionsRemaining, isLandscape && styles.fullscreenDirectionsRemainingLandscape]}>{remainingSummary}</Text>
-                      )}
-                      <Text style={[styles.fullscreenDirectionsHint, isLandscape && styles.fullscreenDirectionsHintLandscape]}>Tap anywhere to exit fullscreen</Text>
-                    </ScrollView>
-                  </Pressable>
-                </Modal>
-            </>
-          );
-        })()
-      )}
+      {renderDirectionsPanel()}
       {postbox && (
         <View style={[
           styles.postbox,
@@ -7259,21 +7266,19 @@ const styles = StyleSheet.create({
 
   miniMapModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.62)',
+    backgroundColor: 'rgba(0, 0, 0, 0)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
   },
 
   miniMapModalCard: {
     width: '100%',
-    maxWidth: 900,
-    height: '78%',
-    backgroundColor: theme.colors.surface,
-    borderRadius: 14,
+    height: '100%',
+    backgroundColor: 'transparent',
+    borderRadius: 0,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 0,
   },
 
   miniMapModalHeader: {
@@ -7303,7 +7308,23 @@ const styles = StyleSheet.create({
 
   miniMapModalMapWrap: {
     flex: 1,
-    padding: 12,
+    padding: 0,
+  },
+
+  miniMapModalDismiss: {
+    position: 'absolute',
+    bottom: 24,
+    alignSelf: 'center',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 24, 35, 0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    zIndex: 2100,
+    elevation: 10,
   },
 
 
@@ -7452,7 +7473,7 @@ const styles = StyleSheet.create({
   },
   junctionRemaining: {
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "700",
     color: "rgba(245, 245, 240, 0.8)",
     marginTop: 4,
   },
