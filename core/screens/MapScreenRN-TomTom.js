@@ -2315,21 +2315,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }, [])
   );
 
-  // End active ride when leaving map screen
-  useFocusEffect(
-    useCallback(() => {
-      // Cleanup: Runs when screen loses focus
-      return () => {
-        // Use refs to access current values without creating dependencies
-        if (activeRideRef.current && endRideRef.current) {
-          endRideRef.current();
-        }
-      };
-      // Empty deps - cleanup runs on blur, current values accessed via refs
-    }, [])
-  );
-
-  // End active ride when app goes to background or is closed
+  // Keep active ride sharing when leaving the map or backgrounding the app.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
@@ -2340,11 +2326,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
             }
           })
           .catch(() => {});
-      }
-      if (nextAppState === 'background' || nextAppState === 'inactive') {
-        if (activeRideRef.current && endRideRef.current) {
-          endRideRef.current();
-        }
       }
     });
 
@@ -3546,11 +3527,9 @@ function getStepCompletionThresholds(step = null) {
       if (visitedWaypointIndices.includes(idx)) return;
       
       // Check distance to waypoint
-      if (waypoint.lat && waypoint.lng) {
-        const distToWaypoint = distanceBetweenMeters(
-          userLocation,
-          { latitude: waypoint.lat, longitude: waypoint.lng }
-        );
+      const waypointCoord = normalizeCoord(waypoint);
+      if (waypointCoord) {
+        const distToWaypoint = distanceBetweenMeters(userLocation, waypointCoord);
         
         const waypointKey = String(idx);
         if (distToWaypoint <= waypointSpeechMeters && isTtsEnabled && !waypointAnnouncedRef.current.has(waypointKey)) {
