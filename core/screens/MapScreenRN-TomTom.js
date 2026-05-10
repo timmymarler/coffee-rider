@@ -3108,6 +3108,7 @@ function getStepCompletionThresholds(step = null) {
   });
   const instructionsSuppressedRef = useRef(false);
   const lastSpokenInstructionRef = useRef({ text: null, timestamp: 0 });
+  const lastWaypointSpokenAtRef = useRef(0);
   const speechScheduleRef = useRef({
     currentStepIdx: -1,
     spokenStages: new Set(),
@@ -3356,6 +3357,11 @@ function getStepCompletionThresholds(step = null) {
     if (!routeSteps || routeSteps.length === 0) return;
     if (currentStepIndex >= routeSteps.length) return;
 
+    const now = Date.now();
+    if (lastWaypointSpokenAtRef.current && now - lastWaypointSpokenAtRef.current < 3000) {
+      return;
+    }
+
     let schedule = speechScheduleRef.current;
     if (schedule.currentStepIdx !== currentStepIndex) {
       schedule = {
@@ -3543,6 +3549,7 @@ function getStepCompletionThresholds(step = null) {
               pitch: 1,
               rate: 0.95,
             });
+            lastWaypointSpokenAtRef.current = Date.now();
             waypointAnnouncedRef.current.add(waypointKey);
           } catch (error) {
             console.warn('[Waypoints] Failed to speak waypoint arrival:', error);
@@ -3955,15 +3962,27 @@ function getStepCompletionThresholds(step = null) {
       console.log(`[AutoReroute] No waypoints, routing to final destination`);
     }
 
-    const rerouteDestination = nextWaypoint || routeDestination;
-    
-    console.log(`[AutoReroute] Rerouting to: ${rerouteDestination?.title || 'destination'}, remaining waypoints: ${remainingWaypoints.length}`);
-    
-    // Rebuild route from current location to next waypoint (or destination if no waypoints)
+    const rerouteWaypoints = [];
+    if (nextWaypoint) {
+      rerouteWaypoints.push(nextWaypoint);
+    }
+    if (remainingWaypoints.length > 0) {
+      rerouteWaypoints.push(...remainingWaypoints);
+    }
+
+    let rerouteDestination = routeDestination;
+    if (!rerouteDestination && rerouteWaypoints.length > 0) {
+      rerouteDestination = rerouteWaypoints[rerouteWaypoints.length - 1];
+      rerouteWaypoints.pop();
+    }
+
+    console.log(`[AutoReroute] Rerouting to: ${rerouteDestination?.title || 'destination'}, waypoints: ${rerouteWaypoints.length}`);
+
+    // Rebuild route from current location through remaining waypoints to final destination.
     const requestId = ++routeRequestId.current;
     mapRoute({
       origin: checkPosition,
-      waypoints: remainingWaypoints,
+      waypoints: rerouteWaypoints,
       destination: rerouteDestination,
       travelMode: userTravelMode,
       routeType: userRouteType,
@@ -4352,13 +4371,6 @@ function getStepCompletionThresholds(step = null) {
   const handleRegionChangeComplete = async (region) => {
     setMapRegion(region);
 
-
-    // Debounce disables for 2s after programmatic camera moves
-    if (skipRegionChangeUntilRef.current && Date.now() < skipRegionChangeUntilRef.current) {
-      // Ignore region changes during debounce window
-      return;
-    }
-
     // IMPORTANT: Do NOT disable Follow Me during active Follow Me mode
     // All camera updates during Follow Me are programmatic (from location updates)
     // Only disable if user manually pans AFTER they were in Follow Me
@@ -4370,6 +4382,12 @@ function getStepCompletionThresholds(step = null) {
       }
       await captureCurrentMapZoom(preferredFollowZoomRef.current);
       skipNextRegionChangeRef.current = false;
+      return;
+    }
+
+    // Debounce disables for 2s after programmatic camera moves
+    if (skipRegionChangeUntilRef.current && Date.now() < skipRegionChangeUntilRef.current) {
+      // Ignore region changes during debounce window
       return;
     }
 
@@ -5401,22 +5419,11 @@ function getStepCompletionThresholds(step = null) {
       });
     }
     
-    // DO NOT set manualStartPoint when loading saved routes
-    // The route will use current location as origin during navigation
-    // This prevents confusion between saved origin and actual current location
-    // Only manual "Set Start" button clicks should set manualStartPoint
-    
-    // ALSO set manualStartPoint for the connecting route logic in AutoReroute
-    // This allows merging current location → start point → waypoints → destination when Follow Me starts
-    if (actualOrigin) {
-      setManualStartPoint({
-        latitude: actualOrigin.lat ?? actualOrigin.latitude,
-        longitude: actualOrigin.lng ?? actualOrigin.longitude,
-      });
-      console.log('[loadSavedRoute] manualStartPoint set to:', {
-        latitude: actualOrigin.lat ?? actualOrigin.latitude,
-        longitude: actualOrigin.lng ?? actualOrigin.longitude,
-      });
+    // Do not set manualStartPoint when loading saved routes.
+    // Navigation should originate from current location; manual start points
+    // are only created by explicit user action.
+    if (manualStartPoint) {
+      setManualStartPoint(null);
     }
     
     if (route.destination) {
