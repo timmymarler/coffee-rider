@@ -3,6 +3,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useRouter } from "expo-router";
 import {
     createUserWithEmailAndPassword,
+  deleteUser,
     sendEmailVerification,
 } from "firebase/auth";
 import { useContext, useEffect, useState } from "react";
@@ -32,6 +33,7 @@ import {
 } from "@core/utils/proUpgradePrompt";
 import theme from "@themes";
 import { addDoc, collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
+import { isDisplayNameAvailable, reserveDisplayName } from "@firebaseLocal/users";
 import AuthLayout from "./AuthLayout";
 import { isAppleSignInAvailable, signInWithApple } from "./socialAuth";
 
@@ -188,6 +190,12 @@ export default function RegisterScreen({ onBack }) {
       return;
     }
 
+    const isAvailable = await isDisplayNameAvailable(displayName.trim());
+    if (!isAvailable) {
+      Alert.alert("Display name taken", "Please choose another display name.");
+      return;
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
     setSubmitting(true);
     try {
@@ -244,6 +252,13 @@ export default function RegisterScreen({ onBack }) {
 
         // Store reference to place in user document
         userData.linkedPlaceId = placeId;
+      }
+
+      try {
+        await reserveDisplayName(user.uid, displayName.trim());
+      } catch (err) {
+        await deleteUser(user);
+        throw err;
       }
 
       await setDoc(doc(db, "users", user.uid), userData);

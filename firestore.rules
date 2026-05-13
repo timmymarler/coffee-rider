@@ -60,6 +60,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    /* USERNAME INDEX */
+    match /usernames/{name} {
+      allow read: if isAuthed();
+      allow create: if isAuthed() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuthed() && resource.data.uid == request.auth.uid;
+      allow delete: if isAuthed() && resource.data.uid == request.auth.uid;
+    }
+
     /* USERS */
     match /users/{userId} {
       allow create: if isAuthed() && request.auth.uid == userId;

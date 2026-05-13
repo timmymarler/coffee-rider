@@ -19,6 +19,7 @@ import { cancelSubscription } from "@core/payments/stripeService";
 import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";
+import { updateDisplayNameReservation } from "@firebaseLocal/users";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import theme from "@themes";
@@ -497,9 +498,15 @@ export default function ProfileScreen() {
       const role = profile?.role || "user";
       const userRef = doc(db, "users", user.uid);
       const normalizedContactEmail = contactEmail.trim().toLowerCase();
+      const nextDisplayName = displayName.trim();
+      const previousDisplayName = profile?.displayName || "";
+
+      if (nextDisplayName && nextDisplayName !== previousDisplayName) {
+        await updateDisplayNameReservation(user.uid, nextDisplayName, previousDisplayName);
+      }
       
       const updateData = {
-        displayName: displayName.trim(),
+        displayName: nextDisplayName,
         contactEmail: normalizedContactEmail || null,
         excludeFromUserSearch,
         unitsPreference,
@@ -697,8 +704,9 @@ export default function ProfileScreen() {
         try {
           await Linking.openURL(url);
           return;
-        } catch (_err) {
-          // Try next option.
+        } catch (err) {
+          // Try the next URL.
+          console.warn("[ProfileScreen] Unable to open URL:", url);
         }
       }
 

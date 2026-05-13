@@ -7,6 +7,7 @@ import {
     signInWithCredential,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { reserveDisplayName } from "@firebaseLocal/users";
 import { Platform } from "react-native";
 
 // Conditionally import Apple Sign-in (only available after native compilation)
@@ -78,6 +79,27 @@ export const isAppleSignInAvailable = () => {
   return AppleAuthentication !== null;
 };
 
+async function resolveUniqueDisplayName(uid, baseName) {
+  const trimmed = (baseName || "").trim();
+  const fallback = trimmed || `User ${uid.slice(0, 6)}`;
+  const candidates = [
+    fallback,
+    `${fallback} ${uid.slice(0, 4)}`,
+    `User ${uid.slice(0, 6)}`,
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      await reserveDisplayName(uid, candidate);
+      return candidate;
+    } catch (err) {
+      // try next
+    }
+  }
+
+  throw new Error("Display name already taken");
+}
+
 /**
  * Sign in with Google
  * @returns {Promise<{user, isNewUser}>}
@@ -125,6 +147,10 @@ export const signInWithGoogle = async () => {
     try {
       if (!userSnapshot.exists()) {
         const betaProFields = getBetaProFields();
+        const uniqueDisplayName = await resolveUniqueDisplayName(
+          firebaseUser.uid,
+          firebaseUser.displayName || "Google User"
+        );
         // New user - set all fields including displayName and contactEmail
         await setDoc(
           userDocRef,
@@ -132,7 +158,7 @@ export const signInWithGoogle = async () => {
             uid: firebaseUser.uid,
             email: firebaseUser.email?.toLowerCase?.() || firebaseUser.email,
             contactEmail: firebaseUser.email?.toLowerCase?.() || firebaseUser.email, // Use real email for group invites
-            displayName: firebaseUser.displayName || "Google User",
+            displayName: uniqueDisplayName,
             photoURL: firebaseUser.photoURL,
             excludeFromUserSearch: false,
             ...betaProFields,
@@ -254,6 +280,7 @@ export const signInWithApple = async () => {
       
       if (!userSnapshot.exists()) {
         const betaProFields = getBetaProFields();
+        const uniqueDisplayName = await resolveUniqueDisplayName(firebaseUser.uid, displayName);
         // New user - set all fields including displayName and contactEmail
         await setDoc(
           userDocRef,
@@ -261,7 +288,7 @@ export const signInWithApple = async () => {
             uid: firebaseUser.uid,
             email: firebaseUser.email?.toLowerCase?.() || firebaseUser.email,
             contactEmail: null, // Apple users will set this in Profile when upgrading
-            displayName: displayName,
+            displayName: uniqueDisplayName,
             excludeFromUserSearch: false,
             ...betaProFields,
             authProvider: "apple",

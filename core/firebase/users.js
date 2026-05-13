@@ -1,10 +1,100 @@
 // core/firebase/users.js
 
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, query, where, getDocs, runTransaction } from "firebase/firestore";
 import { auth, db } from "../../config/firebase";
 
 function normalizeEmailValue(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function normalizeDisplayNameValue(value) {
+  if (typeof value !== "string") return "";
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function displayNameKey(value) {
+  const normalized = normalizeDisplayNameValue(value);
+  if (!normalized) return "";
+  return normalized.replace(/\//g, "_");
+}
+
+function maskEmailValue(value) {
+  const normalized = normalizeEmailValue(value);
+  if (!normalized || !normalized.includes("@")) return "";
+  const [userPart, domainPart] = normalized.split("@");
+  const [domainName, ...domainRest] = domainPart.split(".");
+  const topLevel = domainRest.length > 0 ? domainRest.join(".") : "";
+  const safeUser = userPart.length <= 2
+    ? `${userPart.charAt(0) || ""}***`
+    : `${userPart.charAt(0)}***${userPart.charAt(userPart.length - 1)}`;
+  const safeDomain = domainName ? `${domainName.charAt(0)}***` : "***";
+  const safeTld = topLevel ? topLevel : "***";
+  return `${safeUser}@${safeDomain}.${safeTld}`;
+}
+
+export async function reserveDisplayName(uid, displayName) {
+  const key = displayNameKey(displayName);
+  if (!uid || !key) {
+    throw new Error("Display name required");
+  }
+
+  const ref = doc(db, "usernames", key);
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(ref);
+    if (snap.exists()) {
+      const data = snap.data() || {};
+      if (data.uid !== uid) {
+        throw new Error("Display name already taken");
+      }
+      transaction.set(ref, { uid, displayName, updatedAt: new Date().toISOString() }, { merge: true });
+      return;
+    }
+    transaction.set(ref, { uid, displayName, createdAt: new Date().toISOString() });
+  });
+}
+
+export async function isDisplayNameAvailable(displayName) {
+  const key = displayNameKey(displayName);
+  if (!key) return false;
+  const ref = doc(db, "usernames", key);
+  const snap = await getDoc(ref);
+  return !snap.exists();
+}
+
+export async function updateDisplayNameReservation(uid, newDisplayName, previousDisplayName = "") {
+  const nextKey = displayNameKey(newDisplayName);
+  const prevKey = displayNameKey(previousDisplayName);
+  if (!uid || !nextKey) {
+    throw new Error("Display name required");
+  }
+  if (prevKey === nextKey) {
+    return;
+  }
+
+  const nextRef = doc(db, "usernames", nextKey);
+  const prevRef = prevKey ? doc(db, "usernames", prevKey) : null;
+
+  await runTransaction(db, async (transaction) => {
+    const nextSnap = await transaction.get(nextRef);
+    if (nextSnap.exists()) {
+      const data = nextSnap.data() || {};
+      if (data.uid !== uid) {
+        throw new Error("Display name already taken");
+      }
+    }
+
+    transaction.set(nextRef, { uid, displayName: newDisplayName, updatedAt: new Date().toISOString() }, { merge: true });
+
+    if (prevRef) {
+      const prevSnap = await transaction.get(prevRef);
+      if (prevSnap.exists()) {
+        const data = prevSnap.data() || {};
+        if (data.uid === uid) {
+          transaction.delete(prevRef);
+        }
+      }
+    }
+  });
 }
 
 export async function ensureUserDocument(uid, authUser = null) {
@@ -87,9 +177,11 @@ export async function searchUsersByNameOrEmail(searchTerm, { excludeUid = null, 
   return snapshot.docs
     .map((docSnap) => {
       const data = docSnap.data() || {};
+      const maskedEmail = maskEmailValue(data.contactEmail || data.email);
       return {
         uid: docSnap.id,
         ...data,
+        maskedEmail,
       };
     })
     .filter((candidate) => {
@@ -97,28 +189,19 @@ export async function searchUsersByNameOrEmail(searchTerm, { excludeUid = null, 
       if (candidate.excludeFromUserSearch === true) return false;
 
       const displayName = String(candidate.displayName || candidate.name || "").trim().toLowerCase();
-      const contactEmail = normalizeEmailValue(candidate.contactEmail);
-      const email = normalizeEmailValue(candidate.email);
-
-      return (
-        displayName.includes(normalizedTerm) ||
-        contactEmail.includes(normalizedTerm) ||
-        email.includes(normalizedTerm)
-      );
+      return displayName.includes(normalizedTerm);
     })
     .sort((a, b) => {
       const aName = String(a.displayName || a.name || "").trim().toLowerCase();
       const bName = String(b.displayName || b.name || "").trim().toLowerCase();
-      const aEmail = normalizeEmailValue(a.contactEmail || a.email);
-      const bEmail = normalizeEmailValue(b.contactEmail || b.email);
 
-      const score = (name, email) => {
-        if (name === normalizedTerm || email === normalizedTerm) return 0;
-        if (name.startsWith(normalizedTerm) || email.startsWith(normalizedTerm)) return 1;
+      const score = (name) => {
+        if (name === normalizedTerm) return 0;
+        if (name.startsWith(normalizedTerm)) return 1;
         return 2;
       };
 
-      return score(aName, aEmail) - score(bName, bEmail);
+      return score(aName) - score(bName);
     })
     .slice(0, limit);
 }

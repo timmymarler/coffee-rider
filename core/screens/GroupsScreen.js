@@ -16,7 +16,7 @@ import { searchUsersByNameOrEmail } from "@firebaseLocal/users";
 import theme from "@themes";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -105,7 +105,7 @@ export default function GroupsScreen() {
   async function handleSearchInvitees() {
     const searchTerm = inviteeInput.trim();
     if (!searchTerm) {
-      Alert.alert("Search required", "Enter a display name or email first.");
+      Alert.alert("Search required", "Enter a display name first.");
       return;
     }
 
@@ -128,7 +128,7 @@ export default function GroupsScreen() {
     if (!candidate?.uid) return;
 
     setSelectedInviteeUser(candidate);
-    setInviteeInput(candidate.contactEmail || candidate.email || candidate.displayName || candidate.name || "");
+    setInviteeInput(candidate.displayName || candidate.name || "");
     setShowInviteSearchModal(false);
   }
 
@@ -943,12 +943,21 @@ export default function GroupsScreen() {
                     style={styles.userSearchResult}
                     onPress={() => handleSelectInvitee(candidate)}
                   >
-                    <Text style={styles.userSearchName}>
-                      {candidate.displayName || candidate.name || candidate.contactEmail || candidate.email || candidate.uid}
-                    </Text>
-                    <Text style={styles.userSearchEmail}>
-                      {candidate.contactEmail || candidate.email || "No email available"}
-                    </Text>
+                    <View style={styles.userSearchAvatarWrap}>
+                      {candidate.photoURL ? (
+                        <Image source={{ uri: candidate.photoURL }} style={styles.userSearchAvatar} />
+                      ) : (
+                        <View style={styles.userSearchAvatarFallback} />
+                      )}
+                    </View>
+                    <View style={styles.userSearchDetails}>
+                      <Text style={styles.userSearchName}>
+                        {candidate.displayName || candidate.name || candidate.uid}
+                      </Text>
+                      <Text style={styles.userSearchEmail}>
+                        {candidate.maskedEmail || "Email hidden"}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -1132,6 +1141,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   userSearchResult: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 10,
     borderRadius: 10,
@@ -1139,6 +1150,29 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.background,
     marginBottom: 8,
+  },
+  userSearchAvatarWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.primaryDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  userSearchAvatar: {
+    width: 44,
+    height: 44,
+  },
+  userSearchAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: theme.colors.primaryMid,
+  },
+  userSearchDetails: {
+    flex: 1,
   },
   userSearchName: {
     color: theme.colors.text,
