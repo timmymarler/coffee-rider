@@ -116,9 +116,6 @@ export default function PlaceCard({
   useEffect(() => {
     setBikeBrewChecked(!!place?.bikeBrew);
   }, [place?.bikeBrew, place?.id]);
-  const openingStatus = getOpeningStatus(currentPlace.regularOpeningHours);
-  const weekList = formatWeekdayText(currentPlace.regularOpeningHours);
-
   const safePlace = {
     ...currentPlace,
     googlePlaceId: currentPlace.googlePlaceId || null,
@@ -157,6 +154,8 @@ export default function PlaceCard({
       currentPlace.vicinity ||
       null,
   };
+  const openingStatus = getOpeningStatus(safePlace.regularOpeningHours);
+  const weekList = formatWeekdayText(safePlace.regularOpeningHours);
 
   // Use dynamic theme from context
   const dynamicTheme = useTheme();
@@ -170,8 +169,8 @@ export default function PlaceCard({
   const canNavigate = capabilities.canNavigate === true;
   const canRate = capabilities.canRate === true;
   const currentUid = user?.uid || null;
-  const isManualOnly = place?.source === "manual";
-  const isGoogle = place?.source === "google";
+  const isManualOnly = safePlace?.source === "manual";
+  const isGoogle = safePlace?.source === "google";
   // 🔑 NORMALISE Google place id (ABSOLUTELY REQUIRED)
   const googlePlaceId =
     safePlace.googlePlaceId ||
@@ -179,8 +178,8 @@ export default function PlaceCard({
   const isNewPlace =
     safePlace._temp === true || safePlace.source === "google";
 
-  const isGoogleNew = place?.source === "google-new";
-  const isCr = place?.source === "cr";
+  const isGoogleNew = safePlace?.source === "google-new";
+  const isCr = safePlace?.source === "cr";
   const isRealCr = safePlace.source === "cr" && !safePlace._temp;
   const uid = user?.uid;
   const userCrRating =

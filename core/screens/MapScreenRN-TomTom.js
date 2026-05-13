@@ -3455,8 +3455,8 @@ function getStepCompletionThresholds(step = null) {
       lastKnownDistanceRef.current = null;
     }
 
-    const now = Date.now();
-    if (!schedule.initialSpoken && now - schedule.stepStartedAt >= INITIAL_SPEECH_DELAY_MS) {
+    const nowMs = Date.now();
+    if (!schedule.initialSpoken && nowMs - schedule.stepStartedAt >= INITIAL_SPEECH_DELAY_MS) {
       const spoke = speakInstruction();
       if (spoke) {
         schedule.initialSpoken = true;
@@ -3478,7 +3478,7 @@ function getStepCompletionThresholds(step = null) {
     }
 
     if (distanceNow == null) {
-      const timeSinceLastSpeech = now - (lastSpokenInstructionRef.current.timestamp || 0);
+      const timeSinceLastSpeech = nowMs - (lastSpokenInstructionRef.current.timestamp || 0);
       if (
         lastSpokenInstructionRef.current.timestamp > 0 &&
         timeSinceLastSpeech >= SPEECH_FAILSAFE_INTERVAL_MS &&

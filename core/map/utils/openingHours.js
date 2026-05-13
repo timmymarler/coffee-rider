@@ -1,5 +1,38 @@
+function getWeekdayText(openingHours) {
+  if (!openingHours) return [];
+  if (Array.isArray(openingHours.weekday_text)) return openingHours.weekday_text;
+  if (Array.isArray(openingHours.weekdayDescriptions)) return openingHours.weekdayDescriptions;
+  return [];
+}
+
 export function getOpeningStatus(openingHours) {
-  if (!openingHours || !openingHours.periods) {
+  if (!openingHours) {
+    return {
+      label: "Opening hours not available",
+      color: "#999",
+      isOpen: false,
+      closingSoon: false,
+      todayText: null,
+    };
+  }
+
+  const openNow = openingHours.open_now ?? openingHours.openNow ?? null;
+  const weekdayText = getWeekdayText(openingHours);
+
+  if (!openingHours.periods || !Array.isArray(openingHours.periods)) {
+    if (weekdayText.length > 0) {
+      const label = openNow === true
+        ? "Open now"
+        : (openNow === false ? "Closed" : "Opening hours available");
+      return {
+        label,
+        color: openNow === true ? "#22c55e" : "#999",
+        isOpen: openNow === true,
+        closingSoon: false,
+        todayText: null,
+      };
+    }
+
     return {
       label: "Opening hours not available",
       color: "#999",
@@ -64,6 +97,5 @@ export function getOpeningStatus(openingHours) {
 }
 
 export function formatWeekdayText(openingHours) {
-  if (!openingHours?.weekday_text) return [];
-  return openingHours.weekday_text;
+  return getWeekdayText(openingHours);
 }

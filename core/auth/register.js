@@ -33,7 +33,7 @@ import {
 } from "@core/utils/proUpgradePrompt";
 import theme from "@themes";
 import { addDoc, collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
-import { isDisplayNameAvailable, reserveDisplayName } from "@firebaseLocal/users";
+import { reserveDisplayName } from "@firebaseLocal/users";
 import AuthLayout from "./AuthLayout";
 import { isAppleSignInAvailable, signInWithApple } from "./socialAuth";
 
@@ -190,12 +190,6 @@ export default function RegisterScreen({ onBack }) {
       return;
     }
 
-    const isAvailable = await isDisplayNameAvailable(displayName.trim());
-    if (!isAvailable) {
-      Alert.alert("Display name taken", "Please choose another display name.");
-      return;
-    }
-
     const normalizedEmail = email.trim().toLowerCase();
     setSubmitting(true);
     try {
@@ -300,6 +294,12 @@ export default function RegisterScreen({ onBack }) {
           "Email already in use",
           "This email is tied to an existing or deactivated account. To request reactivation, contact support@coffee-rider.co.uk."
         );
+        return;
+      }
+
+      if ((err?.message || "").toLowerCase().includes("display name already taken")) {
+        setSubmitting(false);
+        Alert.alert("Display name taken", "Please choose another display name.");
         return;
       }
 

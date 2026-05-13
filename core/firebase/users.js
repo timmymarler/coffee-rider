@@ -32,10 +32,34 @@ function maskEmailValue(value) {
   return `${safeUser}@${safeDomain}.${safeTld}`;
 }
 
+async function findConflictingDisplayNameUid(displayName, excludeUid = null) {
+  const normalized = normalizeDisplayNameValue(displayName);
+  if (!normalized) return null;
+
+  const snapshot = await getDocs(collection(db, "users"));
+  for (const docSnap of snapshot.docs) {
+    const data = docSnap.data() || {};
+    const uid = docSnap.id;
+    if (!uid || (excludeUid && uid === excludeUid)) continue;
+
+    const candidate = normalizeDisplayNameValue(data.displayName || data.name || "");
+    if (candidate && candidate === normalized) {
+      return uid;
+    }
+  }
+
+  return null;
+}
+
 export async function reserveDisplayName(uid, displayName) {
   const key = displayNameKey(displayName);
   if (!uid || !key) {
     throw new Error("Display name required");
+  }
+
+  const conflictingUid = await findConflictingDisplayNameUid(displayName, uid);
+  if (conflictingUid) {
+    throw new Error("Display name already taken");
   }
 
   const ref = doc(db, "usernames", key);
@@ -69,6 +93,11 @@ export async function updateDisplayNameReservation(uid, newDisplayName, previous
   }
   if (prevKey === nextKey) {
     return;
+  }
+
+  const conflictingUid = await findConflictingDisplayNameUid(newDisplayName, uid);
+  if (conflictingUid) {
+    throw new Error("Display name already taken");
   }
 
   const nextRef = doc(db, "usernames", nextKey);
