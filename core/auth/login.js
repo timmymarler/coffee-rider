@@ -364,7 +364,7 @@ export default function LoginScreen() {
         onPress={handleResetPassword}
         style={{ marginTop: spacing.sm, alignItems: "center" }}
       >
-        <Text style={[styles.linkText, { color: colors.accent }]}>Reset Password</Text>
+        <Text style={[styles.linkText, { color: colors.accentMid }]}>Reset Password</Text>
       </TouchableOpacity>
 
       {appleAvailable && (

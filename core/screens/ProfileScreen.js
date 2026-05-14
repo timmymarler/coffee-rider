@@ -19,8 +19,8 @@ import { cancelSubscription } from "@core/payments/stripeService";
 import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";
-import { updateDisplayNameReservation } from "@firebaseLocal/users";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { updateDisplayNameReservation } from "@firebaseLocal/users";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import theme from "@themes";
 import * as ImagePicker from "expo-image-picker";
@@ -639,15 +639,24 @@ export default function ProfileScreen() {
 
     setUnsubscribing(true);
     try {
-      await cancelSubscription({
+      const cancellationResult = await cancelSubscription({
         userId: user.uid,
         stripeSubscriptionId: subscription.stripeSubscriptionId || null, // Pass null for trials (no Stripe ID)
       });
 
-      // Refresh profile to reflect cancelled subscription
+      // Refresh profile and immediately close the UI
       await refreshProfile();
-      
-      Alert.alert("Unsubscribed", "Your subscription has been cancelled.");
+
+      const isScheduledCancellation =
+        cancellationResult?.cancelAtPeriodEnd === true ||
+        cancellationResult?.status === 'active';
+
+      Alert.alert(
+        "Unsubscribed",
+        isScheduledCancellation
+          ? `Your cancellation is scheduled. You will keep Pro access until ${formatSubscriptionDate(subscription?.renewalDate)}.`
+          : "Your subscription has been cancelled."
+      );
       setUnsubscribeConfirmVisible(false);
       setUnsubscribing(false);
     } catch (error) {
@@ -1214,8 +1223,8 @@ export default function ProfileScreen() {
         </CRCard>
       </View>
 
-      {/* Unsubscribe Section - Only show if user has active subscription */}
-      {subscription && profile?.role === 'pro' && (
+      {/* Unsubscribe Section - Show whenever user has an active/trial subscription record */}
+      {subscription && subscription?.status && ['active', 'trial', 'past_due', 'pending'].includes(subscription.status) && (
       <View style={styles.cardWrap}>
       <CRCard>
         <View style={{ marginBottom: theme.spacing.md }}>
@@ -1251,20 +1260,33 @@ export default function ProfileScreen() {
             </Text>
           )}
         </View>
-        <CRButton
-          title="Unsubscribe"
-          variant="accentMid"
-          onPress={() => setUnsubscribeConfirmVisible(true)}
-          style={{ width: '100%' }}
-        />
-        <Text style={{ 
-          color: theme.colors.textMuted, 
-          fontSize: 12, 
-          marginTop: theme.spacing.sm,
-          textAlign: 'center'
-        }}>
-          Cancel your Pro subscription
-        </Text>
+        {subscription?.cancelAtPeriodEnd ? (
+          <Text style={{
+            color: theme.colors.textMuted,
+            fontSize: 12,
+            marginTop: theme.spacing.sm,
+            textAlign: 'center'
+          }}>
+            Cancellation scheduled. Your subscription will end on {formatSubscriptionDate(subscription?.cancellationEffectiveDate || subscription?.renewalDate)}.
+          </Text>
+        ) : (
+          <>
+            <CRButton
+              title="Unsubscribe"
+              variant="accentMid"
+              onPress={() => setUnsubscribeConfirmVisible(true)}
+              style={{ width: '100%' }}
+            />
+            <Text style={{ 
+              color: theme.colors.textMuted, 
+              fontSize: 12, 
+              marginTop: theme.spacing.sm,
+              textAlign: 'center'
+            }}>
+              Cancel your Pro subscription
+            </Text>
+          </>
+        )}
       </CRCard>
       </View>
       )}
@@ -1387,7 +1409,7 @@ export default function ProfileScreen() {
               marginBottom: theme.spacing.md,
               lineHeight: 20,
             }}>
-              Your subscription will be cancelled. You'll retain access to Pro features until {subscription?.renewalDate ? new Date(subscription.renewalDate).toLocaleDateString() : 'the renewal date'}.
+              Your subscription will be cancelled. You'll retain access to Pro features until {formatSubscriptionDate(subscription?.renewalDate)}.
             </Text>
 
             <View style={{ flexDirection: 'row', gap: 12 }}>

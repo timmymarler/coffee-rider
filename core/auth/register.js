@@ -3,7 +3,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useRouter } from "expo-router";
 import {
     createUserWithEmailAndPassword,
-  deleteUser,
+    deleteUser,
     sendEmailVerification,
 } from "firebase/auth";
 import { useContext, useEffect, useState } from "react";
@@ -26,14 +26,12 @@ import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
 import {
-    getBetaProFields,
     shouldShowProUpgradePrompt,
-    showBetaWelcomePrompt,
     showProUpgradePrompt,
 } from "@core/utils/proUpgradePrompt";
+import { reserveDisplayName } from "@firebaseLocal/users";
 import theme from "@themes";
 import { addDoc, collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
-import { reserveDisplayName } from "@firebaseLocal/users";
 import AuthLayout from "./AuthLayout";
 import { isAppleSignInAvailable, signInWithApple } from "./socialAuth";
 
@@ -154,13 +152,7 @@ export default function RegisterScreen({ onBack }) {
       setSocialSubmitting(false);
       setSocialProcess(null);
       router.replace("map");
-      if (signInResult?.isNewUser) {
-        setTimeout(() => {
-          showBetaWelcomePrompt();
-        }, 250);
-        return;
-      }
-      if (shouldShowProUpgradePrompt(role)) {
+      if (!signInResult?.isNewUser && shouldShowProUpgradePrompt(role)) {
         setTimeout(() => {
           showProUpgradePrompt(router);
         }, 250);
@@ -200,18 +192,15 @@ export default function RegisterScreen({ onBack }) {
       );
       
       const user = userCredential.user;
-      const isBetaUserSignup = selectedRole === "user";
-      const betaProFields = isBetaUserSignup ? getBetaProFields() : {};
 
       const userData = {
         uid: user.uid,
         email: user.email,
         contactEmail: normalizedEmail,
-        role: isBetaUserSignup ? "pro" : selectedRole,
+        role: selectedRole,
         displayName: displayName.trim(),
         excludeFromUserSearch: false,
         createdAt: serverTimestamp(),
-        ...betaProFields,
       };
 
       console.log("Creating user with role:", selectedRole, "Full userData:", userData);
@@ -266,13 +255,6 @@ export default function RegisterScreen({ onBack }) {
       }
       
       setSubmitting(false);
-      if (isBetaUserSignup) {
-        router.replace("/map");
-        setTimeout(() => {
-          showBetaWelcomePrompt();
-        }, 250);
-        return;
-      }
 
       Alert.alert(
         "Verification email sent",

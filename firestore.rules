@@ -70,9 +70,13 @@ service cloud.firestore {
 
     /* USERS */
     match /users/{userId} {
-      allow create: if isAuthed() && request.auth.uid == userId;
+      allow create: if isAuthed() &&
+        request.auth.uid == userId &&
+        (!('role' in request.resource.data) || request.resource.data.role == 'user');
       allow read: if isAuthed();
-      allow update: if isAuthed() && request.auth.uid == userId;
+      allow update: if isAuthed() &&
+        request.auth.uid == userId &&
+        request.resource.data.role == resource.data.role;
       allow delete: if isAuthed() && (
         request.auth.uid == userId ||
         isAdmin()

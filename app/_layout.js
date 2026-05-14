@@ -15,11 +15,12 @@ import { getAndResetSummary } from "@core/utils/devMetrics";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StripeProvider } from "@stripe/stripe-react-native";
+import { useStripe } from "@stripe/stripe-react-native";
 import theme from "@themes";
 import Constants from "expo-constants";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Alert, Animated, Dimensions, TouchableOpacity, View } from "react-native";
+import { Alert, Animated, Dimensions, Linking, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -368,6 +369,40 @@ function LayoutContent() {
   );
 }
 
+function StripeDeepLinkHandler() {
+  const { handleURLCallback } = useStripe();
+  const router = useRouter();
+
+  useEffect(() => {
+    const consumeStripeUrl = async (url) => {
+      if (!url) return;
+      try {
+        const handled = await handleURLCallback(url);
+        if (handled) {
+          // Keep users on in-app screens after browser-based 3DS redirects.
+          router.replace('/subscriptions');
+        }
+      } catch (error) {
+        console.error('[Stripe] Failed to handle URL callback:', error);
+      }
+    };
+
+    Linking.getInitialURL()
+      .then(consumeStripeUrl)
+      .catch((error) => console.error('[Stripe] Failed to get initial URL:', error));
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      consumeStripeUrl(url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [handleURLCallback, router]);
+
+  return null;
+}
+
 export default function Layout() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashChecked, setSplashChecked] = useState(false);
@@ -441,6 +476,7 @@ export default function Layout() {
         merchantIdentifier={merchantIdentifier}
         urlScheme={Constants.expoConfig?.scheme}
       >
+        <StripeDeepLinkHandler />
         <AuthProvider>
           <ThemeAwareLayoutContent />
         </AuthProvider>

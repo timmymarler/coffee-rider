@@ -7,14 +7,18 @@ import Constants from 'expo-constants';
 const stripeExtra = Constants.expoConfig?.extra?.stripe || {};
 const cancelStripeSubscriptionCallable = httpsCallable(functions, 'cancelStripeSubscription');
 
+async function updateUserSubscriptionFields(userId, fields) {
+  await updateDoc(doc(db, 'users', userId), fields);
+}
+
 /**
  * Stripe subscription products
  * Replace with actual Stripe product IDs when account is set up
  */
 export const STRIPE_PRODUCTS = {
-  DAILY: stripeExtra.priceDaily || 'price_test_daily_PLACEHOLDER',
-  MONTHLY: stripeExtra.priceMonthly || 'price_test_monthly_PLACEHOLDER',
-  ANNUAL: stripeExtra.priceAnnual || 'price_test_annual_PLACEHOLDER',
+  DAILY: stripeExtra.priceDailyLive || stripeExtra.priceDaily || 'price_test_daily_PLACEHOLDER',
+  MONTHLY: stripeExtra.priceMonthlyLive || stripeExtra.priceMonthly || 'price_test_monthly_PLACEHOLDER',
+  ANNUAL: stripeExtra.priceAnnualLive || stripeExtra.priceAnnual || 'price_test_annual_PLACEHOLDER',
 };
 
 export const SUBSCRIPTION_PLANS = {
@@ -117,8 +121,7 @@ export async function startFreeTrial({ userId, email }) {
     );
 
     // Update user profile with trial info
-    await updateDoc(doc(db, 'users', userId), {
-      role: 'pro',
+    await updateUserSubscriptionFields(userId, {
       subscriptionStatus: 'trial',
       subscriptionExpiresAt: trialEndDate.getTime(), // Store as milliseconds
       trialStartedAt: serverTimestamp(),
@@ -188,8 +191,7 @@ export async function activateSubscription({
     );
 
     // Update user profile with subscription info
-    await updateDoc(doc(db, 'users', userId), {
-      role: 'pro',
+    await updateUserSubscriptionFields(userId, {
       subscriptionStatus: 'active',
       subscriptionExpiresAt: renewalDate.getTime(), // Store as milliseconds
       subscriptionPlan: plan.id,
@@ -232,8 +234,7 @@ export async function cancelSubscription({ userId, stripeSubscriptionId }) {
       { merge: true }
     );
 
-    await updateDoc(doc(db, 'users', userId), {
-      role: 'user',
+    await updateUserSubscriptionFields(userId, {
       subscriptionStatus: 'cancelled',
       subscriptionExpiresAt: null,
     });

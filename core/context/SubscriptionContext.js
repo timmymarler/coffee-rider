@@ -1,5 +1,5 @@
 import { db } from '@config/firebase';
-import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { createContext, useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
@@ -12,6 +12,19 @@ export function SubscriptionProvider({ children, userId }) {
   const unsubscribeRef = useRef(null);
   const expirationCheckRef = useRef(null);
   const userSyncRef = useRef({ status: null, expiresAt: null });
+
+  const syncUserSubscriptionProfile = useCallback(
+    async ({ fields, logLabel }) => {
+      if (!userId) return;
+
+      try {
+        await updateDoc(doc(db, 'users', userId), fields);
+      } catch (err) {
+        console.error(`[Subscription] Error syncing ${logLabel} to user profile:`, err);
+      }
+    },
+    [userId]
+  );
 
   // Check if subscription has expired
   const checkAndUpdateExpiration = useCallback((subData) => {
@@ -38,12 +51,12 @@ export function SubscriptionProvider({ children, userId }) {
         // Trial has expired - update user profile in Firestore
         console.log('[Subscription] Trial has expired, updating user profile and clearing subscription');
         if (userId) {
-          updateDoc(doc(db, 'users', userId), {
-            role: 'user',
-            subscriptionStatus: 'expired',
-            subscriptionExpiresAt: null,
-          }).catch((err) => {
-            console.error('[Subscription] Error updating user profile on trial expiration:', err);
+          syncUserSubscriptionProfile({
+            fields: {
+              subscriptionStatus: 'expired',
+              subscriptionExpiresAt: null,
+            },
+            logLabel: 'trial expiration',
           });
         }
         userSyncRef.current = { status: 'expired', expiresAt: null };
@@ -57,12 +70,12 @@ export function SubscriptionProvider({ children, userId }) {
           userSyncRef.current.expiresAt !== expiresAtMs
         ) {
           userSyncRef.current = { status: 'trial', expiresAt: expiresAtMs };
-          updateDoc(doc(db, 'users', userId), {
-            role: 'pro',
-            subscriptionStatus: 'trial',
-            subscriptionExpiresAt: expiresAtMs,
-          }).catch((err) => {
-            console.error('[Subscription] Error syncing trial status to user profile:', err);
+          syncUserSubscriptionProfile({
+            fields: {
+              subscriptionStatus: 'trial',
+              subscriptionExpiresAt: expiresAtMs,
+            },
+            logLabel: 'trial status',
           });
         }
       }
@@ -87,12 +100,12 @@ export function SubscriptionProvider({ children, userId }) {
         // Subscription has expired - update user profile in Firestore
         console.log('[Subscription] Subscription has expired, updating user profile and clearing subscription');
         if (userId) {
-          updateDoc(doc(db, 'users', userId), {
-            role: 'user',
-            subscriptionStatus: 'expired',
-            subscriptionExpiresAt: null,
-          }).catch((err) => {
-            console.error('[Subscription] Error updating user profile on subscription expiration:', err);
+          syncUserSubscriptionProfile({
+            fields: {
+              subscriptionStatus: 'expired',
+              subscriptionExpiresAt: null,
+            },
+            logLabel: 'subscription expiration',
           });
         }
         userSyncRef.current = { status: 'expired', expiresAt: null };
@@ -106,13 +119,13 @@ export function SubscriptionProvider({ children, userId }) {
           userSyncRef.current.expiresAt !== renewalMs
         ) {
           userSyncRef.current = { status: 'active', expiresAt: renewalMs };
-          updateDoc(doc(db, 'users', userId), {
-            role: 'pro',
-            subscriptionStatus: 'active',
-            subscriptionPlan: subData.plan || null,
-            subscriptionExpiresAt: renewalMs,
-          }).catch((err) => {
-            console.error('[Subscription] Error syncing active status to user profile:', err);
+          syncUserSubscriptionProfile({
+            fields: {
+              subscriptionStatus: 'active',
+              subscriptionPlan: subData.plan || null,
+              subscriptionExpiresAt: renewalMs,
+            },
+            logLabel: 'active status',
           });
         }
       }
@@ -120,9 +133,19 @@ export function SubscriptionProvider({ children, userId }) {
     }
 
     // Cancelled, expired, or other invalid status
-    console.log('[Subscription] Subscription status is', subData.status);
+    console.log('[Subscription] Subscription status is', subData.status, ' - returning null');
+    if (userId) {
+      // Ensure user doc is synced to reflect no active subscription
+      syncUserSubscriptionProfile({
+        fields: {
+          subscriptionStatus: subData.status || 'cancelled',
+          subscriptionExpiresAt: null,
+        },
+        logLabel: 'cancelled status',
+      });
+    }
     return null;
-  }, [userId]);
+  }, [userId, syncUserSubscriptionProfile]);
 
   // Set up real-time listener and expiration check
   useEffect(() => {

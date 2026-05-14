@@ -63,9 +63,9 @@ export default function SubscriptionsScreen() {
         return;
       }
       Alert.alert(
-        'Processing Payment',
-        'Once Stripe confirms the payment your Pro access will unlock automatically.',
-        [{ text: 'OK', onPress: () => router.replace('/profile') }]
+        'Payment Successful',
+        'Your Pro subscription is now active. You have access to all Pro features.',
+        [{ text: 'OK', onPress: () => router.back() }]
       );
       await refreshProfile();
     } catch (err) {
@@ -87,6 +87,12 @@ export default function SubscriptionsScreen() {
   const trialDaysLeft = getTrialDaysRemaining();
   const hasActiveSubscription = isSubscribed();
   const isCurrentlyInTrial = isInTrial();
+
+  const formatDate = (date) => {
+    if (!date) return '';
+    const d = new Date(date?.seconds ? date.seconds * 1000 : date);
+    return d.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.primaryDark }]}>
@@ -139,7 +145,7 @@ export default function SubscriptionsScreen() {
               Pro Subscriber
             </Text>
             <Text style={[styles.statusText, { color: theme.colors.textLight }]}>
-              Renews {subscription?.renewalDate}
+              Renews {formatDate(subscription?.renewalDate)}
             </Text>
           </View>
           <MaterialCommunityIcons
@@ -158,71 +164,106 @@ export default function SubscriptionsScreen() {
         <Features theme={theme} />
       </View>
 
-      {/* Pricing Plans */}
+      {/* Pricing & Management */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-          Choose your plan
-        </Text>
-
-        {/* Annual Plan */}
-        <PricingCard
-          plan={SUBSCRIPTION_PLANS.ANNUAL}
-          isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
-          onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.ANNUAL)}
-          processing={processing && selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
-          disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
-          theme={theme}
-        />
-
-        {/* Monthly Plan */}
-        <PricingCard
-          plan={SUBSCRIPTION_PLANS.MONTHLY}
-          isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
-          onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.MONTHLY)}
-          processing={processing && selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
-          disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
-          theme={theme}
-        />
-
-        {/* Free Trial CTA (if not already in trial or subscribed) */}
-        {!isCurrentlyInTrial && !hasActiveSubscription && (
-          <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}>
-            <Pressable
-              style={[
-                {
-                  backgroundColor: theme.colors.accentMid,
-                  paddingVertical: 8,
-                  paddingHorizontal: 18,
-                  borderRadius: 8,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexDirection: 'row',
-                  gap: 8,
-                },
-                processing && { opacity: 0.5 },
-              ]}
-              onPress={handleStartTrial}
-              disabled={processing}
-            >
-              {processing ? (
-                <ActivityIndicator color={theme.colors.text} />
-              ) : (
-                <>
-                  <MaterialCommunityIcons
-                    name="gift"
-                    size={20}
-                    color={theme.colors.intext}
-                  />
-                  <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: '600' }}>
-                    Start 7-Day Free Trial
-                  </Text>
-                </>
-              )}
-            </Pressable>
-            <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}>
-              (No card needed)
+        {hasActiveSubscription && !isCurrentlyInTrial ? (
+          <>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
+              Manage your subscription
             </Text>
-          </View>
+            <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
+              <Pressable
+                style={[
+                  {
+                    backgroundColor: theme.colors.accentMid,
+                    paddingVertical: 10,
+                    paddingHorizontal: 18,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'row',
+                    gap: 8,
+                  },
+                ]}
+                onPress={() => router.push('/subscriptions/manage')}
+              >
+                <MaterialCommunityIcons name="cog" size={18} color={theme.colors.intext} />
+                <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: '600' }}>
+                  Manage / Cancel Subscription
+                </Text>
+              </Pressable>
+              <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}> 
+                Plan switching is not available in-app yet.
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
+              Choose your plan
+            </Text>
+
+            {/* Annual Plan */}
+            <PricingCard
+              plan={SUBSCRIPTION_PLANS.ANNUAL}
+              isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
+              onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.ANNUAL)}
+              processing={processing && selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
+              disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
+              theme={theme}
+            />
+
+            {/* Monthly Plan */}
+            <PricingCard
+              plan={SUBSCRIPTION_PLANS.MONTHLY}
+              isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
+              onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.MONTHLY)}
+              processing={processing && selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
+              disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
+              theme={theme}
+            />
+
+            {/* Free Trial CTA (if not already in trial or subscribed) */}
+            {!isCurrentlyInTrial && !hasActiveSubscription && (
+              <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
+                <Pressable
+                  style={[
+                    {
+                      backgroundColor: theme.colors.accentMid,
+                      paddingVertical: 8,
+                      paddingHorizontal: 18,
+                      borderRadius: 8,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'row',
+                      gap: 8,
+                    },
+                    processing && { opacity: 0.5 },
+                  ]}
+                  onPress={handleStartTrial}
+                  disabled={processing}
+                >
+                  {processing ? (
+                    <ActivityIndicator color={theme.colors.text} />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons
+                        name="gift"
+                        size={20}
+                        color={theme.colors.intext}
+                      />
+                      <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: '600' }}>
+                        Start 7-Day Free Trial
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+                <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}> 
+                  (No card needed)
+                </Text>
+              </View>
+            )}
+          </>
         )}
       </View>
 
@@ -238,12 +279,12 @@ export default function SubscriptionsScreen() {
         />
         <FAQItem
           question="Is there a free trial?"
-          answer="Yes, start with a 30-day free trial of all Pro features. No credit card required."
+          answer="Yes, you get a 7-day free trial of Pro features. No card required for the trial."
           theme={theme}
         />
         <FAQItem
           question="What if I switch plans?"
-          answer="You can upgrade or downgrade your plan anytime. We'll prorate the charges or credits based on your remaining billing period."
+          answer="Plan switching is not available in-app yet. If needed, cancel your current plan and choose another after the current billing period ends."
           theme={theme}
         />
       </View>

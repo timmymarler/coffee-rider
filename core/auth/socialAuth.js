@@ -1,13 +1,12 @@
 // core/auth/socialAuth.js
 import { auth, db } from "@config/firebase";
-import { getBetaProFields } from "@core/utils/proUpgradePrompt";
+import { reserveDisplayName } from "@firebaseLocal/users";
 import {
     GoogleAuthProvider,
     OAuthProvider,
     signInWithCredential,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
-import { reserveDisplayName } from "@firebaseLocal/users";
 import { Platform } from "react-native";
 
 // Conditionally import Apple Sign-in (only available after native compilation)
@@ -146,7 +145,6 @@ export const signInWithGoogle = async () => {
     
     try {
       if (!userSnapshot.exists()) {
-        const betaProFields = getBetaProFields();
         const uniqueDisplayName = await resolveUniqueDisplayName(
           firebaseUser.uid,
           firebaseUser.displayName || "Google User"
@@ -159,9 +157,10 @@ export const signInWithGoogle = async () => {
             email: firebaseUser.email?.toLowerCase?.() || firebaseUser.email,
             contactEmail: firebaseUser.email?.toLowerCase?.() || firebaseUser.email, // Use real email for group invites
             displayName: uniqueDisplayName,
+            role: "user",
+            subscriptionStatus: "free",
             photoURL: firebaseUser.photoURL,
             excludeFromUserSearch: false,
-            ...betaProFields,
             authProvider: "google",
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -279,7 +278,6 @@ export const signInWithApple = async () => {
       const userSnapshot = await getDoc(userDocRef);
       
       if (!userSnapshot.exists()) {
-        const betaProFields = getBetaProFields();
         const uniqueDisplayName = await resolveUniqueDisplayName(firebaseUser.uid, displayName);
         // New user - set all fields including displayName and contactEmail
         await setDoc(
@@ -289,8 +287,9 @@ export const signInWithApple = async () => {
             email: firebaseUser.email?.toLowerCase?.() || firebaseUser.email,
             contactEmail: null, // Apple users will set this in Profile when upgrading
             displayName: uniqueDisplayName,
+            role: "user",
+            subscriptionStatus: "free",
             excludeFromUserSearch: false,
-            ...betaProFields,
             authProvider: "apple",
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),

@@ -178,7 +178,6 @@ const handleSubscriptionSync = async (subscription) => {
   });
 
   await updateUserProfile(uid, {
-    role: status === 'active' ? 'pro' : 'user',
     subscriptionStatus: status,
     subscriptionPlan: planId,
     subscriptionExpiresAt: renewalDate,

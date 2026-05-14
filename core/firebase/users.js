@@ -1,6 +1,6 @@
 // core/firebase/users.js
 
-import { doc, getDoc, setDoc, collection, query, where, getDocs, runTransaction } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, runTransaction, setDoc, where } from "firebase/firestore";
 import { auth, db } from "../../config/firebase";
 
 function normalizeEmailValue(value) {
