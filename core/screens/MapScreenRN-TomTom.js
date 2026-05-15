@@ -1191,6 +1191,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
   const filtersActive = appliedFilters.suitability.size > 0 || appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0 || appliedFilters.sponsor || appliedFilters.visited;
   const [userLocation, setUserLocation] = useState(null);
+  const [isMapReady, setIsMapReady] = useState(false);
 
   const [mapRegion, setMapRegion] = useState(userLocation);
 
@@ -1400,6 +1401,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   // Track activeRide state separately - update TabBarContext when it changes
   const previousActiveRideRef = useRef(null);
+  const pendingActiveRideRebuildRef = useRef(false);
+  const activeRideRebuildInFlightRef = useRef(false);
+  const initialFollowCameraRideRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -1473,13 +1477,31 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setActiveRide(activeRide);
     activeRideRef.current = activeRide;
     endRideRef.current = endRide;
+
+    if (!activeRide) {
+      pendingActiveRideRebuildRef.current = false;
+      activeRideRebuildInFlightRef.current = false;
+    }
     
     // Only rebuild if ride is NEWLY started (previousActiveRideRef.current was null)
     const rideJustStarted = previousActiveRideRef.current === null && activeRide;
-    
-    if (rideJustStarted && routeDestination && userLocation && !followUser) {
-      console.log('[ACTIVE_RIDE] New active ride detected, rebuilding route...');
+
+    if (rideJustStarted) {
+      pendingActiveRideRebuildRef.current = true;
+    }
+
+    const shouldRebuildActiveRideRoute =
+      !!activeRide &&
+      pendingActiveRideRebuildRef.current &&
+      !!routeDestination &&
+      !!userLocation &&
+      !activeRideRebuildInFlightRef.current;
+
+    if (shouldRebuildActiveRideRoute) {
+      console.log('[ACTIVE_RIDE] Building joined-ride route from current location');
       const requestId = ++routeRequestId.current;
+      activeRideRebuildInFlightRef.current = true;
+
       mapRoute({
         origin: userLocation,
         waypoints: waypoints,
@@ -1488,12 +1510,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         routeType: userRouteType,
         avoidMotorways,
         requestId,
-        skipFitToView: false,
-      }).catch(error => {
-        console.warn('[ACTIVE_RIDE] mapRoute error:', error);
-      });
+        skipFitToView: true,
+      })
+        .then((ok) => {
+          if (ok) {
+            pendingActiveRideRebuildRef.current = false;
+          }
+        })
+        .catch((error) => {
+          console.warn('[ACTIVE_RIDE] Deferred rebuild error:', error);
+        })
+        .finally(() => {
+          activeRideRebuildInFlightRef.current = false;
+        });
     }
-
+    
     if (rideJustStarted) {
       // Re-arm Follow Me on shared-ride rejoin and reset camera guards that can
       // remain stale on iOS after ending and restarting a ride.
@@ -1526,6 +1557,60 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     // Update ref for next comparison
     previousActiveRideRef.current = activeRide;
   }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType]);
+
+  // One-time camera lock for joined rides: ensure initial Follow Me zoom/pitch is applied
+  // after route geometry is loaded (prevents needing to tap Follow Me again).
+  useEffect(() => {
+    const rideId = activeRide?.rideId;
+    if (!rideId) {
+      initialFollowCameraRideRef.current = null;
+      return;
+    }
+    if (!followUser || !userLocation) return;
+    if (!isMapReady) return;
+    if (!routeCoords || routeCoords.length < 2) return;
+    if (initialFollowCameraRideRef.current === rideId) return;
+
+    initialFollowCameraRideRef.current = rideId;
+    skipNextFollowTickRef.current = true;
+    skipNextRegionChangeRef.current = true;
+    skipRegionChangeUntilRef.current = Date.now() + 2500;
+    preferredFollowZoomRef.current = FOLLOW_ZOOM;
+
+    recenterOnUser({
+      zoom: FOLLOW_ZOOM,
+      pitch: 35,
+      followMode: true,
+      preserveZoom: false,
+      heading: Number.isFinite(lastFollowHeadingRef.current) ? lastFollowHeadingRef.current : null,
+    }).catch((error) => {
+      console.warn('[ACTIVE_RIDE] initial camera lock error:', error);
+    });
+
+    const retryDelaysMs = [300, 900, 1700];
+    const retryTimerIds = retryDelaysMs.map((delayMs) =>
+      setTimeout(() => {
+        if (activeRideRef.current?.rideId !== rideId) return;
+        if (!followUser || !mapReadyRef.current) return;
+        if (!routeCoords || routeCoords.length < 2) return;
+
+        preferredFollowZoomRef.current = FOLLOW_ZOOM;
+        recenterOnUser({
+          zoom: FOLLOW_ZOOM,
+          pitch: 35,
+          followMode: true,
+          preserveZoom: false,
+          heading: Number.isFinite(lastFollowHeadingRef.current) ? lastFollowHeadingRef.current : null,
+        }).catch((error) => {
+          console.warn('[ACTIVE_RIDE] initial camera retry error:', error);
+        });
+      }, delayMs)
+    );
+
+    return () => {
+      retryTimerIds.forEach((timerId) => clearTimeout(timerId));
+    };
+  }, [activeRide?.rideId, followUser, userLocation, routeCoords.length, routeSteps.length, isMapReady]);
 
   // Load the shared route polyline when joining a ride
   // This is separate from the above effect because we need to load the route first,
@@ -5482,6 +5567,13 @@ function getStepCompletionThresholds(step = null) {
       setRouteCoordsWithFlush(decoded, {
         distance: routeDistance,
       });
+
+      const savedSteps = Array.isArray(route.tomtomSteps)
+        ? route.tomtomSteps
+        : (Array.isArray(route.routeSteps) ? route.routeSteps : []);
+      if (savedSteps.length > 0) {
+        setRouteSteps(normalizeRouteSteps(savedSteps, decoded));
+      }
       
       setLastEncodedPolyline(typeof route.routePolyline === 'string' ? route.routePolyline : null);
 
@@ -5546,6 +5638,13 @@ function getStepCompletionThresholds(step = null) {
       setRouteCoordsWithFlush(decoded, {
         distance: ride.distanceMeters,
       });
+
+      const savedSteps = Array.isArray(ride.tomtomSteps)
+        ? ride.tomtomSteps
+        : (Array.isArray(ride.routeSteps) ? ride.routeSteps : []);
+      if (savedSteps.length > 0) {
+        setRouteSteps(normalizeRouteSteps(savedSteps, decoded));
+      }
 
       // Use stored destination if available, otherwise fallback to last polyline point
       const destPoint = ride.destination || {
@@ -6275,6 +6374,7 @@ function getStepCompletionThresholds(step = null) {
           }}      
           onMapReady={() => {
             mapReadyRef.current = true;
+            setIsMapReady(true);
             attemptRouteFit();
           }}
         >
