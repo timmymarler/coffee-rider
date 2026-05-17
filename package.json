@@ -1,8 +1,8 @@
 {
   "name": "coffee-rider-v2",
   "main": "expo-router/entry",
-  "version": "2.30.2",
-  "buildNumber": "44",
+  "version": "2.30.3",
+  "buildNumber": "45",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
