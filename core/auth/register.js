@@ -193,17 +193,22 @@ export default function RegisterScreen({ onBack }) {
       
       const user = userCredential.user;
 
+      // Security rules only allow self-created profiles with role "user".
+      // Preserve the selected role as a request for post-signup processing.
+      const requestedRole = selectedRole;
+
       const userData = {
         uid: user.uid,
         email: user.email,
         contactEmail: normalizedEmail,
-        role: selectedRole,
+        role: "user",
+        requestedRole,
         displayName: displayName.trim(),
         excludeFromUserSearch: false,
         createdAt: serverTimestamp(),
       };
 
-      console.log("Creating user with role:", selectedRole, "Full userData:", userData);
+      console.log("Creating user with role:", userData.role, "requestedRole:", requestedRole, "Full userData:", userData);
 
       // Create place document if place-owner
       if (selectedRole === "place-owner") {
