@@ -37,8 +37,6 @@ import { isAppleSignInAvailable, signInWithApple } from "./socialAuth";
 
 const ROLES = [
   { id: "user", label: "User", description: "Find coffee stops" },
-  { id: "pro", label: "Pro", description: "User + full features" },
-  { id: "place-owner", label: "Place Owner", description: "Manage your café" },
 ];
 
 export default function RegisterScreen({ onBack }) {
@@ -269,10 +267,6 @@ export default function RegisterScreen({ onBack }) {
             text: "OK",
             onPress: () => {
               onBack?.();
-              // If they selected Pro during registration, take them straight to subscriptions
-              if (requestedRole === "pro") {
-                router.replace("/subscriptions");
-              }
             }
           }
         ]

@@ -284,7 +284,7 @@ export default function LoginScreen() {
               onPress={handleLogout}
               style={[styles.button, { backgroundColor: colors.accentMid }]}
             >
-              <Text style={styles.buttonText}>Logout & Browse as Guest</Text>
+              <Text style={styles.buttonText}>Continue</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -292,7 +292,7 @@ export default function LoginScreen() {
               disabled={submitting}
               style={{ marginTop: spacing.md, alignItems: "center" }}
             >
-              <Text style={[styles.linkText, { color: colors.accent }]}>
+              <Text style={[styles.linkText, { color: colors.accentMid }]}> 
                 {submitting ? "Sending..." : "Resend Verification Email"}
               </Text>
             </TouchableOpacity>
