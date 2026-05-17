@@ -268,8 +268,11 @@ export default function RegisterScreen({ onBack }) {
           {
             text: "OK",
             onPress: () => {
-              // Close register modal and return to login
               onBack?.();
+              // If they selected Pro during registration, take them straight to subscriptions
+              if (requestedRole === "pro") {
+                router.replace("/subscriptions");
+              }
             }
           }
         ]
