@@ -2,29 +2,29 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useRouter } from "expo-router";
 import {
-    createUserWithEmailAndPassword,
-    deleteUser,
-    sendEmailVerification,
+  createUserWithEmailAndPassword,
+  deleteUser,
+  sendEmailVerification,
 } from "firebase/auth";
 import { useContext, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
 import {
-    shouldShowProUpgradePrompt,
-    showProUpgradePrompt,
+  shouldShowProUpgradePrompt,
+  showProUpgradePrompt,
 } from "@core/utils/proUpgradePrompt";
 import { reserveDisplayName } from "@firebaseLocal/users";
 import theme from "@themes";

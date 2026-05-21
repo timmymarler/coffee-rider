@@ -1,12 +1,12 @@
 // app/_layout.js
 
-import { destroyBleTransport, initBleTransport } from "@core/ble/bleTransport";
-import { getBleDirectionsConfig } from "@core/ble/directionsTransmitter";
 import AuthProvider, { AuthContext } from "@context/AuthContext";
 import { RoutingPreferencesProvider } from "@context/RoutingPreferencesContext";
 import { SubscriptionProvider } from "@context/SubscriptionContext";
 import { TabBarContext, TabBarProvider } from "@context/TabBarContext";
 import { ThemeProvider } from "@context/ThemeContext";
+import { destroyBleTransport, initBleTransport } from "@core/ble/bleTransport";
+import { getBleDirectionsConfig } from "@core/ble/directionsTransmitter";
 import AppHeader from "@core/components/layout/AppHeader";
 import SplashScreen from "@core/components/ui/SplashScreen";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
@@ -14,8 +14,7 @@ import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
 import { getAndResetSummary } from "@core/utils/devMetrics";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { StripeProvider } from "@stripe/stripe-react-native";
-import { useStripe } from "@stripe/stripe-react-native";
+import { StripeProvider, useStripe } from "@stripe/stripe-react-native";
 import theme from "@themes";
 import Constants from "expo-constants";
 import { Tabs, usePathname, useRouter } from "expo-router";
