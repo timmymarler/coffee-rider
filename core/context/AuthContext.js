@@ -377,7 +377,14 @@ export default function AuthProvider({ children }) {
   // ----------------------------------------
   // ROLE + CAPABILITIES
   // ----------------------------------------
-  const role = profile?.role || "guest";
+  const storedRole = profile?.role || 'guest';
+  const role = (() => {
+    if (storedRole === 'guest') return 'guest';
+    if (storedRole === 'admin' || storedRole === 'place-owner') return storedRole;
+    const subStatus = profile?.subscriptionStatus;
+    if (subStatus === 'trial' || subStatus === 'active') return 'pro';
+    return storedRole;
+  })();
   const capabilities = getCapabilities(role);
 
   const value = {

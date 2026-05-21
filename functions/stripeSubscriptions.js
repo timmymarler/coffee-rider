@@ -59,6 +59,7 @@ const getWebhookSecret = () =>
 
 const firestore = admin.firestore();
 const { FieldValue } = admin.firestore;
+const PROTECTED_ROLES = new Set(['admin', 'place-owner']);
 
 const upsertSubscriptionDocument = async (uid, data) => {
   const subRef = firestore.doc(`users/${uid}/subscription/current`);
@@ -74,6 +75,30 @@ const upsertSubscriptionDocument = async (uid, data) => {
 const updateUserProfile = async (uid, data) => {
   const userRef = firestore.doc(`users/${uid}`);
   await userRef.set(data, { merge: true });
+};
+
+const getRoleForSubscriptionStatus = (status) => {
+  if (status === 'active' || status === 'trial') {
+    return 'pro';
+  }
+
+  return 'user';
+};
+
+const syncSubscriptionRole = async (uid, status, extraUpdates = {}) => {
+  const userRef = firestore.doc(`users/${uid}`);
+  const userSnap = await userRef.get();
+  const currentRole = userSnap.exists ? userSnap.data()?.role : null;
+  const updates = { ...extraUpdates };
+
+  if (!PROTECTED_ROLES.has(currentRole)) {
+    const nextRole = getRoleForSubscriptionStatus(status);
+    if (nextRole && currentRole !== nextRole) {
+      updates.role = nextRole;
+    }
+  }
+
+  await updateUserProfile(uid, updates);
 };
 
 const ensureCustomerForUid = async (uid) => {
@@ -177,7 +202,7 @@ const handleSubscriptionSync = async (subscription) => {
     cancellationEffectiveDate,
   });
 
-  await updateUserProfile(uid, {
+  await syncSubscriptionRole(uid, status, {
     subscriptionStatus: status,
     subscriptionPlan: planId,
     subscriptionExpiresAt: renewalDate,
