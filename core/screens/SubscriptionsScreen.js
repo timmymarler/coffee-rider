@@ -1,6 +1,7 @@
 import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
+import { useAppleSubscription } from '@core/payments/useAppleSubscription';
 import { SUBSCRIPTION_PLANS, startFreeTrial } from '@core/payments/stripeService';
 import { useStripeSubscription } from '@core/payments/useStripeSubscription';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -9,6 +10,7 @@ import { useContext, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+  Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -24,6 +26,15 @@ export default function SubscriptionsScreen() {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [processing, setProcessing] = useState(false);
   const { subscribeToPlan, status: stripeStatus } = useStripeSubscription();
+  const {
+    productsByPlan: appleProductsByPlan,
+    loadingProducts: appleLoading,
+    processingSku: appleProcessingSku,
+    restoring: appleRestoring,
+    subscribeToPlan: subscribeToApplePlan,
+    restorePurchases,
+  } = useAppleSubscription({ user });
+  const isIOS = Platform.OS === 'ios';
 
   const handleStartTrial = async () => {
     if (!user?.email) {
@@ -76,6 +87,45 @@ export default function SubscriptionsScreen() {
     }
   };
 
+  const handleAppleSubscribe = async (planId) => {
+    if (!user?.email) {
+      Alert.alert('Error', 'Please log in first');
+      return;
+    }
+
+    try {
+      setSelectedPlan(planId);
+      const result = await subscribeToApplePlan(planId);
+      if (result?.success) {
+        await refreshProfile();
+        Alert.alert('Subscription Active', 'Your Apple subscription is now active.');
+      }
+    } catch (err) {
+      Alert.alert('Error', err?.message || 'Unable to complete Apple subscription.');
+    } finally {
+      setSelectedPlan(null);
+    }
+  };
+
+  const handleAppleRestore = async () => {
+    if (!user?.email) {
+      Alert.alert('Error', 'Please log in first');
+      return;
+    }
+
+    try {
+      const result = await restorePurchases();
+      await refreshProfile();
+      if (result?.restored) {
+        Alert.alert('Restored', 'Your Apple subscription has been restored.');
+      } else {
+        Alert.alert('No Active Subscription', 'No active Apple subscription was found to restore.');
+      }
+    } catch (err) {
+      Alert.alert('Error', err?.message || 'Unable to restore Apple purchases.');
+    }
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.primaryDark }]}>
@@ -104,8 +154,10 @@ export default function SubscriptionsScreen() {
           color={theme.colors.accentMid}
         />
         <Text style={[styles.title, { color: theme.colors.text }]}>Pro Features</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.accentMid }]}>
-          Unlock all features with a Pro subscription
+        <Text style={[styles.subtitle, { color: theme.colors.accentMid }]}> 
+          {isIOS
+            ? 'Unlock Pro with Apple subscriptions'
+            : 'Unlock all features with a Pro subscription'}
         </Text>
       </View>
 
@@ -199,69 +251,138 @@ export default function SubscriptionsScreen() {
           </>
         ) : (
           <>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
-              Choose your plan
-            </Text>
-
-            {/* Annual Plan */}
-            <PricingCard
-              plan={SUBSCRIPTION_PLANS.ANNUAL}
-              isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
-              onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.ANNUAL)}
-              processing={processing && selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
-              disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
-              theme={theme}
-            />
-
-            {/* Monthly Plan */}
-            <PricingCard
-              plan={SUBSCRIPTION_PLANS.MONTHLY}
-              isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
-              onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.MONTHLY)}
-              processing={processing && selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
-              disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
-              theme={theme}
-            />
-
-            {/* Free Trial CTA (if not already in trial or subscribed) */}
-            {!isCurrentlyInTrial && !hasActiveSubscription && (
-              <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
-                <Pressable
-                  style={[
-                    {
-                      backgroundColor: theme.colors.accentMid,
-                      paddingVertical: 8,
-                      paddingHorizontal: 18,
-                      borderRadius: 8,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'row',
-                      gap: 8,
-                    },
-                    processing && { opacity: 0.5 },
-                  ]}
-                  onPress={handleStartTrial}
-                  disabled={processing}
-                >
-                  {processing ? (
-                    <ActivityIndicator color={theme.colors.text} />
-                  ) : (
-                    <>
-                      <MaterialCommunityIcons
-                        name="gift"
-                        size={20}
-                        color={theme.colors.intext}
-                      />
-                      <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: '600' }}>
-                        Start 7-Day Free Trial
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
-                <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}> 
-                  (No card needed)
+            {isIOS ? (
+              <>
+                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
+                  Choose your Apple plan
                 </Text>
-              </View>
+
+                <PricingCard
+                  plan={{
+                    ...SUBSCRIPTION_PLANS.ANNUAL,
+                    price: appleProductsByPlan.annual?.displayPrice || SUBSCRIPTION_PLANS.ANNUAL.price,
+                  }}
+                  isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
+                  onPress={() => handleAppleSubscribe('annual')}
+                  processing={appleProcessingSku === appleProductsByPlan.annual?.productId}
+                  disabled={appleLoading || appleRestoring || Boolean(appleProcessingSku)}
+                  theme={theme}
+                />
+
+                <PricingCard
+                  plan={{
+                    ...SUBSCRIPTION_PLANS.MONTHLY,
+                    price: appleProductsByPlan.monthly?.displayPrice || SUBSCRIPTION_PLANS.MONTHLY.price,
+                  }}
+                  isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
+                  onPress={() => handleAppleSubscribe('monthly')}
+                  processing={appleProcessingSku === appleProductsByPlan.monthly?.productId}
+                  disabled={appleLoading || appleRestoring || Boolean(appleProcessingSku)}
+                  theme={theme}
+                />
+
+                <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
+                  <Pressable
+                    style={[
+                      {
+                        backgroundColor: theme.colors.accentMid,
+                        paddingVertical: 8,
+                        paddingHorizontal: 18,
+                        borderRadius: 8,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexDirection: 'row',
+                        gap: 8,
+                      },
+                      appleRestoring && { opacity: 0.5 },
+                    ]}
+                    onPress={handleAppleRestore}
+                    disabled={appleLoading || appleRestoring || Boolean(appleProcessingSku)}
+                  >
+                    {appleRestoring ? (
+                      <ActivityIndicator color={theme.colors.text} />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons
+                          name="restore"
+                          size={20}
+                          color={theme.colors.intext}
+                        />
+                        <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: '600' }}>
+                          Restore Apple Purchases
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
+                  Choose your plan
+                </Text>
+
+                {/* Annual Plan */}
+                <PricingCard
+                  plan={SUBSCRIPTION_PLANS.ANNUAL}
+                  isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
+                  onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.ANNUAL)}
+                  processing={processing && selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
+                  disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
+                  theme={theme}
+                />
+
+                {/* Monthly Plan */}
+                <PricingCard
+                  plan={SUBSCRIPTION_PLANS.MONTHLY}
+                  isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
+                  onPress={() => handleSubscribe(SUBSCRIPTION_PLANS.MONTHLY)}
+                  processing={processing && selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
+                  disabled={processing || stripeStatus === 'initializing' || stripeStatus === 'ready'}
+                  theme={theme}
+                />
+
+                {/* Free Trial CTA (if not already in trial or subscribed) */}
+                {!isCurrentlyInTrial && !hasActiveSubscription && (
+                  <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
+                    <Pressable
+                      style={[
+                        {
+                          backgroundColor: theme.colors.accentMid,
+                          paddingVertical: 8,
+                          paddingHorizontal: 18,
+                          borderRadius: 8,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'row',
+                          gap: 8,
+                        },
+                        processing && { opacity: 0.5 },
+                      ]}
+                      onPress={handleStartTrial}
+                      disabled={processing}
+                    >
+                      {processing ? (
+                        <ActivityIndicator color={theme.colors.text} />
+                      ) : (
+                        <>
+                          <MaterialCommunityIcons
+                            name="gift"
+                            size={20}
+                            color={theme.colors.intext}
+                          />
+                          <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: '600' }}>
+                            Start 7-Day Free Trial
+                          </Text>
+                        </>
+                      )}
+                    </Pressable>
+                    <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}> 
+                      (No card needed)
+                    </Text>
+                  </View>
+                )}
+              </>
             )}
           </>
         )}

@@ -1,14 +1,15 @@
 // core/payments/stripeService.js
 import { db, functions } from '@config/firebase';
-import { addDoc, collection, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
 import Constants from 'expo-constants';
+import { addDoc, collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
 const stripeExtra = Constants.expoConfig?.extra?.stripe || {};
+const appleIapExtra = Constants.expoConfig?.extra?.appleIap || {};
 const cancelStripeSubscriptionCallable = httpsCallable(functions, 'cancelStripeSubscription');
 
 async function updateUserSubscriptionFields(userId, fields) {
-  await updateDoc(doc(db, 'users', userId), fields);
+  await setDoc(doc(db, 'users', userId), fields, { merge: true });
 }
 
 /**
@@ -48,6 +49,31 @@ export const SUBSCRIPTION_PLANS = {
     savingsPercent: 17, // (1 - 29.99/(2.99*12)) * 100
   },
 };
+
+export const APPLE_SUBSCRIPTION_PRODUCTS = {
+  MONTHLY: appleIapExtra.monthlyProductId || 'com.timmy.marler.coffeerider.pro.monthly',
+  ANNUAL: appleIapExtra.annualProductId || 'com.timmy.marler.coffeerider.pro.annual',
+};
+
+function mapAppleProductIdToPlan(productId) {
+  if (productId === APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL) {
+    return 'annual';
+  }
+
+  return 'monthly';
+}
+
+function getRenewalDateForPlan(planId, purchaseDateMs = Date.now()) {
+  const renewalDate = new Date(purchaseDateMs);
+
+  if (planId === 'annual') {
+    renewalDate.setFullYear(renewalDate.getFullYear() + 1);
+  } else {
+    renewalDate.setMonth(renewalDate.getMonth() + 1);
+  }
+
+  return renewalDate;
+}
 
 /**
  * Create a payment intent for a subscription
@@ -206,6 +232,53 @@ export async function activateSubscription({
     console.error('[Stripe] Error activating subscription:', err);
     throw err;
   }
+}
+
+export async function activateAppleSubscription({
+  userId,
+  email,
+  productId,
+  transactionId,
+  originalTransactionId,
+  purchaseDateMs,
+}) {
+  if (!userId || !productId || !transactionId) {
+    throw new Error('userId, productId, and transactionId are required');
+  }
+
+  const plan = mapAppleProductIdToPlan(productId);
+  const purchaseTime = Number.isFinite(purchaseDateMs) ? purchaseDateMs : Date.now();
+  const renewalDate = getRenewalDateForPlan(plan, purchaseTime);
+
+  await setDoc(
+    doc(db, 'users', userId, 'subscription', 'current'),
+    {
+      status: 'active',
+      plan,
+      provider: 'apple_iap',
+      appleProductId: productId,
+      appleTransactionId: transactionId,
+      appleOriginalTransactionId: originalTransactionId || transactionId,
+      purchaseDate: purchaseTime,
+      renewalDate: renewalDate.getTime(),
+      email: email || null,
+      updatedAt: serverTimestamp(),
+      lastRenewal: serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  await updateUserSubscriptionFields(userId, {
+    subscriptionStatus: 'active',
+    subscriptionPlan: plan,
+    subscriptionExpiresAt: renewalDate.getTime(),
+  });
+
+  return {
+    status: 'active',
+    plan,
+    renewalDate,
+  };
 }
 
 /**

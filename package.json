@@ -1,8 +1,8 @@
 {
   "name": "coffee-rider-v2",
   "main": "expo-router/entry",
-  "version": "2.30.3",
-  "buildNumber": "45",
+  "version": "2.30.4",
+  "buildNumber": "46",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -52,6 +52,7 @@
     "react-native-draggable-flatlist": "^4.0.3",
     "react-native-dropdown-picker": "^5.4.6",
     "react-native-gesture-handler": "~2.28.0",
+    "react-native-iap": "^14.7.20",
     "react-native-maps": "^1.26.18",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",

@@ -24,6 +24,8 @@ const stripePriceDailyLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_DAILY_LIVE || 
 const stripePriceMonthlyLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_MONTHLY_LIVE || null;
 const stripePriceAnnualLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_ANNUAL_LIVE || null;
 const stripeMerchantIdentifier = process.env.STRIPE_MERCHANT_IDENTIFIER || 'merchant.com.timmy.marler.coffeerider';
+const appleIapMonthlyProductId = process.env.EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID || 'com.timmy.marler.coffeerider.pro.monthly';
+const appleIapAnnualProductId = process.env.EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID || 'com.timmy.marler.coffeerider.pro.annual';
 
 // Use these variables wherever you need the keys
 // Read the app variant from ENV or default to rider
@@ -67,7 +69,7 @@ export default {
     name: DISPLAY_NAME[APP_NAME],
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
-    version: "2.30.3",
+    version: "2.30.4",
     icon: `${brandFolder}/icon.png`,
     splash: {
       image: `${brandFolder}/splash.png`,
@@ -94,6 +96,10 @@ export default {
         priceMonthlyLive: stripePriceMonthlyLive,
         priceAnnualLive: stripePriceAnnualLive,
       },
+      appleIap: {
+        monthlyProductId: appleIapMonthlyProductId,
+        annualProductId: appleIapAnnualProductId,
+      },
       firebase: {
         apiKey: isIOS
           ? process.env.EXPO_PUBLIC_FIREBASE_API_KEY_IOS
@@ -108,7 +114,7 @@ export default {
 
     ios: {
       bundleIdentifier: IOS_BUNDLE[APP_NAME],
-      buildNumber: "45",
+      buildNumber: "46",
       googleServicesFile: "./GoogleService-Info.plist",
       infoPlist: {
         NSLocationWhenInUseUsageDescription: "Coffee Rider needs your location to show nearby places and help with group rides.",
@@ -124,7 +130,7 @@ export default {
 
     android: {
       package: ANDROID_PACKAGE[APP_NAME],
-      versionCode: 45,
+      versionCode: 46,
       permissions: [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",

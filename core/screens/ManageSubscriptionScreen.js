@@ -8,6 +8,8 @@ import { useContext, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+  Linking,
+  Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -28,6 +30,24 @@ export default function ManageSubscriptionScreen() {
   const trialDaysLeft = getTrialDaysRemaining();
 
   const handleCancelSubscription = async () => {
+    const isAppleManagedSubscription =
+      Platform.OS === 'ios' &&
+      (subscription?.provider === 'apple_iap' || Boolean(subscription?.appleTransactionId));
+
+    if (isAppleManagedSubscription) {
+      try {
+        const manageUrl = 'itms-apps://apps.apple.com/account/subscriptions';
+        const fallbackUrl = 'https://apps.apple.com/account/subscriptions';
+        const canOpenManage = await Linking.canOpenURL(manageUrl);
+        await Linking.openURL(canOpenManage ? manageUrl : fallbackUrl);
+      } catch (err) {
+        Alert.alert('Error', 'Unable to open Apple subscription management.');
+      } finally {
+        setConfirmingCancel(false);
+      }
+      return;
+    }
+
     if (!subscription?.stripeSubscriptionId) {
       return;
     }

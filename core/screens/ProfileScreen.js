@@ -27,10 +27,13 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
 import { useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Clipboard, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Clipboard, Image, Linking, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LoginScreen from "../auth/login";
 import RegisterScreen from "../auth/register";
+
+const PRIVACY_POLICY_URL = "https://coffee-rider.co.uk/privacy-policy";
+const TERMS_OF_SERVICE_URL = "mailto:support@coffee-rider.co.uk?subject=Terms%20of%20Service%20Request";
 
 
 export default function ProfileScreen() {
@@ -639,6 +642,20 @@ export default function ProfileScreen() {
 
     setUnsubscribing(true);
     try {
+      const isAppleManagedSubscription =
+        Platform.OS === 'ios' &&
+        (subscription?.provider === 'apple_iap' || Boolean(subscription?.appleTransactionId));
+
+      if (isAppleManagedSubscription) {
+        const manageUrl = 'itms-apps://apps.apple.com/account/subscriptions';
+        const fallbackUrl = 'https://apps.apple.com/account/subscriptions';
+        const canOpenManage = await Linking.canOpenURL(manageUrl);
+        await Linking.openURL(canOpenManage ? manageUrl : fallbackUrl);
+        setUnsubscribing(false);
+        setUnsubscribeConfirmVisible(false);
+        return;
+      }
+
       const cancellationResult = await cancelSubscription({
         userId: user.uid,
         stripeSubscriptionId: subscription.stripeSubscriptionId || null, // Pass null for trials (no Stripe ID)
@@ -723,6 +740,20 @@ export default function ProfileScreen() {
     } catch (error) {
       // Expected on devices without mail handlers or restricted URL handling.
       Alert.alert("Unable to Open Email", "Please email support@coffee-rider.co.uk manually.");
+    }
+  }
+
+  async function openExternalLink(url, label) {
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        Alert.alert("Unable to open link", `${label} link is currently unavailable.`);
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (error) {
+      console.error(`[ProfileScreen] Failed to open ${label} link:`, error);
+      Alert.alert("Unable to open link", `${label} link is currently unavailable.`);
     }
   }
 
@@ -1220,6 +1251,25 @@ export default function ProfileScreen() {
           >
             Opens an email to support@coffee-rider.co.uk
           </Text>
+        </CRCard>
+      </View>
+
+      {/* Legal Links */}
+      <View style={styles.cardWrap}>
+        <CRCard>
+          <CRButton
+            title="Privacy Policy"
+            variant="accentMid"
+            onPress={() => openExternalLink(PRIVACY_POLICY_URL, "Privacy Policy")}
+            style={{ width: "100%" }}
+          />
+          <View style={{ height: 10 }} />
+          <CRButton
+            title="Terms of Service"
+            variant="accentMid"
+            onPress={() => openExternalLink(TERMS_OF_SERVICE_URL, "Terms of Service")}
+            style={{ width: "100%" }}
+          />
         </CRCard>
       </View>
 
