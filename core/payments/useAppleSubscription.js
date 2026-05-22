@@ -1,16 +1,16 @@
 import { activateAppleSubscription, APPLE_SUBSCRIPTION_PRODUCTS } from '@core/payments/stripeService';
-import {
-  endConnection,
-  fetchProducts,
-  finishTransaction,
-  getAvailablePurchases,
-  initConnection,
-  purchaseErrorListener,
-  purchaseUpdatedListener,
-  requestPurchase,
-} from 'react-native-iap';
 import { Platform } from 'react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+// react-native-iap requires a compiled native binary (Nitro/TurboModule).
+// Lazy-require so missing native spec doesn't crash the JS bundle in dev builds
+// or on Android where the module is not linked.
+let iap = null;
+try {
+  iap = require('react-native-iap');
+} catch (_) {
+  // Native module not available — all IAP calls will be no-ops
+}
 
 const APPLE_PRODUCT_TO_PLAN = {
   [APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY]: 'monthly',
@@ -68,8 +68,8 @@ export function useAppleSubscription({ user }) {
           purchaseDateMs: purchase.transactionDate,
         });
 
-        if (finish) {
-          await finishTransaction({ purchase, isConsumable: false });
+        if (finish && iap) {
+          await iap.finishTransaction({ purchase, isConsumable: false });
         }
       } finally {
         handledTransactionsRef.current.delete(transactionKey);
@@ -79,7 +79,7 @@ export function useAppleSubscription({ user }) {
   );
 
   useEffect(() => {
-    if (Platform.OS !== 'ios') {
+    if (Platform.OS !== 'ios' || !iap) {
       return undefined;
     }
 
@@ -88,8 +88,8 @@ export function useAppleSubscription({ user }) {
     const initialize = async () => {
       try {
         setLoadingProducts(true);
-        await initConnection();
-        const fetchedProducts = await fetchProducts({ skus: availableSkus, type: 'subs' });
+        await iap.initConnection();
+        const fetchedProducts = await iap.fetchProducts({ skus: availableSkus, type: 'subs' });
         if (isMounted) {
           setProducts(fetchedProducts || []);
         }
@@ -107,7 +107,7 @@ export function useAppleSubscription({ user }) {
 
     initialize();
 
-    const purchaseUpdateSubscription = purchaseUpdatedListener(async (purchase) => {
+    const purchaseUpdateSubscription = iap.purchaseUpdatedListener(async (purchase) => {
       try {
         await syncPurchaseToProfile(purchase, { finish: true });
       } catch (err) {
@@ -115,7 +115,7 @@ export function useAppleSubscription({ user }) {
       }
     });
 
-    const purchaseErrorSubscription = purchaseErrorListener((purchaseError) => {
+    const purchaseErrorSubscription = iap.purchaseErrorListener((purchaseError) => {
       console.error('[AppleIAP] Purchase error:', purchaseError);
       setError(purchaseError);
       setProcessingSku(null);
@@ -125,7 +125,7 @@ export function useAppleSubscription({ user }) {
       isMounted = false;
       purchaseUpdateSubscription.remove();
       purchaseErrorSubscription.remove();
-      endConnection().catch(() => {});
+      iap.endConnection().catch(() => {});
     };
   }, [availableSkus, syncPurchaseToProfile]);
 
@@ -141,7 +141,9 @@ export function useAppleSubscription({ user }) {
         setError(null);
         setProcessingSku(sku);
 
-        const result = await requestPurchase({
+        if (!iap) throw new Error('Apple IAP is not available in this build.');
+
+        const result = await iap.requestPurchase({
           type: 'subs',
           request: {
             ios: { sku },
@@ -172,7 +174,9 @@ export function useAppleSubscription({ user }) {
       setError(null);
       setRestoring(true);
 
-      const purchases = await getAvailablePurchases({
+      if (!iap) throw new Error('Apple IAP is not available in this build.');
+
+      const purchases = await iap.getAvailablePurchases({
         onlyIncludeActiveItemsIOS: true,
       });
 
