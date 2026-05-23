@@ -287,7 +287,7 @@ export default function SubscriptionsScreen() {
                   }}
                   isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
                   onPress={() => handleAppleSubscribe('annual')}
-                  processing={appleProcessingSku === appleProductsByPlan.annual?.productId}
+                  processing={appleProcessingSku === (appleProductsByPlan.annual?.id ?? appleProductsByPlan.annual?.productId)}
                   disabled={appleRestoring || Boolean(appleProcessingSku)}
                   theme={theme}
                 />
@@ -299,7 +299,7 @@ export default function SubscriptionsScreen() {
                   }}
                   isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
                   onPress={() => handleAppleSubscribe('monthly')}
-                  processing={appleProcessingSku === appleProductsByPlan.monthly?.productId}
+                  processing={appleProcessingSku === (appleProductsByPlan.monthly?.id ?? appleProductsByPlan.monthly?.productId)}
                   disabled={appleRestoring || Boolean(appleProcessingSku)}
                   theme={theme}
                 />

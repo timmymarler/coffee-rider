@@ -38,7 +38,7 @@ export function useAppleSubscription({ user }) {
 
   const productsByPlan = useMemo(() => {
     return products.reduce((acc, product) => {
-      const planId = APPLE_PRODUCT_TO_PLAN[product.productId];
+      const planId = APPLE_PRODUCT_TO_PLAN[product.id ?? product.productId];
       if (planId) {
         acc[planId] = product;
       }
