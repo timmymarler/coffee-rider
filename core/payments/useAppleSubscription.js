@@ -94,7 +94,12 @@ export function useAppleSubscription({ user }) {
       try {
         setLoadingProducts(true);
         await iap.initConnection();
-        const fetchedProducts = await iap.fetchProducts({ skus: availableSkus, type: 'subs' });
+        const fetchedProducts = await Promise.race([
+          iap.fetchProducts({ skus: availableSkus, type: 'subs' }),
+          new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Timed out loading App Store products.')), 10000);
+          }),
+        ]);
         if (isMounted) {
           setProducts(fetchedProducts || []);
         }

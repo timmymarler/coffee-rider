@@ -31,6 +31,7 @@ export default function SubscriptionsScreen() {
     loadingProducts: appleLoading,
     processingSku: appleProcessingSku,
     restoring: appleRestoring,
+    error: appleError,
     subscribeToPlan: subscribeToApplePlan,
     restorePurchases,
   } = useAppleSubscription({ user });
@@ -90,6 +91,16 @@ export default function SubscriptionsScreen() {
   const handleAppleSubscribe = async (planId) => {
     if (!user?.email) {
       Alert.alert('Error', 'Please log in first');
+      return;
+    }
+
+    if (appleLoading) {
+      Alert.alert('Please wait', 'Still loading App Store subscription products. Try again in a moment.');
+      return;
+    }
+
+    if (!appleProductsByPlan.monthly && !appleProductsByPlan.annual) {
+      Alert.alert('Subscriptions unavailable', 'Unable to load App Store products right now. Please try again shortly.');
       return;
     }
 
@@ -257,6 +268,18 @@ export default function SubscriptionsScreen() {
                   Choose your Apple plan
                 </Text>
 
+                {appleLoading && (
+                  <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginBottom: 12 }]}> 
+                    Loading App Store plans...
+                  </Text>
+                )}
+
+                {appleError && (
+                  <Text style={[styles.trialNote, { color: theme.colors.danger, marginBottom: 12 }]}> 
+                    App Store products failed to load. Please retry in a moment.
+                  </Text>
+                )}
+
                 <PricingCard
                   plan={{
                     ...SUBSCRIPTION_PLANS.ANNUAL,
@@ -265,7 +288,7 @@ export default function SubscriptionsScreen() {
                   isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
                   onPress={() => handleAppleSubscribe('annual')}
                   processing={appleProcessingSku === appleProductsByPlan.annual?.productId}
-                  disabled={appleLoading || appleRestoring || Boolean(appleProcessingSku)}
+                  disabled={appleRestoring || Boolean(appleProcessingSku)}
                   theme={theme}
                 />
 
@@ -277,7 +300,7 @@ export default function SubscriptionsScreen() {
                   isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
                   onPress={() => handleAppleSubscribe('monthly')}
                   processing={appleProcessingSku === appleProductsByPlan.monthly?.productId}
-                  disabled={appleLoading || appleRestoring || Boolean(appleProcessingSku)}
+                  disabled={appleRestoring || Boolean(appleProcessingSku)}
                   theme={theme}
                 />
 
