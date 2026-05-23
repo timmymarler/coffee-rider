@@ -33,7 +33,7 @@ import LoginScreen from "../auth/login";
 import RegisterScreen from "../auth/register";
 
 const PRIVACY_POLICY_URL = "https://coffee-rider.co.uk/privacy-policy";
-const TERMS_OF_SERVICE_URL = "mailto:support@coffee-rider.co.uk?subject=Terms%20of%20Service%20Request";
+const TERMS_OF_SERVICE_URL = "https://coffee-rider.co.uk/terms-of-service";
 
 
 export default function ProfileScreen() {

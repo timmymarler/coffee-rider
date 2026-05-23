@@ -1,6 +1,6 @@
 import { activateAppleSubscription, APPLE_SUBSCRIPTION_PRODUCTS } from '@core/payments/stripeService';
-import { Platform } from 'react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 
 // react-native-iap requires a compiled native binary (Nitro/TurboModule).
 // Lazy-require so missing native spec doesn't crash the JS bundle in dev builds
@@ -66,6 +66,11 @@ export function useAppleSubscription({ user }) {
           transactionId: purchase.transactionId,
           originalTransactionId: purchase.originalTransactionIdentifierIOS,
           purchaseDateMs: purchase.transactionDate,
+          receiptData:
+            purchase.transactionReceipt ||
+            purchase.transactionReceiptIOS ||
+            purchase.receiptData ||
+            null,
         });
 
         if (finish && iap) {

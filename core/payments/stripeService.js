@@ -7,6 +7,7 @@ import { httpsCallable } from 'firebase/functions';
 const stripeExtra = Constants.expoConfig?.extra?.stripe || {};
 const appleIapExtra = Constants.expoConfig?.extra?.appleIap || {};
 const cancelStripeSubscriptionCallable = httpsCallable(functions, 'cancelStripeSubscription');
+const activateAppleSubscriptionCallable = httpsCallable(functions, 'activateAppleSubscription');
 
 async function updateUserSubscriptionFields(userId, fields) {
   await setDoc(doc(db, 'users', userId), fields, { merge: true });
@@ -241,43 +242,28 @@ export async function activateAppleSubscription({
   transactionId,
   originalTransactionId,
   purchaseDateMs,
+  receiptData,
 }) {
-  if (!userId || !productId || !transactionId) {
-    throw new Error('userId, productId, and transactionId are required');
+  if (!userId || !productId || !transactionId || !receiptData) {
+    throw new Error('userId, productId, transactionId, and receiptData are required');
   }
 
-  const plan = mapAppleProductIdToPlan(productId);
-  const purchaseTime = Number.isFinite(purchaseDateMs) ? purchaseDateMs : Date.now();
-  const renewalDate = getRenewalDateForPlan(plan, purchaseTime);
-
-  await setDoc(
-    doc(db, 'users', userId, 'subscription', 'current'),
-    {
-      status: 'active',
-      plan,
-      provider: 'apple_iap',
-      appleProductId: productId,
-      appleTransactionId: transactionId,
-      appleOriginalTransactionId: originalTransactionId || transactionId,
-      purchaseDate: purchaseTime,
-      renewalDate: renewalDate.getTime(),
-      email: email || null,
-      updatedAt: serverTimestamp(),
-      lastRenewal: serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  await updateUserSubscriptionFields(userId, {
-    subscriptionStatus: 'active',
-    subscriptionPlan: plan,
-    subscriptionExpiresAt: renewalDate.getTime(),
+  const response = await activateAppleSubscriptionCallable({
+    userId,
+    email: email || null,
+    productId,
+    transactionId,
+    originalTransactionId: originalTransactionId || transactionId,
+    purchaseDateMs: Number.isFinite(purchaseDateMs) ? purchaseDateMs : Date.now(),
+    receiptData,
   });
 
+  const data = response?.data || {};
+
   return {
-    status: 'active',
-    plan,
-    renewalDate,
+    status: data.status || 'active',
+    plan: data.plan || mapAppleProductIdToPlan(productId),
+    renewalDate: data.renewalDate ? new Date(data.renewalDate) : getRenewalDateForPlan(mapAppleProductIdToPlan(productId)),
   };
 }
 

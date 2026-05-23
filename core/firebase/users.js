@@ -105,6 +105,12 @@ export async function updateDisplayNameReservation(uid, newDisplayName, previous
 
   await runTransaction(db, async (transaction) => {
     const nextSnap = await transaction.get(nextRef);
+    let prevSnap = null;
+
+    if (prevRef) {
+      prevSnap = await transaction.get(prevRef);
+    }
+
     if (nextSnap.exists()) {
       const data = nextSnap.data() || {};
       if (data.uid !== uid) {
@@ -114,8 +120,7 @@ export async function updateDisplayNameReservation(uid, newDisplayName, previous
 
     transaction.set(nextRef, { uid, displayName: newDisplayName, updatedAt: new Date().toISOString() }, { merge: true });
 
-    if (prevRef) {
-      const prevSnap = await transaction.get(prevRef);
+    if (prevRef && prevSnap) {
       if (prevSnap.exists()) {
         const data = prevSnap.data() || {};
         if (data.uid === uid) {

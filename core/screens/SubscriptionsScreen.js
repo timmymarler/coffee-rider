@@ -1,8 +1,8 @@
 import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
-import { useAppleSubscription } from '@core/payments/useAppleSubscription';
 import { SUBSCRIPTION_PLANS, startFreeTrial } from '@core/payments/stripeService';
+import { useAppleSubscription } from '@core/payments/useAppleSubscription';
 import { useStripeSubscription } from '@core/payments/useStripeSubscription';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -10,7 +10,7 @@ import { useContext, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-  Platform,
+    Platform,
     Pressable,
     ScrollView,
     StyleSheet,

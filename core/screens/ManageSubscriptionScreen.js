@@ -8,8 +8,8 @@ import { useContext, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-  Linking,
-  Platform,
+    Linking,
+    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
