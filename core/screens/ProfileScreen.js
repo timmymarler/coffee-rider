@@ -372,13 +372,6 @@ export default function ProfileScreen() {
 
     setUploading(true);
     try {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        setUploading(false);
-        return;
-      }
-
       const mediaTypeImages = ImagePicker.MediaType?.Images || ImagePicker.MediaTypeOptions.Images;
       const mediaTypes = ImagePicker.MediaType ? [mediaTypeImages] : mediaTypeImages;
 

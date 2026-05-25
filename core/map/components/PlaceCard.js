@@ -833,10 +833,6 @@ export default function PlaceCard({
       return;
     }
 
-    const { status } =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") return;
-
     const mediaTypeImages = ImagePicker.MediaType?.Images || ImagePicker.MediaTypeOptions.Images;
     const mediaTypes = ImagePicker.MediaType ? [mediaTypeImages] : mediaTypeImages;
 

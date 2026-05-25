@@ -1944,6 +1944,91 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setShowRefreshRouteMenu(false);
   };
 
+  function getUnvisitedWaypointEntries() {
+    return waypoints
+      .map((waypoint, index) => ({ waypoint, index }))
+      .filter(({ index }) => !visitedWaypointIndices.includes(index));
+  }
+
+  async function rerouteFromCurrentLocation({
+    originOverride = null,
+    skipNextWaypoint = false,
+    markSkippedVisited = false,
+    source = 'manual',
+  } = {}) {
+    const origin = normalizeCoord(originOverride || userLocation);
+    if (!origin || (!routeDestination && waypoints.length === 0)) {
+      console.warn(`[REROUTE] (${source}) Missing origin or route intent`);
+      return false;
+    }
+
+    const unvisitedEntries = getUnvisitedWaypointEntries();
+    let remainingEntries = unvisitedEntries;
+    let skippedEntry = null;
+
+    if (skipNextWaypoint) {
+      if (remainingEntries.length === 0) {
+        setPostbox({
+          type: 'info',
+          title: 'No waypoint to skip',
+          message: 'All waypoints are already complete.',
+        });
+        return false;
+      }
+
+      skippedEntry = remainingEntries[0];
+      remainingEntries = remainingEntries.slice(1);
+
+      if (markSkippedVisited) {
+        markWaypointVisited(skippedEntry.index);
+      }
+    }
+
+    let rerouteDestination = routeDestination || null;
+    let rerouteWaypoints = remainingEntries.map(({ waypoint }) => waypoint);
+
+    // If there is no explicit destination, use the last remaining waypoint as destination.
+    if (!rerouteDestination && rerouteWaypoints.length > 0) {
+      rerouteDestination = rerouteWaypoints[rerouteWaypoints.length - 1];
+      rerouteWaypoints = rerouteWaypoints.slice(0, -1);
+    }
+
+    if (!rerouteDestination) {
+      console.warn(`[REROUTE] (${source}) No reroute destination available`);
+      return false;
+    }
+
+    if (skippedEntry) {
+      console.log(`[REROUTE] (${source}) Skipped waypoint ${skippedEntry.index}: ${skippedEntry.waypoint?.title || 'untitled waypoint'}`);
+      setPostbox({
+        type: 'info',
+        title: 'Waypoint skipped',
+        message: `Skipping ${skippedEntry.waypoint?.title || 'next waypoint'} and rerouting.`,
+      });
+    }
+
+    console.log(`[REROUTE] (${source}) Destination: ${rerouteDestination?.title || 'destination'}, waypoints: ${rerouteWaypoints.length}`);
+
+    const requestId = ++routeRequestId.current;
+    const success = await mapRoute({
+      origin,
+      waypoints: rerouteWaypoints,
+      destination: rerouteDestination,
+      travelMode: userTravelMode,
+      routeType: userRouteType,
+      avoidMotorways,
+      requestId,
+      skipFitToView: true,
+      vehicleHeading: origin?.heading || null,
+    });
+
+    if (!success) {
+      console.warn(`[REROUTE] (${source}) mapRoute returned false`);
+    }
+
+    return success;
+  }
+
   // Explicit handlers that UI components can call (not via dependency effects)
   const onVehicleTypeSelected = useCallback(() => {
     handleVehicleTypeChange();
@@ -1955,128 +2040,16 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   const handleRefreshRouteToNextWaypoint = async () => {
     closeRefreshRouteMenu();
+    await rerouteFromCurrentLocation({ source: 'manual-refresh' });
+  };
 
-    // Must have user location and either waypoints or a destination
-    if (!userLocation || (!routeDestination && waypoints.length === 0)) {
-      console.warn("[REFRESH] No user location or route");
-      return;
-    }
-
-    try {
-      // If we have a current polyline, find the NEXT waypoint ahead to snap to
-      let snapPoint = null;
-      if (routeCoords && routeCoords.length >= 2) {
-        // Find the closest point on current polyline
-        let minDistance = Infinity;
-        let closestIdx = 0;
-        
-        // Sample every Nth point instead of checking all points for performance
-        // For a 1000-point route, this checks ~50 points instead of 1000
-        const sampleInterval = Math.max(1, Math.floor(routeCoords.length / 50));
-        
-        for (let i = 0; i < routeCoords.length; i += sampleInterval) {
-          const dist = distanceBetweenMeters(userLocation, routeCoords[i]);
-          if (dist < minDistance) {
-            minDistance = dist;
-            closestIdx = i;
-          }
-        }
-        
-        // Find the NEXT waypoint ahead of current position
-        // Look ahead by ~20% of remaining route to find next waypoint
-        let nextWaypointIdx = closestIdx;
-        const lookAheadDistance = Math.floor(routeCoords.length * 0.2); // 20% ahead
-        const searchEndIdx = Math.min(closestIdx + lookAheadDistance, routeCoords.length - 1);
-        
-        // Find furthest waypoint within look-ahead range (going forward on route)
-        if (searchEndIdx > closestIdx) {
-          nextWaypointIdx = searchEndIdx;
-          snapPoint = routeCoords[nextWaypointIdx];
-          const snapDistance = distanceBetweenMeters(userLocation, snapPoint);
-        } else if (minDistance < 500) {
-          // Fallback: if very close to current route, snap to closest point
-          snapPoint = routeCoords[closestIdx];
-        }
-      }
-
-      // Determine final destination (same as buildRoute logic) - normalize coordinates
-      let finalDestination = null;
-      if (routeDestination) {
-        finalDestination = normalizeCoord(routeDestination);
-        if (!finalDestination) {
-          console.error('[REFRESH] Failed to normalize route destination');
-          return;
-        }
-      } else if (waypoints.length > 0) {
-        finalDestination = normalizeCoord(waypoints[waypoints.length - 1]);
-        if (!finalDestination) {
-          console.error('[REFRESH] Failed to normalize last waypoint');
-          return;
-        }
-      }
-
-      if (!finalDestination) {
-        console.error('[REFRESH] No valid final destination');
-        return;
-      }
-
-      // If we have a snap point, route through it to maintain the path
-      let routeWaypoints = waypoints.map(wp => {
-        const normalized = normalizeCoord(wp);
-        return normalized || { latitude: wp.lat, longitude: wp.lng };
-      });
-
-      if (snapPoint) {
-        // Insert snap point as first waypoint to guide forward on route
-        routeWaypoints = [
-          {
-            latitude: snapPoint.latitude,
-            longitude: snapPoint.longitude,
-          },
-          ...routeWaypoints,
-        ];
-      }
-
-      // Route from current location through waypoints (including snap point if exists) to final destination
-      const result = await fetchRoute({
-        origin: userLocation,
-        destination: finalDestination,
-        waypoints: routeWaypoints,
-        travelMode: userTravelMode,
-        routeType: userRouteType,
-        routeTypeMap,
-        useCache: false, // Always fresh for refresh
-        customHilliness,
-        customWindingness,
-      });
-
-      if (!result?.polyline) {
-        console.warn("[REFRESH] No polyline in result");
-        return;
-      }
-
-      // TomTom returns polyline as array of {latitude, longitude} objects
-      const decoded = result.polyline;
-
-      // Use flush mechanism to prevent Android polyline ghosting
-      setRouteCoordsWithFlush(decoded, {
-        distance: result.distanceMeters ?? result.distance,
-        steps: result.steps ?? [],
-      });
-      
-      setRouteMeta({
-        distanceMeters: result.distanceMeters ?? result.distance,
-        durationSeconds: result.durationSeconds ?? result.duration,
-        speedLimits: result.speedLimits ?? [],
-      });
-      
-      setCurrentStepIndex(0);
-
-      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0, closestStepEndDistance: Infinity };
-
-    } catch (error) {
-      console.error("[REFRESH] Error refreshing route:", error);
-    }
+  const handleSkipNextWaypoint = async () => {
+    closeRefreshRouteMenu();
+    await rerouteFromCurrentLocation({
+      skipNextWaypoint: true,
+      markSkippedVisited: true,
+      source: 'manual-skip',
+    });
   };
 
   function isSameRoutePoint(a, b, toleranceMeters = 20) {
@@ -3976,107 +3949,11 @@ function getStepCompletionThresholds(step = null) {
     console.log(`[AutoReroute] User off-route (${effectiveDistance.toFixed(0)}m effective), rerouting...`);
     lastRerouteAttemptRef.current = now;
     
-    // Build the reroute using the remaining forward list only.
-    // Skip the current waypoint only if it is clearly missed.
-    let nextWaypoint = null;
-    let remainingWaypoints = [];
-
-    const unvisitedEntries = waypoints
-      .map((waypoint, index) => ({ waypoint, index }))
-      .filter(({ index }) => !visitedWaypointIndices.includes(index));
-
-    let shouldSkipMissedWaypoint = false;
-    const nextWaypointIdx = getNextUnvisitedWaypointIndex();
-
-    if (nextWaypointIdx >= 0 && nextWaypointIdx < waypoints.length) {
-      const currentWaypoint = waypoints[nextWaypointIdx];
-      const followingWaypoint = nextWaypointIdx + 1 < waypoints.length ? waypoints[nextWaypointIdx + 1] : null;
-      const currentCoord = normalizeCoord(currentWaypoint);
-      const followingCoord = normalizeCoord(followingWaypoint);
-
-      if (currentCoord) {
-        const userProjection = projectPointToPolylineDetailed(
-          checkPosition,
-          routeCoords,
-          250,
-          stepProgressRef.current.lastProgressMeters || 0
-        );
-        const waypointProjection = projectPointToPolylineDetailed(
-          currentCoord,
-          routeCoords,
-          250,
-          0
-        );
-
-        const userProgress = Number(userProjection?.progressMeters);
-        const waypointProgress = Number(waypointProjection?.progressMeters);
-
-        if (Number.isFinite(userProgress) && Number.isFinite(waypointProgress) && userProgress > waypointProgress + 35) {
-          shouldSkipMissedWaypoint = true;
-        }
-
-        if (!shouldSkipMissedWaypoint && followingCoord) {
-          const distanceToCurrent = distanceBetweenMeters(checkPosition, currentCoord);
-          const distanceToNext = distanceBetweenMeters(checkPosition, followingCoord);
-
-          if (Number.isFinite(distanceToCurrent) && Number.isFinite(distanceToNext) && distanceToNext + 40 < distanceToCurrent) {
-            shouldSkipMissedWaypoint = true;
-          }
-        }
-      }
-    }
-
-    if (unvisitedEntries.length > 0) {
-      const nextEntry = unvisitedEntries[0];
-      if (shouldSkipMissedWaypoint && nextEntry && nextEntry.index === nextWaypointIdx) {
-        console.log(`[AutoReroute] Skipping missed current waypoint ${nextEntry.index}: ${nextEntry.waypoint?.title || 'untitled waypoint'}`);
-        markWaypointVisited(nextEntry.index);
-        unvisitedEntries.shift();
-      }
-
-      if (unvisitedEntries.length > 0) {
-        nextWaypoint = unvisitedEntries[0].waypoint;
-        remainingWaypoints = unvisitedEntries.slice(1).map(({ waypoint }) => waypoint);
-        console.log(`[AutoReroute] Routing to next remaining waypoint: ${nextWaypoint.title}, remaining: ${remainingWaypoints.length}`);
-      } else {
-        console.log(`[AutoReroute] No more waypoints remaining, routing to final destination`);
-      }
-    } else if (waypoints.length > 0) {
-      console.log(`[AutoReroute] All waypoints already completed, routing to final destination`);
-    } else {
-      console.log(`[AutoReroute] No waypoints, routing to final destination`);
-    }
-
-    const rerouteWaypoints = [];
-    if (nextWaypoint) {
-      rerouteWaypoints.push(nextWaypoint);
-    }
-    if (remainingWaypoints.length > 0) {
-      rerouteWaypoints.push(...remainingWaypoints);
-    }
-
-    let rerouteDestination = routeDestination;
-    if (!rerouteDestination && rerouteWaypoints.length > 0) {
-      rerouteDestination = rerouteWaypoints[rerouteWaypoints.length - 1];
-      rerouteWaypoints.pop();
-    }
-
-    console.log(`[AutoReroute] Rerouting to: ${rerouteDestination?.title || 'destination'}, waypoints: ${rerouteWaypoints.length}`);
-
-    // Rebuild route from current location through remaining waypoints to final destination.
-    const requestId = ++routeRequestId.current;
-    mapRoute({
-      origin: checkPosition,
-      waypoints: rerouteWaypoints,
-      destination: rerouteDestination,
-      travelMode: userTravelMode,
-      routeType: userRouteType,
-      avoidMotorways,
-      requestId,
-      skipFitToView: true,
-      vehicleHeading: checkPosition?.heading || null,
-    }).catch(error => {
-      console.warn('[AutoReroute] mapRoute reroute error:', error);
+    rerouteFromCurrentLocation({
+      originOverride: checkPosition,
+      source: 'auto-offroute',
+    }).catch((error) => {
+      console.warn('[AutoReroute] rerouteFromCurrentLocation error:', error);
     });
   }, [
     userLocation,
@@ -4085,8 +3962,6 @@ function getStepCompletionThresholds(step = null) {
     routeDestination,
     waypoints,
     visitedWaypointIndices,
-    getNextUnvisitedWaypointIndex,
-    markWaypointVisited,
     userTravelMode,
     userRouteType,
     hasArrivedAtDestination,
@@ -5963,6 +5838,7 @@ function getStepCompletionThresholds(step = null) {
     if (!step) return null;
 
     const hasRouteIntent = routeDestination || waypoints.length > 0;
+    const hasUnvisitedWaypoint = waypoints.some((_, idx) => !visitedWaypointIndices.includes(idx));
     const hasValidRouteSteps = routeSteps && routeSteps.length >= 1;
     const isAtFinalStep = currentStepIndex >= routeSteps.length - 1;
 
@@ -6188,18 +6064,34 @@ function getStepCompletionThresholds(step = null) {
               ) : (
                 <View style={styles.junctionHeaderSpacer} />
               )}
-              <TouchableOpacity
-                onPress={handleTtsToggle}
-                style={styles.ttsToggleButtonCompact}
-                accessibilityRole="button"
-                accessibilityLabel={isTtsEnabled ? "Mute navigation voice" : "Unmute navigation voice"}
-              >
-                <MaterialCommunityIcons
-                  name={isTtsEnabled ? "volume-high" : "volume-mute"}
-                  size={22}
-                  color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.6)"}
-                />
-              </TouchableOpacity>
+              <View style={styles.junctionHeaderActions}>
+                {hasUnvisitedWaypoint && (
+                  <TouchableOpacity
+                    onPress={handleSkipNextWaypoint}
+                    style={styles.skipWaypointButtonCompact}
+                    accessibilityRole="button"
+                    accessibilityLabel="Skip next waypoint and reroute"
+                  >
+                    <MaterialCommunityIcons
+                      name="map-marker-remove-outline"
+                      size={21}
+                      color="#FFD85C"
+                    />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  onPress={handleTtsToggle}
+                  style={styles.ttsToggleButtonCompact}
+                  accessibilityRole="button"
+                  accessibilityLabel={isTtsEnabled ? "Mute navigation voice" : "Unmute navigation voice"}
+                >
+                  <MaterialCommunityIcons
+                    name={isTtsEnabled ? "volume-high" : "volume-mute"}
+                    size={22}
+                    color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.6)"}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
             <Text
               style={[styles.junctionLabel, isLandscape && styles.junctionLabelLandscape]}
@@ -7182,6 +7074,22 @@ function getStepCompletionThresholds(step = null) {
             </Pressable>
 
             <Pressable
+              onPress={handleSkipNextWaypoint}
+              style={({ pressed }) => [
+                styles.refreshMenuItem,
+                pressed && { backgroundColor: theme.colors.primaryDark },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="map-marker-remove-outline"
+                size={28}
+                color={theme.colors.warning || "#FFD85C"}
+                style={{ marginRight: 12 }}
+              />
+              <Text style={styles.refreshMenuText}>Skip next waypoint and reroute</Text>
+            </Pressable>
+
+            <Pressable
               onPress={closeRefreshRouteMenu}
               style={({ pressed }) => [
                 styles.refreshMenuItem,
@@ -7702,9 +7610,24 @@ const styles = StyleSheet.create({
   junctionHeaderSpacer: {
     flex: 1,
   },
+  junctionHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   ttsToggleButton: {
     paddingHorizontal: 8,
     paddingVertical: 4,
+  },
+  skipWaypointButtonCompact: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 216, 92, 0.45)",
   },
   ttsToggleButtonCompact: {
     width: 36,
