@@ -195,8 +195,6 @@ import { classifyPoi } from "../map/classify/classifyPois";
 import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
 import MapRouteTypeSelector from "@core/components/routing/MapRouteTypeSelector";
-import AiRoutePlannerModal from "@core/components/routing/AiRoutePlannerModal";
-import { generateAiRouteWaypoints } from "@core/map/utils/aiRoutePlanner";
 import { decode } from "@mapbox/polyline";
 import { SearchBar } from "../map/components/SearchBar";
 
@@ -1930,8 +1928,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [manualStartPoint, setManualStartPoint] = useState(null);
   const [showRefreshRouteMenu, setShowRefreshRouteMenu] = useState(false);
   const [showRouteTypeSelector, setShowRouteTypeSelector] = useState(false);
-  const [showAiRoutePlanner, setShowAiRoutePlanner] = useState(false);
-  const [aiRouteGenerating, setAiRouteGenerating] = useState(false);
   const hasRouteIntent = routeDestination || waypoints.length > 0;
 
   const closeAddPointMenu = () => {
@@ -2054,75 +2050,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       markSkippedVisited: true,
       source: 'manual-skip',
     });
-  };
-
-  const handleAiRoutePlan = async ({ routePersonality, direction, maxDistanceKm, strictLoop, startPoint, endPoint }) => {
-    if (!userLocation) return;
-    setAiRouteGenerating(true);
-
-    try {
-      const {
-        start: aiStart,
-        waypoints: aiWaypoints,
-        destination: aiDest,
-        tomtomRouteType,
-        avoidMotorways: aiAvoidMotorways,
-      } = generateAiRouteWaypoints(userLocation, {
-        direction,
-        maxDistanceKm,
-        routePersonality,
-        strictLoop,
-        startPoint,
-        endPoint,
-      });
-
-      // Clear any existing route and waypoints first
-      clearRoute();
-
-      // Prevent the waypoint-change auto-rebuild from firing — we call mapRoute directly below
-      skipNextRebuildRef.current = true;
-
-      // Set destination and waypoints in context so pins appear on the map
-      setRouteDestination({
-        latitude: aiDest.latitude,
-        longitude: aiDest.longitude,
-        title: aiDest.title,
-      });
-      aiWaypoints.forEach((wp) => {
-        addWaypoint({
-          latitude: wp.latitude,
-          longitude: wp.longitude,
-          title: wp.title,
-        });
-      });
-
-      // Reflect explicit custom start in UI state (if provided)
-      if (startPoint) {
-        setManualStartPoint({
-          latitude: aiStart.latitude,
-          longitude: aiStart.longitude,
-          title: aiStart.title || "Route start",
-        });
-      }
-
-      // Build the route explicitly with AI-selected parameters
-      const requestId = ++routeRequestId.current;
-      await mapRoute({
-        origin: aiStart,
-        waypoints: aiWaypoints,
-        destination: aiDest,
-        travelMode: userTravelMode,
-        routeType: tomtomRouteType,
-        avoidMotorways: aiAvoidMotorways,
-        requestId,
-        skipFitToView: false,
-      });
-    } catch (err) {
-      console.warn('[AI_ROUTE] Error generating route:', err);
-    } finally {
-      setAiRouteGenerating(false);
-      setShowAiRoutePlanner(false);
-    }
   };
 
   function isSameRoutePoint(a, b, toleranceMeters = 20) {
@@ -6885,21 +6812,6 @@ function getStepCompletionThresholds(step = null) {
         </TouchableOpacity>
       )}
 
-      {!followUser && !activeRide && !!userLocation && (
-        <TouchableOpacity
-          style={[styles.aiRouteButton, { bottom: saveButtonBottom }]}
-          onPress={() => setShowAiRoutePlanner(true)}
-          accessibilityLabel="AI Route Planner"
-        >
-          <MaterialCommunityIcons
-            name="creation"
-            size={20}
-            color={theme.colors.primaryDark}
-          />
-          <Text style={styles.aiRouteButtonText}>AI Route</Text>
-        </TouchableOpacity>
-      )}
-
       {!followUser && !activeRide && (
         <SearchBar
           value={searchInput}
@@ -7289,15 +7201,6 @@ function getStepCompletionThresholds(step = null) {
           </View>
         </View>
       </Modal>
-
-      {/* AI Route Planner Modal */}
-      <AiRoutePlannerModal
-        visible={showAiRoutePlanner}
-        onClose={() => setShowAiRoutePlanner(false)}
-        onGenerate={handleAiRoutePlan}
-        isGenerating={aiRouteGenerating}
-        currentLocation={userLocation}
-      />
 
       {/* Route Type Selector Modal */}
       <MapRouteTypeSelector
@@ -7976,26 +7879,6 @@ const styles = StyleSheet.create({
   },
 
   saveRouteButtonText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: "600",
-    color: theme.colors.primaryDark,
-  },
-
-  aiRouteButton: {
-    position: "absolute",
-    left: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 24,
-    backgroundColor: theme.colors.accentMid,
-    elevation: 6,
-    zIndex: 2500,
-  },
-
-  aiRouteButtonText: {
     marginLeft: 8,
     fontSize: 14,
     fontWeight: "600",
