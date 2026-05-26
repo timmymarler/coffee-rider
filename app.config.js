@@ -136,6 +136,7 @@ export default {
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
       blockedPermissions: [
+        "com.google.android.gms.permission.AD_ID",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_EXTERNAL_STORAGE",

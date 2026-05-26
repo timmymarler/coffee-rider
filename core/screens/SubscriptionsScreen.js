@@ -525,11 +525,6 @@ function PricingCard({ plan, isSelected, onPress, processing, isPopular, theme, 
         )}
       </Pressable>
 
-      {plan.id === 'annual' && (
-        <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}>
-          (12 months for the price of 10)
-        </Text>
-      )}
     </Pressable>
   );
 }
