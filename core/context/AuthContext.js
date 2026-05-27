@@ -386,10 +386,11 @@ export default function AuthProvider({ children }) {
     return storedRole;
   })();
   const capabilities = getCapabilities(role);
+  const effectiveProfile = profile ? { ...profile, role } : profile;
 
   const value = {
     user,
-    profile,
+    profile: effectiveProfile,
     role,
     capabilities,
     isGuest,
