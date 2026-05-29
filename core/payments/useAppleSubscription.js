@@ -17,6 +17,38 @@ const APPLE_PRODUCT_TO_PLAN = {
   [APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL]: 'annual',
 };
 
+function normalizeId(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function resolvePlanIdFromProduct(product) {
+  const productId = normalizeId(product?.id || product?.productId || product?.sku);
+  const monthlyId = normalizeId(APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY);
+  const annualId = normalizeId(APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL);
+
+  if (!productId) return null;
+  if (productId === annualId || productId.endsWith('.annual')) return 'annual';
+  if (productId === monthlyId || productId.endsWith('.monthly')) return 'monthly';
+
+  return APPLE_PRODUCT_TO_PLAN[product?.id ?? product?.productId] || null;
+}
+
+function normalizeProductsResult(result) {
+  if (Array.isArray(result)) {
+    return result;
+  }
+
+  if (result && Array.isArray(result.products)) {
+    return result.products;
+  }
+
+  if (result && Array.isArray(result.subscriptions)) {
+    return result.subscriptions;
+  }
+
+  return [];
+}
+
 function normalizePurchaseResult(result) {
   if (!result) return null;
   if (Array.isArray(result)) return result[0] || null;
@@ -29,6 +61,7 @@ export function useAppleSubscription({ user }) {
   const [processingSku, setProcessingSku] = useState(null);
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState(null);
+  const [lastLoadError, setLastLoadError] = useState(null);
   const handledTransactionsRef = useRef(new Set());
 
   const availableSkus = useMemo(
@@ -38,7 +71,7 @@ export function useAppleSubscription({ user }) {
 
   const productsByPlan = useMemo(() => {
     return products.reduce((acc, product) => {
-      const planId = APPLE_PRODUCT_TO_PLAN[product.id ?? product.productId];
+      const planId = resolvePlanIdFromProduct(product);
       if (planId) {
         acc[planId] = product;
       }
@@ -58,10 +91,25 @@ export function useAppleSubscription({ user }) {
       }),
     ]);
 
-    const nextProducts = fetchedProducts || [];
+    const nextProducts = normalizeProductsResult(fetchedProducts);
     setProducts(nextProducts);
+    setLastLoadError(null);
     return nextProducts;
   }, [availableSkus]);
+
+  const reloadProducts = useCallback(async () => {
+    try {
+      setLoadingProducts(true);
+      setError(null);
+      const nextProducts = await loadProducts();
+      return nextProducts;
+    } catch (err) {
+      setLastLoadError(err);
+      throw err;
+    } finally {
+      setLoadingProducts(false);
+    }
+  }, [loadProducts]);
 
   const syncPurchaseToProfile = useCallback(
     async (purchase, { finish = true } = {}) => {
@@ -123,6 +171,7 @@ export function useAppleSubscription({ user }) {
         console.error('[AppleIAP] Failed to initialize products:', err);
         if (isMounted) {
           setError(err);
+          setLastLoadError(err);
         }
       } finally {
         if (isMounted) {
@@ -170,12 +219,7 @@ export function useAppleSubscription({ user }) {
         if (!iap) throw new Error('Apple IAP is not available in this build.');
 
         if (!productsByPlan[planId]) {
-          setLoadingProducts(true);
-          try {
-            await loadProducts();
-          } finally {
-            setLoadingProducts(false);
-          }
+          await reloadProducts();
         }
 
         const result = await iap.requestPurchase({
@@ -197,7 +241,7 @@ export function useAppleSubscription({ user }) {
         setProcessingSku(null);
       }
     },
-    [loadProducts, productsByPlan, syncPurchaseToProfile, user?.uid]
+    [productsByPlan, reloadProducts, syncPurchaseToProfile, user?.uid]
   );
 
   const restorePurchases = useCallback(async () => {
@@ -238,6 +282,8 @@ export function useAppleSubscription({ user }) {
     processingSku,
     restoring,
     error,
+    lastLoadError,
+    reloadProducts,
     subscribeToPlan,
     restorePurchases,
   };

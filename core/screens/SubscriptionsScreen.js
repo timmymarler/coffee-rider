@@ -36,6 +36,8 @@ export default function SubscriptionsScreen() {
     processingSku: appleProcessingSku,
     restoring: appleRestoring,
     error: appleError,
+    lastLoadError: appleLoadError,
+    reloadProducts,
     subscribeToPlan: subscribeToApplePlan,
     restorePurchases,
   } = useAppleSubscription({ user });
@@ -117,8 +119,29 @@ export default function SubscriptionsScreen() {
     }
 
     if (!appleProductsByPlan.monthly && !appleProductsByPlan.annual) {
-      Alert.alert('Subscriptions unavailable', 'Unable to load App Store products right now. Please try again shortly.');
-      return;
+      let reloadedProducts = [];
+      try {
+        reloadedProducts = await reloadProducts();
+      } catch (err) {
+        Alert.alert(
+          'Subscriptions unavailable',
+          err?.message || 'Unable to load App Store products right now. Please try again shortly.'
+        );
+        return;
+      }
+
+      const hasReloadedProducts = (reloadedProducts || []).some((p) => {
+        const id = String(p?.id || p?.productId || '').toLowerCase();
+        return id.endsWith('.monthly') || id.endsWith('.annual');
+      });
+
+      if (!hasReloadedProducts) {
+        Alert.alert(
+          'Subscriptions unavailable',
+          'No App Store subscription products were returned for this build. Check product IDs, App Store Connect status, and agreements.'
+        );
+        return;
+      }
     }
 
     try {
@@ -295,6 +318,42 @@ export default function SubscriptionsScreen() {
                   <Text style={[styles.trialNote, { color: theme.colors.danger, marginBottom: 12 }]}> 
                     App Store products failed to load. Please retry in a moment.
                   </Text>
+                )}
+
+                {appleLoadError && (
+                  <Text style={[styles.trialNote, { color: theme.colors.danger, marginBottom: 12 }]}> 
+                    {appleLoadError?.message || 'App Store returned an unknown product-loading error.'}
+                  </Text>
+                )}
+
+                {!appleProductsByPlan.annual && !appleProductsByPlan.monthly && (
+                  <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
+                    <Pressable
+                      style={{
+                        backgroundColor: theme.colors.accentMid,
+                        paddingVertical: 8,
+                        paddingHorizontal: 18,
+                        borderRadius: 8,
+                        alignItems: 'center',
+                      }}
+                      onPress={async () => {
+                        try {
+                          await reloadProducts();
+                        } catch (err) {
+                          Alert.alert('App Store load failed', err?.message || 'Please try again.');
+                        }
+                      }}
+                      disabled={appleLoading}
+                    >
+                      {appleLoading ? (
+                        <ActivityIndicator color={theme.colors.text} />
+                      ) : (
+                        <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: '600' }}>
+                          Reload App Store Plans
+                        </Text>
+                      )}
+                    </Pressable>
+                  </View>
                 )}
 
                 <PricingCard
