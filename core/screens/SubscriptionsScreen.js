@@ -331,6 +331,11 @@ export default function SubscriptionsScreen() {
 
                 {!hasAnyApplePlan && (
                   <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
+                    {appleLoadError ? (
+                      <Text style={{ color: theme.colors.textMuted, fontSize: 11, textAlign: 'center', marginBottom: 8 }}>
+                        {appleLoadError?.message || String(appleLoadError)}
+                      </Text>
+                    ) : null}
                     <Pressable
                       style={{
                         backgroundColor: theme.colors.accentMid,

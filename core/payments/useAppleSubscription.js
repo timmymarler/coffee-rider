@@ -84,17 +84,41 @@ export function useAppleSubscription({ user }) {
       return [];
     }
 
-    const fetchedProducts = await Promise.race([
-      iap.fetchProducts({ skus: availableSkus, type: 'subs' }),
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timed out loading App Store products.')), 15000);
-      }),
-    ]);
+    // Retry up to 3 times — StoreKit can return empty on the first call
+    // if the Nitro module or App Store connection isn't fully settled yet.
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (attempt > 1) {
+        await new Promise((res) => setTimeout(res, attempt * 1500));
+      }
+      try {
+        const fetchedProducts = await Promise.race([
+          iap.fetchProducts({ skus: availableSkus, type: 'subs' }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Timed out loading App Store products.')), 15000)
+          ),
+        ]);
 
-    const nextProducts = normalizeProductsResult(fetchedProducts);
-    setProducts(nextProducts);
-    setLastLoadError(null);
-    return nextProducts;
+        const nextProducts = normalizeProductsResult(fetchedProducts);
+        if (nextProducts.length > 0) {
+          setProducts(nextProducts);
+          setLastLoadError(null);
+          return nextProducts;
+        }
+        // Empty result — record as a soft error and retry
+        lastErr = new Error(
+          `App Store returned no products for: ${availableSkus.join(', ')} (attempt ${attempt}/3)`
+        );
+        console.warn('[AppleIAP] fetchProducts returned empty, will retry. SKUs:', availableSkus);
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[AppleIAP] fetchProducts error (attempt ${attempt}/3):`, err?.message ?? err);
+      }
+    }
+
+    // All retries exhausted
+    setLastLoadError(lastErr);
+    return [];
   }, [availableSkus]);
 
   const reloadProducts = useCallback(async () => {
@@ -164,7 +188,15 @@ export function useAppleSubscription({ user }) {
     const initialize = async () => {
       try {
         setLoadingProducts(true);
-        await iap.initConnection();
+
+        // initConnection can throw "already connected" on hot-reload / remount.
+        // Treat that as non-fatal so we still proceed to fetch products.
+        try {
+          await iap.initConnection();
+        } catch (connErr) {
+          console.warn('[AppleIAP] initConnection warning (may already be connected):', connErr?.message ?? connErr);
+        }
+
         if (!isMounted) return;
         await loadProducts();
       } catch (err) {
