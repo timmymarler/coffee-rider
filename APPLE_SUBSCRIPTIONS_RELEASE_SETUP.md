@@ -49,8 +49,8 @@ https://us-central1-coffee-rider-bea88.cloudfunctions.net/appleServerNotificatio
 ## 4) Verify product IDs and bundle ID
 
 Confirm these values in App Store Connect match app config and EAS build env:
-- Monthly product: `com.timmy.marler.coffeerider.pro.monthly`
-- Annual product: `com.timmy.marler.coffeerider.pro.annual`
+- Monthly product: `com.timmy.marler.coffeerider.pro.monthly.v2`
+- Annual product: `com.timmy.marler.coffeerider.pro.annual.v2`
 - iOS bundle ID: `com.timmy.marler.coffeerider`
 
 ## 5) Smoke test after deploy

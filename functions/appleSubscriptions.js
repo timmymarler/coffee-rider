@@ -54,11 +54,30 @@ const getAppleProductIds = () => {
   return {
     monthly:
       readEnv('EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID') ||
-      'com.timmy.marler.coffeerider.pro.monthly',
+      'com.timmy.marler.coffeerider.pro.monthly.v2',
     annual:
       readEnv('EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID') ||
-      'com.timmy.marler.coffeerider.pro.annual',
+      'com.timmy.marler.coffeerider.pro.annual.v2',
   };
+};
+
+const getAppleProductAliases = (productIds) => {
+  const aliases = new Set([productIds.monthly, productIds.annual]);
+
+  if (productIds.monthly?.endsWith('.v2')) {
+    aliases.add(productIds.monthly.replace(/\.v2$/, ''));
+  }
+  if (productIds.annual?.endsWith('.v2')) {
+    aliases.add(productIds.annual.replace(/\.v2$/, ''));
+  }
+
+  return aliases;
+};
+
+const isAnnualProductId = (productId, configuredAnnualId) => {
+  if (!productId) return false;
+  if (productId === configuredAnnualId) return true;
+  return productId.includes('.annual');
 };
 
 const toMillis = (value) => {
@@ -286,7 +305,7 @@ export const activateAppleSubscription = functions
     }
 
     const productIds = getAppleProductIds();
-    const validProductIds = new Set([productIds.monthly, productIds.annual]);
+    const validProductIds = getAppleProductAliases(productIds);
 
     const latestTxn = pickLatestTransaction({
       transactions: receiptTransactions,
@@ -302,7 +321,7 @@ export const activateAppleSubscription = functions
       );
     }
 
-    const plan = latestTxn.product_id === productIds.annual ? 'annual' : 'monthly';
+    const plan = isAnnualProductId(latestTxn.product_id, productIds.annual) ? 'annual' : 'monthly';
     const renewalDateMs = toMillis(latestTxn.expires_date_ms);
     const purchaseMs = toMillis(latestTxn.purchase_date_ms) || toMillis(purchaseDateMs) || Date.now();
     const now = Date.now();
@@ -420,7 +439,7 @@ export const appleServerNotification = functions
       }
 
       const productIds = getAppleProductIds();
-      const validProducts = new Set([productIds.monthly, productIds.annual]);
+      const validProducts = getAppleProductAliases(productIds);
       if (!productId || !validProducts.has(productId)) {
         if (notificationUUID) {
           await firestore.doc(`appleNotifications/${notificationUUID}`).set({
@@ -456,7 +475,7 @@ export const appleServerNotification = functions
         return;
       }
 
-      const plan = productId === productIds.annual ? 'annual' : 'monthly';
+      const plan = isAnnualProductId(productId, productIds.annual) ? 'annual' : 'monthly';
       const status = deriveNotificationStatus({ notificationType, expiresDateMs });
 
       await firestore.doc(`users/${uid}/subscription/current`).set(

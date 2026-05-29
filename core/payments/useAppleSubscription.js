@@ -27,8 +27,8 @@ function resolvePlanIdFromProduct(product) {
   const annualId = normalizeId(APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL);
 
   if (!productId) return null;
-  if (productId === annualId || productId.endsWith('.annual')) return 'annual';
-  if (productId === monthlyId || productId.endsWith('.monthly')) return 'monthly';
+  if (productId === annualId || productId.includes('.annual')) return 'annual';
+  if (productId === monthlyId || productId.includes('.monthly')) return 'monthly';
 
   return APPLE_PRODUCT_TO_PLAN[product?.id ?? product?.productId] || null;
 }

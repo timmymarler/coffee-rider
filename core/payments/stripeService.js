@@ -52,8 +52,8 @@ export const SUBSCRIPTION_PLANS = {
 };
 
 export const APPLE_SUBSCRIPTION_PRODUCTS = {
-  MONTHLY: appleIapExtra.monthlyProductId || 'com.timmy.marler.coffeerider.pro.monthly',
-  ANNUAL: appleIapExtra.annualProductId || 'com.timmy.marler.coffeerider.pro.annual',
+  MONTHLY: appleIapExtra.monthlyProductId || 'com.timmy.marler.coffeerider.pro.monthly.v2',
+  ANNUAL: appleIapExtra.annualProductId || 'com.timmy.marler.coffeerider.pro.annual.v2',
 };
 
 function mapAppleProductIdToPlan(productId) {

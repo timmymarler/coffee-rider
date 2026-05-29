@@ -132,7 +132,7 @@ export default function SubscriptionsScreen() {
 
       const hasReloadedProducts = (reloadedProducts || []).some((p) => {
         const id = String(p?.id || p?.productId || '').toLowerCase();
-        return id.endsWith('.monthly') || id.endsWith('.annual');
+        return id.includes('.monthly') || id.includes('.annual');
       });
 
       if (!hasReloadedProducts) {

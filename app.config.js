@@ -24,8 +24,8 @@ const stripePriceDailyLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_DAILY_LIVE || 
 const stripePriceMonthlyLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_MONTHLY_LIVE || null;
 const stripePriceAnnualLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_ANNUAL_LIVE || null;
 const stripeMerchantIdentifier = process.env.STRIPE_MERCHANT_IDENTIFIER || 'merchant.com.timmy.marler.coffeerider';
-const appleIapMonthlyProductId = process.env.EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID || 'com.timmy.marler.coffeerider.pro.monthly';
-const appleIapAnnualProductId = process.env.EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID || 'com.timmy.marler.coffeerider.pro.annual';
+const appleIapMonthlyProductId = process.env.EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID || 'com.timmy.marler.coffeerider.pro.monthly.v2';
+const appleIapAnnualProductId = process.env.EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID || 'com.timmy.marler.coffeerider.pro.annual.v2';
 
 // Use these variables wherever you need the keys
 // Read the app variant from ENV or default to rider
@@ -114,7 +114,7 @@ export default {
 
     ios: {
       bundleIdentifier: IOS_BUNDLE[APP_NAME],
-      buildNumber: "54",
+      buildNumber: "55",
       googleServicesFile: "./GoogleService-Info.plist",
       infoPlist: {
         NSLocationWhenInUseUsageDescription: "Coffee Rider needs your location to show nearby places and help with group rides.",
@@ -130,7 +130,7 @@ export default {
 
     android: {
       package: ANDROID_PACKAGE[APP_NAME],
-      versionCode: 54,
+      versionCode: 55,
       permissions: [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
