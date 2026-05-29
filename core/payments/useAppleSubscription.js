@@ -46,6 +46,23 @@ export function useAppleSubscription({ user }) {
     }, {});
   }, [products]);
 
+  const loadProducts = useCallback(async () => {
+    if (Platform.OS !== 'ios' || !iap) {
+      return [];
+    }
+
+    const fetchedProducts = await Promise.race([
+      iap.fetchProducts({ skus: availableSkus, type: 'subs' }),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timed out loading App Store products.')), 15000);
+      }),
+    ]);
+
+    const nextProducts = fetchedProducts || [];
+    setProducts(nextProducts);
+    return nextProducts;
+  }, [availableSkus]);
+
   const syncPurchaseToProfile = useCallback(
     async (purchase, { finish = true } = {}) => {
       if (!purchase?.productId || !purchase?.transactionId || !user?.uid) {
@@ -59,6 +76,16 @@ export function useAppleSubscription({ user }) {
 
       handledTransactionsRef.current.add(transactionKey);
       try {
+        const receiptData =
+          purchase.transactionReceipt ||
+          purchase.transactionReceiptIOS ||
+          purchase.receiptData ||
+          (iap?.getReceiptIOS ? await iap.getReceiptIOS() : null);
+
+        if (!receiptData) {
+          throw new Error('Unable to validate purchase receipt. Please try restoring purchases.');
+        }
+
         await activateAppleSubscription({
           userId: user.uid,
           email: user.email || null,
@@ -66,11 +93,7 @@ export function useAppleSubscription({ user }) {
           transactionId: purchase.transactionId,
           originalTransactionId: purchase.originalTransactionIdentifierIOS,
           purchaseDateMs: purchase.transactionDate,
-          receiptData:
-            purchase.transactionReceipt ||
-            purchase.transactionReceiptIOS ||
-            purchase.receiptData ||
-            null,
+          receiptData,
         });
 
         if (finish && iap) {
@@ -94,15 +117,8 @@ export function useAppleSubscription({ user }) {
       try {
         setLoadingProducts(true);
         await iap.initConnection();
-        const fetchedProducts = await Promise.race([
-          iap.fetchProducts({ skus: availableSkus, type: 'subs' }),
-          new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Timed out loading App Store products.')), 10000);
-          }),
-        ]);
-        if (isMounted) {
-          setProducts(fetchedProducts || []);
-        }
+        if (!isMounted) return;
+        await loadProducts();
       } catch (err) {
         console.error('[AppleIAP] Failed to initialize products:', err);
         if (isMounted) {
@@ -137,7 +153,7 @@ export function useAppleSubscription({ user }) {
       purchaseErrorSubscription.remove();
       iap.endConnection().catch(() => {});
     };
-  }, [availableSkus, syncPurchaseToProfile]);
+  }, [loadProducts, syncPurchaseToProfile]);
 
   const subscribeToPlan = useCallback(
     async (planId) => {
@@ -152,6 +168,15 @@ export function useAppleSubscription({ user }) {
         setProcessingSku(sku);
 
         if (!iap) throw new Error('Apple IAP is not available in this build.');
+
+        if (!productsByPlan[planId]) {
+          setLoadingProducts(true);
+          try {
+            await loadProducts();
+          } finally {
+            setLoadingProducts(false);
+          }
+        }
 
         const result = await iap.requestPurchase({
           type: 'subs',
@@ -172,7 +197,7 @@ export function useAppleSubscription({ user }) {
         setProcessingSku(null);
       }
     },
-    [syncPurchaseToProfile, user?.uid]
+    [loadProducts, productsByPlan, syncPurchaseToProfile, user?.uid]
   );
 
   const restorePurchases = useCallback(async () => {

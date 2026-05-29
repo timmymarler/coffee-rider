@@ -688,8 +688,8 @@ export default function ProfileScreen() {
       setDeleteConfirmVisible(false);
       setDeleting(false);
       Alert.alert(
-        "Account deactivated",
-        "Your account has been deactivated. To reactivate it, contact support@coffee-rider.co.uk.",
+        "Account deleted",
+        "Your account has been deleted and sign-in access has been removed.",
         [
           {
             text: "OK",
@@ -1338,7 +1338,7 @@ export default function ProfileScreen() {
       <View style={styles.cardWrap}>
       <CRCard>
         <CRButton
-          title="Deactivate Account"
+          title="Delete Account"
           variant="danger"
           onPress={() => setDeleteConfirmVisible(true)}
           style={{ width: '100%' }}
@@ -1349,7 +1349,7 @@ export default function ProfileScreen() {
           marginTop: theme.spacing.sm,
           textAlign: 'center'
         }}>
-          Deactivate your account. Contact support@coffee-rider.co.uk to request reactivation.
+          Permanently delete your account and remove sign-in access.
         </Text>
       </CRCard>
       </View>
@@ -1382,7 +1382,7 @@ export default function ProfileScreen() {
               marginBottom: theme.spacing.md,
               textAlign: 'center'
             }}>
-              Deactivate Account?
+              Delete Account?
             </Text>
 
             <Text style={{ 
@@ -1391,12 +1391,12 @@ export default function ProfileScreen() {
               marginBottom: theme.spacing.md,
               lineHeight: 20,
             }}>
-              Your account will be deactivated and blocked from sign-in. To reactivate this account later, contact support@coffee-rider.co.uk.
+              This permanently deletes your account and removes sign-in access. This action cannot be undone.
             </Text>
 
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <CRButton
-                title={deleting ? "Deactivating..." : "Deactivate"}
+                title={deleting ? "Deleting..." : "Delete"}
                 variant="danger"
                 loading={deleting}
                 disabled={deleting}

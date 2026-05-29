@@ -13,12 +13,12 @@ import { db, functions } from '../../config/firebase';
 const deleteUserAccountCallable = httpsCallable(functions, 'deleteUserAccount');
 
 /**
- * Hard delete a user account and cascade soft-delete their content
- * 1. Hard deletes the user auth account (via Cloud Function)
- * 2. Soft-deletes the user document
- * 3. Soft-deletes all their routes
- * 4. Soft-deletes all their events
- * 5. Soft-deletes all their groups
+ * Delete a user account and remove sign-in access
+ * 1. Hard delete the user auth account (via Cloud Function)
+ * 2. Soft-delete the user document
+ * 3. Soft-delete all their routes
+ * 4. Soft-delete all their events
+ * 5. Soft-delete all their groups
  * 
  * @param {string} userId - The user ID to delete
  * @param {string} currentUserId - The ID of the user performing the deletion
@@ -32,6 +32,9 @@ export const deleteUser = async (userId, currentUserId, isAdmin = false) => {
   }
 
   try {
+    // 1. Hard-delete the auth account first to ensure account deletion is completed.
+    await deleteUserAccountCallable({ uid: userId });
+
     const timestamp = new Date();
     const softDeletePayload = {
       deleted: true,
@@ -39,12 +42,12 @@ export const deleteUser = async (userId, currentUserId, isAdmin = false) => {
       deletedBy: currentUserId,
     };
 
-    // 1. Soft-delete the user document first (must succeed)
+    // 2. Soft-delete the user document first (must succeed)
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, softDeletePayload);
 
-    // 2. Soft-delete routes/events/groups best-effort.
-    // Never allow related-content cleanup failures to block hard account deletion.
+    // 3. Soft-delete routes/events/groups best-effort.
+    // Related-content cleanup should not block completion after auth deletion.
     let routeFailures = 0;
     let eventFailures = 0;
     let groupFailures = 0;
@@ -113,14 +116,6 @@ export const deleteUser = async (userId, currentUserId, isAdmin = false) => {
       });
     }
 
-    // 5. Best-effort call to hard-delete the auth account.
-    // This is intentionally non-blocking so account deactivation can still complete
-    // even if auth deletion is unavailable.
-    try {
-      await deleteUserAccountCallable({ uid: userId });
-    } catch (error) {
-      console.warn('[deleteUser] Auth identity removal unavailable:', error?.message || error);
-    }
   } catch (error) {
     console.error('Error deleting user:', error);
     throw error;

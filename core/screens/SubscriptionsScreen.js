@@ -10,6 +10,7 @@ import { useContext, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Linking,
     Platform,
     Pressable,
     ScrollView,
@@ -17,6 +18,9 @@ import {
     Text,
     View,
 } from 'react-native';
+
+const PRIVACY_POLICY_URL = 'https://coffee-rider.co.uk/privacy-policy';
+const TERMS_OF_SERVICE_URL = 'https://coffee-rider.co.uk/terms-of-service';
 
 export default function SubscriptionsScreen() {
   const router = useRouter();
@@ -36,6 +40,19 @@ export default function SubscriptionsScreen() {
     restorePurchases,
   } = useAppleSubscription({ user });
   const isIOS = Platform.OS === 'ios';
+
+  const openExternalLink = async (url, label) => {
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        Alert.alert('Unable to open link', `${label} link is currently unavailable.`);
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (_error) {
+      Alert.alert('Unable to open link', `${label} link is currently unavailable.`);
+    }
+  };
 
   const handleStartTrial = async () => {
     if (!user?.email) {
@@ -338,6 +355,24 @@ export default function SubscriptionsScreen() {
                     )}
                   </Pressable>
                 </View>
+
+                <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
+                  <Text style={[styles.trialNote, { color: theme.colors.text, marginBottom: 8 }]}> 
+                    By subscribing, payment is charged to your Apple ID account at confirmation.
+                  </Text>
+                  <Pressable
+                    style={[styles.linkButton, { borderColor: theme.colors.accentMid }]}
+                    onPress={() => openExternalLink(PRIVACY_POLICY_URL, 'Privacy Policy')}
+                  >
+                    <Text style={[styles.linkText, { color: theme.colors.accentMid }]}>Privacy Policy</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.linkButton, { borderColor: theme.colors.accentMid }]}
+                    onPress={() => openExternalLink(TERMS_OF_SERVICE_URL, 'Terms of Service')}
+                  >
+                    <Text style={[styles.linkText, { color: theme.colors.accentMid }]}>Terms of Service (EULA)</Text>
+                  </Pressable>
+                </View>
               </>
             ) : (
               <>
@@ -423,7 +458,9 @@ export default function SubscriptionsScreen() {
         />
         <FAQItem
           question="Is there a free trial?"
-          answer="Yes, you get a 7-day free trial of Pro features. No card required for the trial."
+          answer={isIOS
+            ? 'iOS subscriptions are billed by Apple. Any trial eligibility is shown directly by the App Store at checkout.'
+            : 'Yes, you get a 7-day free trial of Pro features. No card required for the trial.'}
           theme={theme}
         />
         <FAQItem
@@ -675,6 +712,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     marginTop: 8,
+  linkButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  linkText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   },
   faqItem: {
     paddingVertical: 12,

@@ -153,7 +153,7 @@ export default function RegisterScreen({ onBack }) {
         setSubmitting(false);
         Alert.alert(
           "Email already in use",
-          "This email is tied to an existing or deactivated account. To request reactivation, contact support@coffee-rider.co.uk."
+          "This email is already in use by an existing account."
         );
         return;
       }
