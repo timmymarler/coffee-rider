@@ -38,6 +38,33 @@ const extractArrivalDetails = (instruction = {}) => {
   };
 };
 
+const extractStreetLabel = (instruction = {}) => {
+  const rawCandidates = [
+    instruction?.streetName,
+    instruction?.street,
+    instruction?.roadNumber,
+    instruction?.road,
+    instruction?.streetNumber,
+  ];
+
+  for (const candidate of rawCandidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+
+  if (Array.isArray(instruction?.roadNumbers)) {
+    const firstRoadNumber = instruction.roadNumbers.find(
+      (value) => typeof value === 'string' && value.trim().length > 0
+    );
+    if (firstRoadNumber) {
+      return firstRoadNumber.trim();
+    }
+  }
+
+  return null;
+};
+
 const extractRoundaboutTurnAngle = (instruction = {}) => {
   const candidates = [
     instruction?.turnAngleInDecimalDegrees,
@@ -676,9 +703,11 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
       let nextManeuver = "ARRIVE";
       let nextRoundaboutExitNumber = null;
       let nextRoundaboutTurnAngle = null;
+      let nextStreetName = null;
 
       if (idx + 1 < instructions.length) {
         const nextInstr = instructions[idx + 1];
+        nextStreetName = extractStreetLabel(nextInstr);
         nextManeuver = (nextInstr.maneuver || "STRAIGHT").toUpperCase();
         const isNextArrival = nextManeuver.includes("ARRIVE");
         
@@ -739,9 +768,11 @@ const tomtomApiKey = Constants.expoConfig?.extra?.tomtomApiKey;
         distance: instr.distance || (idx < instructions.length - 1 ? 100 : 0),
         position: instr.point,
         end: endPoint,
+        streetName: extractStreetLabel(instr),
         // KEY: Include the next instruction directly in the step
         nextInstruction,
         nextManeuver,
+        nextStreetName,
         nextRoundaboutExitNumber,
         nextRoundaboutTurnAngle,
         ...extra,

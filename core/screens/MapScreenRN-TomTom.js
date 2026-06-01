@@ -250,6 +250,9 @@ const ROUNDABOUT_COMPLETION_CLEARANCE_METERS = 22;
 const ARRIVAL_ANNOUNCE_DISTANCE_METERS = 35;
 const ARRIVAL_PANEL_DISTANCE_METERS = 45;
 const ARRIVAL_ONROUTE_TOLERANCE_METERS = 30;
+const START_WAYPOINT_AUTO_SKIP_DISTANCE_METERS = 180;
+const REMAINING_LINE_SWAP_MS = 3500;
+const NEXT_JUNCTION_PREVIEW_MAX_GAP_METERS = 182.88; // 200 yards
 const GENERIC_CONTINUE_REGEX = /^continue\b/i;
 const SPEECH_FAILSAFE_INTERVAL_MS = 20000;
 const METERS_PER_DEGREE_LAT = 111320;
@@ -738,6 +741,36 @@ function buildSpokenInstruction(baseInstruction, distanceMeters, units) {
   return `${distancePhrase}, ${baseInstruction}`;
 }
 
+function bearingToCardinalDirection(bearing) {
+  if (!Number.isFinite(bearing)) return null;
+  const normalized = ((bearing % 360) + 360) % 360;
+  if (normalized >= 337.5 || normalized < 22.5) return 'north';
+  if (normalized < 67.5) return 'northeast';
+  if (normalized < 112.5) return 'east';
+  if (normalized < 157.5) return 'southeast';
+  if (normalized < 202.5) return 'south';
+  if (normalized < 247.5) return 'southwest';
+  if (normalized < 292.5) return 'west';
+  return 'northwest';
+}
+
+function buildHeadDirectionInstruction(step = {}) {
+  const start = step?.start || step?.position;
+  const end = step?.end;
+  if (!start || !end) return null;
+
+  const heading = calculateBearing(start, end);
+  const cardinal = bearingToCardinalDirection(heading);
+  if (!cardinal) return null;
+
+  const streetLabel = (step?.nextStreetName || step?.streetName || '').trim();
+  if (streetLabel.length > 0) {
+    return `Head ${cardinal} on ${streetLabel}`;
+  }
+
+  return `Head ${cardinal}`;
+}
+
 function getEffectiveInstructionText(step) {
   if (!step) return null;
   const raw = (step.nextInstruction || step.instruction || '').trim();
@@ -768,14 +801,24 @@ function getEffectiveInstructionText(step) {
 
   const maneuverMeta = MANEUVER_ICON_MAP[nextManeuver];
   if (maneuverMeta?.label) {
+    if (nextManeuver.includes('STRAIGHT')) {
+      const headingInstruction = buildHeadDirectionInstruction(step);
+      if (headingInstruction) return headingInstruction;
+    }
     return maneuverMeta.label;
   }
 
-  if (raw) return raw;
+  if (raw) {
+    if (GENERIC_CONTINUE_REGEX.test(raw)) {
+      const headingInstruction = buildHeadDirectionInstruction(step);
+      if (headingInstruction) return headingInstruction;
+    }
+    return raw;
+  }
   if (nextManeuver.includes('ROUNDABOUT')) {
     return 'Enter the roundabout';
   }
-  return 'Continue straight';
+  return buildHeadDirectionInstruction(step) || 'Continue straight';
 }
 
 // Calculate bearing (compass direction) between two points
@@ -1301,6 +1344,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const previousFollowUserRef = useRef(false); // Track previous Follow Me state to detect when it turn off
   const lastFollowHeadingRef = useRef(null); // Cache last usable heading for stable Follow Me offset
   const preferredFollowZoomRef = useRef(FOLLOW_ZOOM); // Remember rider-selected zoom while Follow Me is active
+  const autoSkippedStartWaypointRef = useRef(false); // Prevent repeated auto-skip bookkeeping
   const pendingFlushRef = useRef(null); // Track pending polyline flush to cancel on clearRoute
   const pendingDisplayTimeoutRef = useRef(null); // Track pending instruction display timeout
   const {
@@ -1361,6 +1405,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [showDirectionsFullscreen, setShowDirectionsFullscreen] = useState(false);
   const [showMiniMapFullscreen, setShowMiniMapFullscreen] = useState(false);
   const [hasArrivedAtDestination, setHasArrivedAtDestination] = useState(false);
+  const [showWaypointSummaryLine, setShowWaypointSummaryLine] = useState(false);
   const lastKnownDistanceRef = useRef(null);
   const routeFittedRef = useRef(false);
   const arrivalPolylineLockRef = useRef(false);
@@ -1392,6 +1437,19 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setShowMiniMapFullscreen(false);
     }
   }, [activeRide, riderLocations.length]);
+
+  useEffect(() => {
+    if (!isNavigationMode || !hasRoute) {
+      setShowWaypointSummaryLine(false);
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      setShowWaypointSummaryLine((prev) => !prev);
+    }, REMAINING_LINE_SWAP_MS);
+
+    return () => clearInterval(intervalId);
+  }, [isNavigationMode, hasRoute]);
 
   useEffect(() => {
     if (hasArrivedAtDestination && showDirectionsFullscreen) {
@@ -5312,13 +5370,38 @@ function getStepCompletionThresholds(step = null) {
         }
       : null;
     const hasPromotedStart = promotedStartWaypoint && effectiveWaypoints.length > 0 && isSameRoutePoint(effectiveWaypoints[0], promotedStartWaypoint);
-    const waypointsForRoute = (followUser || activeRide)
+    const shouldUseLiveOrigin = followUser || activeRide;
+    const canAutoSkipPromotedStart = shouldUseLiveOrigin && hasPromotedStart && effectiveWaypoints.length > 1;
+    const distanceToPromotedStart = canAutoSkipPromotedStart
+      ? distanceBetweenMeters(origin, promotedStartWaypoint)
+      : Infinity;
+    const shouldAutoSkipPromotedStart = Number.isFinite(distanceToPromotedStart) && distanceToPromotedStart <= START_WAYPOINT_AUTO_SKIP_DISTANCE_METERS;
+
+    if (shouldAutoSkipPromotedStart && !autoSkippedStartWaypointRef.current) {
+      const promotedWaypointIndex = waypoints.findIndex((wp) => isSameRoutePoint(wp, promotedStartWaypoint));
+      if (promotedWaypointIndex >= 0 && !visitedWaypointIndices.includes(promotedWaypointIndex)) {
+        markWaypointVisited(promotedWaypointIndex);
+      }
+      autoSkippedStartWaypointRef.current = true;
+      console.log('[buildRoute] Auto-skipping promoted start waypoint and routing to next waypoint', {
+        distanceToPromotedStart: Math.round(distanceToPromotedStart),
+        threshold: START_WAYPOINT_AUTO_SKIP_DISTANCE_METERS,
+      });
+    } else if (!shouldAutoSkipPromotedStart) {
+      autoSkippedStartWaypointRef.current = false;
+    }
+
+    const waypointsForRoute = shouldUseLiveOrigin
       ? (promotedStartWaypoint && !hasPromotedStart
           ? [promotedStartWaypoint, ...effectiveWaypoints.filter((wp) => !isSameRoutePoint(wp, promotedStartWaypoint))]
           : effectiveWaypoints)
       : (manualStartPoint && hasPromotedStart
           ? effectiveWaypoints.slice(1)
           : effectiveWaypoints);
+
+    const waypointsAfterStartSkip = shouldAutoSkipPromotedStart
+      ? waypointsForRoute.filter((wp) => !isSameRoutePoint(wp, promotedStartWaypoint))
+      : waypointsForRoute;
 
     // For active rides and Follow Me, always fetch fresh to ensure polyline from current location
     // is included and correct travel mode is used (not a cached route from different mode)
@@ -5327,7 +5410,7 @@ function getStepCompletionThresholds(step = null) {
     // Call the core mapRoute function
     await mapRoute({
       origin,
-      waypoints: waypointsForRoute,
+      waypoints: waypointsAfterStartSkip,
       destination,
       travelMode: userTravelMode,
       routeType: userRouteType,
@@ -5949,7 +6032,7 @@ function getStepCompletionThresholds(step = null) {
       if (nextManeuver.includes("ROUNDABOUT_EXIT") && step?.nextRoundaboutExitNumber) {
         label = `Take Exit ${step.nextRoundaboutExitNumber}`;
       } else {
-        label = displayMeta?.label || rawNextInstruction;
+        label = effectiveInstruction || displayMeta?.label || rawNextInstruction;
       }
     }
 
@@ -5986,7 +6069,7 @@ function getStepCompletionThresholds(step = null) {
       normalizedInstruction: effectiveInstruction,
     });
 
-    let remainingSummary = null;
+    let totalRemainingSummary = null;
     if (Number.isFinite(remainingDistanceMeters) && remainingDistanceMeters >= 0) {
       const totalMins = Number.isFinite(remainingDurationSeconds)
         ? Math.max(0, Math.round(remainingDurationSeconds / 60))
@@ -6000,11 +6083,55 @@ function getStepCompletionThresholds(step = null) {
         ? formatEtaFromNow(remainingDurationSeconds)
         : null;
 
-      remainingSummary = [
+      totalRemainingSummary = [
+        'Total',
         formatDistanceForUnit(remainingDistanceMeters, distanceUnits),
         durationText,
         etaText ? `ETA ${etaText}` : null,
       ].filter(Boolean).join(' • ');
+    }
+
+    let nextWaypointSummary = null;
+    const nextUnvisitedWaypointIndex = waypoints.findIndex((_, idx) => !visitedWaypointIndices.includes(idx));
+    if (nextUnvisitedWaypointIndex >= 0 && userLocation) {
+      const nextWaypointCoord = normalizeCoord(waypoints[nextUnvisitedWaypointIndex]);
+      const distanceToNextWaypoint = nextWaypointCoord
+        ? distanceBetweenMeters(userLocation, nextWaypointCoord)
+        : null;
+
+      if (Number.isFinite(distanceToNextWaypoint) && distanceToNextWaypoint >= 0) {
+        const totalDistanceForEta = Number.isFinite(remainingDistanceMeters) ? remainingDistanceMeters : null;
+        const totalSecondsForEta = Number.isFinite(remainingDurationSeconds) ? remainingDurationSeconds : null;
+        const nextWaypointSeconds =
+          totalDistanceForEta != null && totalSecondsForEta != null && totalDistanceForEta > 0
+            ? Math.max(0, Math.round((distanceToNextWaypoint / totalDistanceForEta) * totalSecondsForEta))
+            : null;
+        const nextWaypointMins = Number.isFinite(nextWaypointSeconds)
+          ? Math.max(0, Math.round(nextWaypointSeconds / 60))
+          : null;
+        const nextWaypointHours = nextWaypointMins != null ? Math.floor(nextWaypointMins / 60) : 0;
+        const nextWaypointMinsRemainder = nextWaypointMins != null ? nextWaypointMins % 60 : 0;
+        const nextWaypointDurationText = nextWaypointMins == null
+          ? null
+          : (nextWaypointHours > 0 ? `${nextWaypointHours}h ${nextWaypointMinsRemainder}m` : `${nextWaypointMins} min`);
+        const nextWaypointEtaText = Number.isFinite(nextWaypointSeconds)
+          ? formatEtaFromNow(nextWaypointSeconds)
+          : null;
+
+        nextWaypointSummary = [
+          `WP ${nextUnvisitedWaypointIndex + 1}/${waypoints.length}`,
+          formatDistanceForUnit(distanceToNextWaypoint, distanceUnits),
+          nextWaypointDurationText,
+          nextWaypointEtaText ? `ETA ${nextWaypointEtaText}` : null,
+        ].filter(Boolean).join(' • ');
+      }
+    }
+
+    let remainingSummary = totalRemainingSummary;
+    if (totalRemainingSummary && nextWaypointSummary) {
+      remainingSummary = showWaypointSummaryLine ? nextWaypointSummary : totalRemainingSummary;
+    } else if (!totalRemainingSummary && nextWaypointSummary) {
+      remainingSummary = nextWaypointSummary;
     }
 
     const continueCheckSource = (label || effectiveInstruction || rawNextInstruction || '').trim();
@@ -6033,6 +6160,41 @@ function getStepCompletionThresholds(step = null) {
     }
 
     const instructionForDisplay = arrivalInstructionDisplay || effectiveInstruction;
+    const followingStep = routeSteps[currentStepIndex + 1] || null;
+    const followingManeuver = (followingStep?.nextManeuver || followingStep?.maneuver || '').trim().toUpperCase();
+    const followingManeuverIsPreviewable = followingManeuver.length > 0 && !followingManeuver.includes('ARRIVE');
+
+    let followingGapMeters = null;
+    if (followingStep && followingManeuverIsPreviewable) {
+      const currentStepProgress = Number(step?.polylineProgress);
+      const followingStepProgress = Number(followingStep?.polylineProgress);
+      if (Number.isFinite(currentStepProgress) && Number.isFinite(followingStepProgress)) {
+        followingGapMeters = Math.max(0, followingStepProgress - currentStepProgress);
+      }
+
+      if (!Number.isFinite(followingGapMeters) && step?.end && followingStep?.end) {
+        const stepGap = distanceBetweenMeters(step.end, followingStep.end);
+        if (Number.isFinite(stepGap)) {
+          followingGapMeters = stepGap;
+        }
+      }
+    }
+
+    const shouldShowSecondaryJunctionIndicator =
+      followingManeuverIsPreviewable &&
+      Number.isFinite(followingGapMeters) &&
+      followingGapMeters > 0 &&
+      followingGapMeters <= NEXT_JUNCTION_PREVIEW_MAX_GAP_METERS;
+
+    let followingMeta = null;
+    if (shouldShowSecondaryJunctionIndicator) {
+      followingMeta = MANEUVER_ICON_MAP[followingManeuver];
+      if (!followingMeta) {
+        followingMeta = followingManeuver.includes('ROUNDABOUT')
+          ? MANEUVER_ICON_MAP.ROUNDABOUT_ENTER
+          : MANEUVER_ICON_MAP.STRAIGHT;
+      }
+    }
 
     return (
       <>
@@ -6049,14 +6211,27 @@ function getStepCompletionThresholds(step = null) {
           accessibilityRole="button"
           accessibilityHint="Long press to expand directions"
         >
-          <NavigationManeuverIcon
-            maneuver={nextManeuver}
-            iconName={displayMeta.icon}
-            step={step}
-            size={isLandscape ? 62 : 80}
-            color="rgba(245, 245, 240, 0.95)"
-            style={[styles.junctionIcon, isLandscape && styles.junctionIconLandscape]}
-          />
+          <View style={[styles.junctionIconStack, isLandscape && styles.junctionIconStackLandscape]}>
+            <NavigationManeuverIcon
+              maneuver={nextManeuver}
+              iconName={displayMeta.icon}
+              step={step}
+              size={isLandscape ? 62 : 80}
+              color="rgba(245, 245, 240, 0.95)"
+              style={[styles.junctionIcon, isLandscape && styles.junctionIconLandscape]}
+            />
+            {shouldShowSecondaryJunctionIndicator ? (
+              <View style={[styles.junctionNextIconBadge, isLandscape && styles.junctionNextIconBadgeLandscape]}>
+                <NavigationManeuverIcon
+                  maneuver={followingManeuver}
+                  iconName={followingMeta?.icon}
+                  step={followingStep}
+                  size={isLandscape ? 18 : 22}
+                  color="rgba(245, 245, 240, 0.92)"
+                />
+              </View>
+            ) : null}
+          </View>
           <View style={[styles.junctionContent, isLandscape && styles.junctionContentLandscape]}>
             <View style={styles.junctionHeaderRow}>
               {shouldShowDistance ? (
@@ -7439,11 +7614,33 @@ const styles = StyleSheet.create({
   junctionPanelPressed: {
     opacity: 0.92,
   },
-  junctionIcon: {
+  junctionIconStack: {
+    minWidth: 70,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
     marginRight: 4,
+  },
+  junctionIconStackLandscape: {
+    minWidth: 56,
+  },
+  junctionIcon: {
+    marginRight: 0,
   },
   junctionIconLandscape: {
     marginTop: 4,
+  },
+  junctionNextIconBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    backgroundColor: "rgba(0, 0, 0, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 245, 240, 0.28)",
+  },
+  junctionNextIconBadgeLandscape: {
+    paddingHorizontal: 4,
+    paddingVertical: 1,
   },
   junctionContent: {
     justifyContent: "center",
@@ -7467,7 +7664,7 @@ const styles = StyleSheet.create({
   },
   junctionRemaining: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "rgba(245, 245, 240, 0.8)",
     marginTop: 4,
   },
@@ -7689,8 +7886,8 @@ const styles = StyleSheet.create({
   },
   fullscreenDirectionsRemaining: {
     fontSize: 20,
-    fontWeight: "500",
-    color: "rgba(255,255,255,0.65)",
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.82)",
     marginTop: 32,
     textAlign: "center",
   },
