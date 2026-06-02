@@ -1321,10 +1321,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const isLoadingSavedRouteRef = useRef(false);
 
   const showProUpgradeMessage = useCallback((featureLabel = 'use this feature') => {
+    const message = `You need to upgrade to Pro to ${featureLabel}.`;
+
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.LONG);
+      return;
+    }
+
     setPostbox({
       type: 'info',
       title: 'Pro feature',
-      message: `You need to upgrade to Pro to ${featureLabel}.`,
+      message,
     });
   }, []);
 
