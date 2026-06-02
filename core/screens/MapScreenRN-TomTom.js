@@ -1320,6 +1320,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [mapKey, setMapKey] = useState(0);
   const isLoadingSavedRouteRef = useRef(false);
 
+  const showProUpgradeMessage = useCallback((featureLabel = 'use this feature') => {
+    setPostbox({
+      type: 'info',
+      title: 'Pro feature',
+      message: `You need to upgrade to Pro to ${featureLabel}.`,
+    });
+  }, []);
+
+  const requireAdvancedRoutingAccess = useCallback((featureLabel) => {
+    if (capabilities.canCreateRoutes) return true;
+    showProUpgradeMessage(featureLabel);
+    return false;
+  }, [capabilities.canCreateRoutes, showProUpgradeMessage]);
+
   // Auto-clear postbox notifications after timeout
   useEffect(() => {
     if (!postbox) return;
@@ -2288,6 +2302,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }
 
   const handleAddWaypoint = () => {
+    if (!requireAdvancedRoutingAccess('add waypoints and multi-stop routes')) {
+      closeAddPointMenu();
+      return;
+    }
+
     setSelectedPlaceId(null);
     isLoadingSavedRouteRef.current = false;
     
@@ -6998,7 +7017,12 @@ function getStepCompletionThresholds(step = null) {
           onClear={clearSearch}
           onFilterPress={() => setShowFilters(prev => !prev)}
           filtersActive={filtersActive}
-          onRouteTypePress={() => setShowRouteTypeSelector(true)}
+          onRouteTypePress={() => {
+            if (!requireAdvancedRoutingAccess('change route optimization')) {
+              return;
+            }
+            setShowRouteTypeSelector(true);
+          }}
           routeTypeActive={isRouteTypeNonDefault}
           isLandscape={isLandscape}
         />
@@ -7046,6 +7070,9 @@ function getStepCompletionThresholds(step = null) {
             setSelectedPlaceId(newPlace.id);
           }}
           onAddWaypoint={(placeArg) => {
+            if (!requireAdvancedRoutingAccess('add waypoints and multi-stop routes')) {
+              return;
+            }
             addFromPlace(placeArg);
           }}
         />
@@ -7058,6 +7085,9 @@ function getStepCompletionThresholds(step = null) {
             <Pressable
               onPress={() => {
                 closeMarkerMenu();
+                if (!requireAdvancedRoutingAccess('add waypoints and multi-stop routes')) {
+                  return;
+                }
                 if (pendingMarker) addFromPlace(pendingMarker);
               }}
               style={({ pressed }) => [
