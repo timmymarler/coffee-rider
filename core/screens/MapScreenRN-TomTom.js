@@ -6095,7 +6095,8 @@ function getStepCompletionThresholds(step = null) {
       normalizedInstruction: effectiveInstruction,
     });
 
-    let totalRemainingSummary = null;
+    let totalRemainingPrimary = null;
+    let totalRemainingSecondary = null;
     if (Number.isFinite(remainingDistanceMeters) && remainingDistanceMeters >= 0) {
       const totalMins = Number.isFinite(remainingDurationSeconds)
         ? Math.max(0, Math.round(remainingDurationSeconds / 60))
@@ -6109,15 +6110,19 @@ function getStepCompletionThresholds(step = null) {
         ? formatEtaFromNow(remainingDurationSeconds)
         : null;
 
-      totalRemainingSummary = [
-        'Total',
+      totalRemainingPrimary = [
+        'Destination',
         formatDistanceForUnit(remainingDistanceMeters, distanceUnits),
+      ].filter(Boolean).join(' • ');
+
+      totalRemainingSecondary = [
         durationText,
         etaText ? `ETA ${etaText}` : null,
       ].filter(Boolean).join(' • ');
     }
 
-    let nextWaypointSummary = null;
+    let nextWaypointPrimary = null;
+    let nextWaypointSecondary = null;
     const nextUnvisitedWaypointIndex = waypoints.findIndex((_, idx) => !visitedWaypointIndices.includes(idx));
     if (nextUnvisitedWaypointIndex >= 0 && userLocation) {
       const nextWaypointCoord = normalizeCoord(waypoints[nextUnvisitedWaypointIndex]);
@@ -6144,20 +6149,26 @@ function getStepCompletionThresholds(step = null) {
           ? formatEtaFromNow(nextWaypointSeconds)
           : null;
 
-        nextWaypointSummary = [
+        nextWaypointPrimary = [
           `WP ${nextUnvisitedWaypointIndex + 1}/${waypoints.length}`,
           formatDistanceForUnit(distanceToNextWaypoint, distanceUnits),
+        ].filter(Boolean).join(' • ');
+
+        nextWaypointSecondary = [
           nextWaypointDurationText,
           nextWaypointEtaText ? `ETA ${nextWaypointEtaText}` : null,
         ].filter(Boolean).join(' • ');
       }
     }
 
-    let remainingSummary = totalRemainingSummary;
-    if (totalRemainingSummary && nextWaypointSummary) {
-      remainingSummary = showWaypointSummaryLine ? nextWaypointSummary : totalRemainingSummary;
-    } else if (!totalRemainingSummary && nextWaypointSummary) {
-      remainingSummary = nextWaypointSummary;
+    let remainingPrimary = totalRemainingPrimary;
+    let remainingSecondary = totalRemainingSecondary;
+    if (totalRemainingPrimary && nextWaypointPrimary) {
+      remainingPrimary = showWaypointSummaryLine ? nextWaypointPrimary : totalRemainingPrimary;
+      remainingSecondary = showWaypointSummaryLine ? nextWaypointSecondary : totalRemainingSecondary;
+    } else if (!totalRemainingPrimary && nextWaypointPrimary) {
+      remainingPrimary = nextWaypointPrimary;
+      remainingSecondary = nextWaypointSecondary;
     }
 
     const continueCheckSource = (label || effectiveInstruction || rawNextInstruction || '').trim();
@@ -6252,7 +6263,7 @@ function getStepCompletionThresholds(step = null) {
                   maneuver={followingManeuver}
                   iconName={followingMeta?.icon}
                   step={followingStep}
-                  size={isLandscape ? 18 : 22}
+                  size={isLandscape ? 21 : 26}
                   color="rgba(245, 245, 240, 0.92)"
                 />
               </View>
@@ -6265,7 +6276,7 @@ function getStepCompletionThresholds(step = null) {
               ) : (
                 <View style={styles.junctionHeaderSpacer} />
               )}
-              <View style={styles.junctionHeaderActions}>
+              <View style={[styles.junctionHeaderActions, isLandscape && styles.junctionHeaderActionsLandscape]}>
                 {hasUnvisitedWaypoint && (
                   <TouchableOpacity
                     onPress={handleSkipNextWaypoint}
@@ -6275,7 +6286,7 @@ function getStepCompletionThresholds(step = null) {
                   >
                     <MaterialCommunityIcons
                       name="map-marker-remove-outline"
-                      size={21}
+                      size={28}
                       color="#FFD85C"
                     />
                   </TouchableOpacity>
@@ -6288,12 +6299,13 @@ function getStepCompletionThresholds(step = null) {
                 >
                   <MaterialCommunityIcons
                     name={isTtsEnabled ? "volume-high" : "volume-mute"}
-                    size={22}
+                    size={29}
                     color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.6)"}
                   />
                 </TouchableOpacity>
               </View>
             </View>
+            <View style={[styles.junctionBodyShiftUp, isLandscape && styles.junctionBodyShiftUpLandscape]}>
             <Text
               style={[styles.junctionLabel, isLandscape && styles.junctionLabelLandscape]}
               numberOfLines={isLandscape ? 2 : 3}
@@ -6310,14 +6322,22 @@ function getStepCompletionThresholds(step = null) {
                   {instructionForDisplay}
                 </Text>
             )}
-            {remainingSummary && (
+            {remainingPrimary && (
               <Text
                 style={[styles.junctionRemaining, isLandscape && styles.junctionRemainingLandscape]}
-                numberOfLines={isLandscape ? 2 : 3}
+                numberOfLines={1}
               >
-                {remainingSummary}
+                {remainingPrimary}
               </Text>
             )}
+            {remainingSecondary ? (
+              <Text
+                style={[styles.junctionRemainingSub, isLandscape && styles.junctionRemainingSubLandscape]}
+                numberOfLines={1}
+              >
+                {remainingSecondary}
+              </Text>
+            ) : null}
             <View style={styles.junctionInlineStatsRow}>
               <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeCompact, isLandscape && styles.currentSpeedBadgeCompactLandscape, isSpeeding && styles.currentSpeedBadgeWarning]}>
                 <Text style={styles.currentSpeedBadgeValue}>{Number.isFinite(currentSpeedMph) ? Math.round(currentSpeedMph) : '--'}</Text>
@@ -6331,6 +6351,7 @@ function getStepCompletionThresholds(step = null) {
               >
                 <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
               </Pressable>
+            </View>
             </View>
           </View>
         </Pressable>
@@ -6355,14 +6376,58 @@ function getStepCompletionThresholds(step = null) {
               showsVerticalScrollIndicator={false}
               alwaysBounceVertical={false}
             >
-              <NavigationManeuverIcon
-                maneuver={nextManeuver}
-                iconName={displayMeta.icon}
-                step={step}
-                size={fullscreenIconSize}
-                color="#ffffff"
-                style={styles.fullscreenDirectionsIcon}
-              />
+              <View style={[styles.fullscreenDirectionsTopRow, isLandscape && styles.fullscreenDirectionsTopRowLandscape]}>
+                <View style={styles.fullscreenDirectionsIconStack}>
+                  <NavigationManeuverIcon
+                    maneuver={nextManeuver}
+                    iconName={displayMeta.icon}
+                    step={step}
+                    size={fullscreenIconSize}
+                    color="#ffffff"
+                    style={styles.fullscreenDirectionsIcon}
+                  />
+                  {shouldShowSecondaryJunctionIndicator ? (
+                    <View style={[styles.fullscreenDirectionsNextIconBadge, isLandscape && styles.fullscreenDirectionsNextIconBadgeLandscape]}>
+                      <NavigationManeuverIcon
+                        maneuver={followingManeuver}
+                        iconName={followingMeta?.icon}
+                        step={followingStep}
+                        size={isLandscape ? 30 : 36}
+                        color="rgba(255,255,255,0.95)"
+                      />
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={styles.fullscreenDirectionsActionColumn}>
+                  {hasUnvisitedWaypoint ? (
+                    <TouchableOpacity
+                      onPress={handleSkipNextWaypoint}
+                      style={styles.fullscreenDirectionsActionButton}
+                      accessibilityRole="button"
+                      accessibilityLabel="Skip next waypoint and reroute"
+                    >
+                      <MaterialCommunityIcons
+                        name="map-marker-remove-outline"
+                        size={38}
+                        color="#FFD85C"
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    onPress={handleTtsToggle}
+                    style={styles.fullscreenDirectionsActionButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={isTtsEnabled ? "Mute navigation voice" : "Unmute navigation voice"}
+                  >
+                    <MaterialCommunityIcons
+                      name={isTtsEnabled ? "volume-high" : "volume-mute"}
+                      size={40}
+                      color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.65)"}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
               {shouldShowDistance ? (
                 <Text style={[styles.fullscreenDirectionsDistance, isLandscape && styles.fullscreenDirectionsDistanceLandscape]}>{distText}</Text>
               ) : null}
@@ -6386,9 +6451,12 @@ function getStepCompletionThresholds(step = null) {
                   <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
                 </Pressable>
               </View>
-              {remainingSummary && (
-                <Text style={[styles.fullscreenDirectionsRemaining, isLandscape && styles.fullscreenDirectionsRemainingLandscape]}>{remainingSummary}</Text>
+              {remainingPrimary && (
+                <Text style={[styles.fullscreenDirectionsRemaining, isLandscape && styles.fullscreenDirectionsRemainingLandscape]}>{remainingPrimary}</Text>
               )}
+              {remainingSecondary ? (
+                <Text style={[styles.fullscreenDirectionsRemainingSub, isLandscape && styles.fullscreenDirectionsRemainingSubLandscape]}>{remainingSecondary}</Text>
+              ) : null}
               <Text style={[styles.fullscreenDirectionsHint, isLandscape && styles.fullscreenDirectionsHintLandscape]}>Tap anywhere to exit fullscreen</Text>
             </ScrollView>
           </Pressable>
@@ -7633,7 +7701,7 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 9,
     paddingHorizontal: 16,
     borderRadius: 16,
     backgroundColor: "#2196F3",
@@ -7641,12 +7709,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(245, 245, 240, 0.95)",
     zIndex: 2000,
     elevation: 8,
-    gap: 14,
+    gap: 10,
   },
   junctionPanelLandscape: {
     alignItems: "flex-start",
-    paddingVertical: 10,
-    gap: 12,
+    paddingVertical: 8,
+    gap: 10,
   },
   junctionPanelPressed: {
     opacity: 0.92,
@@ -7657,6 +7725,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 2,
     marginRight: 4,
+    marginTop: -10,
   },
   junctionIconStackLandscape: {
     minWidth: 56,
@@ -7669,15 +7738,15 @@ const styles = StyleSheet.create({
   },
   junctionNextIconBadge: {
     borderRadius: 999,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     backgroundColor: "rgba(0, 0, 0, 0.18)",
     borderWidth: 1,
     borderColor: "rgba(245, 245, 240, 0.28)",
   },
   junctionNextIconBadgeLandscape: {
-    paddingHorizontal: 4,
-    paddingVertical: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
   },
   junctionContent: {
     justifyContent: "center",
@@ -7690,25 +7759,37 @@ const styles = StyleSheet.create({
     paddingRight: 0,
   },
   junctionDistance: {
-    fontSize: 44,
+    fontSize: 50,
     fontWeight: "700",
     color: "rgba(245, 245, 240, 0.95)",
-    lineHeight: 52,
+    lineHeight: 56,
+    marginTop: -1,
   },
   junctionDistanceLandscape: {
-    fontSize: 32,
-    lineHeight: 36,
+    fontSize: 36,
+    lineHeight: 42,
   },
   junctionRemaining: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: "800",
     color: "rgba(245, 245, 240, 0.8)",
-    marginTop: 4,
+    marginTop: 3,
   },
   junctionRemainingLandscape: {
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  junctionRemainingSub: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "rgba(245, 245, 240, 0.84)",
+    marginTop: 0,
+  },
+  junctionRemainingSubLandscape: {
+    fontSize: 12,
+    lineHeight: 14,
+    marginTop: 0,
   },
   junctionStatsRow: {
     flexDirection: "row",
@@ -7722,8 +7803,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginTop: 10,
+    marginTop: 8,
     marginBottom: 2,
+  },
+  junctionBodyShiftUp: {
+    marginTop: -2,
+  },
+  junctionBodyShiftUpLandscape: {
+    marginTop: -1,
   },
   junctionMetaRail: {
     alignItems: "center",
@@ -7747,14 +7834,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   currentSpeedBadgeCompact: {
-    minWidth: 58,
-    height: 58,
-    borderRadius: 29,
+    minWidth: 52,
+    height: 52,
+    borderRadius: 26,
   },
   currentSpeedBadgeCompactLandscape: {
-    minWidth: 50,
-    height: 50,
-    borderRadius: 25,
+    minWidth: 46,
+    height: 46,
+    borderRadius: 23,
   },
   currentSpeedBadgeWarning: {
     borderColor: "#fca5a5",
@@ -7789,9 +7876,9 @@ const styles = StyleSheet.create({
     color: "#111111",
   },
   speedLimitBadge: {
-    minWidth: 46,
-    height: 46,
-    borderRadius: 23,
+    minWidth: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: "#ffffff",
     borderWidth: 4,
     borderColor: "#dc2626",
@@ -7800,9 +7887,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   speedLimitBadgeLandscape: {
-    minWidth: 40,
-    height: 40,
-    borderRadius: 20,
+    minWidth: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 3,
   },
   speedLimitBadgeValue: {
@@ -7815,7 +7902,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     color: "rgba(245, 245, 240, 0.95)",
-    marginTop: 4,
+    marginTop: 2,
     flexWrap: "wrap",
   },
   junctionLabelLandscape: {
@@ -7827,7 +7914,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "400",
     color: "rgba(245, 245, 240, 0.80)",
-    marginTop: 3,
+    marginTop: 2,
     flexWrap: "wrap",
   },
   junctionInstructionLandscape: {
@@ -7840,23 +7927,32 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     width: "100%",
+    paddingRight: 62,
   },
   junctionHeaderSpacer: {
     flex: 1,
   },
   junctionHeaderActions: {
-    flexDirection: "row",
+    position: "absolute",
+    right: 0,
+    top: 26,
+    flexDirection: "column",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 0,
+  },
+  junctionHeaderActionsLandscape: {
+    top: 20,
   },
   ttsToggleButton: {
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   skipWaypointButtonCompact: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0, 0, 0, 0.18)",
@@ -7864,9 +7960,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 216, 92, 0.45)",
   },
   ttsToggleButtonCompact: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0, 0, 0, 0.18)",
@@ -7887,8 +7983,51 @@ const styles = StyleSheet.create({
   fullscreenDirectionsContentLandscape: {
     justifyContent: "flex-start",
   },
+  fullscreenDirectionsTopRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 22,
+  },
+  fullscreenDirectionsTopRowLandscape: {
+    gap: 16,
+  },
+  fullscreenDirectionsIconStack: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
   fullscreenDirectionsIcon: {
-    marginBottom: 32,
+    marginBottom: 0,
+  },
+  fullscreenDirectionsNextIconBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.34)",
+  },
+  fullscreenDirectionsNextIconBadgeLandscape: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  fullscreenDirectionsActionColumn: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginTop: 16,
+  },
+  fullscreenDirectionsActionButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.24)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.26)",
   },
   fullscreenDirectionsDistance: {
     fontSize: 72,
@@ -7931,6 +8070,17 @@ const styles = StyleSheet.create({
   fullscreenDirectionsRemainingLandscape: {
     fontSize: 18,
     marginTop: 20,
+  },
+  fullscreenDirectionsRemainingSub: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.78)",
+    marginTop: 8,
+    textAlign: "center",
+  },
+  fullscreenDirectionsRemainingSubLandscape: {
+    fontSize: 16,
+    marginTop: 6,
   },
   fullscreenDirectionsHint: {
     fontSize: 16,
