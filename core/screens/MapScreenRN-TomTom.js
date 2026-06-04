@@ -192,6 +192,7 @@ import * as KeepAwake from "expo-keep-awake";
 import * as Location from "expo-location";
 import * as Speech from "expo-speech";
 import { classifyPoi } from "../map/classify/classifyPois";
+import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
 import MapRouteTypeSelector from "@core/components/routing/MapRouteTypeSelector";
 import { decode } from "@mapbox/polyline";
