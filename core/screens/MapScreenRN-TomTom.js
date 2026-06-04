@@ -192,7 +192,6 @@ import * as KeepAwake from "expo-keep-awake";
 import * as Location from "expo-location";
 import * as Speech from "expo-speech";
 import { classifyPoi } from "../map/classify/classifyPois";
-import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
 import MapRouteTypeSelector from "@core/components/routing/MapRouteTypeSelector";
 import { decode } from "@mapbox/polyline";
@@ -5265,10 +5264,16 @@ function getStepCompletionThresholds(step = null) {
       });
     } catch (error) {
       console.warn('[mapRoute] Error fetching route:', error.message);
-      ToastAndroid.show(
-        `Unable to fetch route: ${error.message}`,
-        ToastAndroid.LONG
-      );
+      const routeErrorMessage = `Unable to fetch route: ${error.message}`;
+      setPostbox({
+        type: 'error',
+        title: 'Routing error',
+        message: routeErrorMessage,
+      });
+
+      if (Platform.OS === 'android') {
+        ToastAndroid.show(routeErrorMessage, ToastAndroid.LONG);
+      }
       return false;
     }
 
@@ -7065,6 +7070,13 @@ function getStepCompletionThresholds(step = null) {
         <WaypointsList
           waypoints={displayWaypoints}
           onClearAll={clearNavigationIntent}
+          onWaypointRemoved={(removedTitle) => {
+            setPostbox({
+              type: 'error',
+              title: 'Waypoint removed',
+              message: `${removedTitle || 'Waypoint'} removed from route.`,
+            });
+          }}
           routeOrigin={manualStartPoint || userLocation}
           isLandscape={isLandscape}
           distanceUnit={distanceUnits}
@@ -7709,7 +7721,7 @@ const styles = StyleSheet.create({
   },
 
   postboxInfo: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryMid || "#163B4F",
   },
 
   junctionPanel: {

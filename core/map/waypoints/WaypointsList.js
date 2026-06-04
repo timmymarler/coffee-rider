@@ -19,7 +19,16 @@ function getWaypointKey(item) {
 // It receives `waypoints` as a prop (which may include destination).
 // It may still call useWaypoints() ONLY for mutations during transition.
 
-export default function WaypointsList({ waypoints, onClearAll, routeOrigin, routedTotalMeters, routedTotalDurationSeconds, isLandscape = false, distanceUnit = "imperial" }) {
+export default function WaypointsList({
+  waypoints,
+  onClearAll,
+  onWaypointRemoved,
+  routeOrigin,
+  routedTotalMeters,
+  routedTotalDurationSeconds,
+  isLandscape = false,
+  distanceUnit = "imperial",
+}) {
   // ⚠️ DO NOT destructure `waypoints` from context here
   const [collapsed, setCollapsed] = useState(true);
   const styles = createStyles(isLandscape);
@@ -109,7 +118,13 @@ export default function WaypointsList({ waypoints, onClearAll, routeOrigin, rout
                 </Text>
                 {/* Remove button */}
                 <TouchableOpacity
-                  onPress={() => removeWaypoint(index)}
+                  onPress={() => {
+                    const removedTitle = item?.title || "Dropped pin";
+                    removeWaypoint(index);
+                    if (typeof onWaypointRemoved === "function") {
+                      onWaypointRemoved(removedTitle);
+                    }
+                  }}
                   hitSlop={12}
                   style={{ paddingHorizontal: 8 }}
                 >
