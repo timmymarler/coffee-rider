@@ -6274,6 +6274,7 @@ function getStepCompletionThresholds(step = null) {
               {shouldShowDistance ? (
                 <Text
                   style={[styles.junctionDistance, isLandscape && styles.junctionDistanceLandscape]}
+                  pointerEvents="none"
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={0.72}
@@ -6285,31 +6286,41 @@ function getStepCompletionThresholds(step = null) {
               )}
               <View style={[styles.junctionHeaderActions, isLandscape && styles.junctionHeaderActionsLandscape]}>
                 {hasUnvisitedWaypoint && (
-                  <TouchableOpacity
+                  <Pressable
                     onPress={handleSkipNextWaypoint}
-                    style={styles.skipWaypointButtonCompact}
+                    style={({ pressed }) => [
+                      styles.skipWaypointButtonCompact,
+                      pressed && styles.compactActionButtonPressed,
+                    ]}
                     accessibilityRole="button"
                     accessibilityLabel="Skip next waypoint and reroute"
                   >
-                    <MaterialCommunityIcons
-                      name="map-marker-remove-outline"
-                      size={28}
-                      color="#FFD85C"
-                    />
-                  </TouchableOpacity>
+                    <View style={styles.compactActionIconShell}>
+                      <MaterialCommunityIcons
+                        name="map-marker-remove-outline"
+                        size={28}
+                        color="#FFD85C"
+                      />
+                    </View>
+                  </Pressable>
                 )}
-                <TouchableOpacity
+                <Pressable
                   onPress={handleTtsToggle}
-                  style={styles.ttsToggleButtonCompact}
+                  style={({ pressed }) => [
+                    styles.ttsToggleButtonCompact,
+                    pressed && styles.compactActionButtonPressed,
+                  ]}
                   accessibilityRole="button"
                   accessibilityLabel={isTtsEnabled ? "Mute navigation voice" : "Unmute navigation voice"}
                 >
-                  <MaterialCommunityIcons
-                    name={isTtsEnabled ? "volume-high" : "volume-mute"}
-                    size={29}
-                    color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.6)"}
-                  />
-                </TouchableOpacity>
+                  <View style={styles.compactActionIconShell}>
+                    <MaterialCommunityIcons
+                      name={isTtsEnabled ? "volume-high" : "volume-mute"}
+                      size={29}
+                      color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.6)"}
+                    />
+                  </View>
+                </Pressable>
               </View>
             </View>
             <View style={[styles.junctionBodyShiftUp, isLandscape && styles.junctionBodyShiftUpLandscape]}>
@@ -7948,6 +7959,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 10,
     marginTop: 0,
+    zIndex: 8,
+    elevation: 8,
   },
   junctionHeaderActionsLandscape: {
     top: 36,
@@ -7962,9 +7975,13 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "center",
+    padding: 0,
+    margin: 0,
     backgroundColor: "rgba(0, 0, 0, 0.18)",
     borderWidth: 1,
     borderColor: "rgba(255, 216, 92, 0.45)",
+    overflow: "hidden",
   },
   ttsToggleButtonCompact: {
     width: 50,
@@ -7972,9 +7989,22 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "center",
+    padding: 0,
+    margin: 0,
     backgroundColor: "rgba(0, 0, 0, 0.18)",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.2)",
+    overflow: "hidden",
+  },
+  compactActionButtonPressed: {
+    opacity: 0.82,
+  },
+  compactActionIconShell: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
   },
   fullscreenDirectionsContainer: {
     flex: 1,
