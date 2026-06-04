@@ -6272,7 +6272,14 @@ function getStepCompletionThresholds(step = null) {
           <View style={[styles.junctionContent, isLandscape && styles.junctionContentLandscape]}>
             <View style={styles.junctionHeaderRow}>
               {shouldShowDistance ? (
-                <Text style={[styles.junctionDistance, isLandscape && styles.junctionDistanceLandscape]}>{distText}</Text>
+                <Text
+                  style={[styles.junctionDistance, isLandscape && styles.junctionDistanceLandscape]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.72}
+                >
+                  {distText}
+                </Text>
               ) : (
                 <View style={styles.junctionHeaderSpacer} />
               )}
@@ -7927,7 +7934,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     width: "100%",
-    paddingRight: 62,
+    paddingRight: 52,
   },
   junctionHeaderSpacer: {
     flex: 1,
@@ -7935,7 +7942,7 @@ const styles = StyleSheet.create({
   junctionHeaderActions: {
     position: "absolute",
     right: 0,
-    top: 26,
+    top: 48,
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
@@ -7943,7 +7950,7 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   junctionHeaderActionsLandscape: {
-    top: 20,
+    top: 36,
   },
   ttsToggleButton: {
     paddingHorizontal: 8,
