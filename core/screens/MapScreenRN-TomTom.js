@@ -773,6 +773,45 @@ function buildHeadDirectionInstruction(step = {}) {
   return `Head ${cardinal}`;
 }
 
+function getStepStreetLabel(step = {}) {
+  return (step?.nextStreetName || step?.streetName || '').trim();
+}
+
+function buildSpokenInstructionWithStreet(baseInstruction, step = {}) {
+  if (!baseInstruction) return null;
+
+  const streetLabel = getStepStreetLabel(step);
+  if (!streetLabel) return baseInstruction;
+
+  const normalizedInstruction = baseInstruction.trim();
+  if (normalizedInstruction.length === 0) return null;
+
+  if (normalizedInstruction.toLowerCase().includes(streetLabel.toLowerCase())) {
+    return normalizedInstruction;
+  }
+
+  const maneuver = (step?.nextManeuver || step?.maneuver || '').trim().toUpperCase();
+
+  if (
+    maneuver.includes('UTURN') ||
+    maneuver.includes('TURN_LEFT_U') ||
+    maneuver.includes('TURN_RIGHT_U')
+  ) {
+    return `${normalizedInstruction} onto ${streetLabel}`;
+  }
+
+  if (
+    maneuver.includes('TURN') ||
+    maneuver === 'LEFT' ||
+    maneuver === 'RIGHT' ||
+    maneuver.includes('ROUNDABOUT')
+  ) {
+    return `${normalizedInstruction} onto ${streetLabel}`;
+  }
+
+  return normalizedInstruction;
+}
+
 function getEffectiveInstructionText(step) {
   if (!step) return null;
   const raw = (step.nextInstruction || step.instruction || '').trim();
@@ -3655,8 +3694,11 @@ function getStepCompletionThresholds(step = null) {
         const baseInstruction = effectiveInstruction || currentStep?.nextInstruction || currentStep?.instruction;
         if (!baseInstruction) return false;
 
+        const spokenBaseInstruction = buildSpokenInstructionWithStreet(baseInstruction, currentStep);
+        if (!spokenBaseInstruction) return false;
+
         const distanceForSpeech = nextJunctionDistance ?? lastKnownDistanceRef.current;
-        spokenInstruction = buildSpokenInstruction(baseInstruction, distanceForSpeech, distanceUnits);
+        spokenInstruction = buildSpokenInstruction(spokenBaseInstruction, distanceForSpeech, distanceUnits);
         if (!spokenInstruction) return false;
       }
 
