@@ -9,7 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
+import { Alert, AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
@@ -251,6 +251,8 @@ const ARRIVAL_ANNOUNCE_DISTANCE_METERS = 35;
 const ARRIVAL_PANEL_DISTANCE_METERS = 45;
 const ARRIVAL_ONROUTE_TOLERANCE_METERS = 30;
 const START_WAYPOINT_AUTO_SKIP_DISTANCE_METERS = 180;
+const RESUME_ROUTE_PROMPT_MIN_FIRST_DISTANCE_METERS = 250;
+const RESUME_ROUTE_PROMPT_MIN_ADVANTAGE_METERS = 150;
 const REMAINING_LINE_SWAP_MS = 3500;
 const NEXT_JUNCTION_PREVIEW_MAX_GAP_METERS = 182.88; // 200 yards
 const GENERIC_CONTINUE_REGEX = /^continue\b/i;
@@ -2008,6 +2010,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [showRefreshRouteMenu, setShowRefreshRouteMenu] = useState(false);
   const [showRouteTypeSelector, setShowRouteTypeSelector] = useState(false);
   const hasRouteIntent = routeDestination || waypoints.length > 0;
+  const resumeRoutePromptInFlightRef = useRef(false);
 
   const closeAddPointMenu = () => {
     setShowAddPointMenu(false);
@@ -2029,6 +2032,73 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       .filter(({ index }) => !visitedWaypointIndices.includes(index));
   }
 
+  function getClosestUnvisitedWaypointEntry(origin, entries) {
+    let closestEntry = null;
+    let closestDistance = Infinity;
+
+    entries.forEach((entry) => {
+      const waypointCoord = normalizeCoord(entry.waypoint);
+      if (!waypointCoord) return;
+
+      const distanceMeters = distanceBetweenMeters(origin, waypointCoord);
+      if (!Number.isFinite(distanceMeters) || distanceMeters >= closestDistance) return;
+
+      closestDistance = distanceMeters;
+      closestEntry = { ...entry, distanceMeters };
+    });
+
+    return closestEntry;
+  }
+
+  function getResumeRoutePromptContext(origin, unvisitedEntries) {
+    if (!origin || unvisitedEntries.length < 2) return null;
+
+    const firstEntry = unvisitedEntries[0];
+    const firstWaypointCoord = normalizeCoord(firstEntry.waypoint);
+    if (!firstWaypointCoord) return null;
+
+    const firstWaypointDistance = distanceBetweenMeters(origin, firstWaypointCoord);
+    if (!Number.isFinite(firstWaypointDistance) || firstWaypointDistance < RESUME_ROUTE_PROMPT_MIN_FIRST_DISTANCE_METERS) {
+      return null;
+    }
+
+    const closestEntry = getClosestUnvisitedWaypointEntry(origin, unvisitedEntries);
+    if (!closestEntry || closestEntry.index === firstEntry.index) return null;
+
+    const distanceAdvantage = firstWaypointDistance - closestEntry.distanceMeters;
+    if (!Number.isFinite(distanceAdvantage) || distanceAdvantage < RESUME_ROUTE_PROMPT_MIN_ADVANTAGE_METERS) {
+      return null;
+    }
+
+    return {
+      firstEntry,
+      closestEntry,
+      firstWaypointDistance,
+      distanceAdvantage,
+    };
+  }
+
+  function promptResumeRoute({ closestEntry, skippedCount }) {
+    return new Promise((resolve) => {
+      Alert.alert(
+        'Continue route?',
+        `It looks like you are back on the road near ${closestEntry.waypoint?.title || `waypoint ${closestEntry.index + 1}`}. Continue from here and skip ${skippedCount} earlier stop${skippedCount === 1 ? '' : 's'}?`,
+        [
+          {
+            text: 'Keep full route',
+            style: 'cancel',
+            onPress: () => resolve(false),
+          },
+          {
+            text: 'Continue from here',
+            onPress: () => resolve(true),
+          },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) }
+      );
+    });
+  }
+
   async function rerouteFromCurrentLocation({
     originOverride = null,
     skipNextWaypoint = false,
@@ -2044,6 +2114,38 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const unvisitedEntries = getUnvisitedWaypointEntries();
     let remainingEntries = unvisitedEntries;
     let skippedEntry = null;
+
+    const resumeRoutePromptContext =
+      (source === 'auto-offroute' || source === 'manual-refresh')
+        ? getResumeRoutePromptContext(origin, unvisitedEntries)
+        : null;
+
+    if (resumeRoutePromptContext && !resumeRoutePromptInFlightRef.current) {
+      resumeRoutePromptInFlightRef.current = true;
+      try {
+        const shouldContinueFromHere = await promptResumeRoute({
+          closestEntry: resumeRoutePromptContext.closestEntry,
+          skippedCount: resumeRoutePromptContext.closestEntry.index,
+        });
+
+        if (shouldContinueFromHere) {
+          for (const entry of unvisitedEntries) {
+            if (entry.index < resumeRoutePromptContext.closestEntry.index) {
+              markWaypointVisited(entry.index);
+            }
+          }
+
+          remainingEntries = unvisitedEntries.filter(({ index }) => index >= resumeRoutePromptContext.closestEntry.index);
+          setPostbox({
+            type: 'info',
+            title: 'Route resumed',
+            message: `Continuing from ${resumeRoutePromptContext.closestEntry.waypoint?.title || `waypoint ${resumeRoutePromptContext.closestEntry.index + 1}`}.`,
+          });
+        }
+      } finally {
+        resumeRoutePromptInFlightRef.current = false;
+      }
+    }
 
     if (skipNextWaypoint) {
       if (remainingEntries.length === 0) {
