@@ -1785,6 +1785,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Dead reckoning: estimate position based on heading when GPS is poor
   const lastGoodGPSRef = useRef(null); // Last accurate GPS reading
   const lastGPSTimeRef = useRef(null); // Time of last GPS update
+  const lastWatchErrorLogRef = useRef({ signature: null, timestamp: 0 });
+  const lastWatchFallbackAttemptRef = useRef(0);
   const estimatedSpeedRef = useRef(0); // Estimated speed in m/s (from recent updates)
   const positionSmoothingRef = useRef(null); // Smoothed position for Kalman-like filtering
   const lastRouteBuildLocationRef = useRef(null); // Track location used for last route build to avoid excessive rebuilds
@@ -4529,19 +4531,72 @@ function getStepCompletionThresholds(step = null) {
           }
         },
         (error) => {
-          console.error("[MAP] Location watch error:", error);
-          
-          // Handle specific location permission/service errors
-          if (error?.code === 'PERMISSION_DENIED' || error?.message?.includes('permission')) {
-            ToastAndroid.show('Location permission required to use map', ToastAndroid.SHORT);
-          } else if (error?.code === 'POSITION_UNAVAILABLE' || error?.message?.includes('Cannot obtain')) {
-            // This is a temporary GPS signal loss - don't overwhelm with ToastAndroid
-            debugLog("GPS_UNAVAILABLE", "GPS signal temporarily unavailable");
-          } else if (error?.code === 'TIMEOUT') {
-            debugLog("GPS_TIMEOUT", "Location request timeout");
-          } else {
-            debugLog("GPS_ERROR", "Unexpected location error: " + error?.message || error);
+          const errorCode = String(error?.code || '').toUpperCase();
+          const errorMessage = String(error?.message || 'Unknown location error');
+          const loweredMessage = errorMessage.toLowerCase();
+          const now = Date.now();
+
+          const isPermissionError =
+            errorCode.includes('PERMISSION') ||
+            loweredMessage.includes('permission');
+          const isTemporaryGpsUnavailable =
+            errorCode === 'POSITION_UNAVAILABLE' ||
+            errorCode === 'TIMEOUT' ||
+            loweredMessage.includes('cannot obtain current location') ||
+            loweredMessage.includes('position unavailable') ||
+            loweredMessage.includes('timeout');
+
+          const logSignature = `${errorCode}:${errorMessage}`;
+          const shouldLogNow =
+            logSignature !== lastWatchErrorLogRef.current.signature ||
+            now - lastWatchErrorLogRef.current.timestamp >= 20000;
+
+          if (shouldLogNow) {
+            if (isTemporaryGpsUnavailable) {
+              console.warn('[MAP] Location watch temporary issue:', { code: errorCode || 'UNKNOWN', message: errorMessage });
+            } else {
+              console.error('[MAP] Location watch error:', error);
+            }
+            lastWatchErrorLogRef.current = { signature: logSignature, timestamp: now };
           }
+
+          if (isPermissionError) {
+            if (Platform.OS === 'android') {
+              ToastAndroid.show('Location permission required to use map', ToastAndroid.SHORT);
+            }
+            return;
+          }
+
+          if (isTemporaryGpsUnavailable) {
+            debugLog('GPS_UNAVAILABLE', 'GPS signal temporarily unavailable', {
+              code: errorCode || null,
+              message: errorMessage,
+            });
+
+            if (now - lastWatchFallbackAttemptRef.current >= 15000) {
+              lastWatchFallbackAttemptRef.current = now;
+              Location.getLastKnownPositionAsync()
+                .then((fallbackPosition) => {
+                  const fallbackCoords = fallbackPosition?.coords;
+                  if (!fallbackCoords) return;
+
+                  setUserLocation((prev) => prev || fallbackCoords);
+                  if (Number.isFinite(fallbackCoords?.accuracy) && fallbackCoords.accuracy <= MAX_LOCATION_ACCURACY) {
+                    lastGoodGPSRef.current = fallbackCoords;
+                    lastGPSTimeRef.current = Date.now();
+                  }
+                })
+                .catch((fallbackError) => {
+                  console.warn('[MAP] Failed to use last known location after watch error:', fallbackError?.message || fallbackError);
+                });
+            }
+            return;
+          }
+
+          debugLog('GPS_ERROR', `Unexpected location error: ${errorMessage}`, {
+            code: errorCode || null,
+            message: errorMessage,
+          });
         }
       );
     })();
