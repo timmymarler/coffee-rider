@@ -247,6 +247,7 @@ const STEP_COMPLETION_PROGRESS_METERS = 8;
 const STEP_COMPLETION_CLEARANCE_METERS = 14;
 const ROUNDABOUT_COMPLETION_PROGRESS_METERS = 14;
 const ROUNDABOUT_COMPLETION_CLEARANCE_METERS = 22;
+const JUNCTION_DISTANCE_ZERO_FALLBACK_METERS = 2;
 const ARRIVAL_ANNOUNCE_DISTANCE_METERS = 35;
 const ARRIVAL_PANEL_DISTANCE_METERS = 45;
 const ARRIVAL_ONROUTE_TOLERANCE_METERS = 30;
@@ -259,6 +260,8 @@ const GENERIC_CONTINUE_REGEX = /^continue\b/i;
 const SPEECH_FAILSAFE_INTERVAL_MS = 20000;
 const METERS_PER_DEGREE_LAT = 111320;
 const EARTH_CIRCUMFERENCE_METERS = 40075000;
+const MAX_PERSISTENT_TRAVELED_POINTS = 2500;
+const PERSISTENT_RECENT_POINTS_WINDOW = 1200;
 
 function metersPerDegreeLongitude(lat) {
   return (EARTH_CIRCUMFERENCE_METERS * Math.cos((lat * Math.PI) / 180)) / 360;
@@ -322,6 +325,24 @@ function offsetCoordinateByHeadingMeters(baseCoord, headingDegrees, meters) {
   const offsetY = Math.cos(headingRadians) * meters;
   const offsetX = Math.sin(headingRadians) * meters;
   return localMetersToLatLng(baseCoord, offsetX, offsetY);
+}
+
+function capPersistentTraveledPath(points) {
+  if (!Array.isArray(points) || points.length <= MAX_PERSISTENT_TRAVELED_POINTS) {
+    return points;
+  }
+
+  const recentWindow = Math.min(PERSISTENT_RECENT_POINTS_WINDOW, points.length);
+  const splitIndex = Math.max(0, points.length - recentWindow);
+  const older = points.slice(0, splitIndex).filter((_, idx) => idx % 2 === 0);
+  const recent = points.slice(splitIndex);
+  const merged = [...older, ...recent];
+
+  if (merged.length <= MAX_PERSISTENT_TRAVELED_POINTS) {
+    return merged;
+  }
+
+  return merged.slice(merged.length - MAX_PERSISTENT_TRAVELED_POINTS);
 }
 
 /* ------------------------------------------------------------------ */
@@ -3561,21 +3582,33 @@ function getStepCompletionThresholds(step = null) {
     let distToEnd = null;
     if (nextStepIdx < routeSteps.length) {
       const upcomingStep = routeSteps[nextStepIdx];
-      if (typeof upcomingStep?.polylineProgress === 'number') {
-        const remainingMeters = Math.max(upcomingStep.polylineProgress - progressForStepMapping, 0);
-        if (Number.isFinite(remainingMeters)) {
-          distToEnd = remainingMeters;
-        }
-      }
-
       const hasEndCoordinates =
         typeof upcomingStep?.end?.latitude === 'number' &&
         typeof upcomingStep?.end?.longitude === 'number' &&
         Number.isFinite(upcomingStep.end.latitude) &&
         Number.isFinite(upcomingStep.end.longitude);
+      const straightLineDistance = hasEndCoordinates
+        ? distanceBetweenMeters(navigationPosition, upcomingStep.end)
+        : null;
+
+      if (typeof upcomingStep?.polylineProgress === 'number') {
+        const remainingMeters = Math.max(upcomingStep.polylineProgress - progressForStepMapping, 0);
+        if (Number.isFinite(remainingMeters)) {
+          distToEnd = remainingMeters;
+
+          // On overlapping/self-crossing routes, progress mapping can collapse to ~0
+          // even when the step endpoint is still physically ahead.
+          if (
+            distToEnd <= JUNCTION_DISTANCE_ZERO_FALLBACK_METERS &&
+            Number.isFinite(straightLineDistance) &&
+            straightLineDistance > JUNCTION_DISTANCE_ZERO_FALLBACK_METERS
+          ) {
+            distToEnd = straightLineDistance;
+          }
+        }
+      }
 
       if (!Number.isFinite(distToEnd) && hasEndCoordinates) {
-        const straightLineDistance = distanceBetweenMeters(navigationPosition, upcomingStep.end);
         if (Number.isFinite(straightLineDistance)) {
           distToEnd = straightLineDistance;
         }
@@ -4218,7 +4251,7 @@ function getStepCompletionThresholds(step = null) {
             prev[prev.length - 1].longitude === userLocation.longitude) {
           return prev;
         }
-        return [...prev, userLocation];
+        return capPersistentTraveledPath([...prev, userLocation]);
       });
       lastTravelledWaypointRef.current = userLocation;
     }
@@ -6863,17 +6896,25 @@ function getStepCompletionThresholds(step = null) {
             })()
           )}
 
+            {(() => {
+              const planningRouteCoords = isNavigationMode ? [] : routeCoords;
+              const activeRouteCoords = isNavigationMode
+                ? (remainingPolyline && remainingPolyline.length > 0 ? remainingPolyline : routeCoords)
+                : [];
+
+              return (
+                <>
             {/* Base route - outline layer for pedestrians and cyclists */}
               {(() => {
                 const shouldRender = shouldRenderOutline(userTravelMode);
-                if (shouldRender && routeCoords.length > 0) {
+                  if (shouldRender && planningRouteCoords.length > 0) {
                   console.log('[POLYLINE MOUNT] base-outline- 0');
                 }
                 return (
                   <Polyline
                     key="base-outline"
-                    coordinates={routeCoords}
-                    strokeWidth={shouldRender ? (hidePolylines ? 0 : getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth) : 0}
+                      coordinates={planningRouteCoords}
+                      strokeWidth={shouldRender ? (hidePolylines ? 0 : (planningRouteCoords.length > 0 ? getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth : 0)) : 0}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                     zIndex={899}
                   />
@@ -6882,14 +6923,14 @@ function getStepCompletionThresholds(step = null) {
               {/* Base route */}
               {(() => {
                 const shouldRender = true;  // Always render, vary strokeWidth
-                if (routeCoords.length > 0) {
+                if (planningRouteCoords.length > 0) {
                   console.log('[POLYLINE MOUNT] base- 0');
                 }
                 return (
                   <Polyline
                     key="base-route"
-                    coordinates={routeCoords}
-                    strokeWidth={hidePolylines ? 0 : (routeCoords.length > 0 ? getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth : 0)}
+                    coordinates={planningRouteCoords}
+                    strokeWidth={hidePolylines ? 0 : (planningRouteCoords.length > 0 ? getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth : 0)}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                     zIndex={900}
                   />
@@ -6932,19 +6973,22 @@ function getStepCompletionThresholds(step = null) {
             {/* Remaining route - outline layer for pedestrians and cyclists */}
               <Polyline
                 key="active-outline"
-                coordinates={routeCoords}
-                strokeWidth={hidePolylines ? 0 : (shouldRenderOutline(userTravelMode) && routeCoords.length > 0 ? (isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)) : 0)}
+                coordinates={activeRouteCoords}
+                strokeWidth={hidePolylines ? 0 : (shouldRenderOutline(userTravelMode) && activeRouteCoords.length > 0 ? (isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)) : 0)}
                 strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                 zIndex={999}
               />
               {/* Remaining route */}
               <Polyline
                 key="active-route"
-                coordinates={routeCoords}
-                strokeWidth={hidePolylines ? 0 : (routeCoords.length > 0 ? (isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)) : 0)}
+                coordinates={activeRouteCoords}
+                strokeWidth={hidePolylines ? 0 : (activeRouteCoords.length > 0 ? (isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)) : 0)}
                 strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                 zIndex={1000}
               />
+              </>
+            );
+          })()}
 
         </MapView>
       ) : (
