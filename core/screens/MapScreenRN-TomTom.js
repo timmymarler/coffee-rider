@@ -9,7 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
+import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
@@ -252,16 +252,12 @@ const ARRIVAL_ANNOUNCE_DISTANCE_METERS = 35;
 const ARRIVAL_PANEL_DISTANCE_METERS = 45;
 const ARRIVAL_ONROUTE_TOLERANCE_METERS = 30;
 const START_WAYPOINT_AUTO_SKIP_DISTANCE_METERS = 180;
-const RESUME_ROUTE_PROMPT_MIN_FIRST_DISTANCE_METERS = 250;
-const RESUME_ROUTE_PROMPT_MIN_ADVANTAGE_METERS = 150;
 const REMAINING_LINE_SWAP_MS = 3500;
 const NEXT_JUNCTION_PREVIEW_MAX_GAP_METERS = 182.88; // 200 yards
 const GENERIC_CONTINUE_REGEX = /^continue\b/i;
 const SPEECH_FAILSAFE_INTERVAL_MS = 20000;
 const METERS_PER_DEGREE_LAT = 111320;
 const EARTH_CIRCUMFERENCE_METERS = 40075000;
-const MAX_PERSISTENT_TRAVELED_POINTS = 2500;
-const PERSISTENT_RECENT_POINTS_WINDOW = 1200;
 
 function metersPerDegreeLongitude(lat) {
   return (EARTH_CIRCUMFERENCE_METERS * Math.cos((lat * Math.PI) / 180)) / 360;
@@ -325,24 +321,6 @@ function offsetCoordinateByHeadingMeters(baseCoord, headingDegrees, meters) {
   const offsetY = Math.cos(headingRadians) * meters;
   const offsetX = Math.sin(headingRadians) * meters;
   return localMetersToLatLng(baseCoord, offsetX, offsetY);
-}
-
-function capPersistentTraveledPath(points) {
-  if (!Array.isArray(points) || points.length <= MAX_PERSISTENT_TRAVELED_POINTS) {
-    return points;
-  }
-
-  const recentWindow = Math.min(PERSISTENT_RECENT_POINTS_WINDOW, points.length);
-  const splitIndex = Math.max(0, points.length - recentWindow);
-  const older = points.slice(0, splitIndex).filter((_, idx) => idx % 2 === 0);
-  const recent = points.slice(splitIndex);
-  const merged = [...older, ...recent];
-
-  if (merged.length <= MAX_PERSISTENT_TRAVELED_POINTS) {
-    return merged;
-  }
-
-  return merged.slice(merged.length - MAX_PERSISTENT_TRAVELED_POINTS);
 }
 
 /* ------------------------------------------------------------------ */
@@ -792,45 +770,6 @@ function buildHeadDirectionInstruction(step = {}) {
   }
 
   return `Head ${cardinal}`;
-}
-
-function getStepStreetLabel(step = {}) {
-  return (step?.nextStreetName || step?.streetName || '').trim();
-}
-
-function buildSpokenInstructionWithStreet(baseInstruction, step = {}) {
-  if (!baseInstruction) return null;
-
-  const streetLabel = getStepStreetLabel(step);
-  if (!streetLabel) return baseInstruction;
-
-  const normalizedInstruction = baseInstruction.trim();
-  if (normalizedInstruction.length === 0) return null;
-
-  if (normalizedInstruction.toLowerCase().includes(streetLabel.toLowerCase())) {
-    return normalizedInstruction;
-  }
-
-  const maneuver = (step?.nextManeuver || step?.maneuver || '').trim().toUpperCase();
-
-  if (
-    maneuver.includes('UTURN') ||
-    maneuver.includes('TURN_LEFT_U') ||
-    maneuver.includes('TURN_RIGHT_U')
-  ) {
-    return `${normalizedInstruction} onto ${streetLabel}`;
-  }
-
-  if (
-    maneuver.includes('TURN') ||
-    maneuver === 'LEFT' ||
-    maneuver === 'RIGHT' ||
-    maneuver.includes('ROUNDABOUT')
-  ) {
-    return `${normalizedInstruction} onto ${streetLabel}`;
-  }
-
-  return normalizedInstruction;
 }
 
 function getEffectiveInstructionText(step) {
@@ -1806,8 +1745,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   // Dead reckoning: estimate position based on heading when GPS is poor
   const lastGoodGPSRef = useRef(null); // Last accurate GPS reading
   const lastGPSTimeRef = useRef(null); // Time of last GPS update
-  const lastWatchErrorLogRef = useRef({ signature: null, timestamp: 0 });
-  const lastWatchFallbackAttemptRef = useRef(0);
   const estimatedSpeedRef = useRef(0); // Estimated speed in m/s (from recent updates)
   const positionSmoothingRef = useRef(null); // Smoothed position for Kalman-like filtering
   const lastRouteBuildLocationRef = useRef(null); // Track location used for last route build to avoid excessive rebuilds
@@ -2072,7 +2009,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [showRefreshRouteMenu, setShowRefreshRouteMenu] = useState(false);
   const [showRouteTypeSelector, setShowRouteTypeSelector] = useState(false);
   const hasRouteIntent = routeDestination || waypoints.length > 0;
-  const resumeRoutePromptInFlightRef = useRef(false);
 
   const closeAddPointMenu = () => {
     setShowAddPointMenu(false);
@@ -2094,73 +2030,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       .filter(({ index }) => !visitedWaypointIndices.includes(index));
   }
 
-  function getClosestUnvisitedWaypointEntry(origin, entries) {
-    let closestEntry = null;
-    let closestDistance = Infinity;
-
-    entries.forEach((entry) => {
-      const waypointCoord = normalizeCoord(entry.waypoint);
-      if (!waypointCoord) return;
-
-      const distanceMeters = distanceBetweenMeters(origin, waypointCoord);
-      if (!Number.isFinite(distanceMeters) || distanceMeters >= closestDistance) return;
-
-      closestDistance = distanceMeters;
-      closestEntry = { ...entry, distanceMeters };
-    });
-
-    return closestEntry;
-  }
-
-  function getResumeRoutePromptContext(origin, unvisitedEntries) {
-    if (!origin || unvisitedEntries.length < 2) return null;
-
-    const firstEntry = unvisitedEntries[0];
-    const firstWaypointCoord = normalizeCoord(firstEntry.waypoint);
-    if (!firstWaypointCoord) return null;
-
-    const firstWaypointDistance = distanceBetweenMeters(origin, firstWaypointCoord);
-    if (!Number.isFinite(firstWaypointDistance) || firstWaypointDistance < RESUME_ROUTE_PROMPT_MIN_FIRST_DISTANCE_METERS) {
-      return null;
-    }
-
-    const closestEntry = getClosestUnvisitedWaypointEntry(origin, unvisitedEntries);
-    if (!closestEntry || closestEntry.index === firstEntry.index) return null;
-
-    const distanceAdvantage = firstWaypointDistance - closestEntry.distanceMeters;
-    if (!Number.isFinite(distanceAdvantage) || distanceAdvantage < RESUME_ROUTE_PROMPT_MIN_ADVANTAGE_METERS) {
-      return null;
-    }
-
-    return {
-      firstEntry,
-      closestEntry,
-      firstWaypointDistance,
-      distanceAdvantage,
-    };
-  }
-
-  function promptResumeRoute({ closestEntry, skippedCount }) {
-    return new Promise((resolve) => {
-      Alert.alert(
-        'Continue route?',
-        `It looks like you are back on the road near ${closestEntry.waypoint?.title || `waypoint ${closestEntry.index + 1}`}. Continue from here and skip ${skippedCount} earlier stop${skippedCount === 1 ? '' : 's'}?`,
-        [
-          {
-            text: 'Keep full route',
-            style: 'cancel',
-            onPress: () => resolve(false),
-          },
-          {
-            text: 'Continue from here',
-            onPress: () => resolve(true),
-          },
-        ],
-        { cancelable: true, onDismiss: () => resolve(false) }
-      );
-    });
-  }
-
   async function rerouteFromCurrentLocation({
     originOverride = null,
     skipNextWaypoint = false,
@@ -2176,38 +2045,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const unvisitedEntries = getUnvisitedWaypointEntries();
     let remainingEntries = unvisitedEntries;
     let skippedEntry = null;
-
-    const resumeRoutePromptContext =
-      (source === 'auto-offroute' || source === 'manual-refresh')
-        ? getResumeRoutePromptContext(origin, unvisitedEntries)
-        : null;
-
-    if (resumeRoutePromptContext && !resumeRoutePromptInFlightRef.current) {
-      resumeRoutePromptInFlightRef.current = true;
-      try {
-        const shouldContinueFromHere = await promptResumeRoute({
-          closestEntry: resumeRoutePromptContext.closestEntry,
-          skippedCount: resumeRoutePromptContext.closestEntry.index,
-        });
-
-        if (shouldContinueFromHere) {
-          for (const entry of unvisitedEntries) {
-            if (entry.index < resumeRoutePromptContext.closestEntry.index) {
-              markWaypointVisited(entry.index);
-            }
-          }
-
-          remainingEntries = unvisitedEntries.filter(({ index }) => index >= resumeRoutePromptContext.closestEntry.index);
-          setPostbox({
-            type: 'info',
-            title: 'Route resumed',
-            message: `Continuing from ${resumeRoutePromptContext.closestEntry.waypoint?.title || `waypoint ${resumeRoutePromptContext.closestEntry.index + 1}`}.`,
-          });
-        }
-      } finally {
-        resumeRoutePromptInFlightRef.current = false;
-      }
-    }
 
     if (skipNextWaypoint) {
       if (remainingEntries.length === 0) {
@@ -3587,6 +3424,7 @@ function getStepCompletionThresholds(step = null) {
         typeof upcomingStep?.end?.longitude === 'number' &&
         Number.isFinite(upcomingStep.end.latitude) &&
         Number.isFinite(upcomingStep.end.longitude);
+
       const straightLineDistance = hasEndCoordinates
         ? distanceBetweenMeters(navigationPosition, upcomingStep.end)
         : null;
@@ -3596,8 +3434,6 @@ function getStepCompletionThresholds(step = null) {
         if (Number.isFinite(remainingMeters)) {
           distToEnd = remainingMeters;
 
-          // On overlapping/self-crossing routes, progress mapping can collapse to ~0
-          // even when the step endpoint is still physically ahead.
           if (
             distToEnd <= JUNCTION_DISTANCE_ZERO_FALLBACK_METERS &&
             Number.isFinite(straightLineDistance) &&
@@ -3729,11 +3565,8 @@ function getStepCompletionThresholds(step = null) {
         const baseInstruction = effectiveInstruction || currentStep?.nextInstruction || currentStep?.instruction;
         if (!baseInstruction) return false;
 
-        const spokenBaseInstruction = buildSpokenInstructionWithStreet(baseInstruction, currentStep);
-        if (!spokenBaseInstruction) return false;
-
         const distanceForSpeech = nextJunctionDistance ?? lastKnownDistanceRef.current;
-        spokenInstruction = buildSpokenInstruction(spokenBaseInstruction, distanceForSpeech, distanceUnits);
+        spokenInstruction = buildSpokenInstruction(baseInstruction, distanceForSpeech, distanceUnits);
         if (!spokenInstruction) return false;
       }
 
@@ -4251,7 +4084,7 @@ function getStepCompletionThresholds(step = null) {
             prev[prev.length - 1].longitude === userLocation.longitude) {
           return prev;
         }
-        return capPersistentTraveledPath([...prev, userLocation]);
+        return [...prev, userLocation];
       });
       lastTravelledWaypointRef.current = userLocation;
     }
@@ -4564,72 +4397,19 @@ function getStepCompletionThresholds(step = null) {
           }
         },
         (error) => {
-          const errorCode = String(error?.code || '').toUpperCase();
-          const errorMessage = String(error?.message || 'Unknown location error');
-          const loweredMessage = errorMessage.toLowerCase();
-          const now = Date.now();
-
-          const isPermissionError =
-            errorCode.includes('PERMISSION') ||
-            loweredMessage.includes('permission');
-          const isTemporaryGpsUnavailable =
-            errorCode === 'POSITION_UNAVAILABLE' ||
-            errorCode === 'TIMEOUT' ||
-            loweredMessage.includes('cannot obtain current location') ||
-            loweredMessage.includes('position unavailable') ||
-            loweredMessage.includes('timeout');
-
-          const logSignature = `${errorCode}:${errorMessage}`;
-          const shouldLogNow =
-            logSignature !== lastWatchErrorLogRef.current.signature ||
-            now - lastWatchErrorLogRef.current.timestamp >= 20000;
-
-          if (shouldLogNow) {
-            if (isTemporaryGpsUnavailable) {
-              console.warn('[MAP] Location watch temporary issue:', { code: errorCode || 'UNKNOWN', message: errorMessage });
-            } else {
-              console.error('[MAP] Location watch error:', error);
-            }
-            lastWatchErrorLogRef.current = { signature: logSignature, timestamp: now };
+          console.error("[MAP] Location watch error:", error);
+          
+          // Handle specific location permission/service errors
+          if (error?.code === 'PERMISSION_DENIED' || error?.message?.includes('permission')) {
+            ToastAndroid.show('Location permission required to use map', ToastAndroid.SHORT);
+          } else if (error?.code === 'POSITION_UNAVAILABLE' || error?.message?.includes('Cannot obtain')) {
+            // This is a temporary GPS signal loss - don't overwhelm with ToastAndroid
+            debugLog("GPS_UNAVAILABLE", "GPS signal temporarily unavailable");
+          } else if (error?.code === 'TIMEOUT') {
+            debugLog("GPS_TIMEOUT", "Location request timeout");
+          } else {
+            debugLog("GPS_ERROR", "Unexpected location error: " + error?.message || error);
           }
-
-          if (isPermissionError) {
-            if (Platform.OS === 'android') {
-              ToastAndroid.show('Location permission required to use map', ToastAndroid.SHORT);
-            }
-            return;
-          }
-
-          if (isTemporaryGpsUnavailable) {
-            debugLog('GPS_UNAVAILABLE', 'GPS signal temporarily unavailable', {
-              code: errorCode || null,
-              message: errorMessage,
-            });
-
-            if (now - lastWatchFallbackAttemptRef.current >= 15000) {
-              lastWatchFallbackAttemptRef.current = now;
-              Location.getLastKnownPositionAsync()
-                .then((fallbackPosition) => {
-                  const fallbackCoords = fallbackPosition?.coords;
-                  if (!fallbackCoords) return;
-
-                  setUserLocation((prev) => prev || fallbackCoords);
-                  if (Number.isFinite(fallbackCoords?.accuracy) && fallbackCoords.accuracy <= MAX_LOCATION_ACCURACY) {
-                    lastGoodGPSRef.current = fallbackCoords;
-                    lastGPSTimeRef.current = Date.now();
-                  }
-                })
-                .catch((fallbackError) => {
-                  console.warn('[MAP] Failed to use last known location after watch error:', fallbackError?.message || fallbackError);
-                });
-            }
-            return;
-          }
-
-          debugLog('GPS_ERROR', `Unexpected location error: ${errorMessage}`, {
-            code: errorCode || null,
-            message: errorMessage,
-          });
         }
       );
     })();
@@ -6348,10 +6128,7 @@ function getStepCompletionThresholds(step = null) {
         ? formatEtaFromNow(remainingDurationSeconds)
         : null;
 
-      totalRemainingPrimary = [
-        'Destination',
-        formatDistanceForUnit(remainingDistanceMeters, distanceUnits),
-      ].filter(Boolean).join(' • ');
+      totalRemainingPrimary = formatDistanceForUnit(remainingDistanceMeters, distanceUnits);
 
       totalRemainingSecondary = [
         durationText,
@@ -6387,10 +6164,7 @@ function getStepCompletionThresholds(step = null) {
           ? formatEtaFromNow(nextWaypointSeconds)
           : null;
 
-        nextWaypointPrimary = [
-          `WP ${nextUnvisitedWaypointIndex + 1}/${waypoints.length}`,
-          formatDistanceForUnit(distanceToNextWaypoint, distanceUnits),
-        ].filter(Boolean).join(' • ');
+        nextWaypointPrimary = formatDistanceForUnit(distanceToNextWaypoint, distanceUnits);
 
         nextWaypointSecondary = [
           nextWaypointDurationText,
@@ -6401,12 +6175,15 @@ function getStepCompletionThresholds(step = null) {
 
     let remainingPrimary = totalRemainingPrimary;
     let remainingSecondary = totalRemainingSecondary;
+    let remainingPrimaryIcon = totalRemainingPrimary ? 'flag-checkered' : null;
     if (totalRemainingPrimary && nextWaypointPrimary) {
       remainingPrimary = showWaypointSummaryLine ? nextWaypointPrimary : totalRemainingPrimary;
       remainingSecondary = showWaypointSummaryLine ? nextWaypointSecondary : totalRemainingSecondary;
+      remainingPrimaryIcon = showWaypointSummaryLine ? 'map-marker-path' : 'flag-checkered';
     } else if (!totalRemainingPrimary && nextWaypointPrimary) {
       remainingPrimary = nextWaypointPrimary;
       remainingSecondary = nextWaypointSecondary;
+      remainingPrimaryIcon = 'map-marker-path';
     }
 
     const continueCheckSource = (label || effectiveInstruction || rawNextInstruction || '').trim();
@@ -6579,12 +6356,22 @@ function getStepCompletionThresholds(step = null) {
                 </Text>
             )}
             {remainingPrimary && (
-              <Text
-                style={[styles.junctionRemaining, isLandscape && styles.junctionRemainingLandscape]}
-                numberOfLines={1}
-              >
-                {remainingPrimary}
-              </Text>
+              <View style={styles.junctionRemainingRow}>
+                {remainingPrimaryIcon ? (
+                  <MaterialCommunityIcons
+                    name={remainingPrimaryIcon}
+                    size={15}
+                    color="rgba(245, 245, 240, 0.95)"
+                    style={styles.junctionRemainingIcon}
+                  />
+                ) : null}
+                <Text
+                  style={[styles.junctionRemaining, isLandscape && styles.junctionRemainingLandscape]}
+                  numberOfLines={1}
+                >
+                  {remainingPrimary}
+                </Text>
+              </View>
             )}
             {remainingSecondary ? (
               <Text
@@ -6896,25 +6683,17 @@ function getStepCompletionThresholds(step = null) {
             })()
           )}
 
-            {(() => {
-              const planningRouteCoords = isNavigationMode ? [] : routeCoords;
-              const activeRouteCoords = isNavigationMode
-                ? (remainingPolyline && remainingPolyline.length > 0 ? remainingPolyline : routeCoords)
-                : [];
-
-              return (
-                <>
             {/* Base route - outline layer for pedestrians and cyclists */}
               {(() => {
                 const shouldRender = shouldRenderOutline(userTravelMode);
-                  if (shouldRender && planningRouteCoords.length > 0) {
+                if (shouldRender && routeCoords.length > 0) {
                   console.log('[POLYLINE MOUNT] base-outline- 0');
                 }
                 return (
                   <Polyline
                     key="base-outline"
-                      coordinates={planningRouteCoords}
-                      strokeWidth={shouldRender ? (hidePolylines ? 0 : (planningRouteCoords.length > 0 ? getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth : 0)) : 0}
+                    coordinates={routeCoords}
+                    strokeWidth={shouldRender ? (hidePolylines ? 0 : getRouteStyle(userTravelMode, theme, isNavigationMode).outlineWidth) : 0}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                     zIndex={899}
                   />
@@ -6923,14 +6702,14 @@ function getStepCompletionThresholds(step = null) {
               {/* Base route */}
               {(() => {
                 const shouldRender = true;  // Always render, vary strokeWidth
-                if (planningRouteCoords.length > 0) {
+                if (routeCoords.length > 0) {
                   console.log('[POLYLINE MOUNT] base- 0');
                 }
                 return (
                   <Polyline
                     key="base-route"
-                    coordinates={planningRouteCoords}
-                    strokeWidth={hidePolylines ? 0 : (planningRouteCoords.length > 0 ? getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth : 0)}
+                    coordinates={routeCoords}
+                    strokeWidth={hidePolylines ? 0 : (routeCoords.length > 0 ? getRouteStyle(userTravelMode, theme, isNavigationMode).mainWidth : 0)}
                     strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                     zIndex={900}
                   />
@@ -6973,22 +6752,19 @@ function getStepCompletionThresholds(step = null) {
             {/* Remaining route - outline layer for pedestrians and cyclists */}
               <Polyline
                 key="active-outline"
-                coordinates={activeRouteCoords}
-                strokeWidth={hidePolylines ? 0 : (shouldRenderOutline(userTravelMode) && activeRouteCoords.length > 0 ? (isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)) : 0)}
+                coordinates={routeCoords}
+                strokeWidth={hidePolylines ? 0 : (shouldRenderOutline(userTravelMode) && routeCoords.length > 0 ? (isNavigationMode && followUser ? 9 : (isNavigationMode ? 7 : 5)) : 0)}
                 strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).outlineColor}
                 zIndex={999}
               />
               {/* Remaining route */}
               <Polyline
                 key="active-route"
-                coordinates={activeRouteCoords}
-                strokeWidth={hidePolylines ? 0 : (activeRouteCoords.length > 0 ? (isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)) : 0)}
+                coordinates={routeCoords}
+                strokeWidth={hidePolylines ? 0 : (routeCoords.length > 0 ? (isNavigationMode && followUser ? 7 : (isNavigationMode ? 5 : 3)) : 0)}
                 strokeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
                 zIndex={1000}
               />
-              </>
-            );
-          })()}
 
         </MapView>
       ) : (
@@ -8048,6 +7824,14 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "rgba(245, 245, 240, 0.8)",
     marginTop: 3,
+  },
+  junctionRemainingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 3,
+  },
+  junctionRemainingIcon: {
+    marginRight: 6,
   },
   junctionRemainingLandscape: {
     fontSize: 13,
