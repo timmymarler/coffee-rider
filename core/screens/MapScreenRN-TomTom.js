@@ -6224,12 +6224,12 @@ function getStepCompletionThresholds(step = null) {
         ? formatEtaFromNow(remainingDurationSeconds)
         : null;
 
-      totalRemainingPrimary = formatDistanceForUnit(remainingDistanceMeters, distanceUnits);
-
-      totalRemainingSecondary = [
+      totalRemainingPrimary = [
+        formatDistanceForUnit(remainingDistanceMeters, distanceUnits),
         durationText,
-        etaText ? `ETA ${etaText}` : null,
       ].filter(Boolean).join(' • ');
+
+      totalRemainingSecondary = etaText ? `ETA ${etaText}` : null;
     }
 
     let nextWaypointPrimary = null;
@@ -6263,12 +6263,10 @@ function getStepCompletionThresholds(step = null) {
         nextWaypointPrimary = [
           `${nextUnvisitedWaypointIndex + 1}/${waypoints.length}`,
           formatDistanceForUnit(distanceToNextWaypoint, distanceUnits),
+          nextWaypointDurationText,
         ].filter(Boolean).join(' • ');
 
-        nextWaypointSecondary = [
-          nextWaypointDurationText,
-          nextWaypointEtaText ? `ETA ${nextWaypointEtaText}` : null,
-        ].filter(Boolean).join(' • ');
+        nextWaypointSecondary = nextWaypointEtaText ? `ETA ${nextWaypointEtaText}` : null;
       }
     }
 
