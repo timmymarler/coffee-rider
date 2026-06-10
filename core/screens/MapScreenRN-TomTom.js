@@ -6179,11 +6179,11 @@ function getStepCompletionThresholds(step = null) {
     if (totalRemainingPrimary && nextWaypointPrimary) {
       remainingPrimary = showWaypointSummaryLine ? nextWaypointPrimary : totalRemainingPrimary;
       remainingSecondary = showWaypointSummaryLine ? nextWaypointSecondary : totalRemainingSecondary;
-      remainingPrimaryIcon = showWaypointSummaryLine ? 'map-marker-path' : 'flag-checkered';
+      remainingPrimaryIcon = showWaypointSummaryLine ? 'map-marker-outline' : 'flag-checkered';
     } else if (!totalRemainingPrimary && nextWaypointPrimary) {
       remainingPrimary = nextWaypointPrimary;
       remainingSecondary = nextWaypointSecondary;
-      remainingPrimaryIcon = 'map-marker-path';
+      remainingPrimaryIcon = 'map-marker-outline';
     }
 
     const continueCheckSource = (label || effectiveInstruction || rawNextInstruction || '').trim();
