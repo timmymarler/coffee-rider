@@ -6164,7 +6164,10 @@ function getStepCompletionThresholds(step = null) {
           ? formatEtaFromNow(nextWaypointSeconds)
           : null;
 
-        nextWaypointPrimary = formatDistanceForUnit(distanceToNextWaypoint, distanceUnits);
+        nextWaypointPrimary = [
+          `${nextUnvisitedWaypointIndex + 1}/${waypoints.length}`,
+          formatDistanceForUnit(distanceToNextWaypoint, distanceUnits),
+        ].filter(Boolean).join(' • ');
 
         nextWaypointSecondary = [
           nextWaypointDurationText,
