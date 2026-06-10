@@ -772,6 +772,64 @@ function buildHeadDirectionInstruction(step = {}) {
   return `Head ${cardinal}`;
 }
 
+function getStepStreetLabel(step = {}) {
+  return (step?.nextStreetName || step?.streetName || '').trim();
+}
+
+function buildSpokenInstructionWithStreet(baseInstruction, step = {}) {
+  if (!baseInstruction) return null;
+
+  const streetLabel = getStepStreetLabel(step);
+  if (!streetLabel) return baseInstruction;
+
+  const normalizedInstruction = baseInstruction.trim();
+  if (normalizedInstruction.length === 0) return null;
+
+  if (normalizedInstruction.toLowerCase().includes(streetLabel.toLowerCase())) {
+    return normalizedInstruction;
+  }
+
+  const maneuver = (step?.nextManeuver || step?.maneuver || '').trim().toUpperCase();
+
+  if (
+    maneuver.includes('UTURN') ||
+    maneuver.includes('TURN_LEFT_U') ||
+    maneuver.includes('TURN_RIGHT_U')
+  ) {
+    return `${normalizedInstruction} onto ${streetLabel}`;
+  }
+
+  if (
+    maneuver.includes('TURN') ||
+    maneuver === 'LEFT' ||
+    maneuver === 'RIGHT' ||
+    maneuver.includes('ROUNDABOUT')
+  ) {
+    return `${normalizedInstruction} onto ${streetLabel}`;
+  }
+
+  return normalizedInstruction;
+}
+
+function getFollowingStepGapMeters(currentStep, followingStep) {
+  if (!currentStep || !followingStep) return null;
+
+  const currentStepProgress = Number(currentStep?.polylineProgress);
+  const followingStepProgress = Number(followingStep?.polylineProgress);
+  if (Number.isFinite(currentStepProgress) && Number.isFinite(followingStepProgress)) {
+    return Math.max(0, followingStepProgress - currentStepProgress);
+  }
+
+  if (currentStep?.end && followingStep?.end) {
+    const stepGap = distanceBetweenMeters(currentStep.end, followingStep.end);
+    if (Number.isFinite(stepGap)) {
+      return stepGap;
+    }
+  }
+
+  return null;
+}
+
 function getEffectiveInstructionText(step) {
   if (!step) return null;
   const raw = (step.nextInstruction || step.instruction || '').trim();
@@ -3559,15 +3617,52 @@ function getStepCompletionThresholds(step = null) {
 
     const speakInstruction = (overrideText = null) => {
       let spokenInstruction = overrideText;
+      const currentStep = routeSteps[currentStepIndex];
+
       if (!spokenInstruction) {
-        const currentStep = routeSteps[currentStepIndex];
         const effectiveInstruction = getEffectiveInstructionText(currentStep);
         const baseInstruction = effectiveInstruction || currentStep?.nextInstruction || currentStep?.instruction;
         if (!baseInstruction) return false;
 
+        const spokenBaseInstruction = buildSpokenInstructionWithStreet(baseInstruction, currentStep);
+        if (!spokenBaseInstruction) return false;
+
         const distanceForSpeech = nextJunctionDistance ?? lastKnownDistanceRef.current;
-        spokenInstruction = buildSpokenInstruction(baseInstruction, distanceForSpeech, distanceUnits);
+        spokenInstruction = buildSpokenInstruction(spokenBaseInstruction, distanceForSpeech, distanceUnits);
         if (!spokenInstruction) return false;
+      }
+
+      const currentManeuver = (currentStep?.nextManeuver || currentStep?.maneuver || '').trim().toUpperCase();
+      const followingStep = routeSteps[currentStepIndex + 1] || null;
+      const followingManeuver = (followingStep?.nextManeuver || followingStep?.maneuver || '').trim().toUpperCase();
+      const followingManeuverIsPreviewable =
+        followingManeuver.length > 0 &&
+        !followingManeuver.includes('ARRIVE');
+      const followingGapMeters = getFollowingStepGapMeters(currentStep, followingStep);
+      const shouldAddFollowUpClause =
+        !currentManeuver.includes('ARRIVE') &&
+        followingManeuverIsPreviewable &&
+        Number.isFinite(followingGapMeters) &&
+        followingGapMeters > 0 &&
+        followingGapMeters <= NEXT_JUNCTION_PREVIEW_MAX_GAP_METERS;
+
+      if (shouldAddFollowUpClause) {
+        const followingEffectiveInstruction = getEffectiveInstructionText(followingStep);
+        const followingBaseInstruction =
+          followingEffectiveInstruction ||
+          followingStep?.nextInstruction ||
+          followingStep?.instruction;
+        const followingEnrichedInstruction = buildSpokenInstructionWithStreet(followingBaseInstruction, followingStep);
+
+        if (followingEnrichedInstruction) {
+          const loweredFollowingInstruction =
+            followingEnrichedInstruction.charAt(0).toLowerCase() +
+            followingEnrichedInstruction.slice(1);
+          const followUpClause = `and then ${loweredFollowingInstruction}`;
+          if (!spokenInstruction.toLowerCase().includes(followUpClause)) {
+            spokenInstruction = `${spokenInstruction}, ${followUpClause}`;
+          }
+        }
       }
 
       const now = Date.now();
@@ -3655,7 +3750,8 @@ function getStepCompletionThresholds(step = null) {
         const currentStep = routeSteps[currentStepIndex];
         const effectiveInstruction = getEffectiveInstructionText(currentStep);
         const baseInstruction = effectiveInstruction || currentStep?.nextInstruction || currentStep?.instruction;
-        if (baseInstruction && speakInstruction(baseInstruction)) {
+        const spokenBaseInstruction = buildSpokenInstructionWithStreet(baseInstruction, currentStep);
+        if (spokenBaseInstruction && speakInstruction(spokenBaseInstruction)) {
           schedule.spokenStages.add(stage.id);
         }
         break;
