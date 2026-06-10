@@ -6495,7 +6495,17 @@ function getStepCompletionThresholds(step = null) {
                 </Pressable>
               </View>
               {remainingPrimary && (
-                <Text style={[styles.fullscreenDirectionsRemaining, isLandscape && styles.fullscreenDirectionsRemainingLandscape]}>{remainingPrimary}</Text>
+                <View style={[styles.fullscreenDirectionsRemainingRow, isLandscape && styles.fullscreenDirectionsRemainingRowLandscape]}>
+                  {remainingPrimaryIcon ? (
+                    <MaterialCommunityIcons
+                      name={remainingPrimaryIcon}
+                      size={18}
+                      color="rgba(255,255,255,0.95)"
+                      style={styles.fullscreenDirectionsRemainingIcon}
+                    />
+                  ) : null}
+                  <Text style={[styles.fullscreenDirectionsRemaining, isLandscape && styles.fullscreenDirectionsRemainingLandscape]}>{remainingPrimary}</Text>
+                </View>
               )}
               {remainingSecondary ? (
                 <Text style={[styles.fullscreenDirectionsRemainingSub, isLandscape && styles.fullscreenDirectionsRemainingSubLandscape]}>{remainingSecondary}</Text>
@@ -8141,12 +8151,10 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     color: "rgba(255,255,255,0.82)",
-    marginTop: 32,
     textAlign: "center",
   },
   fullscreenDirectionsRemainingLandscape: {
     fontSize: 18,
-    marginTop: 20,
   },
   fullscreenDirectionsRemainingSub: {
     fontSize: 18,
@@ -8154,6 +8162,18 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.78)",
     marginTop: 8,
     textAlign: "center",
+  },
+  fullscreenDirectionsRemainingRow: {
+    marginTop: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fullscreenDirectionsRemainingRowLandscape: {
+    marginTop: 20,
+  },
+  fullscreenDirectionsRemainingIcon: {
+    marginRight: 8,
   },
   fullscreenDirectionsRemainingSubLandscape: {
     fontSize: 16,
