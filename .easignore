@@ -20,8 +20,9 @@ expo-env.d.ts
 .kotlin/
 .gradle/
 
-# Ignore iOS entirely for Android proof builds
-ios/
+# Keep iOS source for iOS EAS builds; only ignore generated iOS artifacts
+ios/build/
+ios/Pods/
 
 # Ignore Android generated outputs, but keep Android source tree
 android/.gradle/
