@@ -294,14 +294,29 @@ export const activateAppleSubscription = functions
       );
     }
 
-    // API status: 1=active, 3=billing retry, 4=grace period → active; 2=expired, 5=revoked → expired
-    const isActive = matchedApiStatus === 1 || matchedApiStatus === 3 || matchedApiStatus === 4;
-    const status = isActive ? 'active' : 'expired';
-    const plan = isAnnualProductId(matchedTxnPayload.productId, productIds.annual) ? 'annual' : 'monthly';
+    // API status: 1=active, 3=billing retry, 4=grace period -> active; 2=expired, 5=revoked -> expired
+    const normalizedApiStatus = Number.parseInt(String(matchedApiStatus), 10);
     const renewalDateMs = matchedTxnPayload.expiresDate ? Number(matchedTxnPayload.expiresDate) : null;
+    const hasFutureExpiry = Number.isFinite(renewalDateMs) && renewalDateMs > Date.now();
+    const isActiveByStatus =
+      normalizedApiStatus === 1 || normalizedApiStatus === 3 || normalizedApiStatus === 4;
+    const status = isActiveByStatus || hasFutureExpiry ? 'active' : 'expired';
+    const plan = isAnnualProductId(matchedTxnPayload.productId, productIds.annual) ? 'annual' : 'monthly';
     const purchaseMs = matchedTxnPayload.purchaseDate
       ? Number(matchedTxnPayload.purchaseDate)
       : (purchaseDateMs || Date.now());
+
+    functions.logger.info('Apple subscription sync result', {
+      uid,
+      productId: matchedTxnPayload.productId,
+      transactionId: matchedTxnPayload.transactionId || transactionId,
+      originalTransactionId: matchedTxnPayload.originalTransactionId || origTxnId,
+      apiStatusRaw: matchedApiStatus,
+      apiStatusNormalized: Number.isFinite(normalizedApiStatus) ? normalizedApiStatus : null,
+      renewalDateMs: Number.isFinite(renewalDateMs) ? renewalDateMs : null,
+      status,
+      environment: apiResult.body?.environment || null,
+    });
 
     await firestore
       .doc(`users/${uid}/subscription/current`)
