@@ -21,6 +21,10 @@ function normalizeId(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function stripVersionSuffix(productId) {
+  return String(productId || '').trim().replace(/\.v\d+$/i, '');
+}
+
 function resolvePlanIdFromProduct(product) {
   const productId = normalizeId(product?.id || product?.productId || product?.sku);
   const monthlyId = normalizeId(APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY);
@@ -64,10 +68,20 @@ export function useAppleSubscription({ user }) {
   const [lastLoadError, setLastLoadError] = useState(null);
   const handledTransactionsRef = useRef(new Set());
 
-  const availableSkus = useMemo(
-    () => [APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY, APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL],
-    []
-  );
+  const availableSkus = useMemo(() => {
+    const monthly = APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY;
+    const annual = APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL;
+    const skuSet = new Set([monthly, annual].filter(Boolean));
+
+    // Fallback aliases: if ASC products were created without version suffixes,
+    // StoreKit can still return those while configured env uses .v2 IDs.
+    const monthlyAlias = stripVersionSuffix(monthly);
+    const annualAlias = stripVersionSuffix(annual);
+    if (monthlyAlias) skuSet.add(monthlyAlias);
+    if (annualAlias) skuSet.add(annualAlias);
+
+    return Array.from(skuSet);
+  }, []);
 
   const productsByPlan = useMemo(() => {
     return products.reduce((acc, product) => {
@@ -242,17 +256,25 @@ export function useAppleSubscription({ user }) {
         throw new Error('Please log in first');
       }
 
-      const sku = planId === 'annual' ? APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL : APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY;
+      const fallbackSku =
+        planId === 'annual' ? APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL : APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY;
 
       try {
         setError(null);
-        setProcessingSku(sku);
+        setProcessingSku(fallbackSku);
 
         if (!iap) throw new Error('Apple IAP is not available in this build.');
 
-        if (!productsByPlan[planId]) {
-          await reloadProducts();
+        let productForPlan = productsByPlan[planId];
+        if (!productForPlan) {
+          const reloadedProducts = await reloadProducts();
+          productForPlan = (reloadedProducts || []).find(
+            (product) => resolvePlanIdFromProduct(product) === planId
+          );
         }
+
+        const sku = productForPlan?.id || productForPlan?.productId || productForPlan?.sku || fallbackSku;
+        setProcessingSku(sku);
 
         const result = await iap.requestPurchase({
           type: 'subs',

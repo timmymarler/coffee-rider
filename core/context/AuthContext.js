@@ -21,6 +21,23 @@ import {
 } from "@firebaseLocal/users";
 import Constants from "expo-constants";
 
+function toMillis(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (value?.seconds && Number.isFinite(value.seconds)) {
+    return value.seconds * 1000;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
 export const AuthContext = createContext(null);
 
 const SESSION_KEY = '@coffee_rider_session';
@@ -381,9 +398,21 @@ export default function AuthProvider({ children }) {
   const role = (() => {
     if (storedRole === 'guest') return 'guest';
     if (storedRole === 'admin' || storedRole === 'place-owner') return storedRole;
+
     const subStatus = profile?.subscriptionStatus;
-    if (subStatus === 'trial' || subStatus === 'active') return 'pro';
-    return storedRole;
+    const subExpiresAtMs = toMillis(profile?.subscriptionExpiresAt);
+    const hasExpiry = Number.isFinite(subExpiresAtMs);
+    const isExpired = hasExpiry ? subExpiresAtMs <= Date.now() : true;
+    const hasValidProSubscription =
+      (subStatus === 'trial' || subStatus === 'active') && !isExpired;
+
+    if (hasValidProSubscription) return 'pro';
+
+    if (subStatus === 'expired' || subStatus === 'cancelled' || subStatus === 'free') {
+      return 'user';
+    }
+
+    return storedRole === 'pro' ? 'user' : storedRole;
   })();
   const capabilities = getCapabilities(role);
   const effectiveProfile = profile ? { ...profile, role } : profile;

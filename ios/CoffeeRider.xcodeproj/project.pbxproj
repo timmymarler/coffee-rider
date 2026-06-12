@@ -24,7 +24,7 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = CoffeeRider/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = CoffeeRider/Info.plist; sourceTree = "<group>"; };
 		6E157BE5976514F5668A3512 /* Pods-CoffeeRider.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CoffeeRider.debug.xcconfig"; path = "Target Support Files/Pods-CoffeeRider/Pods-CoffeeRider.debug.xcconfig"; sourceTree = "<group>"; };
-		6F57AFCD4C01B9E42C1155E8 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = CoffeeRider/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		6F57AFCD4C01B9E42C1155E8 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = CoffeeRider/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A1EF800523693C2E5272A97B /* libPods-CoffeeRider.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-CoffeeRider.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A728FCA8F3B7DD76F91E0482 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-CoffeeRider/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = CoffeeRider/SplashScreen.storyboard; sourceTree = "<group>"; };
@@ -117,7 +117,6 @@
 				6E157BE5976514F5668A3512 /* Pods-CoffeeRider.debug.xcconfig */,
 				E71A192528C48E0AAF84ACAE /* Pods-CoffeeRider.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -169,6 +168,9 @@
 		83CBB9F71A601CBA00E9B192 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+				KnownAssetTags = (
+					New,
+				);
 				LastUpgradeCheck = 1130;
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
@@ -388,7 +390,7 @@
 				CODE_SIGN_ENTITLEMENTS = CoffeeRider/CoffeeRider.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-									CURRENT_PROJECT_VERSION = 71;
+				CURRENT_PROJECT_VERSION = 72;
 				DEVELOPMENT_TEAM = U5W34H5KWD;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -401,7 +403,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-									MARKETING_VERSION = 2.31.17;
+				MARKETING_VERSION = 2.31.18;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -427,7 +429,7 @@
 				CODE_SIGN_ENTITLEMENTS = CoffeeRider/CoffeeRider.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-									CURRENT_PROJECT_VERSION = 71;
+				CURRENT_PROJECT_VERSION = 72;
 				DEVELOPMENT_TEAM = U5W34H5KWD;
 				INFOPLIST_FILE = CoffeeRider/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -435,7 +437,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-									MARKETING_VERSION = 2.31.17;
+				MARKETING_VERSION = 2.31.18;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
