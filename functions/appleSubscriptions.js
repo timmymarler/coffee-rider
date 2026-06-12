@@ -1,5 +1,6 @@
 import admin from 'firebase-admin';
 import * as functions from 'firebase-functions/v1';
+import { subtle } from 'crypto';
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -11,8 +12,9 @@ const RUNTIME_OPTS = {
   memory: '512MB',
 };
 
-const APPLE_VERIFY_URL_PROD = 'https://buy.itunes.apple.com/verifyReceipt';
-const APPLE_VERIFY_URL_SANDBOX = 'https://sandbox.itunes.apple.com/verifyReceipt';
+const APPLE_API_BASE_PROD = 'https://api.storekit.itunes.apple.com';
+const APPLE_API_BASE_SANDBOX = 'https://api.storekit-sandbox.itunes.apple.com';
+const BUNDLE_ID = 'com.timmy.marler.coffeerider';
 const PROTECTED_ROLES = new Set(['admin', 'place-owner']);
 
 const firestore = admin.firestore();
@@ -39,15 +41,63 @@ const readEnv = (key) => {
   return null;
 };
 
-const getSharedSecret = () => {
-  const sharedSecret = readEnv('APPLE_SHARED_SECRET') || readEnv('APPLE_APP_SHARED_SECRET');
-  if (!sharedSecret) {
+const getAppStoreConfig = () => {
+  let keyId, issuerId, privateKeyB64;
+  try {
+    const cfg = functions.config?.() || {};
+    keyId = cfg?.apple?.key_id || process.env.APPLE_KEY_ID;
+    issuerId = cfg?.apple?.issuer_id || process.env.APPLE_ISSUER_ID;
+    privateKeyB64 = cfg?.apple?.private_key_b64 || process.env.APPLE_PRIVATE_KEY_B64;
+  } catch (_) {
+    keyId = process.env.APPLE_KEY_ID;
+    issuerId = process.env.APPLE_ISSUER_ID;
+    privateKeyB64 = process.env.APPLE_PRIVATE_KEY_B64;
+  }
+  if (!keyId || !issuerId || !privateKeyB64) {
     throw new functions.https.HttpsError(
       'failed-precondition',
-      'Apple shared secret is not configured on Cloud Functions.'
+      'Apple App Store Server API credentials not configured.'
     );
   }
-  return sharedSecret;
+  return { keyId, issuerId, privateKey: Buffer.from(privateKeyB64, 'base64').toString('utf8') };
+};
+
+const makeAppStoreJwt = async ({ privateKey, keyId, issuerId }) => {
+  const pemContents = privateKey
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\s+/g, '');
+  const keyBuffer = Buffer.from(pemContents, 'base64');
+  const cryptoKey = await subtle.importKey(
+    'pkcs8',
+    keyBuffer,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  );
+  const now = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: 'ES256', kid: keyId, typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    iss: issuerId,
+    iat: now,
+    exp: now + 3600,
+    aud: 'appstoreconnect-v1',
+    bid: BUNDLE_ID,
+  })).toString('base64url');
+  const signingInput = `${header}.${payload}`;
+  const sigBuffer = await subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    cryptoKey,
+    Buffer.from(signingInput)
+  );
+  return `${signingInput}.${Buffer.from(sigBuffer).toString('base64url')}`;
+};
+
+const fetchSubscriptionStatus = async ({ originalTransactionId, jwt, useSandbox }) => {
+  const base = useSandbox ? APPLE_API_BASE_SANDBOX : APPLE_API_BASE_PROD;
+  const url = `${base}/inApps/v1/subscriptions/${originalTransactionId}`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${jwt}` } });
+  return { httpStatus: response.status, body: response.ok ? await response.json() : null };
 };
 
 const getAppleProductIds = () => {
@@ -148,68 +198,7 @@ const deriveNotificationStatus = ({ notificationType, expiresDateMs }) => {
   return hasFutureExpiry ? 'active' : 'expired';
 };
 
-const pickLatestTransaction = ({
-  transactions,
-  validProductIds,
-  transactionId,
-  originalTransactionId,
-}) => {
-  const filtered = transactions
-    .filter((txn) => validProductIds.has(txn.product_id))
-    .map((txn) => ({
-      ...txn,
-      expiresMs: toMillis(txn.expires_date_ms),
-      purchaseMs: toMillis(txn.purchase_date_ms),
-    }));
 
-  const byOriginal = originalTransactionId
-    ? filtered.filter(
-        (txn) =>
-          txn.original_transaction_id === originalTransactionId ||
-          txn.transaction_id === originalTransactionId
-      )
-    : [];
-
-  const byTransaction = transactionId
-    ? filtered.filter(
-        (txn) =>
-          txn.transaction_id === transactionId ||
-          txn.original_transaction_id === transactionId
-      )
-    : [];
-
-  const pool = byOriginal.length > 0 ? byOriginal : byTransaction.length > 0 ? byTransaction : filtered;
-
-  return pool.sort((a, b) => {
-    if (b.expiresMs !== a.expiresMs) return b.expiresMs - a.expiresMs;
-    return b.purchaseMs - a.purchaseMs;
-  })[0];
-};
-
-const postVerifyReceipt = async ({ receiptData, sharedSecret, useSandbox }) => {
-  const endpoint = useSandbox ? APPLE_VERIFY_URL_SANDBOX : APPLE_VERIFY_URL_PROD;
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      'receipt-data': receiptData,
-      password: sharedSecret,
-      'exclude-old-transactions': true,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new functions.https.HttpsError(
-      'internal',
-      `Apple verifyReceipt returned HTTP ${response.status}.`
-    );
-  }
-
-  return response.json();
-};
 
 const getRoleForStatus = (status) => {
   if (status === 'active' || status === 'trial') {
@@ -244,35 +233,11 @@ export const activateAppleSubscription = functions
     }
 
     const uid = context.auth.uid;
-    const {
-      productId,
-      transactionId,
-      originalTransactionId,
-      purchaseDateMs,
-      receiptData,
-      email,
-    } = data || {};
-
-    if (!receiptData || typeof receiptData !== 'string') {
-      functions.logger.error('activateAppleSubscription missing receiptData', {
-        uid,
-        hasReceiptData: Boolean(receiptData),
-        receiptType: typeof receiptData,
-        productId,
-        transactionId,
-      });
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'receiptData is required for Apple subscription validation.'
-      );
-    }
+    const { productId, transactionId, originalTransactionId, purchaseDateMs, email } = data || {};
 
     if (!productId || !transactionId) {
       functions.logger.error('activateAppleSubscription missing identifiers', {
-        uid,
-        productId,
-        transactionId,
-        originalTransactionId,
+        uid, productId, transactionId, originalTransactionId,
       });
       throw new functions.https.HttpsError(
         'invalid-argument',
@@ -280,72 +245,46 @@ export const activateAppleSubscription = functions
       );
     }
 
-    const sharedSecret = getSharedSecret();
-    let verifyPayload = await postVerifyReceipt({
-      receiptData,
-      sharedSecret,
-      useSandbox: false,
-    });
+    const { keyId, issuerId, privateKey } = getAppStoreConfig();
+    const jwt = await makeAppStoreJwt({ privateKey, keyId, issuerId });
+    const origTxnId = originalTransactionId || transactionId;
 
-    // 21007 means sandbox receipt sent to production endpoint.
-    if (verifyPayload?.status === 21007) {
-      verifyPayload = await postVerifyReceipt({
-        receiptData,
-        sharedSecret,
-        useSandbox: true,
-      });
+    // Try production first; TestFlight / sandbox purchases return 404 on prod endpoint.
+    let apiResult = await fetchSubscriptionStatus({ originalTransactionId: origTxnId, jwt, useSandbox: false });
+    if (apiResult.httpStatus === 404) {
+      apiResult = await fetchSubscriptionStatus({ originalTransactionId: origTxnId, jwt, useSandbox: true });
     }
 
-    if (verifyPayload?.status !== 0) {
-      functions.logger.error('Apple receipt validation failed', {
-        uid,
-        status: verifyPayload?.status,
-        environment: verifyPayload?.environment,
-        productId,
-        transactionId,
+    if (!apiResult.body) {
+      functions.logger.error('App Store Server API error', {
+        uid, httpStatus: apiResult.httpStatus, origTxnId, productId,
       });
       throw new functions.https.HttpsError(
         'failed-precondition',
-        `Apple receipt validation failed with status ${verifyPayload?.status}.`
-      );
-    }
-
-    const receiptTransactions = [
-      ...(Array.isArray(verifyPayload?.latest_receipt_info)
-        ? verifyPayload.latest_receipt_info
-        : []),
-      ...(Array.isArray(verifyPayload?.receipt?.in_app) ? verifyPayload.receipt.in_app : []),
-    ];
-
-    if (receiptTransactions.length === 0) {
-      functions.logger.error('Apple receipt contained no transactions', {
-        uid,
-        productId,
-        transactionId,
-        environment: verifyPayload?.environment,
-      });
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        'Apple receipt did not include any in-app purchase records.'
+        `App Store Server API returned HTTP ${apiResult.httpStatus}.`
       );
     }
 
     const productIds = getAppleProductIds();
     const validProductIds = getAppleProductAliases(productIds);
+    const groups = apiResult.body?.data || [];
 
-    const latestTxn = pickLatestTransaction({
-      transactions: receiptTransactions,
-      validProductIds,
-      transactionId,
-      originalTransactionId,
-    });
+    let matchedApiStatus = null;
+    let matchedTxnPayload = null;
+    outer: for (const group of groups) {
+      for (const lastTxn of (group.lastTransactions || [])) {
+        const txnPayload = decodeJwsPayload(lastTxn.signedTransactionInfo);
+        if (txnPayload && validProductIds.has(txnPayload.productId)) {
+          matchedApiStatus = lastTxn.status;
+          matchedTxnPayload = txnPayload;
+          break outer;
+        }
+      }
+    }
 
-    if (!latestTxn) {
-      functions.logger.error('No valid Apple subscription transaction matched configured product IDs', {
-        uid,
-        productId,
-        transactionId,
-        originalTransactionId,
+    if (!matchedTxnPayload) {
+      functions.logger.error('No matching subscription in App Store API response', {
+        uid, origTxnId, productId,
         configuredMonthlyId: productIds.monthly,
         configuredAnnualId: productIds.annual,
       });
@@ -355,11 +294,14 @@ export const activateAppleSubscription = functions
       );
     }
 
-    const plan = isAnnualProductId(latestTxn.product_id, productIds.annual) ? 'annual' : 'monthly';
-    const renewalDateMs = toMillis(latestTxn.expires_date_ms);
-    const purchaseMs = toMillis(latestTxn.purchase_date_ms) || toMillis(purchaseDateMs) || Date.now();
-    const now = Date.now();
-    const status = renewalDateMs > now ? 'active' : 'expired';
+    // API status: 1=active, 3=billing retry, 4=grace period → active; 2=expired, 5=revoked → expired
+    const isActive = matchedApiStatus === 1 || matchedApiStatus === 3 || matchedApiStatus === 4;
+    const status = isActive ? 'active' : 'expired';
+    const plan = isAnnualProductId(matchedTxnPayload.productId, productIds.annual) ? 'annual' : 'monthly';
+    const renewalDateMs = matchedTxnPayload.expiresDate ? Number(matchedTxnPayload.expiresDate) : null;
+    const purchaseMs = matchedTxnPayload.purchaseDate
+      ? Number(matchedTxnPayload.purchaseDate)
+      : (purchaseDateMs || Date.now());
 
     await firestore
       .doc(`users/${uid}/subscription/current`)
@@ -368,14 +310,12 @@ export const activateAppleSubscription = functions
           status,
           plan,
           provider: 'apple_iap',
-          appleProductId: latestTxn.product_id,
-          appleTransactionId: latestTxn.transaction_id || transactionId,
-          appleOriginalTransactionId:
-            latestTxn.original_transaction_id || originalTransactionId || transactionId,
+          appleProductId: matchedTxnPayload.productId,
+          appleTransactionId: matchedTxnPayload.transactionId || transactionId,
+          appleOriginalTransactionId: matchedTxnPayload.originalTransactionId || origTxnId,
           purchaseDate: purchaseMs,
           renewalDate: renewalDateMs || null,
-          appleReceiptEnvironment: verifyPayload?.environment || null,
-          appleReceiptStatusCode: verifyPayload?.status,
+          appleReceiptEnvironment: apiResult.body?.environment || null,
           email: email || null,
           updatedAt: FieldValue.serverTimestamp(),
           lastRenewal: status === 'active' ? FieldValue.serverTimestamp() : null,
@@ -394,7 +334,7 @@ export const activateAppleSubscription = functions
       status,
       plan,
       renewalDate: renewalDateMs || null,
-      environment: verifyPayload?.environment || null,
+      environment: apiResult.body?.environment || null,
     };
   });
 
