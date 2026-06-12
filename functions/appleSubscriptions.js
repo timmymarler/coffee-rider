@@ -254,6 +254,13 @@ export const activateAppleSubscription = functions
     } = data || {};
 
     if (!receiptData || typeof receiptData !== 'string') {
+      functions.logger.error('activateAppleSubscription missing receiptData', {
+        uid,
+        hasReceiptData: Boolean(receiptData),
+        receiptType: typeof receiptData,
+        productId,
+        transactionId,
+      });
       throw new functions.https.HttpsError(
         'invalid-argument',
         'receiptData is required for Apple subscription validation.'
@@ -261,6 +268,12 @@ export const activateAppleSubscription = functions
     }
 
     if (!productId || !transactionId) {
+      functions.logger.error('activateAppleSubscription missing identifiers', {
+        uid,
+        productId,
+        transactionId,
+        originalTransactionId,
+      });
       throw new functions.https.HttpsError(
         'invalid-argument',
         'productId and transactionId are required.'
@@ -284,6 +297,13 @@ export const activateAppleSubscription = functions
     }
 
     if (verifyPayload?.status !== 0) {
+      functions.logger.error('Apple receipt validation failed', {
+        uid,
+        status: verifyPayload?.status,
+        environment: verifyPayload?.environment,
+        productId,
+        transactionId,
+      });
       throw new functions.https.HttpsError(
         'failed-precondition',
         `Apple receipt validation failed with status ${verifyPayload?.status}.`
@@ -298,6 +318,12 @@ export const activateAppleSubscription = functions
     ];
 
     if (receiptTransactions.length === 0) {
+      functions.logger.error('Apple receipt contained no transactions', {
+        uid,
+        productId,
+        transactionId,
+        environment: verifyPayload?.environment,
+      });
       throw new functions.https.HttpsError(
         'failed-precondition',
         'Apple receipt did not include any in-app purchase records.'
@@ -315,6 +341,14 @@ export const activateAppleSubscription = functions
     });
 
     if (!latestTxn) {
+      functions.logger.error('No valid Apple subscription transaction matched configured product IDs', {
+        uid,
+        productId,
+        transactionId,
+        originalTransactionId,
+        configuredMonthlyId: productIds.monthly,
+        configuredAnnualId: productIds.annual,
+      });
       throw new functions.https.HttpsError(
         'failed-precondition',
         'No valid Apple subscription transaction found for configured product IDs.'

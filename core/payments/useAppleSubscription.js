@@ -59,6 +59,41 @@ function normalizePurchaseResult(result) {
   return result;
 }
 
+function getPurchaseProductId(purchase) {
+  return purchase?.productId || purchase?.productID || purchase?.sku || null;
+}
+
+function getPurchaseTransactionId(purchase) {
+  return (
+    purchase?.transactionId ||
+    purchase?.transactionID ||
+    purchase?.id ||
+    purchase?.transactionIdentifierIOS ||
+    null
+  );
+}
+
+function getOriginalTransactionId(purchase) {
+  return (
+    purchase?.originalTransactionIdentifierIOS ||
+    purchase?.originalTransactionId ||
+    purchase?.originalTransactionID ||
+    null
+  );
+}
+
+function normalizePurchaseDateMs(purchase) {
+  const raw =
+    purchase?.transactionDate ||
+    purchase?.purchaseDate ||
+    purchase?.purchaseDateMs ||
+    null;
+
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  const parsed = Number.parseInt(String(raw || ''), 10);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
 export function useAppleSubscription({ user }) {
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -151,11 +186,21 @@ export function useAppleSubscription({ user }) {
 
   const syncPurchaseToProfile = useCallback(
     async (purchase, { finish = true } = {}) => {
-      if (!purchase?.productId || !purchase?.transactionId || !user?.uid) {
+      if (!user?.uid) {
         return;
       }
 
-      const transactionKey = `${purchase.productId}:${purchase.transactionId}`;
+      const productId = getPurchaseProductId(purchase);
+      const transactionId = getPurchaseTransactionId(purchase);
+      const originalTransactionId = getOriginalTransactionId(purchase);
+
+      if (!productId || !transactionId) {
+        throw new Error(
+          `[AppleIAP] Missing product/transaction identifiers. productId=${String(productId)} transactionId=${String(transactionId)}`
+        );
+      }
+
+      const transactionKey = `${productId}:${transactionId}`;
       if (handledTransactionsRef.current.has(transactionKey)) {
         return;
       }
@@ -175,10 +220,10 @@ export function useAppleSubscription({ user }) {
         await activateAppleSubscription({
           userId: user.uid,
           email: user.email || null,
-          productId: purchase.productId,
-          transactionId: purchase.transactionId,
-          originalTransactionId: purchase.originalTransactionIdentifierIOS,
-          purchaseDateMs: purchase.transactionDate,
+          productId,
+          transactionId,
+          originalTransactionId,
+          purchaseDateMs: normalizePurchaseDateMs(purchase),
           receiptData,
         });
 
