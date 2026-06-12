@@ -189,7 +189,7 @@ export function useAppleSubscription({ user }) {
   const syncPurchaseToProfile = useCallback(
     async (purchase, { finish = true } = {}) => {
       if (!user?.uid) {
-        return;
+        throw new Error('Please log in first');
       }
 
       const productId = getPurchaseProductId(purchase);
@@ -204,7 +204,7 @@ export function useAppleSubscription({ user }) {
 
       const transactionKey = `${productId}:${transactionId}`;
       if (handledTransactionsRef.current.has(transactionKey)) {
-        return;
+        throw new Error('Purchase sync already in progress. Please try again in a moment.');
       }
 
       handledTransactionsRef.current.add(transactionKey);
@@ -219,7 +219,7 @@ export function useAppleSubscription({ user }) {
           throw new Error('Unable to validate purchase receipt. Please try restoring purchases.');
         }
 
-        await activateAppleSubscription({
+        const activation = await activateAppleSubscription({
           userId: user.uid,
           email: user.email || null,
           productId,
@@ -232,6 +232,8 @@ export function useAppleSubscription({ user }) {
         if (finish && iap) {
           await iap.finishTransaction({ purchase, isConsumable: false });
         }
+
+        return activation;
       } finally {
         handledTransactionsRef.current.delete(transactionKey);
       }
@@ -334,8 +336,11 @@ export function useAppleSubscription({ user }) {
 
         const purchase = normalizePurchaseResult(result);
         if (purchase) {
-          await syncPurchaseToProfile(purchase, { finish: true });
-          return { success: true, purchase };
+          const activation = await syncPurchaseToProfile(purchase, { finish: true });
+          if (!activation?.status) {
+            throw new Error('Subscription purchase completed, but profile sync failed. Please restore purchases.');
+          }
+          return { success: true, purchase, activation };
         }
 
         return { success: false };
@@ -374,8 +379,11 @@ export function useAppleSubscription({ user }) {
         return { restored: false };
       }
 
-      await syncPurchaseToProfile(latest, { finish: false });
-      return { restored: true, purchase: latest };
+      const activation = await syncPurchaseToProfile(latest, { finish: false });
+      if (!activation?.status) {
+        throw new Error('Restore completed in App Store but profile sync did not complete. Please try again.');
+      }
+      return { restored: true, purchase: latest, activation };
     } finally {
       setRestoring(false);
     }
