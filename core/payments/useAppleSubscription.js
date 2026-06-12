@@ -100,6 +100,7 @@ export function useAppleSubscription({ user }) {
   const [processingSku, setProcessingSku] = useState(null);
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState(null);
+  const [purchaseError, setPurchaseError] = useState(null);
   const [lastLoadError, setLastLoadError] = useState(null);
   const handledTransactionsRef = useRef(new Set());
 
@@ -174,6 +175,7 @@ export function useAppleSubscription({ user }) {
     try {
       setLoadingProducts(true);
       setError(null);
+      setPurchaseError(null);
       const nextProducts = await loadProducts();
       return nextProducts;
     } catch (err) {
@@ -283,7 +285,7 @@ export function useAppleSubscription({ user }) {
 
     const purchaseErrorSubscription = iap.purchaseErrorListener((purchaseError) => {
       console.error('[AppleIAP] Purchase error:', purchaseError);
-      setError(purchaseError);
+      setPurchaseError(purchaseError);
       setProcessingSku(null);
     });
 
@@ -306,6 +308,7 @@ export function useAppleSubscription({ user }) {
 
       try {
         setError(null);
+        setPurchaseError(null);
         setProcessingSku(fallbackSku);
 
         if (!iap) throw new Error('Apple IAP is not available in this build.');
@@ -336,6 +339,9 @@ export function useAppleSubscription({ user }) {
         }
 
         return { success: false };
+      } catch (err) {
+        setPurchaseError(err);
+        throw err;
       } finally {
         setProcessingSku(null);
       }
@@ -350,6 +356,7 @@ export function useAppleSubscription({ user }) {
 
     try {
       setError(null);
+      setPurchaseError(null);
       setRestoring(true);
 
       if (!iap) throw new Error('Apple IAP is not available in this build.');
@@ -381,6 +388,7 @@ export function useAppleSubscription({ user }) {
     processingSku,
     restoring,
     error,
+    purchaseError,
     lastLoadError,
     reloadProducts,
     subscribeToPlan,

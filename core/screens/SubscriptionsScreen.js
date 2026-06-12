@@ -36,6 +36,7 @@ export default function SubscriptionsScreen() {
     processingSku: appleProcessingSku,
     restoring: appleRestoring,
     error: appleError,
+    purchaseError: applePurchaseError,
     lastLoadError: appleLoadError,
     reloadProducts,
     subscribeToPlan: subscribeToApplePlan,
@@ -317,15 +318,21 @@ export default function SubscriptionsScreen() {
                   </Text>
                 )}
 
-                {appleError && (
+                {appleError && !hasAnyApplePlan && (
                   <Text style={[styles.trialNote, { color: theme.colors.danger, marginBottom: 12 }]}> 
                     App Store products failed to load. Please retry in a moment.
                   </Text>
                 )}
 
-                {appleLoadError && (
+                {appleLoadError && !hasAnyApplePlan && (
                   <Text style={[styles.trialNote, { color: theme.colors.danger, marginBottom: 12 }]}> 
                     {appleLoadError?.message || 'App Store returned an unknown product-loading error.'}
+                  </Text>
+                )}
+
+                {applePurchaseError && hasAnyApplePlan && (
+                  <Text style={[styles.trialNote, { color: theme.colors.danger, marginBottom: 12 }]}> 
+                    {applePurchaseError?.message || 'Apple purchase failed. Please try again.'}
                   </Text>
                 )}
 
