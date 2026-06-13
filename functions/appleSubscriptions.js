@@ -14,6 +14,8 @@ const RUNTIME_OPTS = {
 
 const APPLE_API_BASE_PROD = 'https://api.storekit.itunes.apple.com';
 const APPLE_API_BASE_SANDBOX = 'https://api.storekit-sandbox.itunes.apple.com';
+const APPLE_VERIFY_RECEIPT_PROD = 'https://buy.itunes.apple.com/verifyReceipt';
+const APPLE_VERIFY_RECEIPT_SANDBOX = 'https://sandbox.itunes.apple.com/verifyReceipt';
 const BUNDLE_ID = 'com.timmy.marler.coffeerider';
 const PROTECTED_ROLES = new Set(['admin', 'place-owner']);
 
@@ -100,6 +102,33 @@ const fetchSubscriptionStatus = async ({ originalTransactionId, jwt, useSandbox 
   return { httpStatus: response.status, body: response.ok ? await response.json() : null };
 };
 
+const verifyReceiptWithApple = async ({ receiptData, sharedSecret, useSandbox }) => {
+  const endpoint = useSandbox ? APPLE_VERIFY_RECEIPT_SANDBOX : APPLE_VERIFY_RECEIPT_PROD;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      'receipt-data': receiptData,
+      password: sharedSecret,
+      'exclude-old-transactions': false,
+    }),
+  });
+
+  const rawBody = await response.text();
+  let body = null;
+  try {
+    body = rawBody ? JSON.parse(rawBody) : null;
+  } catch (_) {
+    body = null;
+  }
+
+  return {
+    httpStatus: response.status,
+    body,
+    rawBody,
+  };
+};
+
 const getAppleProductIds = () => {
   return {
     monthly:
@@ -131,8 +160,99 @@ const isAnnualProductId = (productId, configuredAnnualId) => {
 };
 
 const toMillis = (value) => {
-  const parsed = Number.parseInt(String(value || 0), 10);
-  return Number.isFinite(parsed) ? parsed : 0;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  const stringValue = String(value || '').trim();
+  if (!stringValue) return 0;
+
+  if (/^\d+$/.test(stringValue)) {
+    const parsedInt = Number.parseInt(stringValue, 10);
+    return Number.isFinite(parsedInt) ? parsedInt : 0;
+  }
+
+  const parsedDate = Date.parse(stringValue);
+  return Number.isFinite(parsedDate) ? parsedDate : 0;
+};
+
+const resolveFromVerifyReceipt = ({
+  verifyBody,
+  validProductIds,
+  configuredAnnualId,
+  fallbackOriginalTransactionId,
+  fallbackTransactionId,
+}) => {
+  const latest = Array.isArray(verifyBody?.latest_receipt_info)
+    ? verifyBody.latest_receipt_info
+    : [];
+  const receiptInApp = Array.isArray(verifyBody?.receipt?.in_app)
+    ? verifyBody.receipt.in_app
+    : [];
+  const allItems = [...latest, ...receiptInApp];
+
+  const targetOriginalTxnId = String(
+    fallbackOriginalTransactionId || fallbackTransactionId || ''
+  );
+
+  const normalized = allItems
+    .map((item) => ({
+      productId: item?.product_id || null,
+      transactionId: item?.transaction_id || null,
+      originalTransactionId: item?.original_transaction_id || null,
+      expiresDateMs: toMillis(item?.expires_date_ms || item?.expires_date),
+      purchaseDateMs: toMillis(item?.purchase_date_ms || item?.purchase_date),
+    }))
+    .filter((item) => item.productId && validProductIds.has(item.productId));
+
+  if (!normalized.length) return null;
+
+  const matchingTransactions = targetOriginalTxnId
+    ? normalized.filter(
+      (item) =>
+        item.originalTransactionId === targetOriginalTxnId ||
+        item.transactionId === targetOriginalTxnId
+    )
+    : [];
+
+  const candidates = matchingTransactions.length ? matchingTransactions : normalized;
+  candidates.sort((a, b) => {
+    if (b.expiresDateMs !== a.expiresDateMs) return b.expiresDateMs - a.expiresDateMs;
+    return b.purchaseDateMs - a.purchaseDateMs;
+  });
+
+  const chosen = candidates[0];
+  if (!chosen) return null;
+
+  const hasFutureExpiry =
+    Number.isFinite(chosen.expiresDateMs) && chosen.expiresDateMs > Date.now();
+
+  return {
+    status: hasFutureExpiry ? 'active' : 'expired',
+    plan: isAnnualProductId(chosen.productId, configuredAnnualId) ? 'annual' : 'monthly',
+    renewalDateMs: chosen.expiresDateMs || null,
+    productId: chosen.productId,
+    transactionId: chosen.transactionId || fallbackTransactionId || null,
+    originalTransactionId:
+      chosen.originalTransactionId ||
+      fallbackOriginalTransactionId ||
+      fallbackTransactionId ||
+      null,
+    purchaseMs: chosen.purchaseDateMs || Date.now(),
+    environment: verifyBody?.environment || null,
+  };
+};
+
+const getFallbackRenewalDateMs = ({ plan, purchaseMs }) => {
+  const baseDate = new Date(Number.isFinite(purchaseMs) ? purchaseMs : Date.now());
+
+  if (plan === 'annual') {
+    baseDate.setFullYear(baseDate.getFullYear() + 1);
+  } else {
+    baseDate.setMonth(baseDate.getMonth() + 1);
+  }
+
+  return baseDate.getTime();
 };
 
 const decodeJwsPayload = (signedValue) => {
@@ -234,7 +354,14 @@ export const activateAppleSubscription = functions
       }
 
       const uid = context.auth.uid;
-      const { productId, transactionId, originalTransactionId, purchaseDateMs, email } = data || {};
+      const {
+        productId,
+        transactionId,
+        originalTransactionId,
+        purchaseDateMs,
+        email,
+        receiptData,
+      } = data || {};
 
       if (!productId || !transactionId) {
         functions.logger.error('activateAppleSubscription missing identifiers', {
@@ -246,9 +373,101 @@ export const activateAppleSubscription = functions
         );
       }
 
+      const origTxnId = originalTransactionId || transactionId;
+      const productIds = getAppleProductIds();
+      const validProductIds = getAppleProductAliases(productIds);
+      const sharedSecret = readEnv('APPLE_SHARED_SECRET') || readEnv('APPLE_APP_SHARED_SECRET');
+
+      if (receiptData && sharedSecret) {
+        let verifyResult = await verifyReceiptWithApple({
+          receiptData,
+          sharedSecret,
+          useSandbox: false,
+        });
+
+        if (Number(verifyResult.body?.status) === 21007) {
+          verifyResult = await verifyReceiptWithApple({
+            receiptData,
+            sharedSecret,
+            useSandbox: true,
+          });
+        }
+
+        const verifyStatus = Number(verifyResult.body?.status);
+        functions.logger.info('Apple verifyReceipt outcome', {
+          uid,
+          verifyStatus: Number.isFinite(verifyStatus) ? verifyStatus : null,
+          httpStatus: verifyResult.httpStatus,
+          environment: verifyResult.body?.environment || null,
+          hasLatestReceiptInfo: Array.isArray(verifyResult.body?.latest_receipt_info),
+        });
+
+        if (verifyStatus === 21004) {
+          throw new functions.https.HttpsError(
+            'failed-precondition',
+            'Apple shared secret mismatch (verifyReceipt status 21004).'
+          );
+        }
+
+        if (verifyStatus !== 0) {
+          throw new functions.https.HttpsError(
+            'failed-precondition',
+            `Apple verifyReceipt returned status ${verifyStatus}.`
+          );
+        }
+
+        const resolved = resolveFromVerifyReceipt({
+          verifyBody: verifyResult.body,
+          validProductIds,
+          configuredAnnualId: productIds.annual,
+          fallbackOriginalTransactionId: origTxnId,
+          fallbackTransactionId: transactionId,
+        });
+
+        if (!resolved) {
+          throw new functions.https.HttpsError(
+            'failed-precondition',
+            'No valid Apple subscription transaction found in verifyReceipt response.'
+          );
+        }
+
+        await firestore
+          .doc(`users/${uid}/subscription/current`)
+          .set(
+            {
+              status: resolved.status,
+              plan: resolved.plan,
+              provider: 'apple_iap',
+              appleProductId: resolved.productId,
+              appleTransactionId: resolved.transactionId,
+              appleOriginalTransactionId: resolved.originalTransactionId,
+              purchaseDate: resolved.purchaseMs,
+              renewalDate: resolved.renewalDateMs,
+              appleReceiptEnvironment: resolved.environment,
+              email: email || null,
+              updatedAt: FieldValue.serverTimestamp(),
+              lastRenewal: resolved.status === 'active' ? FieldValue.serverTimestamp() : null,
+            },
+            { merge: true }
+          );
+
+        await syncSubscriptionRole(uid, resolved.status, {
+          subscriptionStatus: resolved.status,
+          subscriptionPlan: resolved.status === 'active' ? resolved.plan : null,
+          subscriptionExpiresAt: resolved.status === 'active' ? resolved.renewalDateMs : null,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        return {
+          status: resolved.status,
+          plan: resolved.plan,
+          renewalDate: resolved.renewalDateMs,
+          environment: resolved.environment,
+        };
+      }
+
       const { keyId, issuerId, privateKey } = getAppStoreConfig();
       const jwt = await makeAppStoreJwt({ privateKey, keyId, issuerId });
-      const origTxnId = originalTransactionId || transactionId;
 
       // Try production first; TestFlight / sandbox purchases return 404 on prod endpoint.
       let apiResult = await fetchSubscriptionStatus({ originalTransactionId: origTxnId, jwt, useSandbox: false });
@@ -266,8 +485,6 @@ export const activateAppleSubscription = functions
         );
       }
 
-      const productIds = getAppleProductIds();
-      const validProductIds = getAppleProductAliases(productIds);
       const groups = apiResult.body?.data || [];
 
       let matchedApiStatus = null;
@@ -297,15 +514,20 @@ export const activateAppleSubscription = functions
 
       // API status: 1=active, 3=billing retry, 4=grace period -> active; 2=expired, 5=revoked -> expired
       const normalizedApiStatus = Number.parseInt(String(matchedApiStatus), 10);
-      const renewalDateMs = matchedTxnPayload.expiresDate ? Number(matchedTxnPayload.expiresDate) : null;
+      const purchaseMs = matchedTxnPayload.purchaseDate
+        ? Number(matchedTxnPayload.purchaseDate)
+        : (purchaseDateMs || Date.now());
+      const plan = isAnnualProductId(matchedTxnPayload.productId, productIds.annual) ? 'annual' : 'monthly';
+
+      const parsedRenewalMs = toMillis(
+        matchedTxnPayload.expiresDate || matchedTxnPayload.expiresDateMs || null
+      );
+      const fallbackRenewalMs = getFallbackRenewalDateMs({ plan, purchaseMs });
+      const renewalDateMs = parsedRenewalMs > 0 ? parsedRenewalMs : fallbackRenewalMs;
       const hasFutureExpiry = Number.isFinite(renewalDateMs) && renewalDateMs > Date.now();
       const isActiveByStatus =
         normalizedApiStatus === 1 || normalizedApiStatus === 3 || normalizedApiStatus === 4;
       const status = isActiveByStatus || hasFutureExpiry ? 'active' : 'expired';
-      const plan = isAnnualProductId(matchedTxnPayload.productId, productIds.annual) ? 'annual' : 'monthly';
-      const purchaseMs = matchedTxnPayload.purchaseDate
-        ? Number(matchedTxnPayload.purchaseDate)
-        : (purchaseDateMs || Date.now());
 
       functions.logger.info('Apple subscription sync result', {
         uid,
@@ -314,7 +536,8 @@ export const activateAppleSubscription = functions
         originalTransactionId: matchedTxnPayload.originalTransactionId || origTxnId,
         apiStatusRaw: matchedApiStatus,
         apiStatusNormalized: Number.isFinite(normalizedApiStatus) ? normalizedApiStatus : null,
-        renewalDateMs: Number.isFinite(renewalDateMs) ? renewalDateMs : null,
+        renewalDateMs,
+        usedFallbackRenewalDate: parsedRenewalMs <= 0,
         status,
         environment: apiResult.body?.environment || null,
       });

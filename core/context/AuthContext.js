@@ -402,7 +402,7 @@ export default function AuthProvider({ children }) {
     const subStatus = profile?.subscriptionStatus;
     const subExpiresAtMs = toMillis(profile?.subscriptionExpiresAt);
     const hasExpiry = Number.isFinite(subExpiresAtMs);
-    const isExpired = hasExpiry ? subExpiresAtMs <= Date.now() : true;
+    const isExpired = hasExpiry ? subExpiresAtMs <= Date.now() : false;
     const hasValidProSubscription =
       (subStatus === 'trial' || subStatus === 'active') && !isExpired;
 

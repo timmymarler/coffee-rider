@@ -259,11 +259,24 @@ export async function activateAppleSubscription({
   });
 
   const data = response?.data || {};
+  const status = data.status || null;
+  if (!status) {
+    throw new Error('Subscription sync failed: backend did not return a subscription status.');
+  }
+
+  if (status !== 'active') {
+    throw new Error(
+      `Subscription validation returned ${status}. Please restore purchases or try again.`
+    );
+  }
+
+  const plan = data.plan || mapAppleProductIdToPlan(productId);
+  const renewalDateMs = Number.isFinite(data.renewalDate) ? data.renewalDate : null;
 
   return {
-    status: data.status || 'active',
-    plan: data.plan || mapAppleProductIdToPlan(productId),
-    renewalDate: data.renewalDate ? new Date(data.renewalDate) : getRenewalDateForPlan(mapAppleProductIdToPlan(productId)),
+    status,
+    plan,
+    renewalDate: renewalDateMs ? new Date(renewalDateMs) : getRenewalDateForPlan(plan),
   };
 }
 

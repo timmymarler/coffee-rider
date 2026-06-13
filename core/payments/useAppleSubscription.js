@@ -94,6 +94,32 @@ function normalizePurchaseDateMs(purchase) {
   return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
+function getErrorMessage(err) {
+  if (!err) return '';
+  if (typeof err?.message === 'string' && err.message.trim()) return err.message;
+  return String(err);
+}
+
+function isTransientIapCancellationError(err) {
+  const message = getErrorMessage(err).toLowerCase();
+  return (
+    message.includes('request cancelled') ||
+    message.includes('service-error') ||
+    message.includes('com.margelo.nitro.rniap')
+  );
+}
+
+function toFriendlyIapError(err, operation = 'purchase') {
+  if (isTransientIapCancellationError(err)) {
+    return new Error(
+      `Apple ${operation} service was temporarily unavailable. Please check your internet/App Store account and try again.`
+    );
+  }
+
+  const message = getErrorMessage(err);
+  return err instanceof Error ? err : new Error(message || `Unable to ${operation}.`);
+}
+
 export function useAppleSubscription({ user }) {
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -170,6 +196,16 @@ export function useAppleSubscription({ user }) {
     setLastLoadError(lastErr);
     return [];
   }, [availableSkus]);
+
+  const ensureIapConnection = useCallback(async () => {
+    if (Platform.OS !== 'ios' || !iap) return;
+
+    try {
+      await iap.initConnection();
+    } catch (err) {
+      console.warn('[AppleIAP] initConnection warning:', err?.message ?? err);
+    }
+  }, []);
 
   const reloadProducts = useCallback(async () => {
     try {
@@ -254,11 +290,7 @@ export function useAppleSubscription({ user }) {
 
         // initConnection can throw "already connected" on hot-reload / remount.
         // Treat that as non-fatal so we still proceed to fetch products.
-        try {
-          await iap.initConnection();
-        } catch (connErr) {
-          console.warn('[AppleIAP] initConnection warning (may already be connected):', connErr?.message ?? connErr);
-        }
+        await ensureIapConnection();
 
         if (!isMounted) return;
         await loadProducts();
@@ -297,7 +329,7 @@ export function useAppleSubscription({ user }) {
       purchaseErrorSubscription.remove();
       iap.endConnection().catch(() => {});
     };
-  }, [loadProducts, syncPurchaseToProfile]);
+  }, [ensureIapConnection, loadProducts, syncPurchaseToProfile]);
 
   const subscribeToPlan = useCallback(
     async (planId) => {
@@ -314,6 +346,7 @@ export function useAppleSubscription({ user }) {
         setProcessingSku(fallbackSku);
 
         if (!iap) throw new Error('Apple IAP is not available in this build.');
+        await ensureIapConnection();
 
         let productForPlan = productsByPlan[planId];
         if (!productForPlan) {
@@ -337,21 +370,24 @@ export function useAppleSubscription({ user }) {
         const purchase = normalizePurchaseResult(result);
         if (purchase) {
           const activation = await syncPurchaseToProfile(purchase, { finish: true });
-          if (!activation?.status) {
-            throw new Error('Subscription purchase completed, but profile sync failed. Please restore purchases.');
+          if (activation?.status !== 'active') {
+            throw new Error(
+              'Purchase completed, but subscription is not active yet. Please restore purchases.'
+            );
           }
           return { success: true, purchase, activation };
         }
 
         return { success: false };
       } catch (err) {
-        setPurchaseError(err);
-        throw err;
+        const mappedError = toFriendlyIapError(err, 'purchase');
+        setPurchaseError(mappedError);
+        throw mappedError;
       } finally {
         setProcessingSku(null);
       }
     },
-    [productsByPlan, reloadProducts, syncPurchaseToProfile, user?.uid]
+    [ensureIapConnection, productsByPlan, reloadProducts, syncPurchaseToProfile, user?.uid]
   );
 
   const restorePurchases = useCallback(async () => {
@@ -366,9 +402,29 @@ export function useAppleSubscription({ user }) {
 
       if (!iap) throw new Error('Apple IAP is not available in this build.');
 
-      const purchases = await iap.getAvailablePurchases({
-        onlyIncludeActiveItemsIOS: true,
-      });
+      let purchases = null;
+      let lastRestoreErr = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          await ensureIapConnection();
+          purchases = await iap.getAvailablePurchases({
+            onlyIncludeActiveItemsIOS: true,
+          });
+          lastRestoreErr = null;
+          break;
+        } catch (err) {
+          lastRestoreErr = err;
+          if (attempt === 1 && isTransientIapCancellationError(err)) {
+            await new Promise((res) => setTimeout(res, 1200));
+            continue;
+          }
+          break;
+        }
+      }
+
+      if (lastRestoreErr) {
+        throw toFriendlyIapError(lastRestoreErr, 'restore');
+      }
 
       const appleSubscriptions = (purchases || [])
         .filter((purchase) => availableSkus.includes(purchase.productId))
@@ -380,14 +436,18 @@ export function useAppleSubscription({ user }) {
       }
 
       const activation = await syncPurchaseToProfile(latest, { finish: false });
-      if (!activation?.status) {
+      if (activation?.status !== 'active') {
         throw new Error('Restore completed in App Store but profile sync did not complete. Please try again.');
       }
       return { restored: true, purchase: latest, activation };
+    } catch (err) {
+      const mappedError = toFriendlyIapError(err, 'restore');
+      setPurchaseError(mappedError);
+      throw mappedError;
     } finally {
       setRestoring(false);
     }
-  }, [availableSkus, syncPurchaseToProfile, user?.uid]);
+  }, [availableSkus, ensureIapConnection, syncPurchaseToProfile, user?.uid]);
 
   return {
     products,
