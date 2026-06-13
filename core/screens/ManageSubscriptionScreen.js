@@ -84,6 +84,8 @@ export default function ManageSubscriptionScreen() {
     return normalized.toUpperCase();
   };
 
+  const renewalDateLabel = formatDate(subscription?.renewalDate) || 'the next renewal date';
+
   if (!hasActiveSubscription && !isCurrentlyInTrial) {
     return (
       <ScrollView style={[styles.container, { backgroundColor: theme.colors.primaryDark }]}>
@@ -235,6 +237,10 @@ export default function ManageSubscriptionScreen() {
               </Text>
             </Pressable>
           )}
+
+          <Text style={[styles.expiryNote, { color: theme.colors.textLight }]}> 
+            If you cancel now, Pro access remains active until {renewalDateLabel}.
+          </Text>
         </View>
       )}
 
@@ -392,5 +398,10 @@ const styles = StyleSheet.create({
   },
   spacing: {
     height: 40,
+  },
+  expiryNote: {
+    marginTop: 12,
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
