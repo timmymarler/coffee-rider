@@ -189,6 +189,7 @@ export default function SubscriptionsScreen() {
   const trialDaysLeft = getTrialDaysRemaining();
   const hasActiveSubscription = isSubscribed();
   const isCurrentlyInTrial = isInTrial();
+  const isCancellationScheduled = Boolean(subscription?.cancelAtPeriodEnd);
   const hasAppleMonthly = Boolean(appleProductsByPlan.monthly);
   const hasAppleAnnual = Boolean(appleProductsByPlan.annual);
   const hasAnyApplePlan = hasAppleMonthly || hasAppleAnnual;
@@ -249,10 +250,12 @@ export default function SubscriptionsScreen() {
           />
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={[styles.statusTitle, { color: theme.colors.text }]}>
-              Pro Subscriber
+              {isCancellationScheduled ? 'Cancellation Scheduled' : 'Pro Subscriber'}
             </Text>
             <Text style={[styles.statusText, { color: theme.colors.textLight }]}>
-              Renews {formatDate(subscription?.renewalDate)}
+              {isCancellationScheduled
+                ? `Ends ${formatDate(subscription?.renewalDate)}`
+                : `Renews ${formatDate(subscription?.renewalDate)}`}
             </Text>
           </View>
           <MaterialCommunityIcons

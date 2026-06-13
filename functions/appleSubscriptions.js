@@ -176,6 +176,52 @@ const toMillis = (value) => {
   return Number.isFinite(parsedDate) ? parsedDate : 0;
 };
 
+const isAutoRenewDisabled = (value) => {
+  if (value === 0 || value === '0' || value === false) return true;
+  if (typeof value === 'string' && value.trim().toLowerCase() === 'false') return true;
+  return false;
+};
+
+const resolveCancelAtPeriodEndFromVerifyReceipt = ({ verifyBody, originalTransactionId, status }) => {
+  if (status !== 'active') return false;
+
+  const pendingRenewalInfo = Array.isArray(verifyBody?.pending_renewal_info)
+    ? verifyBody.pending_renewal_info
+    : [];
+  if (!pendingRenewalInfo.length) return false;
+
+  const targetOriginalTxnId = String(originalTransactionId || '');
+  const matchedEntry = targetOriginalTxnId
+    ? pendingRenewalInfo.find(
+      (item) => String(item?.original_transaction_id || '') === targetOriginalTxnId
+    )
+    : null;
+
+  const candidate = matchedEntry || pendingRenewalInfo[0] || null;
+  if (!candidate) return false;
+
+  return isAutoRenewDisabled(candidate?.auto_renew_status);
+};
+
+const resolveCancelAtPeriodEndFromRenewalPayload = ({
+  renewalPayload,
+  notificationType,
+  notificationSubtype,
+  status,
+}) => {
+  if (status !== 'active') return false;
+
+  const subtype = String(notificationSubtype || '').toUpperCase();
+  if (subtype === 'AUTO_RENEW_DISABLED') return true;
+
+  const autoRenewStatus =
+    renewalPayload?.autoRenewStatus ?? renewalPayload?.auto_renew_status ?? null;
+
+  if (isAutoRenewDisabled(autoRenewStatus)) return true;
+
+  return notificationType === 'DID_CHANGE_RENEWAL_STATUS' && subtype !== 'AUTO_RENEW_ENABLED';
+};
+
 const resolveFromVerifyReceipt = ({
   verifyBody,
   validProductIds,
@@ -431,6 +477,12 @@ export const activateAppleSubscription = functions
           );
         }
 
+        const cancelAtPeriodEnd = resolveCancelAtPeriodEndFromVerifyReceipt({
+          verifyBody: verifyResult.body,
+          originalTransactionId: resolved.originalTransactionId,
+          status: resolved.status,
+        });
+
         await firestore
           .doc(`users/${uid}/subscription/current`)
           .set(
@@ -444,6 +496,7 @@ export const activateAppleSubscription = functions
               purchaseDate: resolved.purchaseMs,
               renewalDate: resolved.renewalDateMs,
               appleReceiptEnvironment: resolved.environment,
+              cancelAtPeriodEnd,
               email: email || null,
               updatedAt: FieldValue.serverTimestamp(),
               lastRenewal: resolved.status === 'active' ? FieldValue.serverTimestamp() : null,
@@ -455,6 +508,7 @@ export const activateAppleSubscription = functions
           subscriptionStatus: resolved.status,
           subscriptionPlan: resolved.status === 'active' ? resolved.plan : null,
           subscriptionExpiresAt: resolved.status === 'active' ? resolved.renewalDateMs : null,
+          subscriptionCancelAtPeriodEnd: resolved.status === 'active' ? cancelAtPeriodEnd : false,
           updatedAt: FieldValue.serverTimestamp(),
         });
 
@@ -462,6 +516,7 @@ export const activateAppleSubscription = functions
           status: resolved.status,
           plan: resolved.plan,
           renewalDate: resolved.renewalDateMs,
+          cancelAtPeriodEnd,
           environment: resolved.environment,
         };
       }
@@ -489,12 +544,14 @@ export const activateAppleSubscription = functions
 
       let matchedApiStatus = null;
       let matchedTxnPayload = null;
+      let matchedRenewalPayload = null;
       outer: for (const group of groups) {
         for (const lastTxn of (group.lastTransactions || [])) {
           const txnPayload = decodeJwsPayload(lastTxn.signedTransactionInfo);
           if (txnPayload && validProductIds.has(txnPayload.productId)) {
             matchedApiStatus = lastTxn.status;
             matchedTxnPayload = txnPayload;
+            matchedRenewalPayload = decodeJwsPayload(lastTxn.signedRenewalInfo);
             break outer;
           }
         }
@@ -528,6 +585,12 @@ export const activateAppleSubscription = functions
       const isActiveByStatus =
         normalizedApiStatus === 1 || normalizedApiStatus === 3 || normalizedApiStatus === 4;
       const status = isActiveByStatus || hasFutureExpiry ? 'active' : 'expired';
+      const cancelAtPeriodEnd = resolveCancelAtPeriodEndFromRenewalPayload({
+        renewalPayload: matchedRenewalPayload,
+        notificationType: null,
+        notificationSubtype: null,
+        status,
+      });
 
       functions.logger.info('Apple subscription sync result', {
         uid,
@@ -555,6 +618,7 @@ export const activateAppleSubscription = functions
             purchaseDate: purchaseMs,
             renewalDate: renewalDateMs || null,
             appleReceiptEnvironment: apiResult.body?.environment || null,
+            cancelAtPeriodEnd,
             email: email || null,
             updatedAt: FieldValue.serverTimestamp(),
             lastRenewal: status === 'active' ? FieldValue.serverTimestamp() : null,
@@ -566,6 +630,7 @@ export const activateAppleSubscription = functions
         subscriptionStatus: status,
         subscriptionPlan: status === 'active' ? plan : null,
         subscriptionExpiresAt: status === 'active' ? renewalDateMs : null,
+        subscriptionCancelAtPeriodEnd: status === 'active' ? cancelAtPeriodEnd : false,
         updatedAt: FieldValue.serverTimestamp(),
       });
 
@@ -573,6 +638,7 @@ export const activateAppleSubscription = functions
         status,
         plan,
         renewalDate: renewalDateMs || null,
+        cancelAtPeriodEnd,
         environment: apiResult.body?.environment || null,
       };
     } catch (err) {
@@ -707,6 +773,12 @@ export const appleServerNotification = functions
 
       const plan = isAnnualProductId(productId, productIds.annual) ? 'annual' : 'monthly';
       const status = deriveNotificationStatus({ notificationType, expiresDateMs });
+      const cancelAtPeriodEnd = resolveCancelAtPeriodEndFromRenewalPayload({
+        renewalPayload,
+        notificationType,
+        notificationSubtype: subtype,
+        status,
+      });
 
       await firestore.doc(`users/${uid}/subscription/current`).set(
         {
@@ -722,6 +794,7 @@ export const appleServerNotification = functions
           appleNotificationSubtype: subtype,
           appleNotificationUUID: notificationUUID,
           appleNotificationEnvironment: envelope.environment || null,
+          cancelAtPeriodEnd,
           updatedAt: FieldValue.serverTimestamp(),
           lastRenewal: status === 'active' ? FieldValue.serverTimestamp() : null,
         },
@@ -732,6 +805,7 @@ export const appleServerNotification = functions
         subscriptionStatus: status,
         subscriptionPlan: status === 'active' ? plan : null,
         subscriptionExpiresAt: status === 'active' ? expiresDateMs || null : null,
+        subscriptionCancelAtPeriodEnd: status === 'active' ? cancelAtPeriodEnd : false,
         updatedAt: FieldValue.serverTimestamp(),
       });
 

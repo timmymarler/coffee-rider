@@ -28,6 +28,7 @@ export default function ManageSubscriptionScreen() {
   const hasActiveSubscription = isSubscribed();
   const isCurrentlyInTrial = isInTrial();
   const trialDaysLeft = getTrialDaysRemaining();
+  const isCancellationScheduled = Boolean(subscription?.cancelAtPeriodEnd);
 
   const handleCancelSubscription = async () => {
     const isAppleManagedSubscription =
@@ -123,7 +124,11 @@ export default function ManageSubscriptionScreen() {
           color={theme.colors.primary}
         />
         <Text style={[styles.title, { color: theme.colors.text }]}>
-          {isCurrentlyInTrial ? 'Free Trial' : 'Pro Subscriber'}
+          {isCurrentlyInTrial
+            ? 'Free Trial'
+            : isCancellationScheduled
+              ? 'Cancellation Scheduled'
+              : 'Pro Subscriber'}
         </Text>
       </View>
 
@@ -147,7 +152,11 @@ export default function ManageSubscriptionScreen() {
 
         <View style={styles.statusRow}>
           <Text style={[styles.statusLabel, { color: theme.colors.textLight }]}>
-            {isCurrentlyInTrial ? 'Trial Ends' : 'Renewal Date'}
+            {isCurrentlyInTrial
+              ? 'Trial Ends'
+              : isCancellationScheduled
+                ? 'Access Ends On'
+                : 'Renewal Date'}
           </Text>
           <Text style={[styles.statusValue, { color: theme.colors.text }]}>
             {isCurrentlyInTrial
@@ -168,7 +177,21 @@ export default function ManageSubscriptionScreen() {
       {/* Cancel Button (only for paid subscriptions, not trials) */}
       {hasActiveSubscription && !isCurrentlyInTrial && (
         <View style={styles.section}>
-          {confirmingCancel ? (
+          {isCancellationScheduled ? (
+            <View
+              style={[
+                styles.statusCard,
+                { backgroundColor: theme.colors.primaryLight, marginHorizontal: 0, marginBottom: 12 },
+              ]}
+            >
+              <Text style={[styles.statusLabel, { color: theme.colors.textLight, marginBottom: 8 }]}> 
+                Subscription Status
+              </Text>
+              <Text style={[styles.statusValue, { color: theme.colors.text }]}> 
+                Cancelled, active until {renewalDateLabel}
+              </Text>
+            </View>
+          ) : confirmingCancel ? (
             <View style={styles.confirmColumn}>
               <Pressable
                 style={[
@@ -239,7 +262,9 @@ export default function ManageSubscriptionScreen() {
           )}
 
           <Text style={[styles.expiryNote, { color: theme.colors.textLight }]}> 
-            If you cancel now, Pro access remains active until {renewalDateLabel}.
+            {isCancellationScheduled
+              ? `Your subscription is cancelled and Pro access remains active until ${renewalDateLabel}.`
+              : `If you cancel now, Pro access remains active until ${renewalDateLabel}.`}
           </Text>
         </View>
       )}
