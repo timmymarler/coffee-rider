@@ -7,23 +7,28 @@
         { "fieldPath": "stripeSubscriptionId", "order": "ASCENDING" },
         { "fieldPath": "__name__", "order": "ASCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "subscription",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "appleOriginalTransactionId", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "subscription",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "appleTransactionId", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "subscription",
+      "fieldPath": "appleOriginalTransactionId",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "subscription",
+      "fieldPath": "appleTransactionId",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ]
 }
