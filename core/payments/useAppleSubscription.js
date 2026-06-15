@@ -109,6 +109,38 @@ function isTransientIapCancellationError(err) {
   );
 }
 
+function getErrorCode(err) {
+  const code = String(err?.code || err?.status || '').trim().toLowerCase();
+  return code;
+}
+
+function isAccountMismatchError(err) {
+  const message = getErrorMessage(err).toLowerCase();
+  return (
+    message.includes('uid mismatch') ||
+    message.includes('payload uid') ||
+    message.includes('authenticated user') ||
+    message.includes('different user')
+  );
+}
+
+function isBackendPreconditionError(err) {
+  const code = getErrorCode(err);
+  const message = getErrorMessage(err).toLowerCase();
+  return code === 'failed-precondition' || message.includes('failed-precondition');
+}
+
+function isNoActiveSubscriptionError(err) {
+  const message = getErrorMessage(err).toLowerCase();
+  return (
+    message.includes('no active subscription') ||
+    message.includes('subscription is not active') ||
+    message.includes('did not return a subscription status') ||
+    message.includes('validation returned') ||
+    message.includes('profile sync did not complete')
+  );
+}
+
 function toFriendlyIapError(err, operation = 'purchase') {
   if (isTransientIapCancellationError(err)) {
     return new Error(
@@ -116,8 +148,24 @@ function toFriendlyIapError(err, operation = 'purchase') {
     );
   }
 
+  if (isAccountMismatchError(err)) {
+    return new Error(
+      'This Apple purchase appears linked to a different Coffee Rider account. Please sign in to the original account and restore again.'
+    );
+  }
+
+  if (isNoActiveSubscriptionError(err) || isBackendPreconditionError(err)) {
+    return new Error(
+      'We could not confirm an active Apple subscription for this account yet. Please check the signed-in account and try Restore Purchases again.'
+    );
+  }
+
   const message = getErrorMessage(err);
-  return err instanceof Error ? err : new Error(message || `Unable to ${operation}.`);
+  if (message && message !== '[object Object]') {
+    return new Error(`Unable to ${operation} right now. Please try again.`);
+  }
+
+  return new Error(`Unable to ${operation} right now. Please try again.`);
 }
 
 export function useAppleSubscription({ user }) {
