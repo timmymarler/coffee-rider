@@ -7,6 +7,22 @@
         { "fieldPath": "stripeSubscriptionId", "order": "ASCENDING" },
         { "fieldPath": "__name__", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "subscription",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "appleOriginalTransactionId", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "subscription",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "appleTransactionId", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
