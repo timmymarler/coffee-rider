@@ -401,6 +401,7 @@ export const activateAppleSubscription = functions
 
       const uid = context.auth.uid;
       const {
+        userId,
         productId,
         transactionId,
         originalTransactionId,
@@ -408,6 +409,20 @@ export const activateAppleSubscription = functions
         email,
         receiptData,
       } = data || {};
+
+      if (userId && String(userId) !== String(uid)) {
+        functions.logger.error('activateAppleSubscription uid mismatch', {
+          authUid: uid,
+          payloadUserId: String(userId),
+          productId: productId || null,
+          transactionId: transactionId || null,
+        });
+
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'Account mismatch detected during Apple subscription activation. Please sign out and back in.'
+        );
+      }
 
       if (!productId || !transactionId) {
         functions.logger.error('activateAppleSubscription missing identifiers', {
