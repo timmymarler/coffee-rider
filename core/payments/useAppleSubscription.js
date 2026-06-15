@@ -100,10 +100,20 @@ function getErrorMessage(err) {
   return String(err);
 }
 
+function normalizeErrorText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 function isTransientIapCancellationError(err) {
-  const message = getErrorMessage(err).toLowerCase();
+  const message = normalizeErrorText(getErrorMessage(err));
   return (
     message.includes('request cancelled') ||
+    message.includes('not possible to complete this request') ||
+    message.includes('unable to complete this request') ||
+    message.includes('nao foi possivel concluir esta solicitacao') ||
     message.includes('service-error') ||
     message.includes('com.margelo.nitro.rniap')
   );
@@ -141,10 +151,27 @@ function isNoActiveSubscriptionError(err) {
   );
 }
 
+function isAlreadySubscribedError(err) {
+  const message = normalizeErrorText(getErrorMessage(err));
+  return (
+    message.includes('already subscribed') ||
+    message.includes('already have a subscription') ||
+    message.includes('already have an active subscription') ||
+    message.includes('currently subscribed') ||
+    message.includes('already purchased this')
+  );
+}
+
 function toFriendlyIapError(err, operation = 'purchase') {
   if (isTransientIapCancellationError(err)) {
     return new Error(
-      `Apple ${operation} service was temporarily unavailable. Please check your internet/App Store account and try again.`
+      `Apple ${operation} service was temporarily unavailable. Please reopen the App Store, then try again.`
+    );
+  }
+
+  if (isAlreadySubscribedError(err)) {
+    return new Error(
+      'You already have an active Apple subscription on this Apple ID. Please use Restore Purchases to sync it to this account.'
     );
   }
 
@@ -463,7 +490,13 @@ export function useAppleSubscription({ user }) {
         } catch (err) {
           lastRestoreErr = err;
           if (attempt === 1 && isTransientIapCancellationError(err)) {
+            try {
+              await iap.endConnection();
+            } catch (_) {
+              // Best-effort reset before retry.
+            }
             await new Promise((res) => setTimeout(res, 1200));
+            await ensureIapConnection();
             continue;
           }
           break;

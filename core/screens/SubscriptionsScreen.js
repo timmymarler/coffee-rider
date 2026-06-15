@@ -114,34 +114,13 @@ export default function SubscriptionsScreen() {
       return;
     }
 
-    if (appleLoading) {
-      Alert.alert('Please wait', 'Still loading App Store subscription products. Try again in a moment.');
-      return;
-    }
-
     if (!appleProductsByPlan.monthly && !appleProductsByPlan.annual) {
-      let reloadedProducts = [];
+      // Best-effort refresh only. Do not hard-block purchase attempt because
+      // requestPurchase can still succeed using configured fallback SKUs.
       try {
-        reloadedProducts = await reloadProducts();
-      } catch (err) {
-        Alert.alert(
-          'Subscriptions unavailable',
-          err?.message || 'Unable to load App Store products right now. Please try again shortly.'
-        );
-        return;
-      }
-
-      const hasReloadedProducts = (reloadedProducts || []).some((p) => {
-        const id = String(p?.id || p?.productId || '').toLowerCase();
-        return id.includes('.monthly') || id.includes('.annual');
-      });
-
-      if (!hasReloadedProducts) {
-        Alert.alert(
-          'Subscriptions unavailable',
-          'No App Store subscription products were returned for this build. Check product IDs, App Store Connect status, and agreements.'
-        );
-        return;
+        await reloadProducts();
+      } catch (_err) {
+        // Continue and allow hook-level fallback SKU purchase path.
       }
     }
 
@@ -153,7 +132,26 @@ export default function SubscriptionsScreen() {
         Alert.alert('Subscription Active', 'Your Apple subscription is now active.');
       }
     } catch (err) {
-      Alert.alert('Error', err?.message || 'Unable to complete Apple subscription.');
+      const message = String(err?.message || '');
+      const normalized = message.toLowerCase();
+      if (normalized.includes('already have an active apple subscription')) {
+        Alert.alert(
+          'Subscription Already Active',
+          'This Apple ID already has an active subscription. Restore purchases to sync access on this account.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            {
+              text: 'Restore Now',
+              onPress: () => {
+                handleAppleRestore();
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      Alert.alert('Error', message || 'Unable to complete Apple subscription.');
     } finally {
       setSelectedPlan(null);
     }
