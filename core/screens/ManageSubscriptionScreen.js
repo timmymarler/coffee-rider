@@ -33,9 +33,14 @@ export default function ManageSubscriptionScreen() {
   const isCurrentlyInTrial = isInTrial();
   const trialDaysLeft = getTrialDaysRemaining();
   const isCancellationScheduled = Boolean(subscription?.cancelAtPeriodEnd);
+  const hasStripeSubscription = Boolean(subscription?.stripeSubscriptionId);
   const isAppleManagedSubscription =
     Platform.OS === 'ios' &&
-    (subscription?.provider === 'apple_iap' || Boolean(subscription?.appleTransactionId));
+    (
+      subscription?.provider === 'apple_iap' ||
+      Boolean(subscription?.appleTransactionId) ||
+      !hasStripeSubscription
+    );
 
   const syncAppleSubscriptionStatus = async () => {
     if (!isAppleManagedSubscription) return;
@@ -247,9 +252,29 @@ export default function ManageSubscriptionScreen() {
                 Subscription Status
               </Text>
               <Text style={[styles.statusValue, { color: theme.colors.text }]}> 
-                Cancelled, active until {renewalDateLabel}
+                You have unsubscribed and still have access until {renewalDateLabel}.
               </Text>
             </View>
+          ) : isAppleManagedSubscription ? (
+            <Pressable
+              style={[
+                styles.cancelButton,
+                { borderColor: theme.colors.primary },
+                cancelling && styles.buttonDisabled,
+              ]}
+              onPress={handleCancelSubscription}
+              disabled={cancelling}
+            >
+              <MaterialCommunityIcons
+                name="open-in-new"
+                size={20}
+                color={theme.colors.primary}
+                style={{ marginRight: 8 }}
+              />
+              <Text style={[styles.cancelButtonText, { color: theme.colors.primary }]}> 
+                Manage Subscription
+              </Text>
+            </Pressable>
           ) : confirmingCancel ? (
             <View style={styles.confirmColumn}>
               <Pressable
@@ -315,7 +340,7 @@ export default function ManageSubscriptionScreen() {
                 style={{ marginRight: 8 }}
               />
               <Text style={[styles.cancelButtonText, { color: theme.colors.danger }]}>
-                {isAppleManagedSubscription ? 'Manage in App Store' : 'Cancel Subscription'}
+                Cancel Subscription
               </Text>
             </Pressable>
           )}
@@ -323,7 +348,9 @@ export default function ManageSubscriptionScreen() {
           <Text style={[styles.expiryNote, { color: theme.colors.textLight }]}> 
             {isCancellationScheduled
               ? `Your subscription is cancelled and Pro access remains active until ${renewalDateLabel}.`
-              : `If you cancel now, Pro access remains active until ${renewalDateLabel}.`}
+              : isAppleManagedSubscription
+                ? 'Subscription changes are managed in Apple. Use Manage Subscription to view or change auto-renew settings.'
+                : `If you cancel now, Pro access remains active until ${renewalDateLabel}.`}
           </Text>
         </View>
       )}

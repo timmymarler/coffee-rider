@@ -297,7 +297,7 @@ export default function SubscriptionsScreen() {
               >
                 <MaterialCommunityIcons name="cog" size={18} color={theme.colors.intext} />
                 <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: '600' }}>
-                  Manage / Cancel Subscription
+                  {isIOS ? 'Manage Subscription' : 'Manage / Cancel Subscription'}
                 </Text>
               </Pressable>
               <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}> 
