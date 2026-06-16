@@ -279,58 +279,18 @@ export default function ProfileScreen() {
       borderColor: theme.colors.accentMid,
       paddingVertical: 12,
       paddingHorizontal: 24,
-        {subscription?.cancelAtPeriodEnd ? (
-          <View style={{ 
-            backgroundColor: theme.colors.accentLight,
-            borderRadius: theme.borderRadius.md,
-            padding: theme.spacing.md,
-            marginTop: theme.spacing.sm
-          }}>
-            <Text style={{
-              color: theme.colors.text,
-              fontSize: 14,
-              fontWeight: '600',
-              marginBottom: theme.spacing.xs
-            }}>
-              You have unsubscribed
-            </Text>
-            <Text style={{
-              color: theme.colors.textMuted,
-              fontSize: 12,
-            }}>
-              You still have access until {formatSubscriptionDate(subscription?.cancellationEffectiveDate || subscription?.renewalDate)}.
-            </Text>
-          </View>
-        ) : (
-          <>
-            {(() => {
-              const isAppleManagedSubscription =
-                Platform.OS === 'ios' &&
-                (subscription?.provider === 'apple_iap' || Boolean(subscription?.appleTransactionId));
-              
-              return (
-                <>
-                  <CRButton
-                    title={isAppleManagedSubscription ? "Manage Subscription" : "Unsubscribe"}
-                    variant="accentMid"
-                    onPress={() => setUnsubscribeConfirmVisible(true)}
-                    style={{ width: '100%' }}
-                  />
-                  <Text style={{ 
-                    color: theme.colors.textMuted, 
-                    fontSize: 12, 
-                    marginTop: theme.spacing.sm,
-                    textAlign: 'center'
-                  }}>
-                    {isAppleManagedSubscription 
-                      ? "Manage subscription in Apple Settings" 
-                      : "Cancel your Pro subscription"}
-                  </Text>
-                </>
-              );
-            })()}
-          </>
-        )}
+      borderRadius: 999,
+      alignItems: "center",
+      width: "100%",
+    },
+    registerButtonText: {
+      color: theme.colors.accentMid,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+  });
+
+  if (!user) {
     return <LoginScreen />;
   }
 
@@ -1329,32 +1289,53 @@ export default function ProfileScreen() {
           )}
         </View>
         {subscription?.cancelAtPeriodEnd ? (
-          <Text style={{
-            color: theme.colors.textMuted,
-            fontSize: 12,
+          <View style={{
+            backgroundColor: theme.colors.accentLight,
+            borderRadius: theme.borderRadius.md,
+            padding: theme.spacing.md,
             marginTop: theme.spacing.sm,
-            textAlign: 'center'
           }}>
-            Cancellation scheduled. Your subscription will end on {formatSubscriptionDate(subscription?.cancellationEffectiveDate || subscription?.renewalDate)}.
-          </Text>
-        ) : (
-          <>
-            <CRButton
-              title="Unsubscribe"
-              variant="accentMid"
-              onPress={() => setUnsubscribeConfirmVisible(true)}
-              style={{ width: '100%' }}
-            />
-            <Text style={{ 
-              color: theme.colors.textMuted, 
-              fontSize: 12, 
-              marginTop: theme.spacing.sm,
-              textAlign: 'center'
+            <Text style={{
+              color: theme.colors.text,
+              fontSize: 14,
+              fontWeight: '600',
+              marginBottom: theme.spacing.xs,
             }}>
-              Cancel your Pro subscription
+              You have unsubscribed
             </Text>
-          </>
-        )}
+            <Text style={{
+              color: theme.colors.textMuted,
+              fontSize: 12,
+            }}>
+              You still have access until {formatSubscriptionDate(subscription?.cancellationEffectiveDate || subscription?.renewalDate)}.
+            </Text>
+          </View>
+        ) : (() => {
+          const isAppleManagedSubscription =
+            Platform.OS === 'ios' &&
+            (subscription?.provider === 'apple_iap' || Boolean(subscription?.appleTransactionId));
+
+          return (
+            <>
+              <CRButton
+                title={isAppleManagedSubscription ? 'Manage Subscription' : 'Unsubscribe'}
+                variant="accentMid"
+                onPress={() => setUnsubscribeConfirmVisible(true)}
+                style={{ width: '100%' }}
+              />
+              <Text style={{
+                color: theme.colors.textMuted,
+                fontSize: 12,
+                marginTop: theme.spacing.sm,
+                textAlign: 'center',
+              }}>
+                {isAppleManagedSubscription
+                  ? 'Manage subscription in Apple Settings'
+                  : 'Cancel your Pro subscription'}
+              </Text>
+            </>
+          );
+        })()}
       </CRCard>
       </View>
       )}
