@@ -204,6 +204,56 @@ export function useAppleSubscription({ user }) {
   const [purchaseError, setPurchaseError] = useState(null);
   const [lastLoadError, setLastLoadError] = useState(null);
   const handledTransactionsRef = useRef(new Set());
+  const purchaseOperationRef = useRef(null);
+
+  const beginPurchaseOperation = useCallback(() => {
+    if (purchaseOperationRef.current && !purchaseOperationRef.current.settled) {
+      return purchaseOperationRef.current;
+    }
+
+    let resolveOp;
+    let rejectOp;
+    const promise = new Promise((resolve, reject) => {
+      resolveOp = resolve;
+      rejectOp = reject;
+    });
+
+    const operation = {
+      promise,
+      settled: false,
+      resolve: (value) => {
+        if (operation.settled) return;
+        operation.settled = true;
+        resolveOp(value);
+      },
+      reject: (err) => {
+        if (operation.settled) return;
+        operation.settled = true;
+        rejectOp(err);
+      },
+    };
+
+    purchaseOperationRef.current = operation;
+    return operation;
+  }, []);
+
+  const resolvePurchaseOperation = useCallback((value) => {
+    const operation = purchaseOperationRef.current;
+    if (!operation) return;
+    operation.resolve(value);
+  }, []);
+
+  const rejectPurchaseOperation = useCallback((err) => {
+    const operation = purchaseOperationRef.current;
+    if (!operation) return;
+    operation.reject(err);
+  }, []);
+
+  const clearSettledPurchaseOperation = useCallback(() => {
+    const operation = purchaseOperationRef.current;
+    if (!operation || !operation.settled) return;
+    purchaseOperationRef.current = null;
+  }, []);
 
   const availableSkus = useMemo(() => {
     const monthly = APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY;
@@ -386,9 +436,18 @@ export function useAppleSubscription({ user }) {
 
     const purchaseUpdateSubscription = iap.purchaseUpdatedListener(async (purchase) => {
       try {
-        await syncPurchaseToProfile(purchase, { finish: true });
+        const activation = await syncPurchaseToProfile(purchase, { finish: true });
+        resolvePurchaseOperation({
+          success: true,
+          purchase,
+          activation,
+          fromListener: true,
+        });
       } catch (err) {
         console.error('[AppleIAP] Purchase update sync error:', err);
+        const mappedError = toFriendlyIapError(err, 'purchase');
+        setPurchaseError(mappedError);
+        rejectPurchaseOperation(mappedError);
       }
     });
 
@@ -402,9 +461,16 @@ export function useAppleSubscription({ user }) {
       isMounted = false;
       purchaseUpdateSubscription.remove();
       purchaseErrorSubscription.remove();
+      rejectPurchaseOperation(new Error('Purchase flow was interrupted. Please try again.'));
       iap.endConnection().catch(() => {});
     };
-  }, [ensureIapConnection, loadProducts, syncPurchaseToProfile]);
+  }, [
+    ensureIapConnection,
+    loadProducts,
+    rejectPurchaseOperation,
+    resolvePurchaseOperation,
+    syncPurchaseToProfile,
+  ]);
 
   const subscribeToPlan = useCallback(
     async (planId) => {
@@ -419,6 +485,7 @@ export function useAppleSubscription({ user }) {
         setError(null);
         setPurchaseError(null);
         setProcessingSku(fallbackSku);
+        const operation = beginPurchaseOperation();
 
         if (!iap) throw new Error('Apple IAP is not available in this build.');
         await ensureIapConnection();
@@ -450,19 +517,49 @@ export function useAppleSubscription({ user }) {
               'Purchase completed, but subscription is not active yet. Please restore purchases.'
             );
           }
-          return { success: true, purchase, activation };
+          const successResult = { success: true, purchase, activation, fromListener: false };
+          resolvePurchaseOperation(successResult);
+          clearSettledPurchaseOperation();
+          return successResult;
         }
 
-        return { success: false };
+        // Some StoreKit purchase calls resolve before transaction details are
+        // returned; wait for purchaseUpdatedListener to complete backend sync.
+        const listenerResult = await Promise.race([
+          operation.promise,
+          new Promise((_, reject) =>
+            setTimeout(() => {
+              reject(
+                new Error(
+                  'Apple purchase is still processing. Please wait a moment, then use Restore Purchases if access has not updated.'
+                )
+              );
+            }, 30000)
+          ),
+        ]);
+        clearSettledPurchaseOperation();
+        return listenerResult;
       } catch (err) {
         const mappedError = toFriendlyIapError(err, 'purchase');
         setPurchaseError(mappedError);
+        rejectPurchaseOperation(mappedError);
+        clearSettledPurchaseOperation();
         throw mappedError;
       } finally {
         setProcessingSku(null);
       }
     },
-    [ensureIapConnection, productsByPlan, reloadProducts, syncPurchaseToProfile, user?.uid]
+    [
+      beginPurchaseOperation,
+      clearSettledPurchaseOperation,
+      ensureIapConnection,
+      productsByPlan,
+      rejectPurchaseOperation,
+      reloadProducts,
+      resolvePurchaseOperation,
+      syncPurchaseToProfile,
+      user?.uid,
+    ]
   );
 
   const restorePurchases = useCallback(async () => {
