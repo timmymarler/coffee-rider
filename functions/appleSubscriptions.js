@@ -222,6 +222,50 @@ const resolveCancelAtPeriodEndFromRenewalPayload = ({
   return notificationType === 'DID_CHANGE_RENEWAL_STATUS' && subtype !== 'AUTO_RENEW_ENABLED';
 };
 
+const resolveCancelAtPeriodEndFromAppStoreApi = async ({
+  originalTransactionId,
+  validProductIds,
+}) => {
+  const { keyId, issuerId, privateKey } = getAppStoreConfig();
+  const jwt = await makeAppStoreJwt({ privateKey, keyId, issuerId });
+
+  let apiResult = await fetchSubscriptionStatus({
+    originalTransactionId,
+    jwt,
+    useSandbox: false,
+  });
+
+  if (apiResult.httpStatus === 404) {
+    apiResult = await fetchSubscriptionStatus({
+      originalTransactionId,
+      jwt,
+      useSandbox: true,
+    });
+  }
+
+  if (!apiResult.body) {
+    return false;
+  }
+
+  const groups = apiResult.body?.data || [];
+  for (const group of groups) {
+    for (const lastTxn of group.lastTransactions || []) {
+      const txnPayload = decodeJwsPayload(lastTxn.signedTransactionInfo);
+      const renewalPayload = decodeJwsPayload(lastTxn.signedRenewalInfo);
+      if (txnPayload?.productId && validProductIds.has(txnPayload.productId)) {
+        return resolveCancelAtPeriodEndFromRenewalPayload({
+          renewalPayload,
+          notificationType: null,
+          notificationSubtype: null,
+          status: 'active',
+        });
+      }
+    }
+  }
+
+  return false;
+};
+
 const resolveFromVerifyReceipt = ({
   verifyBody,
   validProductIds,
@@ -492,11 +536,28 @@ export const activateAppleSubscription = functions
           );
         }
 
-        const cancelAtPeriodEnd = resolveCancelAtPeriodEndFromVerifyReceipt({
+        let cancelAtPeriodEnd = resolveCancelAtPeriodEndFromVerifyReceipt({
           verifyBody: verifyResult.body,
           originalTransactionId: resolved.originalTransactionId,
           status: resolved.status,
         });
+
+        // verifyReceipt can occasionally lag auto-renew disable state.
+        // Cross-check App Store Server API before persisting if still active/not-cancelled.
+        if (!cancelAtPeriodEnd && resolved.status === 'active') {
+          try {
+            cancelAtPeriodEnd = await resolveCancelAtPeriodEndFromAppStoreApi({
+              originalTransactionId: resolved.originalTransactionId,
+              validProductIds,
+            });
+          } catch (err) {
+            functions.logger.warn('App Store API cancelAtPeriodEnd fallback failed', {
+              uid,
+              message: err?.message || String(err),
+              originalTransactionId: resolved.originalTransactionId,
+            });
+          }
+        }
 
         await firestore
           .doc(`users/${uid}/subscription/current`)
