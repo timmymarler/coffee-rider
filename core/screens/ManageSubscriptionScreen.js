@@ -2,6 +2,7 @@ import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
 import { cancelSubscription } from '@core/payments/stripeService';
+import { useAppleSubscription } from '@core/payments/useAppleSubscription';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useContext, useState } from 'react';
@@ -19,23 +20,53 @@ import {
 
 export default function ManageSubscriptionScreen() {
   const router = useRouter();
-  const { user } = useContext(AuthContext);
+  const { user, refreshProfile } = useContext(AuthContext);
   const { subscription, isSubscribed, isInTrial, getTrialDaysRemaining } = useContext(SubscriptionContext);
   const theme = useTheme();
   const [cancelling, setCancelling] = useState(false);
+  const [syncingAppleStatus, setSyncingAppleStatus] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+
+  const { restorePurchases } = useAppleSubscription({ user });
 
   const hasActiveSubscription = isSubscribed();
   const isCurrentlyInTrial = isInTrial();
   const trialDaysLeft = getTrialDaysRemaining();
   const isCancellationScheduled = Boolean(subscription?.cancelAtPeriodEnd);
+  const isAppleManagedSubscription =
+    Platform.OS === 'ios' &&
+    (subscription?.provider === 'apple_iap' || Boolean(subscription?.appleTransactionId));
+
+  const syncAppleSubscriptionStatus = async () => {
+    if (!isAppleManagedSubscription) return;
+
+    try {
+      setSyncingAppleStatus(true);
+      await restorePurchases();
+      await refreshProfile();
+
+      Alert.alert(
+        'Apple Status Updated',
+        'Subscription status has been refreshed from Apple. If cancellation was scheduled, this screen will update shortly.'
+      );
+    } catch (err) {
+      Alert.alert('Unable to sync Apple status', err?.message || 'Please try again.');
+    } finally {
+      setSyncingAppleStatus(false);
+    }
+  };
 
   const handleCancelSubscription = async () => {
-    const isAppleManagedSubscription =
-      Platform.OS === 'ios' &&
-      (subscription?.provider === 'apple_iap' || Boolean(subscription?.appleTransactionId));
-
     if (isAppleManagedSubscription) {
+      if (isCancellationScheduled) {
+        Alert.alert(
+          'Already Cancelled',
+          `Your Apple subscription is already cancelled and remains active until ${renewalDateLabel}.`
+        );
+        setConfirmingCancel(false);
+        return;
+      }
+
       try {
         const manageUrl = 'itms-apps://apps.apple.com/account/subscriptions';
         const fallbackUrl = 'https://apps.apple.com/account/subscriptions';
@@ -177,6 +208,34 @@ export default function ManageSubscriptionScreen() {
       {/* Cancel Button (only for paid subscriptions, not trials) */}
       {hasActiveSubscription && !isCurrentlyInTrial && (
         <View style={styles.section}>
+          {isAppleManagedSubscription && !isCancellationScheduled && (
+            <Pressable
+              style={[
+                styles.cancelButton,
+                { borderColor: theme.colors.primary, marginBottom: 12 },
+                syncingAppleStatus && styles.buttonDisabled,
+              ]}
+              onPress={syncAppleSubscriptionStatus}
+              disabled={syncingAppleStatus || cancelling}
+            >
+              {syncingAppleStatus ? (
+                <ActivityIndicator color={theme.colors.primary} />
+              ) : (
+                <>
+                  <MaterialCommunityIcons
+                    name="refresh"
+                    size={20}
+                    color={theme.colors.primary}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={[styles.cancelButtonText, { color: theme.colors.primary }]}> 
+                    Sync Apple Status
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          )}
+
           {isCancellationScheduled ? (
             <View
               style={[
@@ -233,7 +292,7 @@ export default function ManageSubscriptionScreen() {
                       style={{ marginRight: 8 }}
                     />
                     <Text style={[styles.cancelButtonText, { color: theme.colors.background }]}>
-                      Cancel Subscription
+                      {isAppleManagedSubscription ? 'Manage in App Store' : 'Cancel Subscription'}
                     </Text>
                   </>
                 )}
@@ -256,7 +315,7 @@ export default function ManageSubscriptionScreen() {
                 style={{ marginRight: 8 }}
               />
               <Text style={[styles.cancelButtonText, { color: theme.colors.danger }]}>
-                Cancel Subscription
+                {isAppleManagedSubscription ? 'Manage in App Store' : 'Cancel Subscription'}
               </Text>
             </Pressable>
           )}
