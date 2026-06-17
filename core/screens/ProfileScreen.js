@@ -88,6 +88,15 @@ export default function ProfileScreen() {
   const [unsubscribeConfirmVisible, setUnsubscribeConfirmVisible] = useState(false);
   const [unsubscribing, setUnsubscribing] = useState(false);
 
+  const hasStripeSubscription = Boolean(subscription?.stripeSubscriptionId);
+  const isAppleManagedSubscription =
+    Platform.OS === 'ios' &&
+    (
+      subscription?.provider === 'apple_iap' ||
+      Boolean(subscription?.appleTransactionId) ||
+      !hasStripeSubscription
+    );
+
   // Track changes for Save button
   const [initialValues, setInitialValues] = useState({});
   
@@ -620,10 +629,6 @@ export default function ProfileScreen() {
 
     setUnsubscribing(true);
     try {
-      const isAppleManagedSubscription =
-        Platform.OS === 'ios' &&
-        (subscription?.provider === 'apple_iap' || Boolean(subscription?.appleTransactionId));
-
       if (isAppleManagedSubscription) {
         const manageUrl = 'itms-apps://apps.apple.com/account/subscriptions';
         const fallbackUrl = 'https://apps.apple.com/account/subscriptions';
@@ -1311,10 +1316,6 @@ export default function ProfileScreen() {
             </Text>
           </View>
         ) : (() => {
-          const isAppleManagedSubscription =
-            Platform.OS === 'ios' &&
-            (subscription?.provider === 'apple_iap' || Boolean(subscription?.appleTransactionId));
-
           return (
             <>
               <CRButton
@@ -1449,7 +1450,7 @@ export default function ProfileScreen() {
               marginBottom: theme.spacing.md,
               textAlign: 'center'
             }}>
-              Cancel Subscription?
+              {isAppleManagedSubscription ? 'Open Apple Subscriptions?' : 'Cancel Subscription?'}
             </Text>
 
             <Text style={{ 
@@ -1458,12 +1459,14 @@ export default function ProfileScreen() {
               marginBottom: theme.spacing.md,
               lineHeight: 20,
             }}>
-              Your subscription will be cancelled. You'll retain access to Pro features until {formatSubscriptionDate(subscription?.renewalDate)}.
+              {isAppleManagedSubscription
+                ? 'Subscription changes are managed in Apple. Open Apple Subscriptions to change or cancel auto-renew. If cancelled there, you keep Pro access until the renewal date.'
+                : `Your subscription will be cancelled. You'll retain access to Pro features until ${formatSubscriptionDate(subscription?.renewalDate)}.`}
             </Text>
 
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <CRButton
-                title={unsubscribing ? "Cancelling…" : "Cancel Subscription"}
+                title={unsubscribing ? "Please wait…" : isAppleManagedSubscription ? 'Open Apple Subscriptions' : 'Cancel Subscription'}
                 variant="danger"
                 loading={unsubscribing}
                 disabled={unsubscribing}
