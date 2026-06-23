@@ -390,7 +390,7 @@
 				CODE_SIGN_ENTITLEMENTS = CoffeeRider/CoffeeRider.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-							CURRENT_PROJECT_VERSION = 84;
+							CURRENT_PROJECT_VERSION = 86;
 				DEVELOPMENT_TEAM = U5W34H5KWD;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -403,7 +403,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-							MARKETING_VERSION = 2.31.29;
+							MARKETING_VERSION = 2.31.31;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -429,7 +429,7 @@
 				CODE_SIGN_ENTITLEMENTS = CoffeeRider/CoffeeRider.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-							CURRENT_PROJECT_VERSION = 84;
+							CURRENT_PROJECT_VERSION = 86;
 				DEVELOPMENT_TEAM = U5W34H5KWD;
 				INFOPLIST_FILE = CoffeeRider/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -437,7 +437,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-							MARKETING_VERSION = 2.31.29;
+							MARKETING_VERSION = 2.31.31;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
