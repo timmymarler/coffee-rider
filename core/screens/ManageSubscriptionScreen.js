@@ -2,7 +2,7 @@ import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
 import { cancelSubscription } from '@core/payments/stripeService';
-import { useAppleSubscription } from '@core/payments/useAppleSubscription';
+import { useAppleSubscriptionV2 } from '@core/payments/useAppleSubscriptionV2';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useContext, useState } from 'react';
@@ -27,7 +27,7 @@ export default function ManageSubscriptionScreen() {
   const [syncingAppleStatus, setSyncingAppleStatus] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
 
-  const { restorePurchases } = useAppleSubscription({ user });
+  const { restorePurchases } = useAppleSubscriptionV2({ user });
 
   const hasActiveSubscription = isSubscribed();
   const isCurrentlyInTrial = isInTrial();

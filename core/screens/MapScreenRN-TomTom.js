@@ -14,6 +14,16 @@ import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
 
+function showPlatformToast(message, duration = 'LONG') {
+  if (!message) return;
+  if (Platform.OS === 'android') {
+    const toastDuration = duration === 'SHORT' ? ToastAndroid.SHORT : ToastAndroid.LONG;
+    ToastAndroid.show(String(message), toastDuration);
+    return;
+  }
+  console.log('[Toast]', message);
+}
+
 function isRoundaboutManeuver(maneuver = "") {
   return String(maneuver).toUpperCase().includes("ROUNDABOUT");
 }
@@ -258,6 +268,7 @@ const GENERIC_CONTINUE_REGEX = /^continue\b/i;
 const SPEECH_FAILSAFE_INTERVAL_MS = 20000;
 const METERS_PER_DEGREE_LAT = 111320;
 const EARTH_CIRCUMFERENCE_METERS = 40075000;
+const FALLBACK_MAP_CENTER = { latitude: 52.3555, longitude: -1.1743, accuracy: 9999, isFallback: true };
 
 function metersPerDegreeLongitude(lat) {
   return (EARTH_CIRCUMFERENCE_METERS * Math.cos((lat * Math.PI) / 180)) / 360;
@@ -1293,9 +1304,23 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
   const filtersActive = appliedFilters.suitability.size > 0 || appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0 || appliedFilters.sponsor || appliedFilters.visited;
   const [userLocation, setUserLocation] = useState(null);
+  const [locationWaitExceeded, setLocationWaitExceeded] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
 
   const [mapRegion, setMapRegion] = useState(userLocation);
+
+  useEffect(() => {
+    if (userLocation) {
+      setLocationWaitExceeded(false);
+      return undefined;
+    }
+
+    const locationTimeout = setTimeout(() => {
+      setLocationWaitExceeded(true);
+    }, 15000);
+
+    return () => clearTimeout(locationTimeout);
+  }, [userLocation]);
 
   // Selected marker/placecard
   const [selectedPlaceId, setSelectedPlaceId] = useState(null);
@@ -2048,7 +2073,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!networkStatus.isOnline) {
       // Show toast once when going offline
       if (!offlineToastShownRef.current) {
-        ToastAndroid.show('You are offline - using cached routes', ToastAndroid.LONG);
+        showPlatformToast('You are offline - using cached routes', 'LONG');
         offlineToastShownRef.current = true;
       }
     } else {
@@ -2465,7 +2490,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       closeAddPointMenu();
     } catch (error) {
       console.error('[handleSetDestination] Error:', error);
-      ToastAndroid.show(`Error setting destination: ${error.message}`, ToastAndroid.LONG);
+      showPlatformToast(`Error setting destination: ${error.message}`, 'LONG');
     }
   };
 
@@ -2919,6 +2944,9 @@ function getStepCompletionThresholds(step = null) {
       const current = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
+      if (!current?.coords || !Number.isFinite(current.coords.latitude) || !Number.isFinite(current.coords.longitude)) {
+        throw new Error('invalid_coords');
+      }
       setUserLocation(current.coords);
       return current.coords;
     } catch (e) {
@@ -2930,6 +2958,35 @@ function getStepCompletionThresholds(step = null) {
       return null;
     }
   }
+
+  const retryLocationBootstrap = useCallback(async () => {
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        const requested = await Location.requestForegroundPermissionsAsync();
+        if (requested.status !== 'granted') {
+          setPostbox({
+            type: 'warning',
+            title: 'Location Required',
+            message: 'Please enable location permission to start navigation.',
+          });
+          return;
+        }
+      }
+
+      const current = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000)),
+      ]);
+
+      if (current?.coords && Number.isFinite(current.coords.latitude) && Number.isFinite(current.coords.longitude)) {
+        setUserLocation(current.coords);
+        setLocationWaitExceeded(false);
+      }
+    } catch (retryErr) {
+      console.warn('[MAP] Retry location bootstrap failed:', retryErr?.message || retryErr);
+    }
+  }, []);
 
   function clampMapZoom(zoom) {
     const num = Number(zoom);
@@ -4399,21 +4456,27 @@ function getStepCompletionThresholds(step = null) {
     let subscription;
 
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        console.warn("[MAP] Location permission denied");
-        return;
-      }
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          console.warn("[MAP] Location permission denied");
+          return;
+        }
 
-      // 1️⃣ IMMEDIATE location (fixes first tap issue)
-      const current = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+        // 1️⃣ IMMEDIATE location (fixes first tap issue)
+        try {
+          const current = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          if (current?.coords && Number.isFinite(current.coords.latitude) && Number.isFinite(current.coords.longitude)) {
+            setUserLocation(current.coords);
+          }
+        } catch (initialLocationError) {
+          console.warn('[MAP] Initial location fetch failed, waiting for watcher update:', initialLocationError?.message || initialLocationError);
+        }
 
-      setUserLocation(current.coords);
-
-      // 2️⃣ CONTINUOUS updates (Follow Me)
-      subscription = await Location.watchPositionAsync(
+        // 2️⃣ CONTINUOUS updates (Follow Me)
+        subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.Balanced,
           timeInterval: 1000,
@@ -4421,19 +4484,30 @@ function getStepCompletionThresholds(step = null) {
         },
         (location) => {
           try {
+            if (!location?.coords) {
+              console.warn('[MAP] Skipping location update with missing coords');
+              return;
+            }
+
+            const rawCoords = location.coords;
+            if (!Number.isFinite(rawCoords.latitude) || !Number.isFinite(rawCoords.longitude)) {
+              console.warn('[MAP] Skipping location update with invalid coordinates:', rawCoords);
+              return;
+            }
+
             const now = Date.now();
-            let coordsToUse = location.coords;
+            let coordsToUse = rawCoords;
             
             // Filter out inaccurate readings
-            if (location.coords.accuracy && location.coords.accuracy > MAX_LOCATION_ACCURACY) {
+            if (rawCoords.accuracy && rawCoords.accuracy > MAX_LOCATION_ACCURACY) {
               
               // Dead reckoning: estimate position using heading when GPS is poor
-              if (lastGoodGPSRef.current && lastGPSTimeRef.current && location.coords.heading !== undefined && location.coords.heading !== -1) {
+              if (lastGoodGPSRef.current && lastGPSTimeRef.current && rawCoords.heading !== undefined && rawCoords.heading !== -1) {
                 const timeDiffSec = (now - lastGPSTimeRef.current) / 1000;
                 const estimatedDistance = estimatedSpeedRef.current * timeDiffSec; // meters
                 
                 if (estimatedDistance > 0 && estimatedDistance < 200) { // Max 200m extrapolation
-                  const heading = location.coords.heading * (Math.PI / 180); // Convert to radians
+                  const heading = rawCoords.heading * (Math.PI / 180); // Convert to radians
                   const lat = lastGoodGPSRef.current.latitude + (estimatedDistance / 111111) * Math.cos(heading);
                   const lng = lastGoodGPSRef.current.longitude + (estimatedDistance / 111111 / Math.cos(lastGoodGPSRef.current.latitude * Math.PI / 180)) * Math.sin(heading);
                   
@@ -4441,7 +4515,7 @@ function getStepCompletionThresholds(step = null) {
                 }
               }
               
-              if (coordsToUse === location.coords) return; // No valid estimate, skip update
+              if (coordsToUse === rawCoords) return; // No valid estimate, skip update
             }
             
             // Filter out movements < 3m (reduces jitter)
@@ -4471,8 +4545,8 @@ function getStepCompletionThresholds(step = null) {
             lastMovementLocationRef.current = coordsToUse;
             
             // Track good GPS readings for dead reckoning
-            if (location.coords.accuracy && location.coords.accuracy <= MAX_LOCATION_ACCURACY) {
-              lastGoodGPSRef.current = location.coords;
+            if (rawCoords.accuracy && rawCoords.accuracy <= MAX_LOCATION_ACCURACY) {
+              lastGoodGPSRef.current = rawCoords;
               lastGPSTimeRef.current = now;
             }
             
@@ -4497,7 +4571,7 @@ function getStepCompletionThresholds(step = null) {
           
           // Handle specific location permission/service errors
           if (error?.code === 'PERMISSION_DENIED' || error?.message?.includes('permission')) {
-            ToastAndroid.show('Location permission required to use map', ToastAndroid.SHORT);
+            showPlatformToast('Location permission required to use map', 'SHORT');
           } else if (error?.code === 'POSITION_UNAVAILABLE' || error?.message?.includes('Cannot obtain')) {
             // This is a temporary GPS signal loss - don't overwhelm with ToastAndroid
             debugLog("GPS_UNAVAILABLE", "GPS signal temporarily unavailable");
@@ -4508,6 +4582,10 @@ function getStepCompletionThresholds(step = null) {
           }
         }
       );
+      } catch (watchStartError) {
+        console.error('[MAP] Failed to start location watcher:', watchStartError);
+        debugLog('GPS_ERROR', 'Failed to start location watcher: ' + (watchStartError?.message || watchStartError));
+      }
     })();
 
     return () => {
@@ -5404,23 +5482,40 @@ function getStepCompletionThresholds(step = null) {
 
     // Simplify polyline for rendering
     const decoded = result.polyline;
-    const simplified = simplifyPolyline(decoded, 0.00001); // ~1m tolerance for detailed road tracing
-    console.log("[mapRoute] Decoded", decoded.length, "points, simplified to", simplified.length, "points");
+    const simplifiedRaw = simplifyPolyline(decoded, 0.00001); // ~1m tolerance for detailed road tracing
+    const simplified = (simplifiedRaw || []).filter(
+      (pt) => pt && Number.isFinite(pt.latitude) && Number.isFinite(pt.longitude)
+    );
+    console.log("[mapRoute] Decoded", decoded.length, "points, simplified to", simplified.length, "valid points");
+
+    if (simplified.length < 2) {
+      console.warn('[mapRoute] Route polyline invalid after filtering, aborting route apply');
+      setPostbox({
+        type: 'error',
+        title: 'Routing error',
+        message: 'Route data was incomplete. Please retry when signal improves.',
+      });
+      return false;
+    }
     
     // DEBUG: Log the start and end points of the polyline
     if (simplified.length > 0) {
       const first = simplified[0];
       const last = simplified[simplified.length - 1];
-      console.log("[mapRoute] POLYLINE START:", first.latitude.toFixed(6), first.longitude.toFixed(6));
-      console.log("[mapRoute] POLYLINE END:", last.latitude.toFixed(6), last.longitude.toFixed(6));
-      console.log("[mapRoute] DESTINATION:", finalDestination.latitude.toFixed(6), finalDestination.longitude.toFixed(6));
+      console.log("[mapRoute] POLYLINE START:", Number(first.latitude).toFixed(6), Number(first.longitude).toFixed(6));
+      console.log("[mapRoute] POLYLINE END:", Number(last.latitude).toFixed(6), Number(last.longitude).toFixed(6));
+      if (Number.isFinite(finalDestination?.latitude) && Number.isFinite(finalDestination?.longitude)) {
+        console.log("[mapRoute] DESTINATION:", Number(finalDestination.latitude).toFixed(6), Number(finalDestination.longitude).toFixed(6));
+      }
       
       // Check distance from end of polyline to destination
-      const endDist = Math.sqrt(
-        Math.pow((last.latitude - finalDestination.latitude) * 111000, 2) +
-        Math.pow((last.longitude - finalDestination.longitude) * 111000 * Math.cos(finalDestination.latitude * Math.PI / 180), 2)
-      );
-      console.log("[mapRoute] Distance from polyline end to destination (meters):", endDist.toFixed(1));
+      if (Number.isFinite(finalDestination?.latitude) && Number.isFinite(finalDestination?.longitude)) {
+        const endDist = Math.sqrt(
+          Math.pow((last.latitude - finalDestination.latitude) * 111000, 2) +
+          Math.pow((last.longitude - finalDestination.longitude) * 111000 * Math.cos(finalDestination.latitude * Math.PI / 180), 2)
+        );
+        console.log("[mapRoute] Distance from polyline end to destination (meters):", endDist.toFixed(1));
+      }
     }
     
     // Get distance value
@@ -6883,6 +6978,37 @@ function getStepCompletionThresholds(step = null) {
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primaryLight, opacity: 0.6 }} />
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primaryLight, opacity: 1 }} />
           </View>
+          {locationWaitExceeded ? (
+            <View style={{ marginTop: 16, width: '82%' }}>
+              <Text style={{ color: theme.colors.textLight, textAlign: 'center', marginBottom: 12 }}>
+                GPS is taking longer than expected. Retry now, or load the map without GPS and continue.
+              </Text>
+              <Pressable
+                onPress={retryLocationBootstrap}
+                style={{
+                  borderWidth: 1,
+                  borderColor: theme.colors.accentMid,
+                  borderRadius: 10,
+                  paddingVertical: 10,
+                  marginBottom: 10,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: theme.colors.accentMid, fontWeight: '600' }}>Retry GPS</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setUserLocation(FALLBACK_MAP_CENTER)}
+                style={{
+                  backgroundColor: theme.colors.accentMid,
+                  borderRadius: 10,
+                  paddingVertical: 10,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: theme.colors.intext, fontWeight: '600' }}>Load Map Without GPS</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       )}
 

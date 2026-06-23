@@ -139,6 +139,17 @@ export default function useActiveRide(user) {
             distanceInterval: 50, // Or when moved 50 meters
           },
           async (location) => {
+            if (!location?.coords) {
+              console.warn('[useActiveRide] Skipping location update with missing coords');
+              return;
+            }
+
+            const { latitude, longitude } = location.coords;
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+              console.warn('[useActiveRide] Skipping location update with invalid coordinates:', location.coords);
+              return;
+            }
+
             const now = Date.now();
             
             // Throttle updates to max once per 5 seconds
@@ -157,8 +168,8 @@ export default function useActiveRide(user) {
               const userAvatar = normalizeAvatarUrl(freshProfileData.photoURL || freshProfileData.avatarUrl || user.photoURL || null);
               
               const payload = {
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
+                latitude,
+                longitude,
                 lastLocationUpdate: serverTimestamp(),
                 lastUpdated: serverTimestamp(),
               };
@@ -169,8 +180,8 @@ export default function useActiveRide(user) {
               await setDoc(activeRideRef, payload, { merge: true });
               
               console.log('[useActiveRide] Location updated:', {
-                lat: location.coords.latitude.toFixed(6),
-                lng: location.coords.longitude.toFixed(6),
+                lat: latitude.toFixed(6),
+                lng: longitude.toFixed(6),
               });
             } catch (err) {
               console.error('[useActiveRide] Error updating location:', err);
@@ -220,6 +231,9 @@ export default function useActiveRide(user) {
         const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
+        if (!location?.coords || !Number.isFinite(location.coords.latitude) || !Number.isFinite(location.coords.longitude)) {
+          throw new Error('Unable to get a valid GPS fix. Please wait for signal and try again.');
+        }
 
         const activeRideRef = doc(db, 'activeRides', user.uid);
         const payload = {

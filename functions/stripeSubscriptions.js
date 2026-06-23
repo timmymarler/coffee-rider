@@ -196,6 +196,7 @@ const handleSubscriptionSync = async (subscription) => {
   await upsertSubscriptionDocument(uid, {
     status,
     plan: planId,
+    provider: 'stripe',
     stripeSubscriptionId: subscription.id,
     renewalDate,
     cancelAtPeriodEnd,
@@ -274,6 +275,7 @@ export const createSubscriptionPaymentSheet = functions
     await upsertSubscriptionDocument(context.auth.uid, {
       status: 'pending',
       plan: planId,
+      provider: 'stripe',
       stripeSubscriptionId: subscription.id,
     });
     functions.logger.info('Subscription document updated', {

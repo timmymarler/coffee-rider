@@ -2,7 +2,7 @@ import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
 import { SUBSCRIPTION_PLANS, startFreeTrial } from '@core/payments/stripeService';
-import { useAppleSubscription } from '@core/payments/useAppleSubscription';
+import { useAppleSubscriptionV2 } from '@core/payments/useAppleSubscriptionV2';
 import { useStripeSubscription } from '@core/payments/useStripeSubscription';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -21,6 +21,7 @@ import {
 
 const PRIVACY_POLICY_URL = 'https://coffee-rider.co.uk/privacy-policy';
 const TERMS_OF_SERVICE_URL = 'https://coffee-rider.co.uk/terms-of-service';
+const APPLE_EULA_URL = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 
 export default function SubscriptionsScreen() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function SubscriptionsScreen() {
     reloadProducts,
     subscribeToPlan: subscribeToApplePlan,
     restorePurchases,
-  } = useAppleSubscription({ user });
+  } = useAppleSubscriptionV2({ user });
   const isIOS = Platform.OS === 'ios';
 
   const openExternalLink = async (url, label) => {
@@ -439,6 +440,9 @@ export default function SubscriptionsScreen() {
                   <Text style={[styles.trialNote, { color: theme.colors.text, marginBottom: 8 }]}> 
                     By subscribing, payment is charged to your Apple ID account at confirmation.
                   </Text>
+                  <Text style={[styles.trialNote, { color: theme.colors.text, marginBottom: 8 }]}> 
+                    Monthly and annual subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period.
+                  </Text>
                   <Pressable
                     style={[styles.linkButton, { borderColor: theme.colors.accentMid }]}
                     onPress={() => openExternalLink(PRIVACY_POLICY_URL, 'Privacy Policy')}
@@ -450,6 +454,12 @@ export default function SubscriptionsScreen() {
                     onPress={() => openExternalLink(TERMS_OF_SERVICE_URL, 'Terms of Service')}
                   >
                     <Text style={[styles.linkText, { color: theme.colors.accentMid }]}>Terms of Service (EULA)</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.linkButton, { borderColor: theme.colors.accentMid }]}
+                    onPress={() => openExternalLink(APPLE_EULA_URL, 'Apple Standard EULA')}
+                  >
+                    <Text style={[styles.linkText, { color: theme.colors.accentMid }]}>Apple Standard EULA</Text>
                   </Pressable>
                 </View>
               </>
