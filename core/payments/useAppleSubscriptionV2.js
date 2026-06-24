@@ -101,6 +101,9 @@ function isTransientIapError(err) {
     message.includes('request cancelled') ||
     message.includes('unable to complete this request') ||
     message.includes('service-error') ||
+    message.includes('temporarily unavailable') ||
+    message.includes('try again later') ||
+    message.includes('timeout') ||
     message.includes('itunes') ||
     message.includes('storekit')
   );
@@ -122,6 +125,9 @@ function toFriendlyIapError(err, operation = 'purchase') {
   }
 
   if (isTransientIapError(err)) {
+    if (operation === 'restore') {
+      return new Error('Apple restore is temporarily unavailable. Please wait 10-15 seconds, then try Restore Purchases again.');
+    }
     return new Error(`Apple ${operation} is temporarily unavailable. Please try again.`);
   }
 
@@ -135,6 +141,24 @@ function withTimeout(promise, timeoutMs, timeoutMessage) {
       setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
     }),
   ]);
+}
+
+async function fetchAvailablePurchasesResilient() {
+  // Primary path for iOS subscriptions.
+  try {
+    return await withTimeout(
+      iap.getAvailablePurchases({ onlyIncludeActiveItemsIOS: true }),
+      45000,
+      'Timed out restoring purchases from Apple.'
+    );
+  } catch (firstErr) {
+    // Fallback path for SDK/StoreKit variants that do not like the iOS-only option.
+    return withTimeout(
+      iap.getAvailablePurchases(),
+      45000,
+      `Timed out restoring purchases from Apple. (${firstErr?.message || 'initial restore failed'})`
+    );
+  }
 }
 
 function makeAttemptId(prefix) {
@@ -153,6 +177,7 @@ export function useAppleSubscriptionV2({ user }) {
 
   const handledTransactionsRef = useRef(new Set());
   const purchaseOperationRef = useRef(null);
+  const lastRestoreAttemptRef = useRef(0);
 
   const beginPurchaseOperation = useCallback(() => {
     if (purchaseOperationRef.current && !purchaseOperationRef.current.settled) {
@@ -422,14 +447,39 @@ export function useAppleSubscriptionV2({ user }) {
       setRestoring(true);
       setPhase('restoring');
 
+      const now = Date.now();
+      if (now - lastRestoreAttemptRef.current < 4000) {
+        throw new Error('Restore already in progress. Please wait a few seconds and try again.');
+      }
+      lastRestoreAttemptRef.current = now;
+
       if (!iap) throw new Error('Apple IAP is not available in this build.');
       await ensureIapConnection();
 
-      const purchases = await withTimeout(
-        iap.getAvailablePurchases({ onlyIncludeActiveItemsIOS: true }),
-        20000,
-        'Timed out restoring purchases from Apple.'
-      );
+      let purchases = null;
+      let lastErr = null;
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          purchases = await fetchAvailablePurchasesResilient();
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          if (attempt === 1) {
+            try {
+              await iap.endConnection();
+            } catch (_) {
+              // Best-effort reset before retry.
+            }
+            await new Promise((res) => setTimeout(res, 1500));
+            await ensureIapConnection();
+          }
+        }
+      }
+
+      if (lastErr) {
+        throw lastErr;
+      }
 
       const appleSubscriptions = (purchases || [])
         .filter((purchase) => availableSkus.includes(purchase.productId))
