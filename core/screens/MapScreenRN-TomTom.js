@@ -1413,6 +1413,28 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [isFreeUser, getLocalDateKey, buildDailyRouteCounterKey]);
 
+  const enforceDailyRoutePlanLimit = useCallback(async () => {
+    const routeLimit = await consumeDailyRoutePlan();
+    if (!routeLimit.allowed) {
+      setPostbox({
+        type: 'info',
+        title: 'Daily route limit reached',
+        message: `Free accounts can plan up to ${FREE_DAILY_ROUTE_PLAN_LIMIT} routes per day. Upgrade to Pro for unlimited route planning and route saving.`,
+      });
+      return null;
+    }
+
+    if (isFreeUser && Number.isFinite(routeLimit.remaining) && routeLimit.remaining <= 2) {
+      setPostbox({
+        type: 'info',
+        title: 'Route plans remaining today',
+        message: `${routeLimit.remaining} route plan${routeLimit.remaining === 1 ? '' : 's'} remaining today on Free.`,
+      });
+    }
+
+    return routeLimit;
+  }, [consumeDailyRoutePlan, isFreeUser]);
+
   // Visited places — derived from user profile (auto-updates via AuthContext's real-time listener)
   const visitedPlaceIds = useMemo(
     () => new Set(Array.isArray(auth?.profile?.visitedPlaceIds) ? auth.profile.visitedPlaceIds : []),
@@ -2529,7 +2551,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }
 
   const handleAddWaypoint = () => {
+    (async () => {
     if (!requireAdvancedRoutingAccess('add waypoints and multi-stop routes')) {
+      closeAddPointMenu();
+      return;
+    }
+
+    const routeLimit = await enforceDailyRoutePlanLimit();
+    if (!routeLimit) {
       closeAddPointMenu();
       return;
     }
@@ -2564,6 +2593,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }).catch(e => console.warn('[handleAddWaypoint] Build error:', e));
     
     closeAddPointMenu();
+    })().catch((error) => {
+      console.warn('[handleAddWaypoint] Error:', error);
+      closeAddPointMenu();
+    });
   };
 
   const handleSetStart = () => {
@@ -2584,6 +2617,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       console.log('[handleSetDestination] Starting');
       setSelectedPlaceId(null);
       isLoadingSavedRouteRef.current = false;
+
+      (async () => {
+      const routeLimit = await enforceDailyRoutePlanLimit();
+      if (!routeLimit) {
+        closeAddPointMenu();
+        return;
+      }
       
       if (!pendingMapPoint) {
         console.error('[handleSetDestination] No pendingMapPoint');
@@ -2624,6 +2664,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }).catch(e => console.warn('[handleSetDestination] Build error:', e));
       
       closeAddPointMenu();
+      })().catch((error) => {
+        console.error('[handleSetDestination] Error:', error);
+        showPlatformToast(`Error setting destination: ${error.message}`, 'LONG');
+        closeAddPointMenu();
+      });
     } catch (error) {
       console.error('[handleSetDestination] Error:', error);
       showPlatformToast(`Error setting destination: ${error.message}`, 'LONG');
@@ -5429,13 +5474,8 @@ function getStepCompletionThresholds(step = null) {
   /* ------------------------------------------------------------ */
 
   async function handleRoute(place) {
-    const routeLimit = await consumeDailyRoutePlan();
-    if (!routeLimit.allowed) {
-      setPostbox({
-        type: 'info',
-        title: 'Daily route limit reached',
-        message: `Free accounts can plan up to ${FREE_DAILY_ROUTE_PLAN_LIMIT} routes per day. Upgrade to Pro for unlimited route planning and route saving.`,
-      });
+    const routeLimit = await enforceDailyRoutePlanLimit();
+    if (!routeLimit) {
       return;
     }
 
@@ -5465,14 +5505,6 @@ function getStepCompletionThresholds(step = null) {
       destinationOverride: structure.destination,
       requestId 
     });
-
-    if (isFreeUser && Number.isFinite(routeLimit.remaining) && routeLimit.remaining <= 2) {
-      setPostbox({
-        type: 'info',
-        title: 'Route plans remaining today',
-        message: `${routeLimit.remaining} route plan${routeLimit.remaining === 1 ? '' : 's'} remaining today on Free.`,
-      });
-    }
 
     routeFittedRef.current = false;
   }
@@ -7634,9 +7666,13 @@ function getStepCompletionThresholds(step = null) {
         <View style={styles.pointMenuOverlay}>
           <View style={styles.pointMenu}>
             <Pressable
-              onPress={() => {
+              onPress={async () => {
                 closeMarkerMenu();
                 if (!requireAdvancedRoutingAccess('add waypoints and multi-stop routes')) {
+                  return;
+                }
+                const routeLimit = await enforceDailyRoutePlanLimit();
+                if (!routeLimit) {
                   return;
                 }
                 if (pendingMarker) addFromPlace(pendingMarker);
