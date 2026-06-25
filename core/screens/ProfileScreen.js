@@ -1296,12 +1296,14 @@ export default function ProfileScreen() {
         {subscription?.cancelAtPeriodEnd ? (
           <View style={{
             backgroundColor: theme.colors.accentLight,
-            borderRadius: theme.borderRadius.md,
+            borderRadius: theme.radius?.md ?? 10,
+            borderWidth: 1,
+            borderColor: theme.colors.accentMid,
             padding: theme.spacing.md,
             marginTop: theme.spacing.sm,
           }}>
             <Text style={{
-              color: theme.colors.text,
+              color: theme.colors.primaryDark,
               fontSize: 14,
               fontWeight: '600',
               marginBottom: theme.spacing.xs,
@@ -1309,7 +1311,7 @@ export default function ProfileScreen() {
               You have unsubscribed
             </Text>
             <Text style={{
-              color: theme.colors.textMuted,
+              color: theme.colors.primaryMid,
               fontSize: 12,
             }}>
               You still have access until {formatSubscriptionDate(subscription?.cancellationEffectiveDate || subscription?.renewalDate)}.
