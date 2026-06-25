@@ -221,6 +221,7 @@ import useWaypoints from "@core/map/waypoints/useWaypoints";
 import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
+import { PRO_UPGRADE_PROMPT_QUEUE_KEY } from "@core/utils/proUpgradePrompt";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
@@ -531,6 +532,8 @@ const ARRIVAL_META = { icon: "flag-checkered", label: "Destination ahead" };
 const ARRIVAL_LEFT_META = { icon: "flag-checkered", label: "Destination on the left" };
 const ARRIVAL_RIGHT_META = { icon: "flag-checkered", label: "Destination on the right" };
 const UNITS_PREFERENCE_KEY = "@coffee_rider_units_preference";
+const FREE_DAILY_ROUTE_PLAN_LIMIT = 5;
+const FREE_DAILY_ROUTE_PLAN_COUNTER_PREFIX = "@coffee_rider_daily_route_plans";
 
   // Maneuver → icon + label map (simplified)
   const MANEUVER_ICON_MAP = {
@@ -597,7 +600,7 @@ const EMPTY_FILTERS = {
   amenities: new Set(),
   sponsor: false,
   bikeBrew: false,
-  visited: false,
+  visited: 'any',
 };
 
 const DEFAULT_FILTERS = {
@@ -606,7 +609,7 @@ const DEFAULT_FILTERS = {
   amenities: [],
   sponsor: false,
   bikeBrew: false,
-  visited: false,
+  visited: 'any',
 };
 
 const DEFAULT_MAP_STATE = {
@@ -1302,7 +1305,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
-  const filtersActive = appliedFilters.suitability.size > 0 || appliedFilters.categories.size > 0 || appliedFilters.amenities.size > 0 || appliedFilters.sponsor || appliedFilters.visited;
+  const filtersActive =
+    appliedFilters.suitability.size > 0 ||
+    appliedFilters.categories.size > 0 ||
+    appliedFilters.amenities.size > 0 ||
+    appliedFilters.sponsor ||
+    appliedFilters.visited === 'show' ||
+    appliedFilters.visited === 'hide';
   const [userLocation, setUserLocation] = useState(null);
   const [locationWaitExceeded, setLocationWaitExceeded] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
@@ -1350,7 +1359,59 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const user = auth?.user || null;
   const role = auth?.profile?.role || "guest";
   const capabilities = getCapabilities(role);
+  const isFreeUser = role === "user";
   const [localUnitsPreference, setLocalUnitsPreference] = useState(null);
+
+  const buildDailyRouteCounterKey = useCallback(() => {
+    const identity = user?.uid || "anon";
+    return `${FREE_DAILY_ROUTE_PLAN_COUNTER_PREFIX}:${identity}`;
+  }, [user?.uid]);
+
+  const getLocalDateKey = useCallback(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  const consumeDailyRoutePlan = useCallback(async () => {
+    if (!isFreeUser) {
+      return { allowed: true, used: 0, remaining: Infinity };
+    }
+
+    const today = getLocalDateKey();
+    const storageKey = buildDailyRouteCounterKey();
+
+    try {
+      const raw = await AsyncStorage.getItem(storageKey);
+      const parsed = raw ? JSON.parse(raw) : null;
+      const usedToday = parsed?.date === today ? Number(parsed?.count || 0) : 0;
+
+      if (usedToday >= FREE_DAILY_ROUTE_PLAN_LIMIT) {
+        return {
+          allowed: false,
+          used: usedToday,
+          remaining: 0,
+        };
+      }
+
+      const nextUsed = usedToday + 1;
+      await AsyncStorage.setItem(
+        storageKey,
+        JSON.stringify({ date: today, count: nextUsed })
+      );
+
+      return {
+        allowed: true,
+        used: nextUsed,
+        remaining: Math.max(0, FREE_DAILY_ROUTE_PLAN_LIMIT - nextUsed),
+      };
+    } catch (error) {
+      console.warn("[ROUTE_LIMIT] Failed to read/write daily route counter:", error);
+      return { allowed: true, used: 0, remaining: Infinity };
+    }
+  }, [isFreeUser, getLocalDateKey, buildDailyRouteCounterKey]);
 
   // Visited places — derived from user profile (auto-updates via AuthContext's real-time listener)
   const visitedPlaceIds = useMemo(
@@ -1438,6 +1499,41 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     return () => clearTimeout(timeout);
   }, [postbox]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    AsyncStorage.getItem(PRO_UPGRADE_PROMPT_QUEUE_KEY)
+      .then((raw) => {
+        if (!isMounted || !raw) return;
+
+        let queuedPrompt = null;
+        try {
+          queuedPrompt = JSON.parse(raw);
+        } catch (error) {
+          console.warn("[PRO_UPGRADE_PROMPT] Invalid queued payload:", error);
+        }
+
+        if (queuedPrompt?.message) {
+          setPostbox({
+            type: 'info',
+            title: queuedPrompt?.title || 'Upgrade available',
+            message: `${queuedPrompt.message} Open Profile > Subscriptions to upgrade.`,
+          });
+        }
+
+        AsyncStorage.removeItem(PRO_UPGRADE_PROMPT_QUEUE_KEY).catch((error) => {
+          console.warn("[PRO_UPGRADE_PROMPT] Failed to clear queued prompt:", error);
+        });
+      })
+      .catch((error) => {
+        console.warn("[PRO_UPGRADE_PROMPT] Failed to load queued prompt:", error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const skipNextFollowTickRef = useRef(false);
   const skipNextRegionChangeRef = useRef(false);
@@ -2113,6 +2209,45 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       .filter(({ index }) => !visitedWaypointIndices.includes(index));
   }
 
+  function resolveActiveRerouteHeading(originCoord = null) {
+    const candidateList = [
+      originCoord?.heading,
+      originCoord?.bearing,
+      userLocation?.heading,
+      userLocation?.bearing,
+      lastMovementHeadingRef.current,
+      lastFollowHeadingRef.current,
+    ];
+
+    for (const candidate of candidateList) {
+      if (Number.isFinite(candidate) && candidate !== -1) {
+        return candidate;
+      }
+    }
+
+    const projectedOrigin = normalizeCoord(originCoord || userLocation);
+    if (projectedOrigin && Array.isArray(routeCoords) && routeCoords.length > 1) {
+      const projection = projectPointToPolylineDetailed(
+        projectedOrigin,
+        routeCoords,
+        300,
+        stepProgressRef.current.lastProgressMeters || 0
+      );
+
+      const segmentIndex = projection?.segmentIndex;
+      if (Number.isInteger(segmentIndex) && segmentIndex >= 0 && segmentIndex < routeCoords.length - 1) {
+        const segStart = routeCoords[segmentIndex];
+        const segEnd = routeCoords[segmentIndex + 1];
+        const routeHeading = calculateBearing(segStart, segEnd);
+        if (Number.isFinite(routeHeading)) {
+          return routeHeading;
+        }
+      }
+    }
+
+    return null;
+  }
+
   async function rerouteFromCurrentLocation({
     originOverride = null,
     skipNextWaypoint = false,
@@ -2173,6 +2308,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     console.log(`[REROUTE] (${source}) Destination: ${rerouteDestination?.title || 'destination'}, waypoints: ${rerouteWaypoints.length}`);
 
     const requestId = ++routeRequestId.current;
+    const activeHeading = resolveActiveRerouteHeading(origin);
     const success = await mapRoute({
       origin,
       waypoints: rerouteWaypoints,
@@ -2182,7 +2318,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       avoidMotorways,
       requestId,
       skipFitToView: true,
-      vehicleHeading: origin?.heading || null,
+      vehicleHeading: activeHeading,
     });
 
     if (!success) {
@@ -4056,7 +4192,7 @@ function getStepCompletionThresholds(step = null) {
                 avoidMotorways,
                 requestId,
                 skipFitToView: true,
-                vehicleHeading: lastGoodGPSRef.current?.heading || null,
+                vehicleHeading: resolveActiveRerouteHeading(lastGoodGPSRef.current),
               }).catch(error => {
                 console.warn('[AutoReroute] mapRoute error after GPS fix:', error);
               });
@@ -4075,7 +4211,7 @@ function getStepCompletionThresholds(step = null) {
             avoidMotorways,
             requestId,
             skipFitToView: true,
-            vehicleHeading: userLocation?.heading || null,
+            vehicleHeading: resolveActiveRerouteHeading(userLocation),
           }).catch(error => {
             console.warn('[AutoReroute] mapRoute error on Follow Me enable:', error);
           });
@@ -5178,9 +5314,11 @@ function getStepCompletionThresholds(step = null) {
       });
     }
 
-    // Visited filter — show only places the user has been to
-    if (appliedFilters.visited) {
+    // Visited filter — mode: any (default), show (only visited), hide (exclude visited)
+    if (appliedFilters.visited === 'show') {
       list = list.filter((p) => visitedPlaceIds.has(p.id));
+    } else if (appliedFilters.visited === 'hide') {
+      list = list.filter((p) => !visitedPlaceIds.has(p.id));
     }
 
     return list;
@@ -5227,8 +5365,16 @@ function getStepCompletionThresholds(step = null) {
       return true;
     });
     
-    return [...googleResults, ...crSearchMatches];
-  }, [googlePois, crPlaces, paddedRegion, activeQuery]);
+    let combined = [...googleResults, ...crSearchMatches];
+
+    if (appliedFilters.visited === 'show') {
+      combined = combined.filter((p) => visitedPlaceIds.has(p.id));
+    } else if (appliedFilters.visited === 'hide') {
+      combined = combined.filter((p) => !visitedPlaceIds.has(p.id));
+    }
+
+    return combined;
+  }, [googlePois, crPlaces, paddedRegion, activeQuery, appliedFilters.visited, visitedPlaceIds]);
 
 
   const selectedPlace = useMemo(() => {
@@ -5283,6 +5429,16 @@ function getStepCompletionThresholds(step = null) {
   /* ------------------------------------------------------------ */
 
   async function handleRoute(place) {
+    const routeLimit = await consumeDailyRoutePlan();
+    if (!routeLimit.allowed) {
+      setPostbox({
+        type: 'info',
+        title: 'Daily route limit reached',
+        message: `Free accounts can plan up to ${FREE_DAILY_ROUTE_PLAN_LIMIT} routes per day. Upgrade to Pro for unlimited route planning and route saving.`,
+      });
+      return;
+    }
+
     routeRequestId.current += 1;
     const requestId = routeRequestId.current;
 
@@ -5309,6 +5465,15 @@ function getStepCompletionThresholds(step = null) {
       destinationOverride: structure.destination,
       requestId 
     });
+
+    if (isFreeUser && Number.isFinite(routeLimit.remaining) && routeLimit.remaining <= 2) {
+      setPostbox({
+        type: 'info',
+        title: 'Route plans remaining today',
+        message: `${routeLimit.remaining} route plan${routeLimit.remaining === 1 ? '' : 's'} remaining today on Free.`,
+      });
+    }
+
     routeFittedRef.current = false;
   }
 
@@ -7107,33 +7272,61 @@ function getStepCompletionThresholds(step = null) {
 
               {/* VISITED */}
               {user && (
+                (() => {
+                  const visitedMode = draftFilters.visited || 'any';
+                  const isShowVisited = visitedMode === 'show';
+                  const isHideVisited = visitedMode === 'hide';
+                  const visitedIcon = isHideVisited ? 'map-marker-remove' : 'map-marker-check';
+                  const visitedColor = isShowVisited
+                    ? '#10b981'
+                    : isHideVisited
+                      ? '#ef4444'
+                      : theme.colors.primaryLight;
+                  const visitedLabel = isShowVisited
+                    ? 'Visited (Show)'
+                    : isHideVisited
+                      ? 'Visited (Hide)'
+                      : 'Visited';
+
+                  return (
                 <TouchableOpacity
                   key="visited"
                   style={[
                     styles.iconButton,
-                    draftFilters.visited && styles.iconButtonActive,
+                    (isShowVisited || isHideVisited) && styles.iconButtonActive,
+                    isShowVisited && { borderColor: '#10b981' },
+                    isHideVisited && { borderColor: '#ef4444' },
                   ]}
                   onPress={() =>
                     setDraftFilters((prev) => ({
                       ...prev,
-                      visited: !prev.visited,
+                      visited:
+                        prev.visited === 'any'
+                          ? 'show'
+                          : prev.visited === 'show'
+                            ? 'hide'
+                            : 'any',
                     }))
                   }
                 >
                   <MaterialCommunityIcons
-                    name="map-marker-check"
+                    name={visitedIcon}
                     size={26}
-                    color={draftFilters.visited ? "#10b981" : theme.colors.primaryLight}
+                    color={visitedColor}
                   />
                   <Text
                     style={[
                       styles.iconLabel,
-                      draftFilters.visited && styles.iconLabelActive,
+                      (isShowVisited || isHideVisited) && styles.iconLabelActive,
+                      isShowVisited && { color: '#10b981' },
+                      isHideVisited && { color: '#ef4444' },
                     ]}
                   >
-                    Visited
+                    {visitedLabel}
                   </Text>
                 </TouchableOpacity>
+                  );
+                })()
               )}
 
             </View>

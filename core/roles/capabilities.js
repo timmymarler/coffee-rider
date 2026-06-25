@@ -164,9 +164,9 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canViewMap: true,
         canViewPlacecard: true,
 
-        canNavigate: false,
-        canPreviewSingleRoute: true,   // ✅ this is the key upgrade
-        canCreateRoutes: false,        // ❌ no waypoints
+        canNavigate: true,
+        canPreviewSingleRoute: true,
+        canCreateRoutes: true,
 
         canAddVenue: true,
         canRate: true,
@@ -174,11 +174,11 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canUploadPhotos: false,
         canUpdatePlaces: false,
 
-        canSaveRoutes: true,           // auto-saved, hidden
+        canSaveRoutes: false,
         canShareRoutes: false,
 
         canSearchCR: true,
-        canSearchGoogle: false,
+        canSearchGoogle: true,
 
         googlePhotoAccess: "limited",
         canViewGooglePhotos: true,

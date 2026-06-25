@@ -1,7 +1,9 @@
-import { Alert } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Alert, Platform, ToastAndroid } from "react-native";
 
 export const PRO_UPGRADE_TITLE = "Unlock all Pro benefits";
-export const PRO_UPGRADE_MESSAGE = "Unlock all the benefits you need by upgrading to a Pro account.";
+export const PRO_UPGRADE_MESSAGE = "You are on the Free plan. Upgrade to Pro for unlimited route planning and route saving.";
+export const PRO_UPGRADE_PROMPT_QUEUE_KEY = "@coffee_rider_upgrade_prompt_queue";
 export const BETA_PRO_EXPIRY_ISO = "2026-05-31T23:59:59.999Z";
 export const BETA_PRO_EXPIRY_LABEL = "31 May 2026";
 
@@ -35,16 +37,17 @@ export function showProUpgradePrompt(router, options = {}) {
   const title = options.title || PRO_UPGRADE_TITLE;
   const message = options.message || PRO_UPGRADE_MESSAGE;
 
-  Alert.alert(title, message, [
-    {
-      text: "Cancel",
-      style: "cancel",
-    },
-    {
-      text: "Upgrade",
-      onPress: () => {
-        router?.push?.("/subscriptions");
-      },
-    },
-  ]);
+  const queuedPrompt = {
+    title,
+    message,
+    createdAt: Date.now(),
+  };
+
+  AsyncStorage.setItem(PRO_UPGRADE_PROMPT_QUEUE_KEY, JSON.stringify(queuedPrompt)).catch((error) => {
+    console.warn("[PRO_UPGRADE_PROMPT] Failed to queue prompt:", error);
+  });
+
+  if (Platform.OS === "android") {
+    ToastAndroid.show(message, ToastAndroid.LONG);
+  }
 }
