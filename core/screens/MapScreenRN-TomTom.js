@@ -2587,11 +2587,11 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   };
 
   const handleSetDestination = async () => {
-    setSelectedPlaceId(null);
-    
-    const newPlace = {
-      latitude: pendingMapPoint.latitude,
-      longitude: pendingMapPoint.longitude,
+    try {
+      console.log('[handleSetDestination] Starting');
+      setSelectedPlaceId(null);
+      isLoadingSavedRouteRef.current = false;
+
       const isCreatingNewRoute = !routeDestination && (!Array.isArray(waypoints) || waypoints.length === 0);
       if (isCreatingNewRoute) {
         const routeLimit = await enforceDailyRoutePlanLimit();
@@ -2601,39 +2601,26 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         }
       }
 
-  const handleSetDestination = () => {
-    try {
-      console.log('[handleSetDestination] Starting');
-      setSelectedPlaceId(null);
-      isLoadingSavedRouteRef.current = false;
-
-      (async () => {
-      const routeLimit = await enforceDailyRoutePlanLimit();
-      if (!routeLimit) {
-        closeAddPointMenu();
-        return;
-      }
-      
       if (!pendingMapPoint) {
         console.error('[handleSetDestination] No pendingMapPoint');
         return;
       }
-      
+
       const newPlace = formatPoint(pendingMapPoint);
       console.log('[handleSetDestination] New place (from formatPoint):', newPlace);
-      
+
       if (!newPlace || !newPlace.lat || !newPlace.lng) {
         console.error('[handleSetDestination] Invalid newPlace from formatPoint:', newPlace);
         return;
       }
-      
+
       // Convert from formatPoint's lat/lng to latitude/longitude
       const placeWithCamelCase = {
         latitude: newPlace.lat,
         longitude: newPlace.lng,
         title: newPlace.title,
       };
-      
+
       const structure = determineRouteAction(placeWithCamelCase, {
         currentStart: manualStartPoint,
         currentWaypoints: waypoints,
@@ -2645,13 +2632,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
       console.log('[handleSetDestination] Structure determined:', structure);
       updateRouteUIState(structure);
-      
+
       // Build with explicit structure to immediately use the new waypoints/destination
-      buildRoute({ 
+      buildRoute({
         waypointsOverride: structure.waypoints,
         destinationOverride: structure.destination,
       }).catch(e => console.warn('[handleSetDestination] Build error:', e));
-      
+
       closeAddPointMenu();
     } catch (error) {
       console.error('[handleSetDestination] Error:', error);
