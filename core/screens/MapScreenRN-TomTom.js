@@ -1419,7 +1419,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setPostbox({
         type: 'info',
         title: 'Daily route limit reached',
-        message: `Free accounts can plan up to ${FREE_DAILY_ROUTE_PLAN_LIMIT} routes per day. Upgrade to Pro for unlimited route planning and route saving.`,
+        message: `Free accounts can plan up to ${FREE_DAILY_ROUTE_PLAN_LIMIT} new routes per day. Upgrade to Pro for unlimited route planning and route saving.`,
       });
       return null;
     }
@@ -1427,8 +1427,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (isFreeUser && Number.isFinite(routeLimit.remaining) && routeLimit.remaining <= 2) {
       setPostbox({
         type: 'info',
-        title: 'Route plans remaining today',
-        message: `${routeLimit.remaining} route plan${routeLimit.remaining === 1 ? '' : 's'} remaining today on Free.`,
+        title: 'New routes remaining today',
+        message: `${routeLimit.remaining} new route${routeLimit.remaining === 1 ? '' : 's'} remaining today on Free.`,
       });
     }
 
@@ -1477,9 +1477,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     customWindingness,
   } = useContext(RoutingPreferencesContext);
 
-  // Determine if route type is non-default
-  const defaultRouteType = getDefaultsForBrand(currentTheme)?.routeType;
-  const isRouteTypeNonDefault = userRouteType !== defaultRouteType;
+  // Keep route-type button highlighted whenever a route is visible.
 
   const [searchNotice, setSearchNotice] = useState(null);
   const [postbox, setPostbox] = useState(null);
@@ -2551,14 +2549,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }
 
   const handleAddWaypoint = () => {
-    (async () => {
     if (!requireAdvancedRoutingAccess('add waypoints and multi-stop routes')) {
-      closeAddPointMenu();
-      return;
-    }
-
-    const routeLimit = await enforceDailyRoutePlanLimit();
-    if (!routeLimit) {
       closeAddPointMenu();
       return;
     }
@@ -2593,24 +2584,22 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }).catch(e => console.warn('[handleAddWaypoint] Build error:', e));
     
     closeAddPointMenu();
-    })().catch((error) => {
-      console.warn('[handleAddWaypoint] Error:', error);
-      closeAddPointMenu();
-    });
   };
 
-  const handleSetStart = () => {
+  const handleSetDestination = async () => {
     setSelectedPlaceId(null);
     
     const newPlace = {
       latitude: pendingMapPoint.latitude,
       longitude: pendingMapPoint.longitude,
-      title: pendingMapPoint.name || 'Custom Location',
-    };
-
-    applyExplicitStartPoint(newPlace);
-    closeAddPointMenu();
-  };
+      const isCreatingNewRoute = !routeDestination && (!Array.isArray(waypoints) || waypoints.length === 0);
+      if (isCreatingNewRoute) {
+        const routeLimit = await enforceDailyRoutePlanLimit();
+        if (!routeLimit) {
+          closeAddPointMenu();
+          return;
+        }
+      }
 
   const handleSetDestination = () => {
     try {
@@ -2664,14 +2653,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       }).catch(e => console.warn('[handleSetDestination] Build error:', e));
       
       closeAddPointMenu();
-      })().catch((error) => {
-        console.error('[handleSetDestination] Error:', error);
-        showPlatformToast(`Error setting destination: ${error.message}`, 'LONG');
-        closeAddPointMenu();
-      });
     } catch (error) {
       console.error('[handleSetDestination] Error:', error);
       showPlatformToast(`Error setting destination: ${error.message}`, 'LONG');
+      closeAddPointMenu();
     }
   };
 
@@ -5474,9 +5459,12 @@ function getStepCompletionThresholds(step = null) {
   /* ------------------------------------------------------------ */
 
   async function handleRoute(place) {
-    const routeLimit = await enforceDailyRoutePlanLimit();
-    if (!routeLimit) {
-      return;
+    const isCreatingNewRoute = !routeDestination && (!Array.isArray(waypoints) || waypoints.length === 0);
+    if (isCreatingNewRoute) {
+      const routeLimit = await enforceDailyRoutePlanLimit();
+      if (!routeLimit) {
+        return;
+      }
     }
 
     routeRequestId.current += 1;
@@ -7606,7 +7594,7 @@ function getStepCompletionThresholds(step = null) {
             }
             setShowRouteTypeSelector(true);
           }}
-          routeTypeActive={isRouteTypeNonDefault}
+          routeTypeActive={hasRoute}
           isLandscape={isLandscape}
         />
       )}
@@ -7669,10 +7657,6 @@ function getStepCompletionThresholds(step = null) {
               onPress={async () => {
                 closeMarkerMenu();
                 if (!requireAdvancedRoutingAccess('add waypoints and multi-stop routes')) {
-                  return;
-                }
-                const routeLimit = await enforceDailyRoutePlanLimit();
-                if (!routeLimit) {
                   return;
                 }
                 if (pendingMarker) addFromPlace(pendingMarker);
