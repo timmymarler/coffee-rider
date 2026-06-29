@@ -381,29 +381,6 @@ export function useAppleSubscriptionV2({ user }) {
       return undefined;
     }
 
-    let isMounted = true;
-
-    const initialize = async () => {
-      try {
-        setLoadingProducts(true);
-        await ensureIapConnection();
-        if (!isMounted) return;
-        await loadProducts();
-      } catch (err) {
-        if (isMounted) {
-          setError(err);
-          setLastLoadError(err);
-          setPhase('error');
-        }
-      } finally {
-        if (isMounted) {
-          setLoadingProducts(false);
-        }
-      }
-    };
-
-    initialize();
-
     const purchaseUpdateSubscription = iap.purchaseUpdatedListener(async (purchase) => {
       try {
         const activation = await syncPurchaseToProfile(purchase, { finish: true });
@@ -425,16 +402,16 @@ export function useAppleSubscriptionV2({ user }) {
       setPurchaseError(mappedError);
       setProcessingSku(null);
       setPhase('error');
+      rejectPurchaseOperation(mappedError);
     });
 
     return () => {
-      isMounted = false;
       purchaseUpdateSubscription.remove();
       purchaseErrorSubscription.remove();
       rejectPurchaseOperation(new Error('Purchase flow was interrupted. Please try again.'));
       iap.endConnection().catch(() => {});
     };
-  }, [ensureIapConnection, loadProducts, rejectPurchaseOperation, resolvePurchaseOperation, syncPurchaseToProfile]);
+  }, [rejectPurchaseOperation, resolvePurchaseOperation, syncPurchaseToProfile]);
 
   const restorePurchases = useCallback(async () => {
     if (!user?.uid) {

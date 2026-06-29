@@ -2586,6 +2586,25 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     closeAddPointMenu();
   };
 
+  const handleSetStart = () => {
+    setSelectedPlaceId(null);
+
+    if (!pendingMapPoint?.latitude || !pendingMapPoint?.longitude) {
+      console.error('[handleSetStart] No valid pendingMapPoint');
+      closeAddPointMenu();
+      return;
+    }
+
+    const newPlace = {
+      latitude: pendingMapPoint.latitude,
+      longitude: pendingMapPoint.longitude,
+      title: pendingMapPoint.name || pendingMapPoint.geocodeResult || 'Custom Location',
+    };
+
+    applyExplicitStartPoint(newPlace);
+    closeAddPointMenu();
+  };
+
   const handleSetDestination = async () => {
     try {
       console.log('[handleSetDestination] Starting');

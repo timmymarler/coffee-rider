@@ -115,16 +115,6 @@ export default function SubscriptionsScreen() {
       return;
     }
 
-    if (!appleProductsByPlan.monthly && !appleProductsByPlan.annual) {
-      // Best-effort refresh only. Do not hard-block purchase attempt because
-      // requestPurchase can still succeed using configured fallback SKUs.
-      try {
-        await reloadProducts();
-      } catch (_err) {
-        // Continue and allow hook-level fallback SKU purchase path.
-      }
-    }
-
     try {
       setSelectedPlan(planId);
       const result = await subscribeToApplePlan(planId);
@@ -152,7 +142,9 @@ export default function SubscriptionsScreen() {
         return;
       }
 
-      Alert.alert('Error', message || 'Unable to complete Apple subscription.');
+      if (!normalized.includes('temporarily unavailable')) {
+        Alert.alert('Error', message || 'Unable to complete Apple subscription.');
+      }
     } finally {
       setSelectedPlan(null);
     }
@@ -373,33 +365,29 @@ export default function SubscriptionsScreen() {
                   </View>
                 )}
 
-                {hasAppleAnnual && (
-                  <PricingCard
-                    plan={{
-                      ...SUBSCRIPTION_PLANS.ANNUAL,
-                      price: appleProductsByPlan.annual?.displayPrice || SUBSCRIPTION_PLANS.ANNUAL.price,
-                    }}
-                    isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
-                    onPress={() => handleAppleSubscribe('annual')}
-                    processing={appleProcessingSku === (appleProductsByPlan.annual?.id ?? appleProductsByPlan.annual?.productId)}
-                    disabled={appleRestoring || Boolean(appleProcessingSku)}
-                    theme={theme}
-                  />
-                )}
+                <PricingCard
+                  plan={{
+                    ...SUBSCRIPTION_PLANS.ANNUAL,
+                    price: appleProductsByPlan.annual?.displayPrice || SUBSCRIPTION_PLANS.ANNUAL.price,
+                  }}
+                  isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
+                  onPress={() => handleAppleSubscribe('annual')}
+                  processing={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id && Boolean(appleProcessingSku)}
+                  disabled={appleRestoring || Boolean(appleProcessingSku)}
+                  theme={theme}
+                />
 
-                {hasAppleMonthly && (
-                  <PricingCard
-                    plan={{
-                      ...SUBSCRIPTION_PLANS.MONTHLY,
-                      price: appleProductsByPlan.monthly?.displayPrice || SUBSCRIPTION_PLANS.MONTHLY.price,
-                    }}
-                    isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
-                    onPress={() => handleAppleSubscribe('monthly')}
-                    processing={appleProcessingSku === (appleProductsByPlan.monthly?.id ?? appleProductsByPlan.monthly?.productId)}
-                    disabled={appleRestoring || Boolean(appleProcessingSku)}
-                    theme={theme}
-                  />
-                )}
+                <PricingCard
+                  plan={{
+                    ...SUBSCRIPTION_PLANS.MONTHLY,
+                    price: appleProductsByPlan.monthly?.displayPrice || SUBSCRIPTION_PLANS.MONTHLY.price,
+                  }}
+                  isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
+                  onPress={() => handleAppleSubscribe('monthly')}
+                  processing={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id && Boolean(appleProcessingSku)}
+                  disabled={appleRestoring || Boolean(appleProcessingSku)}
+                  theme={theme}
+                />
 
                 <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
                   <Pressable
