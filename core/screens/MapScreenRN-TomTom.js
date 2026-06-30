@@ -234,7 +234,7 @@ import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
 const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17; // Android: 17, iOS: 7 - More zoomed in for better detail
 const FOLLOW_CENTER_AHEAD_METERS_PORTRAIT = 120;
-const FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE = 55;
+const FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE = 66;
 const ENABLE_GOOGLE_AUTO_FETCH = true;
 
 // Follow Me smoothing constants
@@ -3255,14 +3255,12 @@ function getStepCompletionThresholds(step = null) {
       lastFollowHeadingRef.current = effectiveHeading;
     }
 
-    // iOS uses altitude (in meters), Android uses zoom level
+    // iOS and Android both persist preferred Follow Me zoom.
     let effectiveZoom = null;
     if (preserveZoom && followMode) {
-      if (Platform.OS === "android") {
-        const preferredZoom = Number(preferredFollowZoomRef.current);
-        if (Number.isFinite(preferredZoom)) {
-          effectiveZoom = clampMapZoom(preferredZoom);
-        }
+      const preferredZoom = Number(preferredFollowZoomRef.current);
+      if (Number.isFinite(preferredZoom)) {
+        effectiveZoom = clampMapZoom(preferredZoom);
       }
     } else {
       effectiveZoom = zoom !== null
@@ -3276,8 +3274,11 @@ function getStepCompletionThresholds(step = null) {
         ? effectiveZoom
         : Number(preferredFollowZoomRef.current);
       if (Number.isFinite(zoomForOffset)) {
-        // Reduce offset as you zoom in so the dot stays on-screen.
-        zoomDamp = Math.min(1, Math.max(0.6, (18 - zoomForOffset) / 8 + 0.6));
+        const zoomDeltaFromFollow = FOLLOW_ZOOM - zoomForOffset;
+        // Maintain a stable screen position by scaling offset per zoom step.
+        // Each zoom-out step roughly doubles meters-per-pixel, so mirror that.
+        const clampedDelta = Math.max(-1.5, Math.min(4.5, zoomDeltaFromFollow));
+        zoomDamp = Math.max(0.35, Math.min(22.7, Math.pow(2, clampedDelta)));
       }
     }
     const followOffsetMultiplier = followMode && Number.isFinite(pitch) && pitch > 0 ? 1.35 : 1;
@@ -3302,6 +3303,7 @@ function getStepCompletionThresholds(step = null) {
 
     if (effectiveZoom !== null) {
       if (Platform.OS === "ios") {
+        cameraConfig.zoom = effectiveZoom;
         // Convert zoom level to altitude for iOS
         // Lower altitude = closer/more zoomed in
         // zoom 28 ≈ ~100m altitude, zoom 12 ≈ ~5000m altitude
