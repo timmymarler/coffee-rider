@@ -2200,6 +2200,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   const navButtonBottom = insets.bottom + TAB_BAR_HEIGHT + FLOATING_MARGIN;
   const saveButtonBottom = navButtonBottom + SAVE_BUTTON_GAP;
+  const followControlsBottom = navButtonBottom;
   const [pendingMapPoint, setPendingMapPoint] = useState(null);
   const [showAddPointMenu, setShowAddPointMenu] = useState(false);
   const [showMarkerMenu, setShowMarkerMenu] = useState(false);
@@ -2208,6 +2209,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [showRefreshRouteMenu, setShowRefreshRouteMenu] = useState(false);
   const [showRouteTypeSelector, setShowRouteTypeSelector] = useState(false);
   const hasRouteIntent = routeDestination || waypoints.length > 0;
+  const hasUnvisitedWaypoint = waypoints.some((_, idx) => !visitedWaypointIndices.includes(idx));
 
   const closeAddPointMenu = () => {
     setShowAddPointMenu(false);
@@ -3322,6 +3324,26 @@ function getStepCompletionThresholds(step = null) {
     // Always reset to normal zoom and no tilt
     skipNextRegionChangeRef.current = true;
     recenterOnUser({ zoom: RECENTER_ZOOM, pitch: 0, heading: 0 });
+  }
+
+  async function adjustFollowZoom(delta) {
+    if (!followUser) return;
+
+    try {
+      const currentZoom = await captureCurrentMapZoom(preferredFollowZoomRef.current);
+      const nextZoom = clampMapZoom(currentZoom + delta);
+
+      if (Math.abs(nextZoom - currentZoom) < 0.01) return;
+
+      skipNextFollowTickRef.current = true;
+      skipNextRegionChangeRef.current = true;
+      skipRegionChangeUntilRef.current = Date.now() + 2000;
+      preferredFollowZoomRef.current = nextZoom;
+      await recenterOnUser({ zoom: nextZoom, pitch: 35, followMode: true });
+      resetFollowMeInactivityTimeout();
+    } catch (error) {
+      console.warn("[FollowMe] Unable to adjust zoom:", error?.message || error);
+    }
   }
 
   function clearFollowMeInactivityTimeout() {
@@ -6347,7 +6369,6 @@ function getStepCompletionThresholds(step = null) {
     if (!step) return null;
 
     const hasRouteIntent = routeDestination || waypoints.length > 0;
-    const hasUnvisitedWaypoint = waypoints.some((_, idx) => !visitedWaypointIndices.includes(idx));
     const hasValidRouteSteps = routeSteps && routeSteps.length >= 1;
     const isAtFinalStep = currentStepIndex >= routeSteps.length - 1;
 
@@ -6683,41 +6704,17 @@ function getStepCompletionThresholds(step = null) {
                 <View style={styles.junctionHeaderSpacer} />
               )}
               <View style={[styles.junctionHeaderActions, isLandscape && styles.junctionHeaderActionsLandscape]}>
-                {hasUnvisitedWaypoint && (
-                  <Pressable
-                    onPress={handleSkipNextWaypoint}
-                    style={({ pressed }) => [
-                      styles.skipWaypointButtonCompact,
-                      pressed && styles.compactActionButtonPressed,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Skip next waypoint and reroute"
-                  >
-                    <View style={styles.compactActionIconShell}>
-                      <MaterialCommunityIcons
-                        name="map-marker-remove-outline"
-                        size={28}
-                        color="#FFD85C"
-                      />
-                    </View>
-                  </Pressable>
-                )}
+                <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeCompact, isLandscape && styles.currentSpeedBadgeCompactLandscape, isSpeeding && styles.currentSpeedBadgeWarning]}>
+                  <Text style={styles.currentSpeedBadgeValue}>{Number.isFinite(currentSpeedMph) ? Math.round(currentSpeedMph) : '--'}</Text>
+                </View>
                 <Pressable
-                  onPress={handleTtsToggle}
-                  style={({ pressed }) => [
-                    styles.ttsToggleButtonCompact,
-                    pressed && styles.compactActionButtonPressed,
-                  ]}
+                  onLongPress={() => setShowSpeedLimitDebug((prev) => !prev)}
+                  delayLongPress={350}
+                  style={[styles.speedLimitBadge, isLandscape && styles.speedLimitBadgeLandscape]}
                   accessibilityRole="button"
-                  accessibilityLabel={isTtsEnabled ? "Mute navigation voice" : "Unmute navigation voice"}
+                  accessibilityLabel="Toggle speed limit debug"
                 >
-                  <View style={styles.compactActionIconShell}>
-                    <MaterialCommunityIcons
-                      name={isTtsEnabled ? "volume-high" : "volume-mute"}
-                      size={29}
-                      color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.6)"}
-                    />
-                  </View>
+                  <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
                 </Pressable>
               </View>
             </View>
@@ -6764,20 +6761,6 @@ function getStepCompletionThresholds(step = null) {
                 {remainingSecondary}
               </Text>
             ) : null}
-            <View style={styles.junctionInlineStatsRow}>
-              <View style={[styles.currentSpeedBadge, styles.currentSpeedBadgeCompact, isLandscape && styles.currentSpeedBadgeCompactLandscape, isSpeeding && styles.currentSpeedBadgeWarning]}>
-                <Text style={styles.currentSpeedBadgeValue}>{Number.isFinite(currentSpeedMph) ? Math.round(currentSpeedMph) : '--'}</Text>
-              </View>
-              <Pressable
-                onLongPress={() => setShowSpeedLimitDebug((prev) => !prev)}
-                delayLongPress={350}
-                style={[styles.speedLimitBadge, isLandscape && styles.speedLimitBadgeLandscape]}
-                accessibilityRole="button"
-                accessibilityLabel="Toggle speed limit debug"
-              >
-                <Text style={styles.speedLimitBadgeValue}>{currentSpeedLimitMph != null ? currentSpeedLimitMph : '—'}</Text>
-              </Pressable>
-            </View>
             </View>
           </View>
         </Pressable>
@@ -7501,6 +7484,81 @@ function getStepCompletionThresholds(step = null) {
       )}
 
       {renderDirectionsPanel()}
+
+      {followUser && !showDirectionsFullscreen && !showMiniMapFullscreen && (
+        <>
+          <View style={[styles.followActionClusterLeft, { bottom: followControlsBottom }]}>
+            {hasUnvisitedWaypoint ? (
+              <Pressable
+                onPress={handleSkipNextWaypoint}
+                style={({ pressed }) => [
+                  styles.followActionButton,
+                  styles.followSkipButton,
+                  pressed && styles.compactActionButtonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Skip next waypoint and reroute"
+              >
+                <MaterialCommunityIcons
+                  name="map-marker-remove-outline"
+                  size={28}
+                  color="#FFD85C"
+                />
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={handleTtsToggle}
+              style={({ pressed }) => [
+                styles.followActionButton,
+                styles.followMuteButton,
+                pressed && styles.compactActionButtonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={isTtsEnabled ? "Mute navigation voice" : "Unmute navigation voice"}
+            >
+              <MaterialCommunityIcons
+                name={isTtsEnabled ? "volume-high" : "volume-mute"}
+                size={29}
+                color={isTtsEnabled ? "#FFD85C" : "rgba(245, 245, 240, 0.6)"}
+              />
+            </Pressable>
+          </View>
+
+          <View
+            style={[
+              styles.followZoomClusterRight,
+              {
+                bottom: followControlsBottom,
+                right: isLandscape ? 124 : 16,
+              },
+            ]}
+          >
+            <Pressable
+              onPress={() => adjustFollowZoom(1)}
+              style={({ pressed }) => [
+                styles.followZoomButton,
+                pressed && styles.compactActionButtonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Zoom in while in Follow Me mode"
+            >
+              <Text style={styles.followZoomGlyph}>+</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => adjustFollowZoom(-1)}
+              style={({ pressed }) => [
+                styles.followZoomButton,
+                pressed && styles.compactActionButtonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Zoom out while in Follow Me mode"
+            >
+              <Text style={styles.followZoomGlyph}>-</Text>
+            </Pressable>
+          </View>
+        </>
+      )}
+
       {postbox && (
         <View style={[
           styles.postbox,
@@ -8445,7 +8503,7 @@ const styles = StyleSheet.create({
   junctionHeaderActions: {
     position: "absolute",
     right: 0,
-    top: 48,
+    top: 20,
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
@@ -8455,7 +8513,57 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   junctionHeaderActionsLandscape: {
-    top: 36,
+    top: 10,
+  },
+  followActionClusterLeft: {
+    position: "absolute",
+    left: 16,
+    zIndex: 2100,
+    elevation: 10,
+    gap: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  followZoomClusterRight: {
+    position: "absolute",
+    right: 16,
+    zIndex: 2100,
+    elevation: 10,
+    gap: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  followActionButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  followSkipButton: {
+    borderColor: "rgba(255, 216, 92, 0.45)",
+  },
+  followMuteButton: {
+    borderColor: "rgba(255, 255, 255, 0.25)",
+  },
+  followZoomButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    borderWidth: 1,
+    borderColor: "rgba(245, 245, 240, 0.95)",
+  },
+  followZoomGlyph: {
+    color: "#FFD85C",
+    fontSize: 24,
+    fontWeight: "900",
+    lineHeight: 24,
   },
   ttsToggleButton: {
     paddingHorizontal: 8,
