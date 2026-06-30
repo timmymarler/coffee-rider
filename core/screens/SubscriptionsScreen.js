@@ -118,6 +118,9 @@ export default function SubscriptionsScreen() {
     try {
       setSelectedPlan(planId);
       const result = await subscribeToApplePlan(planId);
+      if (result?.cancelled) {
+        return;
+      }
       if (result?.success) {
         await refreshProfile();
         Alert.alert('Subscription Active', 'Your Apple subscription is now active.');

@@ -96,6 +96,11 @@ function normalizeErrorText(value) {
 }
 
 function isTransientIapError(err) {
+  const code = String(err?.code || '').toLowerCase();
+  if (code === 'e_user_cancelled' || code === 'user_cancelled' || code === 'purchase_cancelled') {
+    return false;
+  }
+
   const message = normalizeErrorText(getErrorMessage(err));
   return (
     message.includes('request cancelled') ||
@@ -106,6 +111,21 @@ function isTransientIapError(err) {
     message.includes('timeout') ||
     message.includes('itunes') ||
     message.includes('storekit')
+  );
+}
+
+function isUserCancelledError(err) {
+  const code = String(err?.code || '').toLowerCase();
+  if (code === 'e_user_cancelled' || code === 'user_cancelled' || code === 'purchase_cancelled') {
+    return true;
+  }
+
+  const message = normalizeErrorText(getErrorMessage(err));
+  return (
+    message.includes('cancelled') ||
+    message.includes('canceled') ||
+    message.includes('user cancelled') ||
+    message.includes('user canceled')
   );
 }
 
@@ -120,6 +140,10 @@ function isAlreadySubscribedError(err) {
 }
 
 function toFriendlyIapError(err, operation = 'purchase') {
+  if (isUserCancelledError(err)) {
+    return new Error('Apple purchase cancelled.');
+  }
+
   if (isAlreadySubscribedError(err)) {
     return new Error('This Apple ID already has a subscription. Use Restore Purchases to sync access.');
   }
@@ -163,6 +187,81 @@ async function fetchAvailablePurchasesResilient() {
 
 function makeAttemptId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function fetchStoreProductsResilient(skus) {
+  const skuList = Array.isArray(skus) ? skus.filter(Boolean) : [];
+  if (!skuList.length) return [];
+
+  const attempts = [];
+
+  if (typeof iap?.fetchProducts === 'function') {
+    attempts.push(() => iap.fetchProducts({ skus: skuList, type: 'subs' }));
+    attempts.push(() => iap.fetchProducts({ skus: skuList }));
+  }
+  if (typeof iap?.getSubscriptions === 'function') {
+    attempts.push(() => iap.getSubscriptions({ skus: skuList }));
+    attempts.push(() => iap.getSubscriptions(skuList));
+  }
+
+  let lastErr = null;
+  for (const run of attempts) {
+    try {
+      const result = await withTimeout(run(), 15000, 'Timed out loading App Store products.');
+      const products = normalizeProductsResult(result);
+      if (products.length > 0) {
+        return products;
+      }
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  if (lastErr) {
+    throw lastErr;
+  }
+
+  return [];
+}
+
+async function requestSubscriptionResilient(sku) {
+  const skuValue = String(sku || '').trim();
+  if (!skuValue) {
+    throw new Error('Missing App Store SKU for selected plan.');
+  }
+
+  const attempts = [];
+
+  if (typeof iap?.requestSubscription === 'function') {
+    attempts.push(() => iap.requestSubscription({ sku: skuValue }));
+    attempts.push(() => iap.requestSubscription(skuValue));
+  }
+
+  if (typeof iap?.requestPurchase === 'function') {
+    attempts.push(() =>
+      iap.requestPurchase({
+        type: 'subs',
+        request: {
+          ios: { sku: skuValue },
+          apple: { sku: skuValue },
+        },
+      })
+    );
+  }
+
+  let lastErr = null;
+  for (const run of attempts) {
+    try {
+      return await withTimeout(run(), 25000, 'Apple purchase timed out. Please try again.');
+    } catch (err) {
+      lastErr = err;
+      if (isUserCancelledError(err)) {
+        throw err;
+      }
+    }
+  }
+
+  throw lastErr || new Error('Unable to start Apple subscription purchase.');
 }
 
 export function useAppleSubscriptionV2({ user }) {
@@ -283,13 +382,7 @@ export function useAppleSubscriptionV2({ user }) {
 
       try {
         await ensureIapConnection();
-        const fetchedProducts = await withTimeout(
-          iap.fetchProducts({ skus: availableSkus, type: 'subs' }),
-          15000,
-          'Timed out loading App Store products.'
-        );
-
-        const nextProducts = normalizeProductsResult(fetchedProducts);
+        const nextProducts = await fetchStoreProductsResilient(availableSkus);
         if (nextProducts.length > 0) {
           setProducts(nextProducts);
           setLastLoadError(null);
@@ -516,17 +609,7 @@ export function useAppleSubscriptionV2({ user }) {
         setProcessingSku(sku);
 
         const operation = beginPurchaseOperation();
-        const result = await withTimeout(
-          iap.requestPurchase({
-            type: 'subs',
-            request: {
-              ios: { sku },
-              apple: { sku },
-            },
-          }),
-          25000,
-          'Apple purchase timed out. Please try again.'
-        );
+        const result = await requestSubscriptionResilient(sku);
 
         const purchase = normalizePurchaseResult(result);
         if (purchase) {
@@ -552,6 +635,11 @@ export function useAppleSubscriptionV2({ user }) {
         setPhase('active');
         return { ...listenerResult, attemptId };
       } catch (err) {
+        if (isUserCancelledError(err)) {
+          setPhase('ready');
+          return { cancelled: true, attemptId };
+        }
+
         if (isAlreadySubscribedError(err)) {
           const restoreResult = await restorePurchases();
           if (restoreResult?.restored) {
