@@ -1,4 +1,5 @@
 import { activateAppleSubscription, APPLE_SUBSCRIPTION_PRODUCTS } from '@core/payments/stripeService';
+import { debugLog } from '@core/utils/debugLog';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
@@ -39,6 +40,46 @@ function normalizeProductsResult(result) {
   if (Array.isArray(result?.products)) return result.products;
   if (Array.isArray(result?.subscriptions)) return result.subscriptions;
   return [];
+}
+
+function resolveDisplayPrice(product) {
+  if (!product) return null;
+
+  const directPrice =
+    product.displayPrice ||
+    product.localizedPrice ||
+    product.priceString ||
+    product.formattedPrice ||
+    null;
+
+  if (typeof directPrice === 'string' && directPrice.trim()) {
+    return directPrice.trim();
+  }
+
+  const numericPrice = Number(product.price);
+  const currencyCode = String(product.currency || product.currencyCode || '').trim();
+  if (Number.isFinite(numericPrice) && currencyCode) {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: currencyCode,
+      }).format(numericPrice);
+    } catch (_) {
+      // Ignore formatter failures; return null so callers can fallback safely.
+    }
+  }
+
+  return null;
+}
+
+function normalizeStoreProduct(product) {
+  if (!product) return product;
+  const displayPrice = resolveDisplayPrice(product);
+  if (!displayPrice) return product;
+  return {
+    ...product,
+    displayPrice,
+  };
 }
 
 function normalizePurchaseResult(result) {
@@ -139,7 +180,29 @@ function isAlreadySubscribedError(err) {
   );
 }
 
+function isSandboxAccountError(err) {
+  const code = String(err?.code || '').toLowerCase();
+  if (code.includes('not_allowed') || code.includes('not-entitled')) {
+    return true;
+  }
+
+  const message = normalizeErrorText(getErrorMessage(err));
+  return (
+    message.includes('sandbox') ||
+    message.includes('cannot connect to itunes store') ||
+    message.includes('sign in with your apple id') ||
+    message.includes('not signed in') ||
+    message.includes('authentication failed') ||
+    message.includes('asd') ||
+    message.includes('storekit') && message.includes('sign')
+  );
+}
+
 function toFriendlyIapError(err, operation = 'purchase') {
+  if (isSandboxAccountError(err)) {
+    return new Error('Apple account validation failed. On development builds/simulator, sign in with a Sandbox Apple ID in device Settings. On TestFlight, use your normal Apple ID and retry.');
+  }
+
   if (isUserCancelledError(err)) {
     return new Error('Apple purchase cancelled.');
   }
@@ -187,6 +250,10 @@ async function fetchAvailablePurchasesResilient() {
 
 function makeAttemptId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function queueDebugLog(tag, message, data = null) {
+  debugLog(tag, message, data).catch(() => {});
 }
 
 async function fetchStoreProductsResilient(skus) {
@@ -369,6 +436,10 @@ export function useAppleSubscriptionV2({ user }) {
 
   const loadProducts = useCallback(async () => {
     if (Platform.OS !== 'ios' || !iap) {
+      queueDebugLog('APPLE_IAP', 'Skipping App Store plan load', {
+        platform: Platform.OS,
+        iapAvailable: Boolean(iap),
+      });
       return [];
     }
 
@@ -380,10 +451,24 @@ export function useAppleSubscriptionV2({ user }) {
         await new Promise((res) => setTimeout(res, attempt * 1200));
       }
 
+      queueDebugLog('APPLE_IAP', 'Loading App Store plans', {
+        attempt,
+        maxAttempts: 3,
+        skuCount: availableSkus.length,
+      });
+
       try {
         await ensureIapConnection();
-        const nextProducts = await fetchStoreProductsResilient(availableSkus);
+        const nextProducts = (await fetchStoreProductsResilient(availableSkus)).map(normalizeStoreProduct);
         if (nextProducts.length > 0) {
+          queueDebugLog('APPLE_IAP', 'Loaded App Store plans', {
+            count: nextProducts.length,
+            products: nextProducts.map((product) => ({
+              id: product?.id || product?.productId || product?.sku || null,
+              displayPrice: product?.displayPrice || null,
+              currency: product?.currency || product?.currencyCode || null,
+            })),
+          });
           setProducts(nextProducts);
           setLastLoadError(null);
           setPhase('ready');
@@ -391,13 +476,27 @@ export function useAppleSubscriptionV2({ user }) {
         }
 
         lastErr = new Error(`No App Store plans returned (attempt ${attempt}/3)`);
+        queueDebugLog('APPLE_IAP', 'No App Store plans returned', {
+          attempt,
+        });
       } catch (err) {
         lastErr = err;
         console.warn(`[AppleIAP V2] loadProducts attempt ${attempt} failed:`, err?.message || err);
+        queueDebugLog('APPLE_IAP', 'App Store plan load attempt failed', {
+          attempt,
+          error: err?.message || String(err),
+          code: err?.code || null,
+        });
       }
     }
 
-    setLastLoadError(lastErr);
+    const mappedLoadError = toFriendlyIapError(lastErr, 'load App Store plans');
+    setLastLoadError(mappedLoadError);
+    queueDebugLog('APPLE_IAP', 'Failed to load App Store plans', {
+      error: mappedLoadError?.message || String(mappedLoadError),
+      originalError: lastErr?.message || String(lastErr),
+      code: lastErr?.code || null,
+    });
     setPhase('error');
     return [];
   }, [availableSkus, ensureIapConnection]);
@@ -407,9 +506,18 @@ export function useAppleSubscriptionV2({ user }) {
       setLoadingProducts(true);
       setError(null);
       setPurchaseError(null);
-      return await loadProducts();
+      queueDebugLog('APPLE_IAP', 'User tapped Reload App Store Plans');
+      const reloaded = await loadProducts();
+      queueDebugLog('APPLE_IAP', 'Reload App Store Plans completed', {
+        productCount: Array.isArray(reloaded) ? reloaded.length : 0,
+      });
+      return reloaded;
     } catch (err) {
       setLastLoadError(err);
+      queueDebugLog('APPLE_IAP', 'Reload App Store Plans threw error', {
+        error: err?.message || String(err),
+        code: err?.code || null,
+      });
       throw err;
     } finally {
       setLoadingProducts(false);
