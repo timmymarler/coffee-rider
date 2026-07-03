@@ -19,6 +19,10 @@ import { cancelSubscription } from "@core/payments/stripeService";
 import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";
+import {
+  IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
+  IOS_SUBSCRIPTIONS_TEMP_DISABLED,
+} from "@core/config/launchFlags";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { updateDisplayNameReservation } from "@firebaseLocal/users";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -586,6 +590,10 @@ export default function ProfileScreen() {
   }
 
   async function handleUpgrade() {
+    if (Platform.OS === "ios" && IOS_SUBSCRIPTIONS_TEMP_DISABLED) {
+      Alert.alert("Soft launch access", IOS_SUBSCRIPTIONS_DISABLED_MESSAGE);
+      return;
+    }
     // Navigate to subscriptions screen to let user choose their plan
     router.push("/subscriptions");
   }
@@ -811,7 +819,7 @@ export default function ProfileScreen() {
           </Text>
           <View style={{ marginTop: theme.spacing.sm }}>
             <CRInfoBadge label={role.charAt(0).toUpperCase() + role.slice(1)} />
-            {role==="user" && (
+            {role==="user" && !(Platform.OS === "ios" && IOS_SUBSCRIPTIONS_TEMP_DISABLED) && (
               <CRButton
                 title="Upgrade"
                 variant="primary"

@@ -1,6 +1,10 @@
 import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
+import {
+  IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
+  IOS_SUBSCRIPTIONS_TEMP_DISABLED,
+} from '@core/config/launchFlags';
 import { SUBSCRIPTION_PLANS, startFreeTrial } from '@core/payments/stripeService';
 import { useAppleSubscriptionV2 } from '@core/payments/useAppleSubscriptionV2';
 import { useStripeSubscription } from '@core/payments/useStripeSubscription';
@@ -44,6 +48,7 @@ export default function SubscriptionsScreen() {
     restorePurchases,
   } = useAppleSubscriptionV2({ user });
   const isIOS = Platform.OS === 'ios';
+  const isIOSSubscriptionsDisabled = isIOS && IOS_SUBSCRIPTIONS_TEMP_DISABLED;
 
   const openExternalLink = async (url, label) => {
     try {
@@ -205,7 +210,9 @@ export default function SubscriptionsScreen() {
         />
         <Text style={[styles.title, { color: theme.colors.text }]}>Pro Features</Text>
         <Text style={[styles.subtitle, { color: theme.colors.accentMid }]}> 
-          {isIOS
+          {isIOSSubscriptionsDisabled
+            ? 'Soft launch access is active while subscriptions are unavailable on iOS'
+            : isIOS
             ? 'Unlock Pro with Apple subscriptions'
             : 'Unlock all features with a Pro subscription'}
         </Text>
@@ -303,7 +310,22 @@ export default function SubscriptionsScreen() {
           </>
         ) : (
           <>
-            {isIOS ? (
+            {isIOSSubscriptionsDisabled ? (
+              <>
+                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
+                  Soft launch access
+                </Text>
+
+                <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
+                  <Text style={[styles.trialNote, { color: theme.colors.text, marginBottom: 8 }]}> 
+                    {IOS_SUBSCRIPTIONS_DISABLED_MESSAGE}
+                  </Text>
+                  <Text style={[styles.trialNote, { color: theme.colors.accentMid }]}> 
+                    We will re-enable iOS subscriptions in an upcoming update.
+                  </Text>
+                </View>
+              </>
+            ) : isIOS ? (
               <>
                 <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
                   Choose your Apple plan

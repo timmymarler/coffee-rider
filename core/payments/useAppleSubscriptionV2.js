@@ -344,6 +344,7 @@ export function useAppleSubscriptionV2({ user }) {
   const handledTransactionsRef = useRef(new Set());
   const purchaseOperationRef = useRef(null);
   const lastRestoreAttemptRef = useRef(0);
+  const purchaseFlowActiveRef = useRef(false);
 
   const beginPurchaseOperation = useCallback(() => {
     if (purchaseOperationRef.current && !purchaseOperationRef.current.settled) {
@@ -392,6 +393,14 @@ export function useAppleSubscriptionV2({ user }) {
     const operation = purchaseOperationRef.current;
     if (!operation || !operation.settled) return;
     purchaseOperationRef.current = null;
+  }, []);
+
+  const beginPurchaseFlow = useCallback(() => {
+    purchaseFlowActiveRef.current = true;
+  }, []);
+
+  const endPurchaseFlow = useCallback(() => {
+    purchaseFlowActiveRef.current = false;
   }, []);
 
   const availableSkus = useMemo(() => {
@@ -591,18 +600,41 @@ export function useAppleSubscriptionV2({ user }) {
           activation,
           fromListener: true,
         });
+        queueDebugLog('APPLE_IAP', 'purchaseUpdatedListener activation success', {
+          productId: getPurchaseProductId(purchase),
+        });
       } catch (err) {
         const mappedError = toFriendlyIapError(err, 'purchase');
         setPurchaseError(mappedError);
+        queueDebugLog('APPLE_IAP', 'purchaseUpdatedListener activation failed', {
+          error: mappedError?.message || String(mappedError),
+        });
         rejectPurchaseOperation(mappedError);
       }
     });
 
     const purchaseErrorSubscription = iap.purchaseErrorListener((purchaseErr) => {
+      const hasActiveOperation = Boolean(
+        purchaseOperationRef.current && !purchaseOperationRef.current.settled
+      );
+      const hasActivePurchaseFlow = purchaseFlowActiveRef.current || Boolean(processingSku);
+
+      if (!hasActiveOperation && !hasActivePurchaseFlow) {
+        queueDebugLog('APPLE_IAP', 'Ignored purchaseErrorListener event (no active purchase flow)', {
+          code: purchaseErr?.code || null,
+          message: getErrorMessage(purchaseErr),
+        });
+        return;
+      }
+
       const mappedError = toFriendlyIapError(purchaseErr, 'purchase');
       setPurchaseError(mappedError);
       setProcessingSku(null);
       setPhase('error');
+      queueDebugLog('APPLE_IAP', 'purchaseErrorListener mapped purchase error', {
+        code: purchaseErr?.code || null,
+        message: mappedError?.message || String(mappedError),
+      });
       rejectPurchaseOperation(mappedError);
     });
 
@@ -610,9 +642,10 @@ export function useAppleSubscriptionV2({ user }) {
       purchaseUpdateSubscription.remove();
       purchaseErrorSubscription.remove();
       rejectPurchaseOperation(new Error('Purchase flow was interrupted. Please try again.'));
+      endPurchaseFlow();
       iap.endConnection().catch(() => {});
     };
-  }, [rejectPurchaseOperation, resolvePurchaseOperation, syncPurchaseToProfile]);
+  }, [endPurchaseFlow, processingSku, rejectPurchaseOperation, resolvePurchaseOperation, syncPurchaseToProfile]);
 
   const restorePurchases = useCallback(async () => {
     if (!user?.uid) {
@@ -699,6 +732,7 @@ export function useAppleSubscriptionV2({ user }) {
       try {
         setError(null);
         setPurchaseError(null);
+        beginPurchaseFlow();
         setProcessingSku(fallbackSku);
         setPhase('purchasing');
 
@@ -763,11 +797,14 @@ export function useAppleSubscriptionV2({ user }) {
         throw mappedError;
       } finally {
         setProcessingSku(null);
+        endPurchaseFlow();
       }
     },
     [
+      beginPurchaseFlow,
       beginPurchaseOperation,
       clearSettledPurchaseOperation,
+      endPurchaseFlow,
       ensureIapConnection,
       productsByPlan,
       rejectPurchaseOperation,
