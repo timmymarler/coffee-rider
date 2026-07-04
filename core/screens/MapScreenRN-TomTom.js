@@ -533,7 +533,7 @@ const ARRIVAL_META = { icon: "flag-checkered", label: "Destination ahead" };
 const ARRIVAL_LEFT_META = { icon: "flag-checkered", label: "Destination on the left" };
 const ARRIVAL_RIGHT_META = { icon: "flag-checkered", label: "Destination on the right" };
 const UNITS_PREFERENCE_KEY = "@coffee_rider_units_preference";
-const FREE_DAILY_ROUTE_PLAN_LIMIT = 5;
+const FREE_DAILY_ROUTE_PLAN_LIMIT = 3;
 const FREE_DAILY_ROUTE_PLAN_COUNTER_PREFIX = "@coffee_rider_daily_route_plans";
 
   // Maneuver → icon + label map (simplified)
