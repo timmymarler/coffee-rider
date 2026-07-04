@@ -1,7 +1,11 @@
 import { db } from '@config/firebase';
+import { functions } from '@config/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { createContext, useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+
+const syncStripeSubscriptionStateCallable = httpsCallable(functions, 'syncStripeSubscriptionState');
 
 export const SubscriptionContext = createContext();
 
@@ -12,6 +16,34 @@ export function SubscriptionProvider({ children, userId }) {
   const unsubscribeRef = useRef(null);
   const expirationCheckRef = useRef(null);
   const userSyncRef = useRef({ status: null, expiresAt: null });
+  const pendingSyncRef = useRef({ inFlight: false, lastSubscriptionId: null, lastAttemptAt: 0 });
+
+  const maybeRecoverPendingStripeSubscription = useCallback(async (subData) => {
+    if (!userId || !subData) return;
+    if (subData.status !== 'pending' || subData.provider !== 'stripe') return;
+
+    const stripeSubscriptionId = subData.stripeSubscriptionId || null;
+    const now = Date.now();
+    const isSameSub = pendingSyncRef.current.lastSubscriptionId === stripeSubscriptionId;
+    const isCoolingDown = isSameSub && now - pendingSyncRef.current.lastAttemptAt < 60_000;
+
+    if (pendingSyncRef.current.inFlight || isCoolingDown) {
+      return;
+    }
+
+    pendingSyncRef.current.inFlight = true;
+    pendingSyncRef.current.lastSubscriptionId = stripeSubscriptionId;
+    pendingSyncRef.current.lastAttemptAt = now;
+
+    try {
+      const result = await syncStripeSubscriptionStateCallable({ stripeSubscriptionId });
+      console.log('[Subscription] Pending Stripe sync attempted:', result?.data || null);
+    } catch (err) {
+      console.error('[Subscription] Pending Stripe sync failed:', err);
+    } finally {
+      pendingSyncRef.current.inFlight = false;
+    }
+  }, [userId]);
 
   const syncUserSubscriptionProfile = useCallback(
     async ({ fields, logLabel }) => {
@@ -168,6 +200,7 @@ export function SubscriptionProvider({ children, userId }) {
           if (docSnap.exists()) {
             const subData = docSnap.data();
             console.log('[Subscription] Document data:', subData);
+            maybeRecoverPendingStripeSubscription(subData);
             const validData = checkAndUpdateExpiration(subData);
             console.log('[Subscription] After expiration check:', validData);
             setSubscription(validData);
@@ -229,7 +262,7 @@ export function SubscriptionProvider({ children, userId }) {
       setError(err.message);
       setLoading(false);
     }
-  }, [userId, checkAndUpdateExpiration]);
+  }, [userId, checkAndUpdateExpiration, maybeRecoverPendingStripeSubscription]);
 
   const isSubscribed = useCallback(() => {
     return subscription !== null;
