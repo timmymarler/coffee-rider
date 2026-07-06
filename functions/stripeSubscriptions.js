@@ -54,6 +54,54 @@ const getPriceId = (plan) => {
   return readEnv(`STRIPE_LIVE_PRICE_${suffix}`) || readEnv(`STRIPE_TEST_PRICE_${suffix}`);
 };
 
+const KNOWN_PLAN_IDS = new Set(['daily', 'monthly', 'annual']);
+
+const normalizePlanId = (plan) => {
+  const normalizedPlan = typeof plan === 'string' ? plan.toLowerCase() : null;
+  return normalizedPlan && KNOWN_PLAN_IDS.has(normalizedPlan) ? normalizedPlan : null;
+};
+
+const resolvePlanIdFromPriceId = (priceId) => {
+  if (!priceId) return null;
+
+  for (const plan of KNOWN_PLAN_IDS) {
+    if (getPriceId(plan) === priceId) {
+      return plan;
+    }
+  }
+
+  return null;
+};
+
+const resolveStripePlanId = ({ subscription, existingSub }) => {
+  const metadataPlanId = normalizePlanId(subscription.metadata?.planId);
+  if (metadataPlanId) {
+    return metadataPlanId;
+  }
+
+  const price = subscription.items?.data?.[0]?.price || null;
+  const priceMetadataPlanId = normalizePlanId(price?.metadata?.planId);
+  if (priceMetadataPlanId) {
+    return priceMetadataPlanId;
+  }
+
+  const priceIdPlan = resolvePlanIdFromPriceId(price?.id);
+  if (priceIdPlan) {
+    return priceIdPlan;
+  }
+
+  const existingPlanId = normalizePlanId(existingSub?.plan);
+  if (
+    existingSub?.provider === 'stripe' &&
+    existingSub?.stripeSubscriptionId === subscription.id &&
+    existingPlanId
+  ) {
+    return existingPlanId;
+  }
+
+  return null;
+};
+
 const getWebhookSecret = () =>
   readEnv('STRIPE_LIVE_WEBHOOK_SECRET') || readEnv('STRIPE_TEST_WEBHOOK_SECRET');
 
@@ -206,8 +254,10 @@ const handleSubscriptionSync = async (subscription) => {
   const existingSubSnap = await existingSubRef.get();
   const existingSub = existingSubSnap.exists ? existingSubSnap.data() : null;
 
-  const planId =
-    subscription.metadata?.planId || subscription.items?.data?.[0]?.price?.metadata?.planId || 'monthly';
+  const priceId = subscription.items?.data?.[0]?.price?.id || null;
+  const resolvedPlanId = resolveStripePlanId({ subscription, existingSub });
+  const existingPlanId = normalizePlanId(existingSub?.plan);
+  const nextPlanId = resolvedPlanId || existingPlanId;
   const currentPeriodEnd =
     subscription.current_period_end || subscription.items?.data?.[0]?.current_period_end || null;
   const renewalDate = currentPeriodEnd
@@ -248,24 +298,61 @@ const handleSubscriptionSync = async (subscription) => {
     uid,
     subscriptionId: subscription.id,
     status,
+    resolvedPlanId: resolvedPlanId || null,
+    existingPlanId: existingPlanId || null,
+    priceId,
   });
 
-  await upsertSubscriptionDocument(uid, {
+  if (!resolvedPlanId) {
+    functions.logger.warn('Stripe subscription plan could not be resolved from incoming data', {
+      uid,
+      subscriptionId: subscription.id,
+      priceId,
+      metadataPlanId: subscription.metadata?.planId || null,
+      priceMetadataPlanId: subscription.items?.data?.[0]?.price?.metadata?.planId || null,
+      existingPlanId: existingPlanId || null,
+    });
+  }
+
+  if (
+    resolvedPlanId &&
+    existingPlanId &&
+    resolvedPlanId !== existingPlanId &&
+    existingSub?.provider === 'stripe'
+  ) {
+    functions.logger.warn('Stripe subscription plan changed during sync', {
+      uid,
+      subscriptionId: subscription.id,
+      existingPlanId,
+      resolvedPlanId,
+      priceId,
+    });
+  }
+
+  const subscriptionUpdate = {
     status,
-    plan: planId,
     provider: 'stripe',
     stripeSubscriptionId: subscription.id,
     renewalDate,
     cancelAtPeriodEnd,
     cancellationEffectiveDate,
-  });
+  };
+  if (nextPlanId) {
+    subscriptionUpdate.plan = nextPlanId;
+  }
 
-  await syncSubscriptionRole(uid, status, {
+  await upsertSubscriptionDocument(uid, subscriptionUpdate);
+
+  const profileUpdate = {
     subscriptionStatus: status,
-    subscriptionPlan: planId,
     subscriptionExpiresAt: renewalDate,
     subscriptionCancelAtPeriodEnd: cancelAtPeriodEnd,
-  });
+  };
+  if (nextPlanId) {
+    profileUpdate.subscriptionPlan = nextPlanId;
+  }
+
+  await syncSubscriptionRole(uid, status, profileUpdate);
 };
 
 const getKnownCustomerIdForUid = async (uid) => {
