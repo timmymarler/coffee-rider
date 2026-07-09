@@ -1,4 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
+  IOS_SUBSCRIPTIONS_TEMP_DISABLED,
+} from "@core/config/launchFlags";
 import { Alert, Platform, ToastAndroid } from "react-native";
 
 export const PRO_UPGRADE_TITLE = "Unlock all Pro benefits";
@@ -34,6 +38,19 @@ export function shouldShowProUpgradePrompt(role) {
 }
 
 export function showProUpgradePrompt(router, options = {}) {
+  if (Platform.OS === "ios" && IOS_SUBSCRIPTIONS_TEMP_DISABLED) {
+    const queuedPrompt = {
+      title: "Soft launch access",
+      message: IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
+      createdAt: Date.now(),
+    };
+
+    AsyncStorage.setItem(PRO_UPGRADE_PROMPT_QUEUE_KEY, JSON.stringify(queuedPrompt)).catch((error) => {
+      console.warn("[PRO_UPGRADE_PROMPT] Failed to queue prompt:", error);
+    });
+    return;
+  }
+
   const title = options.title || PRO_UPGRADE_TITLE;
   const message = options.message || PRO_UPGRADE_MESSAGE;
 

@@ -54,6 +54,54 @@ const getPriceId = (plan) => {
   return readEnv(`STRIPE_LIVE_PRICE_${suffix}`) || readEnv(`STRIPE_TEST_PRICE_${suffix}`);
 };
 
+const KNOWN_PLAN_IDS = new Set(['daily', 'monthly', 'annual']);
+
+const normalizePlanId = (plan) => {
+  const normalizedPlan = typeof plan === 'string' ? plan.toLowerCase() : null;
+  return normalizedPlan && KNOWN_PLAN_IDS.has(normalizedPlan) ? normalizedPlan : null;
+};
+
+const resolvePlanIdFromPriceId = (priceId) => {
+  if (!priceId) return null;
+
+  for (const plan of KNOWN_PLAN_IDS) {
+    if (getPriceId(plan) === priceId) {
+      return plan;
+    }
+  }
+
+  return null;
+};
+
+const resolveStripePlanId = ({ subscription, existingSub }) => {
+  const metadataPlanId = normalizePlanId(subscription.metadata?.planId);
+  if (metadataPlanId) {
+    return metadataPlanId;
+  }
+
+  const price = subscription.items?.data?.[0]?.price || null;
+  const priceMetadataPlanId = normalizePlanId(price?.metadata?.planId);
+  if (priceMetadataPlanId) {
+    return priceMetadataPlanId;
+  }
+
+  const priceIdPlan = resolvePlanIdFromPriceId(price?.id);
+  if (priceIdPlan) {
+    return priceIdPlan;
+  }
+
+  const existingPlanId = normalizePlanId(existingSub?.plan);
+  if (
+    existingSub?.provider === 'stripe' &&
+    existingSub?.stripeSubscriptionId === subscription.id &&
+    existingPlanId
+  ) {
+    return existingPlanId;
+  }
+
+  return null;
+};
+
 const getWebhookSecret = () =>
   readEnv('STRIPE_LIVE_WEBHOOK_SECRET') || readEnv('STRIPE_TEST_WEBHOOK_SECRET');
 
@@ -146,6 +194,27 @@ const mapStripeStatus = (status) => {
   }
 };
 
+const resolveUidByCustomerId = async (customerId) => {
+  if (!customerId) return null;
+
+  try {
+    const fieldsToCheck = ['stripeCustomerId', 'stripeCustomerIdTest'];
+    for (const field of fieldsToCheck) {
+      const snapshot = await firestore.collection('users').where(field, '==', customerId).limit(1).get();
+      if (!snapshot.empty) {
+        return snapshot.docs[0].id;
+      }
+    }
+  } catch (err) {
+    functions.logger.error('Failed to resolve UID via customer lookup', {
+      customerId,
+      message: err?.message || String(err),
+    });
+  }
+
+  return null;
+};
+
 const resolveUidForSubscription = async (subscription) => {
   if (subscription.metadata?.firebaseUID) {
     return subscription.metadata.firebaseUID;
@@ -166,6 +235,11 @@ const resolveUidForSubscription = async (subscription) => {
     functions.logger.error('Failed to resolve UID via collectionGroup lookup', err);
   }
 
+  const uidFromCustomer = await resolveUidByCustomerId(subscription.customer);
+  if (uidFromCustomer) {
+    return uidFromCustomer;
+  }
+
   return null;
 };
 
@@ -176,8 +250,14 @@ const handleSubscriptionSync = async (subscription) => {
     return;
   }
 
-  const planId =
-    subscription.metadata?.planId || subscription.items?.data?.[0]?.price?.metadata?.planId || 'monthly';
+  const existingSubRef = firestore.doc(`users/${uid}/subscription/current`);
+  const existingSubSnap = await existingSubRef.get();
+  const existingSub = existingSubSnap.exists ? existingSubSnap.data() : null;
+
+  const priceId = subscription.items?.data?.[0]?.price?.id || null;
+  const resolvedPlanId = resolveStripePlanId({ subscription, existingSub });
+  const existingPlanId = normalizePlanId(existingSub?.plan);
+  const nextPlanId = resolvedPlanId || existingPlanId;
   const currentPeriodEnd =
     subscription.current_period_end || subscription.items?.data?.[0]?.current_period_end || null;
   const renewalDate = currentPeriodEnd
@@ -187,29 +267,167 @@ const handleSubscriptionSync = async (subscription) => {
   const cancellationEffectiveDate = cancelAtPeriodEnd && renewalDate ? renewalDate : null;
   const status = mapStripeStatus(subscription.status);
 
+  // Stripe can emit non-active states for stale/incomplete subscriptions.
+  // Do not downgrade a still-valid active/trial Stripe record to pending.
+  if (
+    status === 'pending' &&
+    existingSub?.provider === 'stripe' &&
+    (existingSub?.status === 'active' || existingSub?.status === 'trial')
+  ) {
+    const existingRenewalMs =
+      typeof existingSub?.renewalDate === 'number'
+        ? existingSub.renewalDate
+        : typeof existingSub?.subscriptionExpiresAt === 'number'
+          ? existingSub.subscriptionExpiresAt
+          : null;
+    const hasFutureExpiry = Number.isFinite(existingRenewalMs) ? existingRenewalMs > Date.now() : true;
+
+    if (hasFutureExpiry) {
+      functions.logger.warn('Ignoring pending downgrade for still-active Stripe subscription', {
+        uid,
+        incomingSubscriptionId: subscription.id,
+        incomingStripeStatus: subscription.status,
+        existingStatus: existingSub.status,
+        existingSubscriptionId: existingSub.stripeSubscriptionId || null,
+      });
+      return;
+    }
+  }
+
   functions.logger.info('Syncing subscription state', {
     uid,
     subscriptionId: subscription.id,
     status,
+    resolvedPlanId: resolvedPlanId || null,
+    existingPlanId: existingPlanId || null,
+    priceId,
   });
 
-  await upsertSubscriptionDocument(uid, {
+  if (!resolvedPlanId) {
+    functions.logger.warn('Stripe subscription plan could not be resolved from incoming data', {
+      uid,
+      subscriptionId: subscription.id,
+      priceId,
+      metadataPlanId: subscription.metadata?.planId || null,
+      priceMetadataPlanId: subscription.items?.data?.[0]?.price?.metadata?.planId || null,
+      existingPlanId: existingPlanId || null,
+    });
+  }
+
+  if (
+    resolvedPlanId &&
+    existingPlanId &&
+    resolvedPlanId !== existingPlanId &&
+    existingSub?.provider === 'stripe'
+  ) {
+    functions.logger.warn('Stripe subscription plan changed during sync', {
+      uid,
+      subscriptionId: subscription.id,
+      existingPlanId,
+      resolvedPlanId,
+      priceId,
+    });
+  }
+
+  const subscriptionUpdate = {
     status,
-    plan: planId,
     provider: 'stripe',
     stripeSubscriptionId: subscription.id,
     renewalDate,
     cancelAtPeriodEnd,
     cancellationEffectiveDate,
-  });
+  };
+  if (nextPlanId) {
+    subscriptionUpdate.plan = nextPlanId;
+  }
 
-  await syncSubscriptionRole(uid, status, {
+  await upsertSubscriptionDocument(uid, subscriptionUpdate);
+
+  const profileUpdate = {
     subscriptionStatus: status,
-    subscriptionPlan: planId,
     subscriptionExpiresAt: renewalDate,
     subscriptionCancelAtPeriodEnd: cancelAtPeriodEnd,
-  });
+  };
+  if (nextPlanId) {
+    profileUpdate.subscriptionPlan = nextPlanId;
+  }
+
+  await syncSubscriptionRole(uid, status, profileUpdate);
 };
+
+const getKnownCustomerIdForUid = async (uid) => {
+  const userSnap = await firestore.doc(`users/${uid}`).get();
+  const userData = userSnap.exists ? userSnap.data() : null;
+  return userData?.stripeCustomerId || userData?.stripeCustomerIdTest || null;
+};
+
+const pickMostRelevantSubscription = (subscriptions = [], preferredId = null) => {
+  if (!Array.isArray(subscriptions) || subscriptions.length === 0) {
+    return null;
+  }
+
+  if (preferredId) {
+    const exact = subscriptions.find((sub) => sub?.id === preferredId);
+    if (exact) return exact;
+  }
+
+  const rank = {
+    trialing: 0,
+    active: 0,
+    past_due: 1,
+    unpaid: 2,
+    incomplete: 3,
+    incomplete_expired: 4,
+    canceled: 5,
+  };
+
+  return [...subscriptions].sort((a, b) => {
+    const rankA = rank[a?.status] ?? 99;
+    const rankB = rank[b?.status] ?? 99;
+    if (rankA !== rankB) return rankA - rankB;
+    return (b?.created || 0) - (a?.created || 0);
+  })[0];
+};
+
+export const syncStripeSubscriptionState = functions
+  .region(REGION)
+  .runWith(RUNTIME_OPTS)
+  .https.onCall(async (data, context) => {
+    if (!context.auth?.uid) {
+      throw new functions.https.HttpsError('unauthenticated', 'You must be signed in.');
+    }
+
+    const uid = context.auth.uid;
+    const preferredSubscriptionId = data?.stripeSubscriptionId || null;
+    const customerId = await getKnownCustomerIdForUid(uid);
+
+    if (!customerId) {
+      functions.logger.info('syncStripeSubscriptionState: no Stripe customer found', { uid });
+      return { status: 'none', reason: 'missing_customer' };
+    }
+
+    const stripe = getStripe();
+    const listed = await stripe.subscriptions.list({
+      customer: customerId,
+      status: 'all',
+      limit: 10,
+    });
+
+    const chosen = pickMostRelevantSubscription(listed?.data || [], preferredSubscriptionId);
+    if (!chosen) {
+      functions.logger.info('syncStripeSubscriptionState: no subscriptions found', { uid, customerId });
+      return { status: 'none', reason: 'no_subscriptions' };
+    }
+
+    const subscription = await stripe.subscriptions.retrieve(chosen.id);
+    await handleSubscriptionSync(subscription);
+
+    return {
+      status: mapStripeStatus(subscription.status),
+      stripeStatus: subscription.status,
+      stripeSubscriptionId: subscription.id,
+    };
+  });
 
 export const ensureStripeCustomer = functions
   .region(REGION)

@@ -1,7 +1,11 @@
 import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
-import { SUBSCRIPTION_PLANS, startFreeTrial } from '@core/payments/stripeService';
+import {
+  IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
+  IOS_SUBSCRIPTIONS_TEMP_DISABLED,
+} from '@core/config/launchFlags';
+import { SUBSCRIPTION_PLANS } from '@core/payments/stripeService';
 import { useAppleSubscriptionV2 } from '@core/payments/useAppleSubscriptionV2';
 import { useStripeSubscription } from '@core/payments/useStripeSubscription';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -44,6 +48,7 @@ export default function SubscriptionsScreen() {
     restorePurchases,
   } = useAppleSubscriptionV2({ user });
   const isIOS = Platform.OS === 'ios';
+  const isIOSSubscriptionsDisabled = isIOS && IOS_SUBSCRIPTIONS_TEMP_DISABLED;
 
   const openExternalLink = async (url, label) => {
     try {
@@ -55,29 +60,6 @@ export default function SubscriptionsScreen() {
       await Linking.openURL(url);
     } catch (_error) {
       Alert.alert('Unable to open link', `${label} link is currently unavailable.`);
-    }
-  };
-
-  const handleStartTrial = async () => {
-    if (!user?.email) {
-      Alert.alert('Error', 'Please log in first');
-      return;
-    }
-
-    try {
-      setProcessing(true);
-      await startFreeTrial({ userId: user.uid, email: user.email });
-      
-      // Refresh user profile to reflect new 'pro' role
-      await refreshProfile();
-      
-      Alert.alert('Success!', 'You now have 7 days of Pro access', [
-        { text: 'OK', onPress: () => router.push('/map') }
-      ]);
-    } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to start trial');
-    } finally {
-      setProcessing(false);
     }
   };
 
@@ -205,7 +187,9 @@ export default function SubscriptionsScreen() {
         />
         <Text style={[styles.title, { color: theme.colors.text }]}>Pro Features</Text>
         <Text style={[styles.subtitle, { color: theme.colors.accentMid }]}> 
-          {isIOS
+          {isIOSSubscriptionsDisabled
+            ? 'Soft launch access is active while subscriptions are unavailable on iOS'
+            : isIOS
             ? 'Unlock Pro with Apple subscriptions'
             : 'Unlock all features with a Pro subscription'}
         </Text>
@@ -303,7 +287,22 @@ export default function SubscriptionsScreen() {
           </>
         ) : (
           <>
-            {isIOS ? (
+            {isIOSSubscriptionsDisabled ? (
+              <>
+                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
+                  Soft launch access
+                </Text>
+
+                <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
+                  <Text style={[styles.trialNote, { color: theme.colors.text, marginBottom: 8 }]}> 
+                    {IOS_SUBSCRIPTIONS_DISABLED_MESSAGE}
+                  </Text>
+                  <Text style={[styles.trialNote, { color: theme.colors.accentMid }]}> 
+                    We will re-enable iOS subscriptions in an upcoming update.
+                  </Text>
+                </View>
+              </>
+            ) : isIOS ? (
               <>
                 <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
                   Choose your Apple plan
@@ -480,46 +479,6 @@ export default function SubscriptionsScreen() {
                   theme={theme}
                 />
 
-                {/* Free Trial CTA (if not already in trial or subscribed) */}
-                {!isCurrentlyInTrial && !hasActiveSubscription && (
-                  <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
-                    <Pressable
-                      style={[
-                        {
-                          backgroundColor: theme.colors.accentMid,
-                          paddingVertical: 8,
-                          paddingHorizontal: 18,
-                          borderRadius: 8,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexDirection: 'row',
-                          gap: 8,
-                        },
-                        processing && { opacity: 0.5 },
-                      ]}
-                      onPress={handleStartTrial}
-                      disabled={processing}
-                    >
-                      {processing ? (
-                        <ActivityIndicator color={theme.colors.text} />
-                      ) : (
-                        <>
-                          <MaterialCommunityIcons
-                            name="gift"
-                            size={20}
-                            color={theme.colors.intext}
-                          />
-                          <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: '600' }}>
-                            Start 7-Day Free Trial
-                          </Text>
-                        </>
-                      )}
-                    </Pressable>
-                    <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}> 
-                      (No card needed)
-                    </Text>
-                  </View>
-                )}
               </>
             )}
           </>
@@ -540,7 +499,7 @@ export default function SubscriptionsScreen() {
           question="Is there a free trial?"
           answer={isIOS
             ? 'iOS subscriptions are billed by Apple. Any trial eligibility is shown directly by the App Store at checkout.'
-            : 'Yes, you get a 7-day free trial of Pro features. No card required for the trial.'}
+            : 'Free trial is not currently offered on Android. Subscribe to start Pro access immediately.'}
           theme={theme}
         />
         <FAQItem

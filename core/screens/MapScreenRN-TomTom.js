@@ -222,6 +222,7 @@ import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
 import { PRO_UPGRADE_PROMPT_QUEUE_KEY } from "@core/utils/proUpgradePrompt";
+import { IOS_SUBSCRIPTIONS_TEMP_DISABLED } from "@core/config/launchFlags";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import theme from "@themes";
@@ -532,7 +533,7 @@ const ARRIVAL_META = { icon: "flag-checkered", label: "Destination ahead" };
 const ARRIVAL_LEFT_META = { icon: "flag-checkered", label: "Destination on the left" };
 const ARRIVAL_RIGHT_META = { icon: "flag-checkered", label: "Destination on the right" };
 const UNITS_PREFERENCE_KEY = "@coffee_rider_units_preference";
-const FREE_DAILY_ROUTE_PLAN_LIMIT = 5;
+const FREE_DAILY_ROUTE_PLAN_LIMIT = 3;
 const FREE_DAILY_ROUTE_PLAN_COUNTER_PREFIX = "@coffee_rider_daily_route_plans";
 
   // Maneuver → icon + label map (simplified)
@@ -1535,10 +1536,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         }
 
         if (queuedPrompt?.message) {
+          const shouldHideSubscriptionsHint = Platform.OS === 'ios' && IOS_SUBSCRIPTIONS_TEMP_DISABLED;
           setPostbox({
             type: 'info',
             title: queuedPrompt?.title || 'Upgrade available',
-            message: `${queuedPrompt.message} Open Profile > Subscriptions to upgrade.`,
+            message: shouldHideSubscriptionsHint
+              ? queuedPrompt.message
+              : `${queuedPrompt.message} Open Profile > Subscriptions to upgrade.`,
           });
         }
 
