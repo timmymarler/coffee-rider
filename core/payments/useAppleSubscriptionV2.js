@@ -199,8 +199,15 @@ function isSandboxAccountError(err) {
 }
 
 function toFriendlyIapError(err, operation = 'purchase') {
+  const rawCode = String(err?.code || '').trim();
+  const rawMessage = getErrorMessage(err).trim();
+  const detailParts = [rawCode ? `code=${rawCode}` : null, rawMessage ? `message=${rawMessage}` : null]
+    .filter(Boolean)
+    .join(' | ');
+  const detailSuffix = detailParts ? `\n\nDetails: ${detailParts}` : '';
+
   if (isSandboxAccountError(err)) {
-    return new Error('Apple account validation failed. On development builds/simulator, sign in with a Sandbox Apple ID in device Settings. On TestFlight, use your normal Apple ID and retry.');
+    return new Error(`Apple account validation failed. On development builds/simulator, sign in with a Sandbox Apple ID in device Settings. On TestFlight, use your normal Apple ID and retry.${detailSuffix}`);
   }
 
   if (isUserCancelledError(err)) {
@@ -213,12 +220,12 @@ function toFriendlyIapError(err, operation = 'purchase') {
 
   if (isTransientIapError(err)) {
     if (operation === 'restore') {
-      return new Error('Apple restore is temporarily unavailable. Please wait 10-15 seconds, then try Restore Purchases again.');
+      return new Error(`Apple restore is temporarily unavailable. Please wait 10-15 seconds, then try Restore Purchases again.${detailSuffix}`);
     }
-    return new Error(`Apple ${operation} is temporarily unavailable. Please try again.`);
+    return new Error(`Apple ${operation} is temporarily unavailable. Please try again.${detailSuffix}`);
   }
 
-  return new Error(`Unable to ${operation} right now. Please try again.`);
+  return new Error(`Unable to ${operation} right now. Please try again.${detailSuffix}`);
 }
 
 function withTimeout(promise, timeoutMs, timeoutMessage) {
@@ -299,11 +306,6 @@ async function requestSubscriptionResilient(sku) {
 
   const attempts = [];
 
-  if (typeof iap?.requestSubscription === 'function') {
-    attempts.push(() => iap.requestSubscription({ sku: skuValue }));
-    attempts.push(() => iap.requestSubscription(skuValue));
-  }
-
   if (typeof iap?.requestPurchase === 'function') {
     attempts.push(() =>
       iap.requestPurchase({
@@ -314,6 +316,11 @@ async function requestSubscriptionResilient(sku) {
         },
       })
     );
+  }
+
+  if (typeof iap?.requestSubscription === 'function') {
+    attempts.push(() => iap.requestSubscription({ sku: skuValue }));
+    attempts.push(() => iap.requestSubscription(skuValue));
   }
 
   let lastErr = null;
@@ -747,6 +754,11 @@ export function useAppleSubscriptionV2({ user }) {
           );
         }
 
+        if (!productForPlan) {
+          const loadErrorMessage = lastLoadError?.message ? ` Last load error: ${lastLoadError.message}` : '';
+          throw new Error(`No App Store product loaded for ${planId}.${loadErrorMessage}`);
+        }
+
         const sku = productForPlan?.id || productForPlan?.productId || productForPlan?.sku || fallbackSku;
         setProcessingSku(sku);
 
@@ -812,6 +824,7 @@ export function useAppleSubscriptionV2({ user }) {
       resolvePurchaseOperation,
       restorePurchases,
       syncPurchaseToProfile,
+      lastLoadError,
       user?.uid,
     ]
   );
