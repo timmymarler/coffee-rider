@@ -624,7 +624,7 @@ export function useAppleSubscriptionV2({ user }) {
       const hasActiveOperation = Boolean(
         purchaseOperationRef.current && !purchaseOperationRef.current.settled
       );
-      const hasActivePurchaseFlow = purchaseFlowActiveRef.current || Boolean(processingSku);
+      const hasActivePurchaseFlow = purchaseFlowActiveRef.current;
 
       if (!hasActiveOperation && !hasActivePurchaseFlow) {
         queueDebugLog('APPLE_IAP', 'Ignored purchaseErrorListener event (no active purchase flow)', {
@@ -652,7 +652,7 @@ export function useAppleSubscriptionV2({ user }) {
       endPurchaseFlow();
       iap.endConnection().catch(() => {});
     };
-  }, [endPurchaseFlow, processingSku, rejectPurchaseOperation, resolvePurchaseOperation, syncPurchaseToProfile]);
+  }, [endPurchaseFlow, rejectPurchaseOperation, resolvePurchaseOperation, syncPurchaseToProfile]);
 
   const restorePurchases = useCallback(async () => {
     if (!user?.uid) {
@@ -703,7 +703,14 @@ export function useAppleSubscriptionV2({ user }) {
         .filter((purchase) => availableSkus.includes(purchase.productId))
         .sort((a, b) => Number(b.transactionDate || 0) - Number(a.transactionDate || 0));
 
-      const latest = appleSubscriptions[0];
+      let latest = appleSubscriptions[0];
+      if (!latest && typeof iap?.getAllTransactionsIOS === 'function') {
+        const allTransactions = await iap.getAllTransactionsIOS();
+        latest = (allTransactions || [])
+          .filter((purchase) => availableSkus.includes(getPurchaseProductId(purchase)))
+          .sort((a, b) => Number(normalizePurchaseDateMs(b) || 0) - Number(normalizePurchaseDateMs(a) || 0))[0];
+      }
+
       if (!latest) {
         setPhase('ready');
         return { restored: false };
@@ -782,7 +789,7 @@ export function useAppleSubscriptionV2({ user }) {
 
         const listenerResult = await withTimeout(
           operation.promise,
-          30000,
+          90000,
           'Purchase processing timed out. Please use Restore Purchases.'
         );
         clearSettledPurchaseOperation();
