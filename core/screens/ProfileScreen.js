@@ -92,15 +92,6 @@ export default function ProfileScreen() {
   const [unsubscribeConfirmVisible, setUnsubscribeConfirmVisible] = useState(false);
   const [unsubscribing, setUnsubscribing] = useState(false);
 
-  const hasStripeSubscription = Boolean(subscription?.stripeSubscriptionId);
-  const isAppleManagedSubscription =
-    Platform.OS === 'ios' &&
-    (
-      subscription?.provider === 'apple_iap' ||
-      Boolean(subscription?.appleTransactionId) ||
-      !hasStripeSubscription
-    );
-
   // Track changes for Save button
   const [initialValues, setInitialValues] = useState({});
   
@@ -637,16 +628,6 @@ export default function ProfileScreen() {
 
     setUnsubscribing(true);
     try {
-      if (isAppleManagedSubscription) {
-        const manageUrl = 'itms-apps://apps.apple.com/account/subscriptions';
-        const fallbackUrl = 'https://apps.apple.com/account/subscriptions';
-        const canOpenManage = await Linking.canOpenURL(manageUrl);
-        await Linking.openURL(canOpenManage ? manageUrl : fallbackUrl);
-        setUnsubscribing(false);
-        setUnsubscribeConfirmVisible(false);
-        return;
-      }
-
       const cancellationResult = await cancelSubscription({
         userId: user.uid,
         stripeSubscriptionId: subscription.stripeSubscriptionId || null, // Pass null for trials (no Stripe ID)
@@ -1329,7 +1310,7 @@ export default function ProfileScreen() {
           return (
             <>
               <CRButton
-                title={isAppleManagedSubscription ? 'Manage Subscription' : 'Unsubscribe'}
+                title="Unsubscribe"
                 variant="accentMid"
                 onPress={() => setUnsubscribeConfirmVisible(true)}
                 style={{ width: '100%' }}
@@ -1340,9 +1321,7 @@ export default function ProfileScreen() {
                 marginTop: theme.spacing.sm,
                 textAlign: 'center',
               }}>
-                {isAppleManagedSubscription
-                  ? 'Manage subscription in Apple Settings'
-                  : 'Cancel your Pro subscription'}
+                Cancel your Pro subscription
               </Text>
             </>
           );
@@ -1460,7 +1439,7 @@ export default function ProfileScreen() {
               marginBottom: theme.spacing.md,
               textAlign: 'center'
             }}>
-              {isAppleManagedSubscription ? 'Open Apple Subscriptions?' : 'Cancel Subscription?'}
+              Cancel Subscription?
             </Text>
 
             <Text style={{ 
@@ -1469,14 +1448,12 @@ export default function ProfileScreen() {
               marginBottom: theme.spacing.md,
               lineHeight: 20,
             }}>
-              {isAppleManagedSubscription
-                ? 'Subscription changes are managed in Apple. Open Apple Subscriptions to change or cancel auto-renew. If cancelled there, you keep Pro access until the renewal date.'
-                : `Your subscription will be cancelled. You'll retain access to Pro features until ${formatSubscriptionDate(subscription?.renewalDate)}.`}
+              {`Your subscription will be cancelled. You'll retain access to Pro features until ${formatSubscriptionDate(subscription?.renewalDate)}.`}
             </Text>
 
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <CRButton
-                title={unsubscribing ? "Please wait…" : isAppleManagedSubscription ? 'Open Apple Subscriptions' : 'Cancel Subscription'}
+                title={unsubscribing ? "Please wait…" : 'Cancel Subscription'}
                 variant="danger"
                 loading={unsubscribing}
                 disabled={unsubscribing}

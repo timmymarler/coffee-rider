@@ -133,10 +133,10 @@ const getAppleProductIds = () => {
   return {
     monthly:
       readEnv('EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID') ||
-      'com.timmy.marler.coffeerider.pro.monthly.v2',
+      'com.timmy.marler.coffeerider.pro.monthly.v3',
     annual:
       readEnv('EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID') ||
-      'com.timmy.marler.coffeerider.pro.annual.v2',
+      'com.timmy.marler.coffeerider.pro.annual.v3',
   };
 };
 

@@ -22,8 +22,8 @@
           "EXPO_PUBLIC_STRIPE_PRICE_DAILY": "price_1THKjLE1Vx0zrcr85qDD92be",
           "EXPO_PUBLIC_STRIPE_PRICE_MONTHLY": "price_1TGNzPE1Vx0zrcr8GmZwcjuT",
           "EXPO_PUBLIC_STRIPE_PRICE_ANNUAL": "price_1TGNzPE1Vx0zrcr8AjE1678p",
-          "EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.monthly.v2",
-          "EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.annual.v2",
+          "EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.monthly.v3",
+          "EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.annual.v3",
           "EXPO_PUBLIC_BLE_DIRECTIONS_ENABLED": "true"
       }
     },
@@ -44,8 +44,8 @@
           "EXPO_PUBLIC_STRIPE_PRICE_DAILY": "price_1THKjLE1Vx0zrcr85qDD92be",
           "EXPO_PUBLIC_STRIPE_PRICE_MONTHLY": "price_1TGNzPE1Vx0zrcr8GmZwcjuT",
           "EXPO_PUBLIC_STRIPE_PRICE_ANNUAL": "price_1TGNzPE1Vx0zrcr8AjE1678p",
-          "EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.monthly.v2",
-          "EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.annual.v2"
+          "EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.monthly.v3",
+          "EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.annual.v3"
       },
       "environment": "development"
     },
@@ -64,10 +64,10 @@
           "EXPO_PUBLIC_TOMTOM_API_KEY_ANDROID": "Zuz4K5BVwI4T4AdzqFtqTJPjEzpbqxqs",
           "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51TGMiFE1Vx0zrcr8uJ9SXk28RQMRNdrtlqYi8jLXAYxwpU4NzWptyQSmygcUnWFAp1dXshpejZzC2v1wUUEOWoPq00wUa4uIrj",
           "EXPO_PUBLIC_STRIPE_PRICE_DAILY": "price_1THKjLE1Vx0zrcr85qDD92be",
+          "EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.monthly.v3",
+          "EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.annual.v3",
           "EXPO_PUBLIC_STRIPE_PRICE_MONTHLY": "price_1TGNzPE1Vx0zrcr8GmZwcjuT",
           "EXPO_PUBLIC_STRIPE_PRICE_ANNUAL": "price_1TGNzPE1Vx0zrcr8AjE1678p",
-          "EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.monthly.v2",
-          "EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.annual.v2",
           "EXPO_PUBLIC_BLE_DIRECTIONS_ENABLED": "true"
       }
     },
@@ -120,8 +120,8 @@
           "EXPO_PUBLIC_STRIPE_PRICE_DAILY_LIVE": "price_1THKjLE1Vx0zrcr85qDD92be",
           "EXPO_PUBLIC_STRIPE_PRICE_MONTHLY_LIVE": "price_1TGOYeCf7uzxcAVCnrrHXtzo",
           "EXPO_PUBLIC_STRIPE_PRICE_ANNUAL_LIVE": "price_1TGOYfCf7uzxcAVCU4cSYasc",
-          "EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.monthly.v2",
-          "EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.annual.v2",
+          "EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.monthly.v3",
+          "EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.annual.v3",
           "EXPO_PUBLIC_BLE_DIRECTIONS_ENABLED": "true"
       }
     },
