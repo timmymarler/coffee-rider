@@ -733,6 +733,32 @@ export function useAppleSubscriptionV2({ user }) {
     }
   }, [availableSkus, ensureIapConnection, syncPurchaseToProfile, user?.uid]);
 
+  const waitForActivationWindow = useCallback(
+    async ({ maxAttempts = 10, delayMs = 6000 } = {}) => {
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          const restoreResult = await restorePurchases();
+          if (restoreResult?.restored) {
+            return restoreResult;
+          }
+        } catch (err) {
+          queueDebugLog('APPLE_IAP', 'Activation polling attempt failed', {
+            attempt,
+            maxAttempts,
+            error: err?.message || String(err),
+          });
+        }
+
+        if (attempt < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+
+      return { restored: false };
+    },
+    [restorePurchases]
+  );
+
   const subscribeToPlan = useCallback(
     async (planId) => {
       if (!user?.uid) {
@@ -777,7 +803,17 @@ export function useAppleSubscriptionV2({ user }) {
           setPhase('validating');
           const activation = await syncPurchaseToProfile(purchase, { finish: true });
           if (activation?.status !== 'active') {
-            throw new Error('Purchase completed, but activation is pending. Please use Restore Purchases.');
+            const restoreResult = await waitForActivationWindow();
+            if (restoreResult?.restored) {
+              const restoredResult = { success: true, restored: true, activation: restoreResult.activation, attemptId };
+              resolvePurchaseOperation(restoredResult);
+              clearSettledPurchaseOperation();
+              setPhase('active');
+              return restoredResult;
+            }
+
+            setPhase('pending_activation');
+            return { pending: true, attemptId };
           }
 
           const successResult = { success: true, purchase, activation, fromListener: false, attemptId };
@@ -789,7 +825,7 @@ export function useAppleSubscriptionV2({ user }) {
 
         const listenerResult = await withTimeout(
           operation.promise,
-          90000,
+          180000,
           'Purchase processing timed out. Please use Restore Purchases.'
         );
         clearSettledPurchaseOperation();
@@ -806,6 +842,20 @@ export function useAppleSubscriptionV2({ user }) {
           if (restoreResult?.restored) {
             return { success: true, restored: true, attemptId };
           }
+        }
+
+        const timedOutWaitingForProcessing =
+          String(err?.message || '').toLowerCase().includes('timed out');
+
+        if (timedOutWaitingForProcessing) {
+          const restoreResult = await waitForActivationWindow();
+          if (restoreResult?.restored) {
+            setPhase('active');
+            return { success: true, restored: true, attemptId };
+          }
+
+          setPhase('pending_activation');
+          return { pending: true, attemptId };
         }
 
         const mappedError = toFriendlyIapError(err, 'purchase');
@@ -830,6 +880,7 @@ export function useAppleSubscriptionV2({ user }) {
       reloadProducts,
       resolvePurchaseOperation,
       restorePurchases,
+      waitForActivationWindow,
       syncPurchaseToProfile,
       lastLoadError,
       user?.uid,

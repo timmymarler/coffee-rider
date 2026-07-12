@@ -55,6 +55,15 @@ export default function SubscriptionsScreen() {
         return;
       }
 
+      if (result?.pending) {
+        Alert.alert(
+          'Purchase Processing',
+          'Apple has accepted your purchase and we are still syncing your subscription. Please wait a moment, then tap Restore Purchases if Pro access is not visible yet.'
+        );
+        await refreshProfile();
+        return;
+      }
+
       await refreshProfile();
     } catch (err) {
       Alert.alert('Apple Subscription', err?.message || 'Unable to purchase right now. Please try again.');
