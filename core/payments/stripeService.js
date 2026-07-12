@@ -248,7 +248,7 @@ export async function activateAppleSubscription({
     throw new Error('userId, productId, transactionId, and receiptData are required');
   }
 
-  const response = await activateAppleSubscriptionCallable({
+  const callPayload = {
     userId,
     email: email || null,
     productId,
@@ -256,9 +256,28 @@ export async function activateAppleSubscription({
     originalTransactionId: originalTransactionId || transactionId,
     purchaseDateMs: Number.isFinite(purchaseDateMs) ? purchaseDateMs : Date.now(),
     receiptData,
-  });
+  };
 
-  const data = response?.data || {};
+  let data = {};
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await activateAppleSubscriptionCallable(callPayload);
+    data = response?.data || {};
+
+    const status = data.status || null;
+    const shouldRetryExpired =
+      status === 'expired' &&
+      attempt < maxAttempts &&
+      Date.now() - callPayload.purchaseDateMs < 5 * 60 * 1000;
+
+    if (!shouldRetryExpired) {
+      break;
+    }
+
+    // StoreKit receipts can briefly lag right after auth/purchase confirmation.
+    await new Promise((resolve) => setTimeout(resolve, attempt * 3000));
+  }
+
   const status = data.status || null;
   if (!status) {
     throw new Error('Subscription sync failed: backend did not return a subscription status.');
