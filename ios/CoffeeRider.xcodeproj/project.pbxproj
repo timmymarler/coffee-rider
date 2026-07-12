@@ -309,6 +309,7 @@
 				"${PODS_CONFIGURATION_BUILD_DIR}/StripeUICore/StripeUICoreBundle.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/expo-dev-launcher/EXDevLauncher.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/expo-dev-menu/EXDevMenu.bundle",
+				"${PODS_ROOT}/openiap/openiap-versions.json",
 			);
 			name = "[CP] Copy Pods Resources";
 			outputPaths = (
@@ -337,6 +338,7 @@
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/StripeUICoreBundle.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXDevLauncher.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXDevMenu.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/openiap-versions.json",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -390,7 +392,7 @@
 				CODE_SIGN_ENTITLEMENTS = CoffeeRider/CoffeeRider.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-																			CURRENT_PROJECT_VERSION = 103;
+				CURRENT_PROJECT_VERSION = 103;
 				DEVELOPMENT_TEAM = U5W34H5KWD;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -403,7 +405,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-																			MARKETING_VERSION = 2.31.46;
+				MARKETING_VERSION = 2.31.46;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -429,7 +431,7 @@
 				CODE_SIGN_ENTITLEMENTS = CoffeeRider/CoffeeRider.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-																			CURRENT_PROJECT_VERSION = 103;
+				CURRENT_PROJECT_VERSION = 103;
 				DEVELOPMENT_TEAM = U5W34H5KWD;
 				INFOPLIST_FILE = CoffeeRider/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -437,7 +439,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-																			MARKETING_VERSION = 2.31.46;
+				MARKETING_VERSION = 2.31.46;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
