@@ -1,13 +1,16 @@
 import { activateAppleSubscription, APPLE_SUBSCRIPTION_PRODUCTS } from '@core/payments/stripeService';
 import { debugLog } from '@core/utils/debugLog';
+import Constants from 'expo-constants';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 let iap = null;
+let iapRequireError = null;
 try {
   iap = require('react-native-iap');
-} catch (_) {
+} catch (err) {
   iap = null;
+  iapRequireError = err;
 }
 
 const APPLE_PRODUCT_TO_PLAN = {
@@ -263,6 +266,13 @@ function queueDebugLog(tag, message, data = null) {
   debugLog(tag, message, data).catch(() => {});
 }
 
+function getRuntimeInfo() {
+  return {
+    executionEnvironment: Constants?.executionEnvironment || null,
+    appOwnership: Constants?.appOwnership || null,
+  };
+}
+
 async function fetchStoreProductsResilient(skus) {
   const skuList = Array.isArray(skus) ? skus.filter(Boolean) : [];
   if (!skuList.length) return [];
@@ -339,6 +349,7 @@ async function requestSubscriptionResilient(sku) {
 }
 
 export function useAppleSubscriptionV2({ user }) {
+  const iapAvailable = Platform.OS === 'ios' && Boolean(iap);
   const [phase, setPhase] = useState('idle');
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -452,9 +463,16 @@ export function useAppleSubscriptionV2({ user }) {
 
   const loadProducts = useCallback(async () => {
     if (Platform.OS !== 'ios' || !iap) {
+      const unavailableError = new Error(
+        'Apple IAP is unavailable in this runtime. If this is a local iOS build, rebuild the app so native modules are refreshed. Expo Go does not include Apple IAP.'
+      );
+      setLastLoadError(unavailableError);
+      setPhase('error');
       queueDebugLog('APPLE_IAP', 'Skipping App Store plan load', {
         platform: Platform.OS,
         iapAvailable: Boolean(iap),
+        iapRequireError: iapRequireError?.message || String(iapRequireError || ''),
+        ...getRuntimeInfo(),
       });
       return [];
     }
@@ -733,32 +751,6 @@ export function useAppleSubscriptionV2({ user }) {
     }
   }, [availableSkus, ensureIapConnection, syncPurchaseToProfile, user?.uid]);
 
-  const waitForActivationWindow = useCallback(
-    async ({ maxAttempts = 10, delayMs = 6000 } = {}) => {
-      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-        try {
-          const restoreResult = await restorePurchases();
-          if (restoreResult?.restored) {
-            return restoreResult;
-          }
-        } catch (err) {
-          queueDebugLog('APPLE_IAP', 'Activation polling attempt failed', {
-            attempt,
-            maxAttempts,
-            error: err?.message || String(err),
-          });
-        }
-
-        if (attempt < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-        }
-      }
-
-      return { restored: false };
-    },
-    [restorePurchases]
-  );
-
   const subscribeToPlan = useCallback(
     async (planId) => {
       if (!user?.uid) {
@@ -803,15 +795,10 @@ export function useAppleSubscriptionV2({ user }) {
           setPhase('validating');
           const activation = await syncPurchaseToProfile(purchase, { finish: true });
           if (activation?.status !== 'active') {
-            const restoreResult = await waitForActivationWindow();
-            if (restoreResult?.restored) {
-              const restoredResult = { success: true, restored: true, activation: restoreResult.activation, attemptId };
-              resolvePurchaseOperation(restoredResult);
-              clearSettledPurchaseOperation();
-              setPhase('active');
-              return restoredResult;
-            }
-
+            queueDebugLog('APPLE_IAP', 'Purchase accepted but activation still pending', {
+              attemptId,
+              planId,
+            });
             setPhase('pending_activation');
             return { pending: true, attemptId };
           }
@@ -848,12 +835,10 @@ export function useAppleSubscriptionV2({ user }) {
           String(err?.message || '').toLowerCase().includes('timed out');
 
         if (timedOutWaitingForProcessing) {
-          const restoreResult = await waitForActivationWindow();
-          if (restoreResult?.restored) {
-            setPhase('active');
-            return { success: true, restored: true, attemptId };
-          }
-
+          queueDebugLog('APPLE_IAP', 'Purchase flow timed out while awaiting StoreKit update', {
+            attemptId,
+            planId,
+          });
           setPhase('pending_activation');
           return { pending: true, attemptId };
         }
@@ -880,7 +865,6 @@ export function useAppleSubscriptionV2({ user }) {
       reloadProducts,
       resolvePurchaseOperation,
       restorePurchases,
-      waitForActivationWindow,
       syncPurchaseToProfile,
       lastLoadError,
       user?.uid,
@@ -888,6 +872,7 @@ export function useAppleSubscriptionV2({ user }) {
   );
 
   return {
+    iapAvailable,
     phase,
     products,
     productsByPlan,

@@ -30,6 +30,7 @@ export default function SubscriptionsScreen() {
   const {
     subscribeToPlan: purchaseApplePlan,
     restorePurchases: restoreApplePurchases,
+    iapAvailable,
     loadingProducts: loadingAppleProducts,
     lastLoadError: appleLoadError,
     reloadProducts: reloadAppleProducts,
@@ -131,6 +132,7 @@ export default function SubscriptionsScreen() {
   const hasActiveSubscription = isSubscribed();
   const isCurrentlyInTrial = isInTrial();
   const isCancellationScheduled = Boolean(subscription?.cancelAtPeriodEnd);
+  const appleActionsDisabled = processing || loadingAppleProducts || !iapAvailable;
 
   const formatDate = (date) => {
     if (!date) return '';
@@ -276,7 +278,7 @@ export default function SubscriptionsScreen() {
                   isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
                   onPress={() => handleApplePurchase('annual')}
                   processing={processing && selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
-                  disabled={processing || loadingAppleProducts}
+                  disabled={appleActionsDisabled}
                   theme={theme}
                 />
 
@@ -286,21 +288,33 @@ export default function SubscriptionsScreen() {
                   isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
                   onPress={() => handleApplePurchase('monthly')}
                   processing={processing && selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
-                  disabled={processing || loadingAppleProducts}
+                  disabled={appleActionsDisabled}
                   theme={theme}
                 />
 
                 {/* Restore Purchases Button */}
                 <Pressable
                   onPress={handleAppleRestore}
-                  disabled={processing || loadingAppleProducts}
+                  disabled={appleActionsDisabled}
                 >
                   <View style={[styles.restoreButton, { backgroundColor: theme.colors.primaryLight }]}>
                     <Text style={[styles.restoreButtonText, { color: theme.colors.accentMid }]}>
-                      {processing ? 'Restoring...' : loadingAppleProducts ? 'Loading App Store...' : 'Restore Purchases'}
+                      {processing
+                        ? 'Restoring...'
+                        : loadingAppleProducts
+                        ? 'Loading App Store...'
+                        : !iapAvailable
+                        ? 'Apple IAP Unavailable'
+                        : 'Restore Purchases'}
                     </Text>
                   </View>
                 </Pressable>
+
+                {!iapAvailable && !processing && (
+                  <Text style={[styles.trialNote, { color: theme.colors.textMuted, marginTop: 12 }]}> 
+                    Apple subscriptions are not available in this runtime. Use a local iOS development build or TestFlight. Expo Go does not include Apple IAP.
+                  </Text>
+                )}
 
                 {appleLoadError && !processing && (
                   <Text style={[styles.trialNote, { color: theme.colors.danger, marginTop: 12 }]}> 
