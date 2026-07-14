@@ -7,7 +7,7 @@ import { useStripeSubscription } from '@core/payments/useStripeSubscription';
 import { useAppleSubscriptionV2 } from '@core/payments/useAppleSubscriptionV2';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -19,6 +19,15 @@ import {
     View,
 } from 'react-native';
 
+const ENTITLEMENT_SYNC_MAX_ATTEMPTS = 10;
+const ENTITLEMENT_SYNC_INTERVAL_MS = 2500;
+const ENTITLEMENT_SYNC_SUCCESS_BANNER_MS = 3000;
+const UPGRADE_TIP_BANNER_MS = 3500;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function SubscriptionsScreen() {
   const router = useRouter();
   const { user, refreshProfile } = useContext(AuthContext);
@@ -26,6 +35,11 @@ export default function SubscriptionsScreen() {
   const theme = useTheme();
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [syncingEntitlement, setSyncingEntitlement] = useState(false);
+  const [showEntitlementSynced, setShowEntitlementSynced] = useState(false);
+  const [showUpgradeTip, setShowUpgradeTip] = useState(false);
+  const entitlementSyncedTimerRef = useRef(null);
+  const upgradeTipTimerRef = useRef(null);
   const { subscribeToPlan, status: stripeStatus } = useStripeSubscription();
   const {
     subscribeToPlan: purchaseApplePlan,
@@ -47,6 +61,70 @@ export default function SubscriptionsScreen() {
     reloadAppleProducts().catch(() => {});
   }, [isIOS, isIOSSubscriptionsDisabled, reloadAppleProducts]);
 
+  useEffect(() => {
+    return () => {
+      if (entitlementSyncedTimerRef.current) {
+        clearTimeout(entitlementSyncedTimerRef.current);
+        entitlementSyncedTimerRef.current = null;
+      }
+
+      if (upgradeTipTimerRef.current) {
+        clearTimeout(upgradeTipTimerRef.current);
+        upgradeTipTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const showUpgradeTipBanner = useCallback(() => {
+    if (upgradeTipTimerRef.current) {
+      clearTimeout(upgradeTipTimerRef.current);
+      upgradeTipTimerRef.current = null;
+    }
+
+    setShowUpgradeTip(true);
+    upgradeTipTimerRef.current = setTimeout(() => {
+      setShowUpgradeTip(false);
+      upgradeTipTimerRef.current = null;
+    }, UPGRADE_TIP_BANNER_MS);
+  }, []);
+
+  const showEntitlementSyncedBanner = useCallback(() => {
+    if (entitlementSyncedTimerRef.current) {
+      clearTimeout(entitlementSyncedTimerRef.current);
+      entitlementSyncedTimerRef.current = null;
+    }
+
+    if (upgradeTipTimerRef.current) {
+      clearTimeout(upgradeTipTimerRef.current);
+      upgradeTipTimerRef.current = null;
+    }
+
+    setShowUpgradeTip(false);
+
+    setShowEntitlementSynced(true);
+    entitlementSyncedTimerRef.current = setTimeout(() => {
+      setShowEntitlementSynced(false);
+      entitlementSyncedTimerRef.current = null;
+      showUpgradeTipBanner();
+    }, ENTITLEMENT_SYNC_SUCCESS_BANNER_MS);
+  }, [showUpgradeTipBanner]);
+
+  const waitForEntitlementSync = useCallback(async () => {
+    for (let attempt = 1; attempt <= ENTITLEMENT_SYNC_MAX_ATTEMPTS; attempt += 1) {
+      await refreshProfile();
+
+      if (isSubscribed() || isInTrial()) {
+        return true;
+      }
+
+      if (attempt < ENTITLEMENT_SYNC_MAX_ATTEMPTS) {
+        await sleep(ENTITLEMENT_SYNC_INTERVAL_MS);
+      }
+    }
+
+    return false;
+  }, [isInTrial, isSubscribed, refreshProfile]);
+
   const handleApplePurchase = async (planId) => {
     try {
       setSelectedPlan(planId);
@@ -58,18 +136,29 @@ export default function SubscriptionsScreen() {
       }
 
       if (result?.pending) {
-        Alert.alert(
-          'Purchase Processing',
-          'Apple has accepted your purchase and we are still syncing your subscription. Please wait a moment, then tap Restore Purchases if Pro access is not visible yet.'
-        );
-        await refreshProfile();
+        setSyncingEntitlement(true);
+        const synced = await waitForEntitlementSync();
+        if (synced) {
+          showEntitlementSyncedBanner();
+        }
+        if (!synced) {
+          Alert.alert(
+            'Purchase Processing',
+            'Apple has accepted your purchase and we are still syncing your subscription. Please wait a moment, then tap Restore Purchases if Pro access is not visible yet.'
+          );
+        }
         return;
       }
 
-      await refreshProfile();
+      setSyncingEntitlement(true);
+      const synced = await waitForEntitlementSync();
+      if (synced) {
+        showEntitlementSyncedBanner();
+      }
     } catch (err) {
       Alert.alert('Apple Subscription', err?.message || 'Unable to purchase right now. Please try again.');
     } finally {
+      setSyncingEntitlement(false);
       setProcessing(false);
       setSelectedPlan(null);
     }
@@ -85,10 +174,15 @@ export default function SubscriptionsScreen() {
         Alert.alert('No Purchases Found', 'No active Apple subscription was found for this Apple ID.');
       }
 
-      await refreshProfile();
+      setSyncingEntitlement(true);
+      const synced = await waitForEntitlementSync();
+      if (synced) {
+        showEntitlementSyncedBanner();
+      }
     } catch (err) {
       Alert.alert('Restore Purchases', err?.message || 'Unable to restore right now. Please try again.');
     } finally {
+      setSyncingEntitlement(false);
       setProcessing(false);
     }
   };
@@ -112,10 +206,15 @@ export default function SubscriptionsScreen() {
         'Your Pro subscription is now active. You have access to all Pro features.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
-      await refreshProfile();
+      setSyncingEntitlement(true);
+      const synced = await waitForEntitlementSync();
+      if (synced) {
+        showEntitlementSyncedBanner();
+      }
     } catch (err) {
       Alert.alert('Error', err.message || 'Payment failed');
     } finally {
+      setSyncingEntitlement(false);
       setProcessing(false);
       setSelectedPlan(null);
     }
@@ -133,7 +232,7 @@ export default function SubscriptionsScreen() {
   const hasActiveSubscription = isSubscribed();
   const isCurrentlyInTrial = isInTrial();
   const isCancellationScheduled = Boolean(subscription?.cancelAtPeriodEnd);
-  const appleActionsDisabled = processing || loadingAppleProducts || !iapAvailable;
+  const appleActionsDisabled = processing || syncingEntitlement || loadingAppleProducts || !iapAvailable;
   const annualApplePrice =
     appleProductsByPlan?.annual?.displayPrice ||
     appleProductsByPlan?.annual?.localizedPrice ||
@@ -222,6 +321,36 @@ export default function SubscriptionsScreen() {
             size={24}
             color={theme.colors.text}
           />
+        </View>
+      )}
+
+      {syncingEntitlement && (
+        <View style={[styles.statusCard, { backgroundColor: theme.colors.primaryLight }]}> 
+          <ActivityIndicator size="small" color={theme.colors.accentMid} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.statusTitle, { color: theme.colors.text }]}>Processing upgrade</Text>
+            <Text style={[styles.statusText, { color: theme.colors.textLight }]}>Finalizing your Pro access...</Text>
+          </View>
+        </View>
+      )}
+
+      {showEntitlementSynced && (
+        <View style={[styles.statusCard, { backgroundColor: theme.colors.primary }]}> 
+          <MaterialCommunityIcons name="check-circle" size={24} color={theme.colors.text} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.statusTitle, { color: theme.colors.text }]}>Pro access active</Text>
+            <Text style={[styles.statusText, { color: theme.colors.textLight }]}>Your upgrade is now available in the app.</Text>
+          </View>
+        </View>
+      )}
+
+      {showUpgradeTip && (
+        <View style={[styles.statusCard, { backgroundColor: theme.colors.accentMid }]}> 
+          <MaterialCommunityIcons name="map-marker-multiple" size={24} color={theme.colors.text} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.statusTitle, { color: theme.colors.text }]}>Next tip</Text>
+            <Text style={[styles.statusText, { color: theme.colors.textLight }]}>Tap Place Markers to view details. Long press anywhere for actions. Try filters and route options to personalise your session.</Text>
+          </View>
         </View>
       )}
 
@@ -318,6 +447,8 @@ export default function SubscriptionsScreen() {
                     <Text style={[styles.restoreButtonText, { color: theme.colors.accentMid }]}>
                       {processing
                         ? 'Restoring...'
+                        : syncingEntitlement
+                        ? 'Finalizing...'
                         : loadingAppleProducts
                         ? 'Loading App Store...'
                         : !iapAvailable
