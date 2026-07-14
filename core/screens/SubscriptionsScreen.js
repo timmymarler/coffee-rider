@@ -30,6 +30,7 @@ export default function SubscriptionsScreen() {
   const {
     subscribeToPlan: purchaseApplePlan,
     restorePurchases: restoreApplePurchases,
+    productsByPlan: appleProductsByPlan,
     iapAvailable,
     loadingProducts: loadingAppleProducts,
     lastLoadError: appleLoadError,
@@ -133,6 +134,22 @@ export default function SubscriptionsScreen() {
   const isCurrentlyInTrial = isInTrial();
   const isCancellationScheduled = Boolean(subscription?.cancelAtPeriodEnd);
   const appleActionsDisabled = processing || loadingAppleProducts || !iapAvailable;
+  const annualApplePrice =
+    appleProductsByPlan?.annual?.displayPrice ||
+    appleProductsByPlan?.annual?.localizedPrice ||
+    appleProductsByPlan?.annual?.priceString ||
+    null;
+  const monthlyApplePrice =
+    appleProductsByPlan?.monthly?.displayPrice ||
+    appleProductsByPlan?.monthly?.localizedPrice ||
+    appleProductsByPlan?.monthly?.priceString ||
+    null;
+  const annualPlanForDisplay = annualApplePrice
+    ? { ...SUBSCRIPTION_PLANS.ANNUAL, price: annualApplePrice }
+    : SUBSCRIPTION_PLANS.ANNUAL;
+  const monthlyPlanForDisplay = monthlyApplePrice
+    ? { ...SUBSCRIPTION_PLANS.MONTHLY, price: monthlyApplePrice }
+    : SUBSCRIPTION_PLANS.MONTHLY;
 
   const formatDate = (date) => {
     if (!date) return '';
@@ -274,7 +291,7 @@ export default function SubscriptionsScreen() {
 
                 {/* Annual Plan */}
                 <PricingCard
-                  plan={SUBSCRIPTION_PLANS.ANNUAL}
+                  plan={annualPlanForDisplay}
                   isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
                   onPress={() => handleApplePurchase('annual')}
                   processing={processing && selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
@@ -284,7 +301,7 @@ export default function SubscriptionsScreen() {
 
                 {/* Monthly Plan */}
                 <PricingCard
-                  plan={SUBSCRIPTION_PLANS.MONTHLY}
+                  plan={monthlyPlanForDisplay}
                   isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
                   onPress={() => handleApplePurchase('monthly')}
                   processing={processing && selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}

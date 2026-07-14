@@ -18,12 +18,32 @@ const APPLE_PRODUCT_TO_PLAN = {
   [APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL]: 'annual',
 };
 
+const CANONICAL_APPLE_SUBSCRIPTION_PRODUCTS = {
+  MONTHLY: 'com.timmy.marler.coffeerider.pro.monthly.v3',
+  ANNUAL: 'com.timmy.marler.coffeerider.pro.annual.v3',
+};
+
 function normalizeId(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function stripVersionSuffix(productId) {
-  return String(productId || '').trim().replace(/\.v\d+$/i, '');
+function normalizeSkuValue(value) {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (typeof value === 'number') {
+    return String(value);
+  }
+
+  if (value && typeof value === 'object') {
+    const nestedValue = value.sku || value.id || value.productId || value.productID || null;
+    if (typeof nestedValue === 'string') {
+      return nestedValue.trim();
+    }
+  }
+
+  return '';
 }
 
 function resolvePlanIdFromProduct(product) {
@@ -240,18 +260,18 @@ function withTimeout(promise, timeoutMs, timeoutMessage) {
   ]);
 }
 
-async function fetchAvailablePurchasesResilient() {
+async function fetchAvailablePurchasesResilient({ onlyIncludeActiveItemsIOS = true } = {}) {
   // Primary path for iOS subscriptions.
   try {
     return await withTimeout(
-      iap.getAvailablePurchases({ onlyIncludeActiveItemsIOS: true }),
+      iap.getAvailablePurchases({ onlyIncludeActiveItemsIOS }),
       45000,
       'Timed out restoring purchases from Apple.'
     );
   } catch (firstErr) {
     // Fallback path for SDK/StoreKit variants that do not like the iOS-only option.
     return withTimeout(
-      iap.getAvailablePurchases(),
+      iap.getAvailablePurchases({ onlyIncludeActiveItemsIOS }),
       45000,
       `Timed out restoring purchases from Apple. (${firstErr?.message || 'initial restore failed'})`
     );
@@ -273,31 +293,123 @@ function getRuntimeInfo() {
   };
 }
 
+async function getStorefrontCodeResilient() {
+  if (!iap || Platform.OS !== 'ios') return null;
+
+  if (typeof iap?.getStorefront === 'function') {
+    try {
+      const storefront = await withTimeout(
+        iap.getStorefront(),
+        5000,
+        'Timed out getting App Store storefront.'
+      );
+      return storefront ? String(storefront).trim() : null;
+    } catch (_) {
+      // Fallback below.
+    }
+  }
+
+  if (typeof iap?.getStorefrontIOS === 'function') {
+    try {
+      const storefront = await withTimeout(
+        iap.getStorefrontIOS(),
+        5000,
+        'Timed out getting App Store storefront.'
+      );
+      return storefront ? String(storefront).trim() : null;
+    } catch (_) {
+      // Ignore storefront lookup failures; this is diagnostic only.
+    }
+  }
+
+  return null;
+}
+
 async function fetchStoreProductsResilient(skus) {
-  const skuList = Array.isArray(skus) ? skus.filter(Boolean) : [];
+  const skuList = Array.isArray(skus)
+    ? Array.from(new Set(skus.map((value) => normalizeSkuValue(value)).filter(Boolean)))
+    : [];
   if (!skuList.length) return [];
 
   const attempts = [];
 
+  // RN-IAP v15+ expects fetchProducts({ skus, type }) for subscriptions.
   if (typeof iap?.fetchProducts === 'function') {
-    attempts.push(() => iap.fetchProducts({ skus: skuList, type: 'subs' }));
-    attempts.push(() => iap.fetchProducts({ skus: skuList }));
+    attempts.push({
+      label: 'fetchProducts_subs_batch',
+      run: () => iap.fetchProducts({ skus: skuList, type: 'subs' }),
+    });
+    attempts.push({
+      label: 'fetchProducts_all_batch',
+      run: () => iap.fetchProducts({ skus: skuList, type: 'all' }),
+    });
   }
-  if (typeof iap?.getSubscriptions === 'function') {
-    attempts.push(() => iap.getSubscriptions({ skus: skuList }));
-    attempts.push(() => iap.getSubscriptions(skuList));
+
+  // Legacy fallback for older RN-IAP versions.
+  if (!attempts.length && typeof iap?.getSubscriptions === 'function') {
+    attempts.push({
+      label: 'getSubscriptions_batch',
+      run: () => iap.getSubscriptions(skuList),
+    });
   }
 
   let lastErr = null;
-  for (const run of attempts) {
+  for (const attempt of attempts) {
     try {
-      const result = await withTimeout(run(), 15000, 'Timed out loading App Store products.');
+      const result = await withTimeout(
+        attempt.run(),
+        15000,
+        'Timed out loading App Store products.'
+      );
       const products = normalizeProductsResult(result);
+      queueDebugLog('APPLE_IAP', 'Store product fetch attempt completed', {
+        strategy: attempt.label,
+        requestedSkuCount: skuList.length,
+        returnedCount: products.length,
+      });
       if (products.length > 0) {
         return products;
       }
     } catch (err) {
       lastErr = err;
+      queueDebugLog('APPLE_IAP', 'Store product fetch attempt failed', {
+        strategy: attempt.label,
+        error: err?.message || String(err),
+        code: err?.code || null,
+      });
+    }
+  }
+
+  // Some StoreKit/RN-IAP combos return empty for mixed SKU lists; try one-by-one.
+  if (typeof iap?.fetchProducts === 'function' && skuList.length > 1) {
+    const collectedById = new Map();
+
+    for (const sku of skuList) {
+      try {
+        const result = await withTimeout(
+          iap.fetchProducts({ skus: [sku], type: 'subs' }),
+          15000,
+          'Timed out loading App Store products.'
+        );
+        const products = normalizeProductsResult(result);
+        for (const product of products) {
+          const id = String(product?.id || product?.productId || product?.sku || '').trim();
+          if (id) {
+            collectedById.set(id, product);
+          }
+        }
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+
+    const singleSkuProducts = Array.from(collectedById.values());
+    queueDebugLog('APPLE_IAP', 'Store product single-SKU fallback completed', {
+      requestedSkuCount: skuList.length,
+      returnedCount: singleSkuProducts.length,
+    });
+    if (singleSkuProducts.length > 0) {
+      return singleSkuProducts;
     }
   }
 
@@ -316,21 +428,21 @@ async function requestSubscriptionResilient(sku) {
 
   const attempts = [];
 
+  // On iOS, requestSubscription tends to provide more consistent subscription flow behavior.
+  if (typeof iap?.requestSubscription === 'function') {
+    attempts.push(() => iap.requestSubscription({ sku: skuValue }));
+    attempts.push(() => iap.requestSubscription(skuValue));
+  }
+
   if (typeof iap?.requestPurchase === 'function') {
     attempts.push(() =>
       iap.requestPurchase({
         type: 'subs',
         request: {
-          ios: { sku: skuValue },
           apple: { sku: skuValue },
         },
       })
     );
-  }
-
-  if (typeof iap?.requestSubscription === 'function') {
-    attempts.push(() => iap.requestSubscription({ sku: skuValue }));
-    attempts.push(() => iap.requestSubscription(skuValue));
   }
 
   let lastErr = null;
@@ -346,6 +458,59 @@ async function requestSubscriptionResilient(sku) {
   }
 
   throw lastErr || new Error('Unable to start Apple subscription purchase.');
+}
+
+async function waitForMatchingAppleTransactionResilient({ skuCandidates = [], timeoutMs = 150000, pollMs = 5000 } = {}) {
+  if (Platform.OS !== 'ios' || !iap) return null;
+
+  const normalizedSkuSet = new Set(
+    (Array.isArray(skuCandidates) ? skuCandidates : [])
+      .map((value) => normalizeSkuValue(value))
+      .filter(Boolean)
+  );
+  if (!normalizedSkuSet.size) return null;
+
+  const deadline = Date.now() + Math.max(1000, Number(timeoutMs) || 150000);
+
+  while (Date.now() < deadline) {
+    const history = [];
+
+    if (typeof iap?.getPendingTransactionsIOS === 'function') {
+      try {
+        const pending = await iap.getPendingTransactionsIOS();
+        if (Array.isArray(pending) && pending.length) {
+          history.push(...pending);
+        }
+      } catch (_) {
+        // Best-effort polling path.
+      }
+    }
+
+    if (typeof iap?.getAllTransactionsIOS === 'function') {
+      try {
+        const allTransactions = await iap.getAllTransactionsIOS();
+        if (Array.isArray(allTransactions) && allTransactions.length) {
+          history.push(...allTransactions);
+        }
+      } catch (_) {
+        // Best-effort polling path.
+      }
+    }
+
+    const latestMatch = history
+      .filter((purchase) => normalizedSkuSet.has(normalizeSkuValue(getPurchaseProductId(purchase))))
+      .sort((a, b) => Number(normalizePurchaseDateMs(b) || 0) - Number(normalizePurchaseDateMs(a) || 0))[0];
+
+    if (latestMatch) {
+      return latestMatch;
+    }
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(pollMs, remainingMs)));
+  }
+
+  return null;
 }
 
 export function useAppleSubscriptionV2({ user }) {
@@ -374,6 +539,9 @@ export function useAppleSubscriptionV2({ user }) {
     const promise = new Promise((resolve, reject) => {
       resolveOp = resolve;
       rejectOp = reject;
+    });
+    promise.catch(() => {
+      // Prevent unhandled rejection noise when StoreKit callbacks arrive after local timeout.
     });
 
     const operation = {
@@ -413,6 +581,12 @@ export function useAppleSubscriptionV2({ user }) {
     purchaseOperationRef.current = null;
   }, []);
 
+  const abandonPurchaseOperation = useCallback(() => {
+    const operation = purchaseOperationRef.current;
+    if (!operation || operation.settled) return;
+    purchaseOperationRef.current = null;
+  }, []);
+
   const beginPurchaseFlow = useCallback(() => {
     purchaseFlowActiveRef.current = true;
   }, []);
@@ -424,14 +598,16 @@ export function useAppleSubscriptionV2({ user }) {
   const availableSkus = useMemo(() => {
     const monthly = APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY;
     const annual = APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL;
-    const skuSet = new Set([monthly, annual].filter(Boolean));
+    const skuSet = new Set([
+      monthly,
+      annual,
+      CANONICAL_APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY,
+      CANONICAL_APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL,
+    ]);
 
-    const monthlyAlias = stripVersionSuffix(monthly);
-    const annualAlias = stripVersionSuffix(annual);
-    if (monthlyAlias) skuSet.add(monthlyAlias);
-    if (annualAlias) skuSet.add(annualAlias);
-
-    return Array.from(skuSet);
+    return Array.from(skuSet)
+      .map((value) => normalizeSkuValue(value))
+      .filter(Boolean);
   }, []);
 
   const productsByPlan = useMemo(() => {
@@ -479,6 +655,16 @@ export function useAppleSubscriptionV2({ user }) {
 
     setPhase('loading_products');
     let lastErr = null;
+    let storefrontCode = null;
+
+    try {
+      storefrontCode = await getStorefrontCodeResilient();
+      queueDebugLog('APPLE_IAP', 'Resolved App Store storefront', {
+        storefront: storefrontCode,
+      });
+    } catch (_) {
+      // Ignore storefront lookup failures; product loading can proceed without it.
+    }
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       if (attempt > 1) {
@@ -489,6 +675,8 @@ export function useAppleSubscriptionV2({ user }) {
         attempt,
         maxAttempts: 3,
         skuCount: availableSkus.length,
+        skus: availableSkus,
+        storefront: storefrontCode,
       });
 
       try {
@@ -585,7 +773,12 @@ export function useAppleSubscriptionV2({ user }) {
           purchase.receiptData ||
           (iap?.getReceiptIOS ? await iap.getReceiptIOS() : null);
 
-        if (!receiptData) {
+        const refreshedReceiptData =
+          receiptData ||
+          (iap?.requestReceiptRefreshIOS ? await iap.requestReceiptRefreshIOS() : null) ||
+          (iap?.getReceiptDataIOS ? await iap.getReceiptDataIOS() : null);
+
+        if (!refreshedReceiptData) {
           throw new Error('Unable to validate purchase receipt. Please use Restore Purchases.');
         }
 
@@ -596,7 +789,7 @@ export function useAppleSubscriptionV2({ user }) {
           transactionId,
           originalTransactionId,
           purchaseDateMs: normalizePurchaseDateMs(purchase),
-          receiptData,
+          receiptData: refreshedReceiptData,
         });
 
         if (finish && iap) {
@@ -666,13 +859,13 @@ export function useAppleSubscriptionV2({ user }) {
     return () => {
       purchaseUpdateSubscription.remove();
       purchaseErrorSubscription.remove();
-      rejectPurchaseOperation(new Error('Purchase flow was interrupted. Please try again.'));
+      abandonPurchaseOperation();
       endPurchaseFlow();
       iap.endConnection().catch(() => {});
     };
-  }, [endPurchaseFlow, rejectPurchaseOperation, resolvePurchaseOperation, syncPurchaseToProfile]);
+  }, [abandonPurchaseOperation, endPurchaseFlow, resolvePurchaseOperation, syncPurchaseToProfile]);
 
-  const restorePurchases = useCallback(async () => {
+  const restorePurchases = useCallback(async ({ includeInactiveHistory = false, skipRateLimit = false, allowInteractiveSync = false } = {}) => {
     if (!user?.uid) {
       throw new Error('Please log in first');
     }
@@ -684,7 +877,7 @@ export function useAppleSubscriptionV2({ user }) {
       setPhase('restoring');
 
       const now = Date.now();
-      if (now - lastRestoreAttemptRef.current < 4000) {
+      if (!skipRateLimit && now - lastRestoreAttemptRef.current < 4000) {
         throw new Error('Restore already in progress. Please wait a few seconds and try again.');
       }
       lastRestoreAttemptRef.current = now;
@@ -692,11 +885,25 @@ export function useAppleSubscriptionV2({ user }) {
       if (!iap) throw new Error('Apple IAP is not available in this build.');
       await ensureIapConnection();
 
+      if (allowInteractiveSync && typeof iap?.syncIOS === 'function') {
+        try {
+          await withTimeout(iap.syncIOS(), 35000, 'Timed out syncing iOS purchases.');
+          queueDebugLog('APPLE_IAP', 'syncIOS completed before restore');
+        } catch (syncErr) {
+          queueDebugLog('APPLE_IAP', 'syncIOS failed before restore', {
+            error: syncErr?.message || String(syncErr),
+            code: syncErr?.code || null,
+          });
+        }
+      }
+
       let purchases = null;
       let lastErr = null;
       for (let attempt = 1; attempt <= 2; attempt += 1) {
         try {
-          purchases = await fetchAvailablePurchasesResilient();
+          purchases = await fetchAvailablePurchasesResilient({
+            onlyIncludeActiveItemsIOS: !includeInactiveHistory,
+          });
           lastErr = null;
           break;
         } catch (err) {
@@ -717,20 +924,63 @@ export function useAppleSubscriptionV2({ user }) {
         throw lastErr;
       }
 
-      const appleSubscriptions = (purchases || [])
-        .filter((purchase) => availableSkus.includes(purchase.productId))
+      const allHistory = [...(purchases || [])];
+      if (typeof iap?.getPendingTransactionsIOS === 'function') {
+        try {
+          const pendingTransactions = await iap.getPendingTransactionsIOS();
+          if (Array.isArray(pendingTransactions) && pendingTransactions.length) {
+            allHistory.push(...pendingTransactions);
+            queueDebugLog('APPLE_IAP', 'Loaded pending iOS transactions for restore', {
+              count: pendingTransactions.length,
+            });
+          }
+        } catch (pendingErr) {
+          queueDebugLog('APPLE_IAP', 'Failed to load pending iOS transactions for restore', {
+            error: pendingErr?.message || String(pendingErr),
+            code: pendingErr?.code || null,
+          });
+        }
+      }
+
+      if (typeof iap?.getAllTransactionsIOS === 'function') {
+        try {
+          const allTransactions = await iap.getAllTransactionsIOS();
+          if (Array.isArray(allTransactions) && allTransactions.length) {
+            allHistory.push(...allTransactions);
+            queueDebugLog('APPLE_IAP', 'Loaded full iOS transaction history for restore', {
+              count: allTransactions.length,
+            });
+          }
+        } catch (historyErr) {
+          queueDebugLog('APPLE_IAP', 'Failed to load full iOS transaction history for restore', {
+            error: historyErr?.message || String(historyErr),
+            code: historyErr?.code || null,
+          });
+        }
+      }
+
+      const appleSubscriptions = allHistory
+        .filter((purchase) => availableSkus.includes(getPurchaseProductId(purchase)))
         .sort((a, b) => Number(b.transactionDate || 0) - Number(a.transactionDate || 0));
 
       let latest = appleSubscriptions[0];
-      if (!latest && typeof iap?.getAllTransactionsIOS === 'function') {
-        const allTransactions = await iap.getAllTransactionsIOS();
-        latest = (allTransactions || [])
-          .filter((purchase) => availableSkus.includes(getPurchaseProductId(purchase)))
-          .sort((a, b) => Number(normalizePurchaseDateMs(b) || 0) - Number(normalizePurchaseDateMs(a) || 0))[0];
-      }
 
       if (!latest) {
+        if (!includeInactiveHistory) {
+          // If active-only history is empty, escalate once to include full history.
+          return restorePurchases({
+            includeInactiveHistory: true,
+            skipRateLimit: true,
+            allowInteractiveSync: false,
+          });
+        }
+
         setPhase('ready');
+        queueDebugLog('APPLE_IAP', 'Restore did not find matching Apple subscription transactions', {
+          includeInactiveHistory,
+          availablePurchaseCount: Array.isArray(purchases) ? purchases.length : 0,
+          skuCount: availableSkus.length,
+        });
         return { restored: false };
       }
 
@@ -810,11 +1060,72 @@ export function useAppleSubscriptionV2({ user }) {
           return successResult;
         }
 
-        const listenerResult = await withTimeout(
-          operation.promise,
+        // If StoreKit accepted the request but no purchase payload was returned,
+        // try an immediate broad restore before falling back to listener wait.
+        try {
+          const immediateRestore = await restorePurchases({
+            includeInactiveHistory: true,
+            skipRateLimit: true,
+          });
+          if (immediateRestore?.restored) {
+            clearSettledPurchaseOperation();
+            setPhase('active');
+            return { success: true, restored: true, attemptId, fromListener: false };
+          }
+        } catch (restoreErr) {
+          queueDebugLog('APPLE_IAP', 'Immediate post-purchase restore attempt failed', {
+            attemptId,
+            error: restoreErr?.message || String(restoreErr),
+            code: restoreErr?.code || null,
+          });
+        }
+
+        const skuCandidates = Array.from(
+          new Set([
+            sku,
+            fallbackSku,
+            ...availableSkus,
+          ])
+        );
+
+        const listenerOrHistoryResult = await withTimeout(
+          Promise.race([
+            operation.promise.then((value) => ({ source: 'listener', value })),
+            waitForMatchingAppleTransactionResilient({
+              skuCandidates,
+              timeoutMs: 170000,
+              pollMs: 5000,
+            }).then((purchase) => ({ source: 'history', purchase })),
+          ]),
           180000,
           'Purchase processing timed out. Please use Restore Purchases.'
         );
+
+        if (listenerOrHistoryResult?.source === 'history' && listenerOrHistoryResult?.purchase) {
+          queueDebugLog('APPLE_IAP', 'Recovered purchase from iOS transaction history polling', {
+            attemptId,
+            planId,
+            productId: getPurchaseProductId(listenerOrHistoryResult.purchase),
+          });
+          setPhase('validating');
+          const activation = await syncPurchaseToProfile(listenerOrHistoryResult.purchase, { finish: false });
+          if (activation?.status === 'active') {
+            clearSettledPurchaseOperation();
+            setPhase('active');
+            return {
+              success: true,
+              purchase: listenerOrHistoryResult.purchase,
+              activation,
+              fromHistoryPoll: true,
+              attemptId,
+            };
+          }
+        }
+
+        const listenerResult = listenerOrHistoryResult?.value;
+        if (!listenerResult) {
+          throw new Error('Purchase processing timed out. Please use Restore Purchases.');
+        }
         clearSettledPurchaseOperation();
         setPhase('active');
         return { ...listenerResult, attemptId };
@@ -839,6 +1150,27 @@ export function useAppleSubscriptionV2({ user }) {
             attemptId,
             planId,
           });
+          abandonPurchaseOperation();
+
+          // Best-effort recovery: query broad iOS history once immediately after timeout.
+          try {
+            const recoveryRestore = await restorePurchases({
+              includeInactiveHistory: true,
+              skipRateLimit: true,
+              allowInteractiveSync: false,
+            });
+            if (recoveryRestore?.restored) {
+              setPhase('active');
+              return { success: true, restored: true, attemptId };
+            }
+          } catch (restoreErr) {
+            queueDebugLog('APPLE_IAP', 'Post-timeout restore attempt failed', {
+              attemptId,
+              error: restoreErr?.message || String(restoreErr),
+              code: restoreErr?.code || null,
+            });
+          }
+
           setPhase('pending_activation');
           return { pending: true, attemptId };
         }
@@ -855,6 +1187,7 @@ export function useAppleSubscriptionV2({ user }) {
       }
     },
     [
+      abandonPurchaseOperation,
       beginPurchaseFlow,
       beginPurchaseOperation,
       clearSettledPurchaseOperation,
@@ -866,6 +1199,7 @@ export function useAppleSubscriptionV2({ user }) {
       resolvePurchaseOperation,
       restorePurchases,
       syncPurchaseToProfile,
+      availableSkus,
       lastLoadError,
       user?.uid,
     ]
@@ -883,6 +1217,7 @@ export function useAppleSubscriptionV2({ user }) {
     purchaseError,
     lastLoadError,
     reloadProducts,
+    purchasePlan: subscribeToPlan,
     subscribeToPlan,
     restorePurchases,
   };
