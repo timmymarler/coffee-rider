@@ -109,6 +109,10 @@ export default function SubscriptionsScreen() {
     }, ENTITLEMENT_SYNC_SUCCESS_BANNER_MS);
   }, [showUpgradeTipBanner]);
 
+  const showPostUpgradeBanners = useCallback(() => {
+    showEntitlementSyncedBanner();
+  }, [showEntitlementSyncedBanner]);
+
   const waitForEntitlementSync = useCallback(async () => {
     for (let attempt = 1; attempt <= ENTITLEMENT_SYNC_MAX_ATTEMPTS; attempt += 1) {
       await refreshProfile();
@@ -136,11 +140,9 @@ export default function SubscriptionsScreen() {
       }
 
       if (result?.pending) {
+        showPostUpgradeBanners();
         setSyncingEntitlement(true);
         const synced = await waitForEntitlementSync();
-        if (synced) {
-          showEntitlementSyncedBanner();
-        }
         if (!synced) {
           Alert.alert(
             'Purchase Processing',
@@ -150,11 +152,9 @@ export default function SubscriptionsScreen() {
         return;
       }
 
+      showPostUpgradeBanners();
       setSyncingEntitlement(true);
-      const synced = await waitForEntitlementSync();
-      if (synced) {
-        showEntitlementSyncedBanner();
-      }
+      await waitForEntitlementSync();
     } catch (err) {
       Alert.alert('Apple Subscription', err?.message || 'Unable to purchase right now. Please try again.');
     } finally {
@@ -174,11 +174,9 @@ export default function SubscriptionsScreen() {
         Alert.alert('No Purchases Found', 'No active Apple subscription was found for this Apple ID.');
       }
 
+      showPostUpgradeBanners();
       setSyncingEntitlement(true);
-      const synced = await waitForEntitlementSync();
-      if (synced) {
-        showEntitlementSyncedBanner();
-      }
+      await waitForEntitlementSync();
     } catch (err) {
       Alert.alert('Restore Purchases', err?.message || 'Unable to restore right now. Please try again.');
     } finally {
@@ -206,11 +204,9 @@ export default function SubscriptionsScreen() {
         'Your Pro subscription is now active. You have access to all Pro features.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
+      showPostUpgradeBanners();
       setSyncingEntitlement(true);
-      const synced = await waitForEntitlementSync();
-      if (synced) {
-        showEntitlementSyncedBanner();
-      }
+      await waitForEntitlementSync();
     } catch (err) {
       Alert.alert('Error', err.message || 'Payment failed');
     } finally {
