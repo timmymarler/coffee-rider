@@ -14,8 +14,9 @@ end
 
 ENV['RCT_NEW_ARCH_ENABLED'] ||= '0' if podfile_properties['newArchEnabled'] == 'false'
 ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] ||= podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
-ENV['RCT_USE_RN_DEP'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
-ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
+# Avoid prebuilt RN core on simulator/Xcode toolchains where C++ symbols can mismatch.
+ENV['RCT_USE_RN_DEP'] = '0'
+ENV['RCT_USE_PREBUILT_RNCORE'] = '0'
 platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 
 prepare_react_native_project!
@@ -63,5 +64,32 @@ target 'CoffeeRider' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    # Xcode toolchain compatibility: ensure transitive Folly includes such as
+    # <folly/lang/Assume.h> always resolve from Pods public headers.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |build_config|
+        header_paths = build_config.build_settings['HEADER_SEARCH_PATHS'] || ['$(inherited)']
+        unless header_paths.is_a?(Array)
+          header_paths = [header_paths]
+        end
+
+        folly_public_root = '$(PODS_ROOT)/Headers/Public/RCT-Folly'
+        unless header_paths.include?(folly_public_root)
+          header_paths << folly_public_root
+        end
+
+        build_config.build_settings['HEADER_SEARCH_PATHS'] = header_paths
+        build_config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'
+      end
+    end
+
+    installer.aggregate_targets.each do |aggregate_target|
+      aggregate_target.user_project.native_targets.each do |native_target|
+        native_target.build_configurations.each do |build_config|
+          build_config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'
+        end
+      end
+    end
   end
 end

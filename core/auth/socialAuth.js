@@ -8,6 +8,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 
 // Conditionally import Apple Sign-in (only available after native compilation)
 let AppleAuthentication = null;
@@ -77,6 +78,26 @@ export const isGoogleSignInAvailable = () => {
 export const isAppleSignInAvailable = () => {
   return AppleAuthentication !== null;
 };
+
+function decodeJwtPayload(token) {
+  try {
+    const parts = String(token || "").split(".");
+    if (parts.length < 2) return null;
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    return JSON.parse(global.atob ? global.atob(padded) : Buffer.from(padded, "base64").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function getExpectedAppleAudience() {
+  return (
+    Constants?.expoConfig?.ios?.bundleIdentifier ||
+    Constants?.manifest2?.extra?.expoClient?.ios?.bundleIdentifier ||
+    null
+  );
+}
 
 async function resolveUniqueDisplayName(uid, baseName) {
   const trimmed = (baseName || "").trim();
@@ -220,6 +241,13 @@ export const signInWithApple = async () => {
     throw new Error("Apple Sign-in is not available on this build. Please run 'expo prebuild' and 'expo run:ios'.");
   }
 
+  const executionEnvironment = Constants?.executionEnvironment;
+  if (executionEnvironment === "storeClient") {
+    throw new Error(
+      "Apple Sign-in cannot be tested in Expo Go. Use a development build (npx expo run:ios) or an EAS iOS build."
+    );
+  }
+
   try {
     console.log("[SocialAuth] Starting Apple Sign-in...");
 
@@ -244,6 +272,16 @@ export const signInWithApple = async () => {
 
     if (!credential.identityToken) {
       throw new Error("No identity token received from Apple");
+    }
+
+    const tokenPayload = decodeJwtPayload(credential.identityToken);
+    const tokenAudience = tokenPayload?.aud;
+    const expectedAudience = getExpectedAppleAudience();
+
+    if (tokenAudience && expectedAudience && tokenAudience !== expectedAudience) {
+      throw new Error(
+        `Apple token audience mismatch (${tokenAudience}). Expected ${expectedAudience}. Use a native iOS build for this bundle ID.`
+      );
     }
 
     console.log("[SocialAuth] Got Apple identity token, signing into Firebase...");
@@ -322,6 +360,10 @@ export const signInWithApple = async () => {
     console.error("[SocialAuth] Error.code:", error.code);
     console.error("[SocialAuth] Error.message:", error.message);
     console.error("[SocialAuth] Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+
+    if (error.code === "auth/invalid-credential" && String(error.message || "").includes("host.exp.Exponent")) {
+      throw new Error("Apple Sign-in is running in Expo Go (audience host.exp.Exponent). Please run a native iOS build for com.timmy.marler.coffeerider.");
+    }
 
     throw new Error(
       error.message || "Apple Sign-in failed. Please try again."

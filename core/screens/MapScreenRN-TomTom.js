@@ -3,6 +3,7 @@ import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useTheme } from "@context/ThemeContext";
 import { sendBleDirectionsFrame } from "@core/ble/directionsTransmitter";
+import MapView, { MAPS_MODULE_AVAILABLE, Marker, Polyline } from "@core/map/nativeMaps";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -10,9 +11,13 @@ import Constants from "expo-constants";
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
+
+const INITIAL_FREE_MAP_TOAST_MS = 3500;
+const MAP_TIP_DISPLAY_MS = 5000;
+
+let hasShownInitialFreeMapUpgradeToastThisSession = false;
 
 function showPlatformToast(message, duration = 'LONG') {
   if (!message) return;
@@ -1361,6 +1366,61 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const role = auth?.profile?.role || "guest";
   const capabilities = getCapabilities(role);
   const isFreeUser = role === "user";
+  const [showMapTip, setShowMapTip] = useState(false);
+  const [mapTipMessage, setMapTipMessage] = useState("");
+  const mapTipTimerRef = useRef(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isFreeUser) {
+        return undefined;
+      }
+
+      if (mapTipTimerRef.current) {
+        clearTimeout(mapTipTimerRef.current);
+        mapTipTimerRef.current = null;
+      }
+
+      const showToast = (message, duration, onHide) => {
+        setMapTipMessage(message);
+        setShowMapTip(true);
+        mapTipTimerRef.current = setTimeout(() => {
+          setShowMapTip(false);
+          mapTipTimerRef.current = null;
+          if (onHide) {
+            onHide();
+          }
+        }, duration);
+      };
+
+      const showFeatureTip = () => {
+        showToast(
+          "Tap place markers to view details. Long press anywhere for actions. Try filters and route options to personalise your session.",
+          MAP_TIP_DISPLAY_MS
+        );
+      };
+
+      if (!hasShownInitialFreeMapUpgradeToastThisSession) {
+        hasShownInitialFreeMapUpgradeToastThisSession = true;
+        showToast(
+          "Upgrade to Pro to get access to all the features.",
+          INITIAL_FREE_MAP_TOAST_MS,
+          showFeatureTip
+        );
+      } else {
+        showFeatureTip();
+      }
+
+      return () => {
+        if (mapTipTimerRef.current) {
+          clearTimeout(mapTipTimerRef.current);
+          mapTipTimerRef.current = null;
+        }
+        setMapTipMessage("");
+        setShowMapTip(false);
+      };
+    }, [isFreeUser])
+  );
   const [localUnitsPreference, setLocalUnitsPreference] = useState(null);
 
   const buildDailyRouteCounterKey = useCallback(() => {
@@ -8054,6 +8114,15 @@ function getStepCompletionThresholds(step = null) {
         onClose={() => setShowRouteTypeSelector(false)}
       />
 
+      {/* First-load tip for free users */}
+      {showMapTip && (
+        <View pointerEvents="none" style={styles.mapTipToast}>
+          <Text style={styles.mapTipText}>
+            {mapTipMessage}
+          </Text>
+        </View>
+      )}
+
     </View>
   );
 }
@@ -9146,6 +9215,29 @@ const styles = StyleSheet.create({
     color: theme.colors.primaryDark,
     fontSize: 12,
     fontWeight: "700",
+    textAlign: "center",
+  },
+
+  mapTipToast: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 110,
+    backgroundColor: "rgba(15,23,42,0.92)",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 8,
+  },
+
+  mapTipText: {
+    color: "#f8fafc",
+    fontSize: 13,
+    lineHeight: 20,
     textAlign: "center",
   },
 });

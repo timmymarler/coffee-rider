@@ -21,8 +21,6 @@ import {
 
 const ENTITLEMENT_SYNC_MAX_ATTEMPTS = 10;
 const ENTITLEMENT_SYNC_INTERVAL_MS = 2500;
-const ENTITLEMENT_SYNC_SUCCESS_BANNER_MS = 3000;
-const UPGRADE_TIP_BANNER_MS = 3500;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -36,10 +34,6 @@ export default function SubscriptionsScreen() {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [syncingEntitlement, setSyncingEntitlement] = useState(false);
-  const [showEntitlementSynced, setShowEntitlementSynced] = useState(false);
-  const [showUpgradeTip, setShowUpgradeTip] = useState(false);
-  const entitlementSyncedTimerRef = useRef(null);
-  const upgradeTipTimerRef = useRef(null);
   const { subscribeToPlan, status: stripeStatus } = useStripeSubscription();
   const {
     subscribeToPlan: purchaseApplePlan,
@@ -60,58 +54,6 @@ export default function SubscriptionsScreen() {
 
     reloadAppleProducts().catch(() => {});
   }, [isIOS, isIOSSubscriptionsDisabled, reloadAppleProducts]);
-
-  useEffect(() => {
-    return () => {
-      if (entitlementSyncedTimerRef.current) {
-        clearTimeout(entitlementSyncedTimerRef.current);
-        entitlementSyncedTimerRef.current = null;
-      }
-
-      if (upgradeTipTimerRef.current) {
-        clearTimeout(upgradeTipTimerRef.current);
-        upgradeTipTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  const showUpgradeTipBanner = useCallback(() => {
-    if (upgradeTipTimerRef.current) {
-      clearTimeout(upgradeTipTimerRef.current);
-      upgradeTipTimerRef.current = null;
-    }
-
-    setShowUpgradeTip(true);
-    upgradeTipTimerRef.current = setTimeout(() => {
-      setShowUpgradeTip(false);
-      upgradeTipTimerRef.current = null;
-    }, UPGRADE_TIP_BANNER_MS);
-  }, []);
-
-  const showEntitlementSyncedBanner = useCallback(() => {
-    if (entitlementSyncedTimerRef.current) {
-      clearTimeout(entitlementSyncedTimerRef.current);
-      entitlementSyncedTimerRef.current = null;
-    }
-
-    if (upgradeTipTimerRef.current) {
-      clearTimeout(upgradeTipTimerRef.current);
-      upgradeTipTimerRef.current = null;
-    }
-
-    setShowUpgradeTip(false);
-
-    setShowEntitlementSynced(true);
-    entitlementSyncedTimerRef.current = setTimeout(() => {
-      setShowEntitlementSynced(false);
-      entitlementSyncedTimerRef.current = null;
-      showUpgradeTipBanner();
-    }, ENTITLEMENT_SYNC_SUCCESS_BANNER_MS);
-  }, [showUpgradeTipBanner]);
-
-  const showPostUpgradeBanners = useCallback(() => {
-    showEntitlementSyncedBanner();
-  }, [showEntitlementSyncedBanner]);
 
   const waitForEntitlementSync = useCallback(async () => {
     for (let attempt = 1; attempt <= ENTITLEMENT_SYNC_MAX_ATTEMPTS; attempt += 1) {
@@ -140,7 +82,6 @@ export default function SubscriptionsScreen() {
       }
 
       if (result?.pending) {
-        showPostUpgradeBanners();
         setSyncingEntitlement(true);
         const synced = await waitForEntitlementSync();
         if (!synced) {
@@ -152,9 +93,11 @@ export default function SubscriptionsScreen() {
         return;
       }
 
-      showPostUpgradeBanners();
       setSyncingEntitlement(true);
-      await waitForEntitlementSync();
+      const synced = await waitForEntitlementSync();
+      if (synced) {
+        Alert.alert('Subscription Active', 'Welcome to Pro! You now have full access.');
+      }
     } catch (err) {
       Alert.alert('Apple Subscription', err?.message || 'Unable to purchase right now. Please try again.');
     } finally {
@@ -174,7 +117,6 @@ export default function SubscriptionsScreen() {
         Alert.alert('No Purchases Found', 'No active Apple subscription was found for this Apple ID.');
       }
 
-      showPostUpgradeBanners();
       setSyncingEntitlement(true);
       await waitForEntitlementSync();
     } catch (err) {
@@ -204,7 +146,6 @@ export default function SubscriptionsScreen() {
         'Your Pro subscription is now active. You have access to all Pro features.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
-      showPostUpgradeBanners();
       setSyncingEntitlement(true);
       await waitForEntitlementSync();
     } catch (err) {
@@ -216,19 +157,12 @@ export default function SubscriptionsScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.colors.primaryDark }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
-  }
-
   const trialDaysLeft = getTrialDaysRemaining();
   const hasActiveSubscription = isSubscribed();
   const isCurrentlyInTrial = isInTrial();
   const isCancellationScheduled = Boolean(subscription?.cancelAtPeriodEnd);
   const appleActionsDisabled = processing || syncingEntitlement || loadingAppleProducts || !iapAvailable;
+  // (toast messages moved to MapScreen)
   const annualApplePrice =
     appleProductsByPlan?.annual?.displayPrice ||
     appleProductsByPlan?.annual?.localizedPrice ||
@@ -252,8 +186,17 @@ export default function SubscriptionsScreen() {
     return d.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.primaryDark }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.primaryDark }]}>
+    <View style={{ flex: 1, backgroundColor: theme.colors.primaryDark }}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 20 }}>
       {/* Header */}
       <View style={styles.header}>
         <MaterialCommunityIcons
@@ -326,26 +269,6 @@ export default function SubscriptionsScreen() {
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={[styles.statusTitle, { color: theme.colors.text }]}>Processing upgrade</Text>
             <Text style={[styles.statusText, { color: theme.colors.textLight }]}>Finalizing your Pro access...</Text>
-          </View>
-        </View>
-      )}
-
-      {showEntitlementSynced && (
-        <View style={[styles.statusCard, { backgroundColor: theme.colors.primary }]}> 
-          <MaterialCommunityIcons name="check-circle" size={24} color={theme.colors.text} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={[styles.statusTitle, { color: theme.colors.text }]}>Pro access active</Text>
-            <Text style={[styles.statusText, { color: theme.colors.textLight }]}>Your upgrade is now available in the app.</Text>
-          </View>
-        </View>
-      )}
-
-      {showUpgradeTip && (
-        <View style={[styles.statusCard, { backgroundColor: theme.colors.accentMid }]}> 
-          <MaterialCommunityIcons name="map-marker-multiple" size={24} color={theme.colors.text} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={[styles.statusTitle, { color: theme.colors.text }]}>Next tip</Text>
-            <Text style={[styles.statusText, { color: theme.colors.textLight }]}>Tap Place Markers to view details. Long press anywhere for actions. Try filters and route options to personalise your session.</Text>
           </View>
         </View>
       )}
@@ -524,6 +447,8 @@ export default function SubscriptionsScreen() {
 
       <View style={styles.spacing} />
     </ScrollView>
+
+    </View>
   );
 }
 
@@ -808,4 +733,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+
 });

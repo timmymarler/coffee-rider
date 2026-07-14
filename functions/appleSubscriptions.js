@@ -266,6 +266,100 @@ const resolveCancelAtPeriodEndFromAppStoreApi = async ({
   return false;
 };
 
+const resolveFromAppStoreApi = async ({
+  originalTransactionId,
+  fallbackTransactionId,
+  fallbackPurchaseDateMs,
+  email,
+  productIds,
+  validProductIds,
+}) => {
+  const { keyId, issuerId, privateKey } = getAppStoreConfig();
+  const jwt = await makeAppStoreJwt({ privateKey, keyId, issuerId });
+
+  let apiResult = await fetchSubscriptionStatus({
+    originalTransactionId,
+    jwt,
+    useSandbox: false,
+  });
+  if (apiResult.httpStatus === 404) {
+    apiResult = await fetchSubscriptionStatus({
+      originalTransactionId,
+      jwt,
+      useSandbox: true,
+    });
+  }
+
+  if (!apiResult.body) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      `App Store Server API returned HTTP ${apiResult.httpStatus}.`
+    );
+  }
+
+  const groups = apiResult.body?.data || [];
+  let matchedApiStatus = null;
+  let matchedTxnPayload = null;
+  let matchedRenewalPayload = null;
+
+  outer: for (const group of groups) {
+    for (const lastTxn of group.lastTransactions || []) {
+      const txnPayload = decodeJwsPayload(lastTxn.signedTransactionInfo);
+      if (txnPayload && validProductIds.has(txnPayload.productId)) {
+        matchedApiStatus = lastTxn.status;
+        matchedTxnPayload = txnPayload;
+        matchedRenewalPayload = decodeJwsPayload(lastTxn.signedRenewalInfo);
+        break outer;
+      }
+    }
+  }
+
+  if (!matchedTxnPayload) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'No valid Apple subscription transaction found for configured product IDs.'
+    );
+  }
+
+  const normalizedApiStatus = Number.parseInt(String(matchedApiStatus), 10);
+  const purchaseMs = matchedTxnPayload.purchaseDate
+    ? Number(matchedTxnPayload.purchaseDate)
+    : (fallbackPurchaseDateMs || Date.now());
+  const plan = isAnnualProductId(matchedTxnPayload.productId, productIds.annual) ? 'annual' : 'monthly';
+
+  const parsedRenewalMs = toMillis(
+    matchedTxnPayload.expiresDate || matchedTxnPayload.expiresDateMs || null
+  );
+  const fallbackRenewalMs = getFallbackRenewalDateMs({ plan, purchaseMs });
+  const renewalDateMs = parsedRenewalMs > 0 ? parsedRenewalMs : fallbackRenewalMs;
+  const hasFutureExpiry = Number.isFinite(renewalDateMs) && renewalDateMs > Date.now();
+  const isActiveByStatus =
+    normalizedApiStatus === 1 || normalizedApiStatus === 3 || normalizedApiStatus === 4;
+  const status = isActiveByStatus || hasFutureExpiry ? 'active' : 'expired';
+  const cancelAtPeriodEnd = resolveCancelAtPeriodEndFromRenewalPayload({
+    renewalPayload: matchedRenewalPayload,
+    notificationType: null,
+    notificationSubtype: null,
+    status,
+  });
+
+  return {
+    status,
+    plan,
+    renewalDateMs: renewalDateMs || null,
+    cancelAtPeriodEnd,
+    environment: apiResult.body?.environment || null,
+    productId: matchedTxnPayload.productId,
+    transactionId: matchedTxnPayload.transactionId || fallbackTransactionId,
+    originalTransactionId: matchedTxnPayload.originalTransactionId || originalTransactionId,
+    purchaseMs,
+    apiStatusRaw: matchedApiStatus,
+    apiStatusNormalized: Number.isFinite(normalizedApiStatus) ? normalizedApiStatus : null,
+    usedFallbackRenewalDate: parsedRenewalMs <= 0,
+    email: email || null,
+  };
+};
+
 const resolveFromVerifyReceipt = ({
   verifyBody,
   validProductIds,
@@ -536,25 +630,60 @@ export const activateAppleSubscription = functions
           );
         }
 
+        let finalResolved = resolved;
+
+        if (
+          resolved.status === 'expired' &&
+          Date.now() - Number(resolved.purchaseMs || purchaseDateMs || Date.now()) < 10 * 60 * 1000
+        ) {
+          try {
+            const apiResolved = await resolveFromAppStoreApi({
+              originalTransactionId: resolved.originalTransactionId || origTxnId,
+              fallbackTransactionId: transactionId,
+              fallbackPurchaseDateMs: resolved.purchaseMs || purchaseDateMs || Date.now(),
+              email,
+              productIds,
+              validProductIds,
+            });
+
+            functions.logger.info('Apple activation verifyReceipt expired fallback', {
+              uid,
+              verifyReceiptStatus: resolved.status,
+              apiStatus: apiResolved.status,
+              originalTransactionId: apiResolved.originalTransactionId,
+            });
+
+            if (apiResolved.status === 'active') {
+              finalResolved = apiResolved;
+            }
+          } catch (err) {
+            functions.logger.warn('Apple activation expired fallback API check failed', {
+              uid,
+              message: err?.message || String(err),
+              originalTransactionId: resolved.originalTransactionId || origTxnId,
+            });
+          }
+        }
+
         let cancelAtPeriodEnd = resolveCancelAtPeriodEndFromVerifyReceipt({
           verifyBody: verifyResult.body,
-          originalTransactionId: resolved.originalTransactionId,
-          status: resolved.status,
+          originalTransactionId: finalResolved.originalTransactionId,
+          status: finalResolved.status,
         });
 
         // verifyReceipt can occasionally lag auto-renew disable state.
         // Cross-check App Store Server API before persisting if still active/not-cancelled.
-        if (!cancelAtPeriodEnd && resolved.status === 'active') {
+        if (!cancelAtPeriodEnd && finalResolved.status === 'active') {
           try {
             cancelAtPeriodEnd = await resolveCancelAtPeriodEndFromAppStoreApi({
-              originalTransactionId: resolved.originalTransactionId,
+              originalTransactionId: finalResolved.originalTransactionId,
               validProductIds,
             });
           } catch (err) {
             functions.logger.warn('App Store API cancelAtPeriodEnd fallback failed', {
               uid,
               message: err?.message || String(err),
-              originalTransactionId: resolved.originalTransactionId,
+              originalTransactionId: finalResolved.originalTransactionId,
             });
           }
         }
@@ -563,159 +692,97 @@ export const activateAppleSubscription = functions
           .doc(`users/${uid}/subscription/current`)
           .set(
             {
-              status: resolved.status,
-              plan: resolved.plan,
+              status: finalResolved.status,
+              plan: finalResolved.plan,
               provider: 'apple_iap',
-              appleProductId: resolved.productId,
-              appleTransactionId: resolved.transactionId,
-              appleOriginalTransactionId: resolved.originalTransactionId,
-              purchaseDate: resolved.purchaseMs,
-              renewalDate: resolved.renewalDateMs,
-              appleReceiptEnvironment: resolved.environment,
+              appleProductId: finalResolved.productId,
+              appleTransactionId: finalResolved.transactionId,
+              appleOriginalTransactionId: finalResolved.originalTransactionId,
+              purchaseDate: finalResolved.purchaseMs,
+              renewalDate: finalResolved.renewalDateMs,
+              appleReceiptEnvironment: finalResolved.environment,
               cancelAtPeriodEnd,
               email: email || null,
               updatedAt: FieldValue.serverTimestamp(),
-              lastRenewal: resolved.status === 'active' ? FieldValue.serverTimestamp() : null,
+              lastRenewal: finalResolved.status === 'active' ? FieldValue.serverTimestamp() : null,
             },
             { merge: true }
           );
 
-        await syncSubscriptionRole(uid, resolved.status, {
-          subscriptionStatus: resolved.status,
-          subscriptionPlan: resolved.status === 'active' ? resolved.plan : null,
-          subscriptionExpiresAt: resolved.status === 'active' ? resolved.renewalDateMs : null,
-          subscriptionCancelAtPeriodEnd: resolved.status === 'active' ? cancelAtPeriodEnd : false,
+        await syncSubscriptionRole(uid, finalResolved.status, {
+          subscriptionStatus: finalResolved.status,
+          subscriptionPlan: finalResolved.status === 'active' ? finalResolved.plan : null,
+          subscriptionExpiresAt: finalResolved.status === 'active' ? finalResolved.renewalDateMs : null,
+          subscriptionCancelAtPeriodEnd: finalResolved.status === 'active' ? cancelAtPeriodEnd : false,
           updatedAt: FieldValue.serverTimestamp(),
         });
 
         return {
-          status: resolved.status,
-          plan: resolved.plan,
-          renewalDate: resolved.renewalDateMs,
+          status: finalResolved.status,
+          plan: finalResolved.plan,
+          renewalDate: finalResolved.renewalDateMs,
           cancelAtPeriodEnd,
-          environment: resolved.environment,
+          environment: finalResolved.environment,
         };
       }
 
-      const { keyId, issuerId, privateKey } = getAppStoreConfig();
-      const jwt = await makeAppStoreJwt({ privateKey, keyId, issuerId });
-
-      // Try production first; TestFlight / sandbox purchases return 404 on prod endpoint.
-      let apiResult = await fetchSubscriptionStatus({ originalTransactionId: origTxnId, jwt, useSandbox: false });
-      if (apiResult.httpStatus === 404) {
-        apiResult = await fetchSubscriptionStatus({ originalTransactionId: origTxnId, jwt, useSandbox: true });
-      }
-
-      if (!apiResult.body) {
-        functions.logger.error('App Store Server API error', {
-          uid, httpStatus: apiResult.httpStatus, origTxnId, productId,
-        });
-        throw new functions.https.HttpsError(
-          'failed-precondition',
-          `App Store Server API returned HTTP ${apiResult.httpStatus}.`
-        );
-      }
-
-      const groups = apiResult.body?.data || [];
-
-      let matchedApiStatus = null;
-      let matchedTxnPayload = null;
-      let matchedRenewalPayload = null;
-      outer: for (const group of groups) {
-        for (const lastTxn of (group.lastTransactions || [])) {
-          const txnPayload = decodeJwsPayload(lastTxn.signedTransactionInfo);
-          if (txnPayload && validProductIds.has(txnPayload.productId)) {
-            matchedApiStatus = lastTxn.status;
-            matchedTxnPayload = txnPayload;
-            matchedRenewalPayload = decodeJwsPayload(lastTxn.signedRenewalInfo);
-            break outer;
-          }
-        }
-      }
-
-      if (!matchedTxnPayload) {
-        functions.logger.error('No matching subscription in App Store API response', {
-          uid, origTxnId, productId,
-          configuredMonthlyId: productIds.monthly,
-          configuredAnnualId: productIds.annual,
-        });
-        throw new functions.https.HttpsError(
-          'failed-precondition',
-          'No valid Apple subscription transaction found for configured product IDs.'
-        );
-      }
-
-      // API status: 1=active, 3=billing retry, 4=grace period -> active; 2=expired, 5=revoked -> expired
-      const normalizedApiStatus = Number.parseInt(String(matchedApiStatus), 10);
-      const purchaseMs = matchedTxnPayload.purchaseDate
-        ? Number(matchedTxnPayload.purchaseDate)
-        : (purchaseDateMs || Date.now());
-      const plan = isAnnualProductId(matchedTxnPayload.productId, productIds.annual) ? 'annual' : 'monthly';
-
-      const parsedRenewalMs = toMillis(
-        matchedTxnPayload.expiresDate || matchedTxnPayload.expiresDateMs || null
-      );
-      const fallbackRenewalMs = getFallbackRenewalDateMs({ plan, purchaseMs });
-      const renewalDateMs = parsedRenewalMs > 0 ? parsedRenewalMs : fallbackRenewalMs;
-      const hasFutureExpiry = Number.isFinite(renewalDateMs) && renewalDateMs > Date.now();
-      const isActiveByStatus =
-        normalizedApiStatus === 1 || normalizedApiStatus === 3 || normalizedApiStatus === 4;
-      const status = isActiveByStatus || hasFutureExpiry ? 'active' : 'expired';
-      const cancelAtPeriodEnd = resolveCancelAtPeriodEndFromRenewalPayload({
-        renewalPayload: matchedRenewalPayload,
-        notificationType: null,
-        notificationSubtype: null,
-        status,
+      const apiResolved = await resolveFromAppStoreApi({
+        originalTransactionId: origTxnId,
+        fallbackTransactionId: transactionId,
+        fallbackPurchaseDateMs: purchaseDateMs || Date.now(),
+        email,
+        productIds,
+        validProductIds,
       });
 
       functions.logger.info('Apple subscription sync result', {
         uid,
-        productId: matchedTxnPayload.productId,
-        transactionId: matchedTxnPayload.transactionId || transactionId,
-        originalTransactionId: matchedTxnPayload.originalTransactionId || origTxnId,
-        apiStatusRaw: matchedApiStatus,
-        apiStatusNormalized: Number.isFinite(normalizedApiStatus) ? normalizedApiStatus : null,
-        renewalDateMs,
-        usedFallbackRenewalDate: parsedRenewalMs <= 0,
-        status,
-        environment: apiResult.body?.environment || null,
+        productId: apiResolved.productId,
+        transactionId: apiResolved.transactionId,
+        originalTransactionId: apiResolved.originalTransactionId,
+        apiStatusRaw: apiResolved.apiStatusRaw,
+        apiStatusNormalized: apiResolved.apiStatusNormalized,
+        renewalDateMs: apiResolved.renewalDateMs,
+        usedFallbackRenewalDate: apiResolved.usedFallbackRenewalDate,
+        status: apiResolved.status,
+        environment: apiResolved.environment,
       });
 
       await firestore
         .doc(`users/${uid}/subscription/current`)
         .set(
           {
-            status,
-            plan,
+            status: apiResolved.status,
+            plan: apiResolved.plan,
             provider: 'apple_iap',
-            appleProductId: matchedTxnPayload.productId,
-            appleTransactionId: matchedTxnPayload.transactionId || transactionId,
-            appleOriginalTransactionId: matchedTxnPayload.originalTransactionId || origTxnId,
-            purchaseDate: purchaseMs,
-            renewalDate: renewalDateMs || null,
-            appleReceiptEnvironment: apiResult.body?.environment || null,
-            cancelAtPeriodEnd,
+            appleProductId: apiResolved.productId,
+            appleTransactionId: apiResolved.transactionId,
+            appleOriginalTransactionId: apiResolved.originalTransactionId,
+            purchaseDate: apiResolved.purchaseMs,
+            renewalDate: apiResolved.renewalDateMs || null,
+            appleReceiptEnvironment: apiResolved.environment,
+            cancelAtPeriodEnd: apiResolved.cancelAtPeriodEnd,
             email: email || null,
             updatedAt: FieldValue.serverTimestamp(),
-            lastRenewal: status === 'active' ? FieldValue.serverTimestamp() : null,
+            lastRenewal: apiResolved.status === 'active' ? FieldValue.serverTimestamp() : null,
           },
           { merge: true }
         );
 
-      await syncSubscriptionRole(uid, status, {
-        subscriptionStatus: status,
-        subscriptionPlan: status === 'active' ? plan : null,
-        subscriptionExpiresAt: status === 'active' ? renewalDateMs : null,
-        subscriptionCancelAtPeriodEnd: status === 'active' ? cancelAtPeriodEnd : false,
+      await syncSubscriptionRole(uid, apiResolved.status, {
+        subscriptionStatus: apiResolved.status,
+        subscriptionPlan: apiResolved.status === 'active' ? apiResolved.plan : null,
+        subscriptionExpiresAt: apiResolved.status === 'active' ? apiResolved.renewalDateMs : null,
+        subscriptionCancelAtPeriodEnd: apiResolved.status === 'active' ? apiResolved.cancelAtPeriodEnd : false,
         updatedAt: FieldValue.serverTimestamp(),
       });
 
       return {
-        status,
-        plan,
-        renewalDate: renewalDateMs || null,
-        cancelAtPeriodEnd,
-        environment: apiResult.body?.environment || null,
+        status: apiResolved.status,
+        plan: apiResolved.plan,
+        renewalDate: apiResolved.renewalDateMs || null,
+        cancelAtPeriodEnd: apiResolved.cancelAtPeriodEnd,
+        environment: apiResolved.environment,
       };
     } catch (err) {
       functions.logger.error('activateAppleSubscription failed', {
