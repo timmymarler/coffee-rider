@@ -2693,13 +2693,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setSelectedPlaceId(null);
       isLoadingSavedRouteRef.current = false;
 
-      const isCreatingNewRoute = !routeDestination && (!Array.isArray(waypoints) || waypoints.length === 0);
-      if (isCreatingNewRoute) {
-        const routeLimit = await enforceDailyRoutePlanLimit();
-        if (!routeLimit) {
-          closeAddPointMenu();
-          return;
-        }
+      const routeLimit = await enforceDailyRoutePlanLimit();
+      if (!routeLimit) {
+        closeAddPointMenu();
+        return;
       }
 
       if (!pendingMapPoint) {
@@ -5589,12 +5586,9 @@ function getStepCompletionThresholds(step = null) {
       return;
     }
 
-    const isCreatingNewRoute = !routeDestination && (!Array.isArray(waypoints) || waypoints.length === 0);
-    if (isCreatingNewRoute) {
-      const routeLimit = await enforceDailyRoutePlanLimit();
-      if (!routeLimit) {
-        return;
-      }
+    const routeLimit = await enforceDailyRoutePlanLimit();
+    if (!routeLimit) {
+      return;
     }
 
     routeRequestId.current += 1;

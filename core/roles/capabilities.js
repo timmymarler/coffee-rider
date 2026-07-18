@@ -154,9 +154,9 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
       return {
         isAdmin: false,
 
-        // Tab access
+        // Tab access (restricted free tier)
         canAccessMap: true,
-        canAccessSavedRoutes: true,
+        canAccessSavedRoutes: false,
         canAccessGroups: false,
         canAccessCalendar: false,
         canAccessProfile: true,
@@ -164,11 +164,12 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canViewMap: true,
         canViewPlacecard: true,
 
+        // Routing is allowed but capped in MapScreen (3/day)
         canNavigate: true,
         canPreviewSingleRoute: true,
         canCreateRoutes: true,
 
-        canAddVenue: true,
+        canAddVenue: false,
         canRate: true,
         canComment: true,
         canUploadPhotos: false,
@@ -181,8 +182,8 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canSearchGoogle: true,
 
         googlePhotoAccess: "limited",
-        canViewGooglePhotos: true,
-        maxGooglePhotosPerPlace: 1,
+        canViewGooglePhotos: false,
+        maxGooglePhotosPerPlace: 0,
 
         // Calendar & Events
         canCreateEvents: false,

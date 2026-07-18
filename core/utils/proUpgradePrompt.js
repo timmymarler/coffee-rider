@@ -2,11 +2,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
   IOS_SUBSCRIPTIONS_TEMP_DISABLED,
+  RESTRICTED_FREE_ACCESS_WINDOW_DAYS,
 } from "@core/config/launchFlags";
 import { Alert, Platform, ToastAndroid } from "react-native";
 
 export const PRO_UPGRADE_TITLE = "Unlock all Pro benefits";
-export const PRO_UPGRADE_MESSAGE = "You are on the Free plan. Upgrade to Pro for unlimited route planning and route saving.";
+export const PRO_UPGRADE_MESSAGE = `You are on the Free plan. Restricted access lasts ${RESTRICTED_FREE_ACCESS_WINDOW_DAYS} days from sign up. Upgrade to Pro for unlimited route planning and route saving.`;
 export const PRO_UPGRADE_PROMPT_QUEUE_KEY = "@coffee_rider_upgrade_prompt_queue";
 export const BETA_PRO_EXPIRY_ISO = "2026-05-31T23:59:59.999Z";
 export const BETA_PRO_EXPIRY_LABEL = "31 May 2026";
