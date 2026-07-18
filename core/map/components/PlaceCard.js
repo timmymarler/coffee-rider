@@ -5,6 +5,7 @@ import { formatWeekdayText, getOpeningStatus } from "@/core/map/utils/openingHou
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { useTheme } from "@context/ThemeContext";
+import { GOOGLE_PLACE_PHOTOS_ENABLED } from "@core/config/launchFlags";
 import { getCapabilities } from "@core/roles/capabilities";
 import { incMetric } from "@core/utils/devMetrics";
 import { uploadImage } from "@core/utils/uploadImage";
@@ -264,6 +265,7 @@ export default function PlaceCard({
   };
 
   const showNoGooglePhotosMessage =
+    GOOGLE_PLACE_PHOTOS_ENABLED &&
     capabilities.canViewGooglePhotos &&
     googlePlaceId &&
     googlePhotos.length === 0;
@@ -304,11 +306,15 @@ export default function PlaceCard({
     let mounted = true;
 
     async function loadGoogleDetails() {
-      const maxPhotosToFetch = capabilities?.maxGooglePhotosPerPlace || 5; // Fetch based on role limits
+      const maxPhotosToFetch = GOOGLE_PLACE_PHOTOS_ENABLED
+        ? (capabilities?.maxGooglePhotosPerPlace || 5)
+        : 0;
       const [refs, ratingInfo] = await Promise.all([
-        googlePhotos.length > 0
-          ? Promise.resolve(googlePhotos)
-          : fetchGooglePhotoRefs(googlePlaceId, maxPhotosToFetch),
+        GOOGLE_PLACE_PHOTOS_ENABLED
+          ? (googlePhotos.length > 0
+            ? Promise.resolve(googlePhotos)
+            : fetchGooglePhotoRefs(googlePlaceId, maxPhotosToFetch))
+          : Promise.resolve([]),
         fetchGoogleRating(googlePlaceId),
       ]);
 
@@ -510,6 +516,7 @@ export default function PlaceCard({
   /* ------------------------------------------------------------------ */
 
   function buildGooglePhotoUrl(name, width = 400) {
+    if (!GOOGLE_PLACE_PHOTOS_ENABLED) return null;
     return `https://places.googleapis.com/v1/${name}/media?maxWidthPx=${width}&key=${GOOGLE_KEY}`;
   }
 

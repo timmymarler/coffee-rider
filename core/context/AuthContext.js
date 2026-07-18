@@ -14,6 +14,10 @@ import { createContext, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import { getCapabilities } from "@core/roles/capabilities";
+import {
+  RESTRICTED_FREE_ACCESS_WINDOW_DAYS,
+  RESTRICTED_FREE_ACCESS_WINDOW_ENABLED,
+} from "@core/config/launchFlags";
 import { checkVersionStatus, fetchVersionInfo } from "@core/utils/versionCheck";
 import {
     ensureUserDocument,
@@ -36,6 +40,23 @@ function toMillis(value) {
   }
 
   return null;
+}
+
+function hasRestrictedFreeAccessWindow(profile, authUser) {
+  if (!RESTRICTED_FREE_ACCESS_WINDOW_ENABLED) {
+    return true;
+  }
+
+  const createdAtMs =
+    toMillis(profile?.createdAt) ??
+    toMillis(authUser?.metadata?.creationTime);
+
+  if (!Number.isFinite(createdAtMs)) {
+    return false;
+  }
+
+  const windowMs = RESTRICTED_FREE_ACCESS_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  return Date.now() <= createdAtMs + windowMs;
 }
 
 export const AuthContext = createContext(null);
@@ -395,6 +416,7 @@ export default function AuthProvider({ children }) {
   // ROLE + CAPABILITIES
   // ----------------------------------------
   const storedRole = profile?.role || 'guest';
+  const displayRole = storedRole === 'pro' ? 'user' : storedRole;
   const role = (() => {
     if (storedRole === 'guest') return 'guest';
     if (storedRole === 'admin' || storedRole === 'place-owner') return storedRole;
@@ -405,17 +427,22 @@ export default function AuthProvider({ children }) {
     const isExpired = hasExpiry ? subExpiresAtMs <= Date.now() : false;
     const hasValidProSubscription =
       (subStatus === 'trial' || subStatus === 'active') && !isExpired;
+    const isWithinRestrictedFreeWindow = hasRestrictedFreeAccessWindow(profile, user);
 
     if (hasValidProSubscription) return 'pro';
 
     if (subStatus === 'expired' || subStatus === 'cancelled' || subStatus === 'free') {
-      return 'user';
+      return isWithinRestrictedFreeWindow ? 'user' : 'guest';
     }
 
-    return storedRole === 'pro' ? 'user' : storedRole;
+    if (storedRole === 'user' || storedRole === 'pro') {
+      return isWithinRestrictedFreeWindow ? 'user' : 'guest';
+    }
+
+    return storedRole;
   })();
   const capabilities = getCapabilities(role);
-  const effectiveProfile = profile ? { ...profile, role } : profile;
+  const effectiveProfile = profile ? { ...profile, role: displayRole } : profile;
 
   const value = {
     user,

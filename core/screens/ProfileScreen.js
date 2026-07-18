@@ -800,7 +800,7 @@ export default function ProfileScreen() {
           </Text>
           <View style={{ marginTop: theme.spacing.sm }}>
             <CRInfoBadge label={role.charAt(0).toUpperCase() + role.slice(1)} />
-            {role==="user" && !(Platform.OS === "ios" && IOS_SUBSCRIPTIONS_TEMP_DISABLED) && (
+            {(role === "user" || role === "guest") && !(Platform.OS === "ios" && IOS_SUBSCRIPTIONS_TEMP_DISABLED) && (
               <CRButton
                 title="Upgrade"
                 variant="primary"
