@@ -17,7 +17,6 @@ import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
 const INITIAL_FREE_MAP_TOAST_MS = 3500;
 const MAP_TIP_DISPLAY_MS = 5000;
 const GOOGLE_TEXT_SEARCH_CACHE = new Map();
-const INITIAL_FREE_MAP_UPGRADE_MESSAGE = "Upgrade to Pro for full access. Free restricted access lasts " + RESTRICTED_FREE_ACCESS_WINDOW_DAYS + " days from sign up.";
 
 let hasShownInitialFreeMapUpgradeToastThisSession = false;
 
@@ -235,10 +234,9 @@ import useWaypoints from "@core/map/waypoints/useWaypoints";
 import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
-import { PRO_UPGRADE_PROMPT_QUEUE_KEY } from "@core/utils/proUpgradePrompt";
+import { buildRestrictedAccessMessage, PRO_UPGRADE_PROMPT_QUEUE_KEY } from "@core/utils/proUpgradePrompt";
 import {
   GOOGLE_PLACE_PHOTOS_ENABLED,
-  RESTRICTED_FREE_ACCESS_WINDOW_DAYS,
   GOOGLE_TEXT_SEARCH_CACHE_TTL_MS,
   IOS_SUBSCRIPTIONS_TEMP_DISABLED,
 } from "@core/config/launchFlags";
@@ -1384,6 +1382,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const isMapFocused = useIsFocused();
   const hasRestrictedFreeRouting = Boolean(user) && !capabilities?.isAdmin && role !== "pro" && role !== "place-owner";
   const shouldShowAccessToast = Boolean(user) && hasRestrictedFreeRouting && (profileRole === "user" || role === "guest");
+  const restrictedAccessMessage = useMemo(
+    () => buildRestrictedAccessMessage(auth?.profile?.createdAt || user?.metadata?.creationTime),
+    [auth?.profile?.createdAt, user?.metadata?.creationTime]
+  );
   const [showMapTip, setShowMapTip] = useState(false);
   const [mapTipMessage, setMapTipMessage] = useState("");
   const mapTipTimerRef = useRef(null);
@@ -1420,7 +1422,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     if (!hasShownInitialFreeMapUpgradeToastThisSession) {
       hasShownInitialFreeMapUpgradeToastThisSession = true;
       showToast(
-        INITIAL_FREE_MAP_UPGRADE_MESSAGE,
+        restrictedAccessMessage,
         INITIAL_FREE_MAP_TOAST_MS,
         showFeatureTip
       );
@@ -1598,6 +1600,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }, [postbox]);
 
   useEffect(() => {
+    if (!isMapFocused) {
+      return undefined;
+    }
+
     let isMounted = true;
 
     AsyncStorage.getItem(PRO_UPGRADE_PROMPT_QUEUE_KEY)
@@ -1611,14 +1617,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           console.warn("[PRO_UPGRADE_PROMPT] Invalid queued payload:", error);
         }
 
-        if (queuedPrompt?.message) {
+        if (queuedPrompt?.message || shouldShowAccessToast) {
           const shouldHideSubscriptionsHint = Platform.OS === 'ios' && IOS_SUBSCRIPTIONS_TEMP_DISABLED;
+          const normalizedMessage = shouldShowAccessToast
+            ? restrictedAccessMessage
+            : queuedPrompt?.message;
           setPostbox({
             type: 'info',
             title: queuedPrompt?.title || 'Upgrade available',
             message: shouldHideSubscriptionsHint
-              ? queuedPrompt.message
-              : `${queuedPrompt.message} Open Profile > Subscriptions to upgrade.`,
+              ? normalizedMessage
+              : `${normalizedMessage} Open Profile > Subscriptions to upgrade.`,
           });
         }
 
@@ -1633,7 +1642,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isMapFocused, shouldShowAccessToast, restrictedAccessMessage]);
 
   const skipNextFollowTickRef = useRef(false);
   const skipNextRegionChangeRef = useRef(false);

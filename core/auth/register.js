@@ -23,6 +23,7 @@ import {
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
 import {
+  buildRestrictedAccessMessage,
   shouldShowProUpgradePrompt,
   showProUpgradePrompt,
 } from "@core/utils/proUpgradePrompt";
@@ -56,11 +57,16 @@ export default function RegisterScreen({ onBack }) {
     try {
       const signInResult = await signInWithApple();
       let role = null;
+      let profileCreatedAt = null;
       try {
         const uid = auth.currentUser?.uid;
         if (uid) {
           const profileSnap = await getDoc(doc(db, "users", uid));
-          role = profileSnap.exists() ? profileSnap.data()?.role : null;
+          if (profileSnap.exists()) {
+            const profileData = profileSnap.data();
+            role = profileData?.role || null;
+            profileCreatedAt = profileData?.createdAt || null;
+          }
         }
       } catch (profileErr) {
         console.warn("Unable to read user profile role after Apple sign-in:", profileErr);
@@ -71,7 +77,9 @@ export default function RegisterScreen({ onBack }) {
       router.replace("map");
       if (!signInResult?.isNewUser && shouldShowProUpgradePrompt(role)) {
         setTimeout(() => {
-          showProUpgradePrompt(router);
+          showProUpgradePrompt(router, {
+            message: buildRestrictedAccessMessage(profileCreatedAt || auth.currentUser?.metadata?.creationTime),
+          });
         }, 250);
       }
     } catch (err) {
