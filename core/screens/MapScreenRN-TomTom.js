@@ -18,8 +18,6 @@ const INITIAL_FREE_MAP_TOAST_MS = 3500;
 const MAP_TIP_DISPLAY_MS = 5000;
 const GOOGLE_TEXT_SEARCH_CACHE = new Map();
 
-let hasShownInitialFreeMapUpgradeToastThisSession = false;
-
 function getGoogleTextSearchCacheKey(query, latitude, longitude, radius, allowPhotos) {
   const latBucket = Number(latitude || 0).toFixed(2);
   const lngBucket = Number(longitude || 0).toFixed(2);
@@ -1381,17 +1379,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const isFreeUser = role === "user";
   const isMapFocused = useIsFocused();
   const hasRestrictedFreeRouting = Boolean(user) && !capabilities?.isAdmin && role !== "pro" && role !== "place-owner";
-  const shouldShowAccessToast = Boolean(user) && hasRestrictedFreeRouting && (profileRole === "user" || role === "guest");
+  const freeAccessCreatedAt = auth?.profile?.createdAt || user?.metadata?.creationTime || null;
+  const shouldShowAccessToast = Boolean(user) && hasRestrictedFreeRouting && (profileRole === "user" || role === "guest") && Boolean(freeAccessCreatedAt);
   const restrictedAccessMessage = useMemo(
-    () => buildRestrictedAccessMessage(auth?.profile?.createdAt || user?.metadata?.creationTime),
-    [auth?.profile?.createdAt, user?.metadata?.creationTime]
+    () => buildRestrictedAccessMessage(freeAccessCreatedAt),
+    [freeAccessCreatedAt]
   );
   const [showMapTip, setShowMapTip] = useState(false);
   const [mapTipMessage, setMapTipMessage] = useState("");
   const mapTipTimerRef = useRef(null);
+  const hasShownInitialFreeMapUpgradeToastRef = useRef(false);
 
   useEffect(() => {
     if (!isMapFocused || !shouldShowAccessToast) {
+      hasShownInitialFreeMapUpgradeToastRef.current = false;
       return undefined;
     }
 
@@ -1419,8 +1420,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       );
     };
 
-    if (!hasShownInitialFreeMapUpgradeToastThisSession) {
-      hasShownInitialFreeMapUpgradeToastThisSession = true;
+    if (!hasShownInitialFreeMapUpgradeToastRef.current) {
+      hasShownInitialFreeMapUpgradeToastRef.current = true;
       showToast(
         restrictedAccessMessage,
         INITIAL_FREE_MAP_TOAST_MS,
@@ -1438,7 +1439,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setMapTipMessage("");
       setShowMapTip(false);
     };
-  }, [isMapFocused, shouldShowAccessToast, user?.uid]);
+  }, [isMapFocused, shouldShowAccessToast, restrictedAccessMessage]);
   const [localUnitsPreference, setLocalUnitsPreference] = useState(null);
 
   const buildDailyRouteCounterKey = useCallback(() => {
