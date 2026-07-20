@@ -7,8 +7,8 @@ export const IOS_SUBSCRIPTIONS_DISABLED_MESSAGE =
 // Keep this true while monitoring billing spikes.
 export const GOOGLE_PLACES_COST_SAVER_MODE = true;
 
-// In cost-saver mode we skip Google Place Photo API calls, which are a common cost driver.
-export const GOOGLE_PLACE_PHOTOS_ENABLED = !GOOGLE_PLACES_COST_SAVER_MODE;
+// Photos are enabled again and controlled per-role so Pro can see them and users stay capped.
+export const GOOGLE_PLACE_PHOTOS_ENABLED = true;
 
 // Cache identical text searches for a short window to avoid duplicate billable requests.
 export const GOOGLE_TEXT_SEARCH_CACHE_TTL_MS = GOOGLE_PLACES_COST_SAVER_MODE ? 5 * 60 * 1000 : 60 * 1000;

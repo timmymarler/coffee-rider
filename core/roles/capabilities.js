@@ -182,8 +182,8 @@ export function getCapabilities(role = CAPABILITY_LEVELS.GUEST) {
         canSearchGoogle: true,
 
         googlePhotoAccess: "limited",
-        canViewGooglePhotos: false,
-        maxGooglePhotosPerPlace: 0,
+        canViewGooglePhotos: true,
+        maxGooglePhotosPerPlace: 1,
 
         // Calendar & Events
         canCreateEvents: false,

@@ -475,11 +475,11 @@ export default function PlaceCard({
     let googlePhotos = [];
     let maxGooglePhotos = capabilities.maxGooglePhotosPerPlace || 0;
 
-    // For Place Owners, check if they own this place
-    if (capabilities.googlePhotoAccess === "limited" && safePlace.createdBy === user?.uid) {
+    // Place owners can see more photos on places they manage.
+    if (role === "place-owner" && safePlace.createdBy === user?.uid) {
       // Owner viewing their own place - show 10 photos
       maxGooglePhotos = 10;
-    } else if (capabilities.googlePhotoAccess === "limited") {
+    } else if (role === "place-owner") {
       // Owner viewing someone else's place - show 5 photos
       maxGooglePhotos = 5;
     }
@@ -1097,7 +1097,7 @@ export default function PlaceCard({
             }}
           />
           {capabilities.googlePhotoAccess === "limited" &&
-          rawGooglePhotos.length > 2 && (
+          rawGooglePhotos.length > (capabilities.maxGooglePhotosPerPlace || 0) && (
             <Text style={styles.upgradeHint}>
               More photos available with Pro
             </Text>
