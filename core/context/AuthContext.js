@@ -13,11 +13,11 @@ import { deleteDoc, doc, getDoc, onSnapshot } from "firebase/firestore";
 import { createContext, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
-import { getCapabilities } from "@core/roles/capabilities";
 import {
-  RESTRICTED_FREE_ACCESS_WINDOW_DAYS,
-  RESTRICTED_FREE_ACCESS_WINDOW_ENABLED,
+    RESTRICTED_FREE_ACCESS_WINDOW_DAYS,
+    RESTRICTED_FREE_ACCESS_WINDOW_ENABLED,
 } from "@core/config/launchFlags";
+import { getCapabilities } from "@core/roles/capabilities";
 import { checkVersionStatus, fetchVersionInfo } from "@core/utils/versionCheck";
 import {
     ensureUserDocument,

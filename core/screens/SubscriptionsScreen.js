@@ -1,13 +1,13 @@
+import { IOS_SUBSCRIPTIONS_DISABLED_MESSAGE, IOS_SUBSCRIPTIONS_TEMP_DISABLED } from '@core/config/launchFlags';
 import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
-import { IOS_SUBSCRIPTIONS_DISABLED_MESSAGE, IOS_SUBSCRIPTIONS_TEMP_DISABLED } from '@core/config/launchFlags';
 import { SUBSCRIPTION_PLANS } from '@core/payments/stripeService';
-import { useStripeSubscription } from '@core/payments/useStripeSubscription';
 import { useAppleSubscriptionV2 } from '@core/payments/useAppleSubscriptionV2';
+import { useStripeSubscription } from '@core/payments/useStripeSubscription';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,

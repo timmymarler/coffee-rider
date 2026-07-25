@@ -1,6 +1,6 @@
+import { subtle } from 'crypto';
 import admin from 'firebase-admin';
 import * as functions from 'firebase-functions/v1';
-import { subtle } from 'crypto';
 
 if (!admin.apps.length) {
   admin.initializeApp();

@@ -3,14 +3,14 @@ import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useTheme } from "@context/ThemeContext";
 import { sendBleDirectionsFrame } from "@core/ble/directionsTransmitter";
-import MapView, { MAPS_MODULE_AVAILABLE, Marker, Polyline } from "@core/map/nativeMaps";
+import MapView, { Marker, Polyline } from "@core/map/nativeMaps";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
+import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, useColorScheme, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
 
@@ -223,6 +223,11 @@ import { saveRide } from "@/core/map/routes/saveRide";
 import { saveRoute } from "@/core/map/routes/saveRoute";
 import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
+import {
+    GOOGLE_PLACE_PHOTOS_ENABLED,
+    GOOGLE_TEXT_SEARCH_CACHE_TTL_MS,
+    IOS_SUBSCRIPTIONS_TEMP_DISABLED,
+} from "@core/config/launchFlags";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
 import { useNetworkStatus } from "@core/hooks/useNetworkStatus";
 import useActiveRide from "@core/map/routes/useActiveRide";
@@ -233,11 +238,6 @@ import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
 import { buildRestrictedAccessMessage, PRO_UPGRADE_PROMPT_QUEUE_KEY } from "@core/utils/proUpgradePrompt";
-import {
-  GOOGLE_PLACE_PHOTOS_ENABLED,
-  GOOGLE_TEXT_SEARCH_CACHE_TTL_MS,
-  IOS_SUBSCRIPTIONS_TEMP_DISABLED,
-} from "@core/config/launchFlags";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import theme from "@themes";

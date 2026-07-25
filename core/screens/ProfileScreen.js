@@ -14,15 +14,15 @@ import { useThemeControls } from "@context/ThemeContext";
 import { deleteUser } from "@core/auth/deleteUser";
 import { RIDER_AMENITIES } from "@core/config/amenities/rider";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
+import {
+    IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
+    IOS_SUBSCRIPTIONS_TEMP_DISABLED,
+} from "@core/config/launchFlags";
 import { RIDER_SUITABILITY } from "@core/config/suitability/rider";
 import { cancelSubscription } from "@core/payments/stripeService";
 import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";
-import {
-  IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
-  IOS_SUBSCRIPTIONS_TEMP_DISABLED,
-} from "@core/config/launchFlags";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { updateDisplayNameReservation } from "@firebaseLocal/users";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -244,6 +244,19 @@ export default function ProfileScreen() {
     if (normalized === 'annual') return 'Annual';
     return plan.charAt(0).toUpperCase() + plan.slice(1);
   };
+
+  const hasManageableSubscription = Boolean(
+    subscription?.status && ['active', 'trial', 'past_due', 'pending'].includes(subscription.status)
+  );
+  const showSubscriptionButton =
+    (role === "user" || role === "guest" || role === "pro" || hasManageableSubscription) &&
+    !(Platform.OS === "ios" && IOS_SUBSCRIPTIONS_TEMP_DISABLED);
+  const subscriptionButtonTitle = hasManageableSubscription || role === "pro"
+    ? "Manage Subscription"
+    : "Upgrade";
+  const handleSubscriptionButtonPress = hasManageableSubscription || role === "pro"
+    ? () => router.push("/subscriptions/manage")
+    : handleUpgrade;
 
   // Create theme-aware styles inside component so they update when theme changes
   // MUST be defined before guest mode check to avoid "Cannot read property 'container' of undefined"
@@ -800,11 +813,11 @@ export default function ProfileScreen() {
           </Text>
           <View style={{ marginTop: theme.spacing.sm }}>
             <CRInfoBadge label={role.charAt(0).toUpperCase() + role.slice(1)} />
-            {(role === "user" || role === "guest") && !(Platform.OS === "ios" && IOS_SUBSCRIPTIONS_TEMP_DISABLED) && (
+            {showSubscriptionButton && (
               <CRButton
-                title="Upgrade"
+                title={subscriptionButtonTitle}
                 variant="primary"
-                onPress={handleUpgrade}
+                onPress={handleSubscriptionButtonPress}
               >
               </CRButton>
             )}
