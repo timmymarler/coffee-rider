@@ -5,6 +5,7 @@ import { formatWeekdayText, getOpeningStatus } from "@/core/map/utils/openingHou
 import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { useTheme } from "@context/ThemeContext";
+import { GOOGLE_PLACE_PHOTOS_ENABLED } from "@core/config/launchFlags";
 import { getCapabilities } from "@core/roles/capabilities";
 import { incMetric } from "@core/utils/devMetrics";
 import { uploadImage } from "@core/utils/uploadImage";
@@ -264,6 +265,7 @@ export default function PlaceCard({
   };
 
   const showNoGooglePhotosMessage =
+    GOOGLE_PLACE_PHOTOS_ENABLED &&
     capabilities.canViewGooglePhotos &&
     googlePlaceId &&
     googlePhotos.length === 0;
@@ -304,11 +306,15 @@ export default function PlaceCard({
     let mounted = true;
 
     async function loadGoogleDetails() {
-      const maxPhotosToFetch = capabilities?.maxGooglePhotosPerPlace || 5; // Fetch based on role limits
+      const maxPhotosToFetch = GOOGLE_PLACE_PHOTOS_ENABLED
+        ? (capabilities?.maxGooglePhotosPerPlace || 5)
+        : 0;
       const [refs, ratingInfo] = await Promise.all([
-        googlePhotos.length > 0
-          ? Promise.resolve(googlePhotos)
-          : fetchGooglePhotoRefs(googlePlaceId, maxPhotosToFetch),
+        GOOGLE_PLACE_PHOTOS_ENABLED
+          ? (googlePhotos.length > 0
+            ? Promise.resolve(googlePhotos)
+            : fetchGooglePhotoRefs(googlePlaceId, maxPhotosToFetch))
+          : Promise.resolve([]),
         fetchGoogleRating(googlePlaceId),
       ]);
 
@@ -469,11 +475,11 @@ export default function PlaceCard({
     let googlePhotos = [];
     let maxGooglePhotos = capabilities.maxGooglePhotosPerPlace || 0;
 
-    // For Place Owners, check if they own this place
-    if (capabilities.googlePhotoAccess === "limited" && safePlace.createdBy === user?.uid) {
+    // Place owners can see more photos on places they manage.
+    if (role === "place-owner" && safePlace.createdBy === user?.uid) {
       // Owner viewing their own place - show 10 photos
       maxGooglePhotos = 10;
-    } else if (capabilities.googlePhotoAccess === "limited") {
+    } else if (role === "place-owner") {
       // Owner viewing someone else's place - show 5 photos
       maxGooglePhotos = 5;
     }
@@ -510,6 +516,7 @@ export default function PlaceCard({
   /* ------------------------------------------------------------------ */
 
   function buildGooglePhotoUrl(name, width = 400) {
+    if (!GOOGLE_PLACE_PHOTOS_ENABLED) return null;
     return `https://places.googleapis.com/v1/${name}/media?maxWidthPx=${width}&key=${GOOGLE_KEY}`;
   }
 
@@ -1090,7 +1097,7 @@ export default function PlaceCard({
             }}
           />
           {capabilities.googlePhotoAccess === "limited" &&
-          rawGooglePhotos.length > 2 && (
+          rawGooglePhotos.length > (capabilities.maxGooglePhotosPerPlace || 0) && (
             <Text style={styles.upgradeHint}>
               More photos available with Pro
             </Text>

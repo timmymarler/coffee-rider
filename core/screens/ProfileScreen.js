@@ -14,15 +14,15 @@ import { useThemeControls } from "@context/ThemeContext";
 import { deleteUser } from "@core/auth/deleteUser";
 import { RIDER_AMENITIES } from "@core/config/amenities/rider";
 import { RIDER_CATEGORIES } from "@core/config/categories/rider";
+import {
+    IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
+    IOS_SUBSCRIPTIONS_TEMP_DISABLED,
+} from "@core/config/launchFlags";
 import { RIDER_SUITABILITY } from "@core/config/suitability/rider";
 import { cancelSubscription } from "@core/payments/stripeService";
 import { clearDebugLogs, exportDebugLogsAsText, getDebugLogs } from "@core/utils/debugLog";
 import { renewSponsorship } from "@core/utils/sponsorshipUtils";
 import { uploadImage } from "@core/utils/uploadImage";
-import {
-  IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
-  IOS_SUBSCRIPTIONS_TEMP_DISABLED,
-} from "@core/config/launchFlags";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { updateDisplayNameReservation } from "@firebaseLocal/users";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -91,15 +91,6 @@ export default function ProfileScreen() {
   // Unsubscribe
   const [unsubscribeConfirmVisible, setUnsubscribeConfirmVisible] = useState(false);
   const [unsubscribing, setUnsubscribing] = useState(false);
-
-  const hasStripeSubscription = Boolean(subscription?.stripeSubscriptionId);
-  const isAppleManagedSubscription =
-    Platform.OS === 'ios' &&
-    (
-      subscription?.provider === 'apple_iap' ||
-      Boolean(subscription?.appleTransactionId) ||
-      !hasStripeSubscription
-    );
 
   // Track changes for Save button
   const [initialValues, setInitialValues] = useState({});
@@ -253,6 +244,19 @@ export default function ProfileScreen() {
     if (normalized === 'annual') return 'Annual';
     return plan.charAt(0).toUpperCase() + plan.slice(1);
   };
+
+  const hasManageableSubscription = Boolean(
+    subscription?.status && ['active', 'trial', 'past_due', 'pending'].includes(subscription.status)
+  );
+  const showSubscriptionButton =
+    (role === "user" || role === "guest" || role === "pro" || hasManageableSubscription) &&
+    !(Platform.OS === "ios" && IOS_SUBSCRIPTIONS_TEMP_DISABLED);
+  const subscriptionButtonTitle = hasManageableSubscription || role === "pro"
+    ? "Manage Subscription"
+    : "Upgrade";
+  const handleSubscriptionButtonPress = hasManageableSubscription || role === "pro"
+    ? () => router.push("/subscriptions/manage")
+    : handleUpgrade;
 
   // Create theme-aware styles inside component so they update when theme changes
   // MUST be defined before guest mode check to avoid "Cannot read property 'container' of undefined"
@@ -637,16 +641,6 @@ export default function ProfileScreen() {
 
     setUnsubscribing(true);
     try {
-      if (isAppleManagedSubscription) {
-        const manageUrl = 'itms-apps://apps.apple.com/account/subscriptions';
-        const fallbackUrl = 'https://apps.apple.com/account/subscriptions';
-        const canOpenManage = await Linking.canOpenURL(manageUrl);
-        await Linking.openURL(canOpenManage ? manageUrl : fallbackUrl);
-        setUnsubscribing(false);
-        setUnsubscribeConfirmVisible(false);
-        return;
-      }
-
       const cancellationResult = await cancelSubscription({
         userId: user.uid,
         stripeSubscriptionId: subscription.stripeSubscriptionId || null, // Pass null for trials (no Stripe ID)
@@ -819,11 +813,11 @@ export default function ProfileScreen() {
           </Text>
           <View style={{ marginTop: theme.spacing.sm }}>
             <CRInfoBadge label={role.charAt(0).toUpperCase() + role.slice(1)} />
-            {role==="user" && !(Platform.OS === "ios" && IOS_SUBSCRIPTIONS_TEMP_DISABLED) && (
+            {showSubscriptionButton && (
               <CRButton
-                title="Upgrade"
+                title={subscriptionButtonTitle}
                 variant="primary"
-                onPress={handleUpgrade}
+                onPress={handleSubscriptionButtonPress}
               >
               </CRButton>
             )}
@@ -1329,7 +1323,7 @@ export default function ProfileScreen() {
           return (
             <>
               <CRButton
-                title={isAppleManagedSubscription ? 'Manage Subscription' : 'Unsubscribe'}
+                title="Unsubscribe"
                 variant="accentMid"
                 onPress={() => setUnsubscribeConfirmVisible(true)}
                 style={{ width: '100%' }}
@@ -1340,9 +1334,7 @@ export default function ProfileScreen() {
                 marginTop: theme.spacing.sm,
                 textAlign: 'center',
               }}>
-                {isAppleManagedSubscription
-                  ? 'Manage subscription in Apple Settings'
-                  : 'Cancel your Pro subscription'}
+                Cancel your Pro subscription
               </Text>
             </>
           );
@@ -1460,7 +1452,7 @@ export default function ProfileScreen() {
               marginBottom: theme.spacing.md,
               textAlign: 'center'
             }}>
-              {isAppleManagedSubscription ? 'Open Apple Subscriptions?' : 'Cancel Subscription?'}
+              Cancel Subscription?
             </Text>
 
             <Text style={{ 
@@ -1469,14 +1461,12 @@ export default function ProfileScreen() {
               marginBottom: theme.spacing.md,
               lineHeight: 20,
             }}>
-              {isAppleManagedSubscription
-                ? 'Subscription changes are managed in Apple. Open Apple Subscriptions to change or cancel auto-renew. If cancelled there, you keep Pro access until the renewal date.'
-                : `Your subscription will be cancelled. You'll retain access to Pro features until ${formatSubscriptionDate(subscription?.renewalDate)}.`}
+              {`Your subscription will be cancelled. You'll retain access to Pro features until ${formatSubscriptionDate(subscription?.renewalDate)}.`}
             </Text>
 
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <CRButton
-                title={unsubscribing ? "Please wait…" : isAppleManagedSubscription ? 'Open Apple Subscriptions' : 'Cancel Subscription'}
+                title={unsubscribing ? "Please wait…" : 'Cancel Subscription'}
                 variant="danger"
                 loading={unsubscribing}
                 disabled={unsubscribing}

@@ -3,16 +3,27 @@ import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useTheme } from "@context/ThemeContext";
 import { sendBleDirectionsFrame } from "@core/ble/directionsTransmitter";
+import MapView, { Marker, Polyline } from "@core/map/nativeMaps";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View, useColorScheme, useWindowDimensions } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
+import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, useColorScheme, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
+
+const INITIAL_FREE_MAP_TOAST_MS = 3500;
+const MAP_TIP_DISPLAY_MS = 5000;
+const GOOGLE_TEXT_SEARCH_CACHE = new Map();
+
+function getGoogleTextSearchCacheKey(query, latitude, longitude, radius, allowPhotos) {
+  const latBucket = Number(latitude || 0).toFixed(2);
+  const lngBucket = Number(longitude || 0).toFixed(2);
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  return `${normalizedQuery}|${latBucket}|${lngBucket}|${Math.round(radius)}|${allowPhotos ? "photos" : "nop"}`;
+}
 
 function showPlatformToast(message, duration = 'LONG') {
   if (!message) return;
@@ -212,6 +223,11 @@ import { saveRide } from "@/core/map/routes/saveRide";
 import { saveRoute } from "@/core/map/routes/saveRoute";
 import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
+import {
+    GOOGLE_PLACE_PHOTOS_ENABLED,
+    GOOGLE_TEXT_SEARCH_CACHE_TTL_MS,
+    IOS_SUBSCRIPTIONS_TEMP_DISABLED,
+} from "@core/config/launchFlags";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
 import { useNetworkStatus } from "@core/hooks/useNetworkStatus";
 import useActiveRide from "@core/map/routes/useActiveRide";
@@ -221,10 +237,9 @@ import useWaypoints from "@core/map/waypoints/useWaypoints";
 import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
-import { PRO_UPGRADE_PROMPT_QUEUE_KEY } from "@core/utils/proUpgradePrompt";
-import { IOS_SUBSCRIPTIONS_TEMP_DISABLED } from "@core/config/launchFlags";
+import { buildRestrictedAccessMessage, PRO_UPGRADE_PROMPT_QUEUE_KEY } from "@core/utils/proUpgradePrompt";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import theme from "@themes";
 import { useRouter } from "expo-router";
 import { RIDER_AMENITIES } from "../config/amenities/rider";
@@ -1048,8 +1063,8 @@ async function doNearbyRequest({ latitude, longitude, radius, includedTypes, cap
     "places.regularOpeningHours",
   ];
 
-  // Only Pro/Admin may request photo metadata
-  if (capabilities.canViewGooglePhotos) {
+  // Photo metadata can be expensive; keep it behind capability + launch flag.
+  if (capabilities.canViewGooglePhotos && GOOGLE_PLACE_PHOTOS_ENABLED) {
     fieldMask.push("places.photos");
   }
 
@@ -1093,7 +1108,7 @@ function mapGooglePlace(place, capabilities) {
   const types = Array.isArray(place.types) ? place.types : [];
   const category = classifyPoi({ types });
   const googlePhotoRefs =
-    capabilities?.canViewGooglePhotos && Array.isArray(place.photos)
+    capabilities?.canViewGooglePhotos && GOOGLE_PLACE_PHOTOS_ENABLED && Array.isArray(place.photos)
       ? place.photos
           .map((p) => p.name)
           .filter(Boolean)
@@ -1358,9 +1373,73 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   
   const auth = useContext(AuthContext);
   const user = auth?.user || null;
-  const role = auth?.profile?.role || "guest";
-  const capabilities = getCapabilities(role);
+  const role = auth?.role || auth?.profile?.role || "guest";
+  const capabilities = auth?.capabilities || getCapabilities(role);
+  const profileRole = auth?.profile?.role || "guest";
   const isFreeUser = role === "user";
+  const isMapFocused = useIsFocused();
+  const hasRestrictedFreeRouting = Boolean(user) && !capabilities?.isAdmin && role !== "pro" && role !== "place-owner";
+  const freeAccessCreatedAt = auth?.profile?.createdAt || user?.metadata?.creationTime || null;
+  const shouldShowAccessToast = Boolean(user) && hasRestrictedFreeRouting && (profileRole === "user" || role === "guest") && Boolean(freeAccessCreatedAt);
+  const restrictedAccessMessage = useMemo(
+    () => buildRestrictedAccessMessage(freeAccessCreatedAt),
+    [freeAccessCreatedAt]
+  );
+  const [showMapTip, setShowMapTip] = useState(false);
+  const [mapTipMessage, setMapTipMessage] = useState("");
+  const mapTipTimerRef = useRef(null);
+  const hasShownInitialFreeMapUpgradeToastRef = useRef(false);
+
+  useEffect(() => {
+    if (!isMapFocused || !shouldShowAccessToast) {
+      hasShownInitialFreeMapUpgradeToastRef.current = false;
+      return undefined;
+    }
+
+    if (mapTipTimerRef.current) {
+      clearTimeout(mapTipTimerRef.current);
+      mapTipTimerRef.current = null;
+    }
+
+    const showToast = (message, duration, onHide) => {
+      setMapTipMessage(message);
+      setShowMapTip(true);
+      mapTipTimerRef.current = setTimeout(() => {
+        setShowMapTip(false);
+        mapTipTimerRef.current = null;
+        if (onHide) {
+          onHide();
+        }
+      }, duration);
+    };
+
+    const showFeatureTip = () => {
+      showToast(
+        "Tap place markers to view details. Long press anywhere for actions. Try filters and route options to personalise your session.",
+        MAP_TIP_DISPLAY_MS
+      );
+    };
+
+    if (!hasShownInitialFreeMapUpgradeToastRef.current) {
+      hasShownInitialFreeMapUpgradeToastRef.current = true;
+      showToast(
+        restrictedAccessMessage,
+        INITIAL_FREE_MAP_TOAST_MS,
+        showFeatureTip
+      );
+    } else {
+      showFeatureTip();
+    }
+
+    return () => {
+      if (mapTipTimerRef.current) {
+        clearTimeout(mapTipTimerRef.current);
+        mapTipTimerRef.current = null;
+      }
+      setMapTipMessage("");
+      setShowMapTip(false);
+    };
+  }, [isMapFocused, shouldShowAccessToast, restrictedAccessMessage]);
   const [localUnitsPreference, setLocalUnitsPreference] = useState(null);
 
   const buildDailyRouteCounterKey = useCallback(() => {
@@ -1377,7 +1456,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }, []);
 
   const consumeDailyRoutePlan = useCallback(async () => {
-    if (!isFreeUser) {
+    if (!hasRestrictedFreeRouting) {
       return { allowed: true, used: 0, remaining: Infinity };
     }
 
@@ -1412,7 +1491,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       console.warn("[ROUTE_LIMIT] Failed to read/write daily route counter:", error);
       return { allowed: true, used: 0, remaining: Infinity };
     }
-  }, [isFreeUser, getLocalDateKey, buildDailyRouteCounterKey]);
+  }, [hasRestrictedFreeRouting, getLocalDateKey, buildDailyRouteCounterKey]);
 
   const enforceDailyRoutePlanLimit = useCallback(async () => {
     const routeLimit = await consumeDailyRoutePlan();
@@ -1425,7 +1504,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return null;
     }
 
-    if (isFreeUser && Number.isFinite(routeLimit.remaining) && routeLimit.remaining <= 2) {
+    if (hasRestrictedFreeRouting && Number.isFinite(routeLimit.remaining) && routeLimit.remaining <= 2) {
       setPostbox({
         type: 'info',
         title: 'New routes remaining today',
@@ -1434,7 +1513,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
 
     return routeLimit;
-  }, [consumeDailyRoutePlan, isFreeUser]);
+  }, [consumeDailyRoutePlan, hasRestrictedFreeRouting]);
 
   // Visited places — derived from user profile (auto-updates via AuthContext's real-time listener)
   const visitedPlaceIds = useMemo(
@@ -1522,6 +1601,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   }, [postbox]);
 
   useEffect(() => {
+    if (!isMapFocused) {
+      return undefined;
+    }
+
     let isMounted = true;
 
     AsyncStorage.getItem(PRO_UPGRADE_PROMPT_QUEUE_KEY)
@@ -1535,14 +1618,17 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
           console.warn("[PRO_UPGRADE_PROMPT] Invalid queued payload:", error);
         }
 
-        if (queuedPrompt?.message) {
+        if (queuedPrompt?.message || shouldShowAccessToast) {
           const shouldHideSubscriptionsHint = Platform.OS === 'ios' && IOS_SUBSCRIPTIONS_TEMP_DISABLED;
+          const normalizedMessage = shouldShowAccessToast
+            ? restrictedAccessMessage
+            : queuedPrompt?.message;
           setPostbox({
             type: 'info',
             title: queuedPrompt?.title || 'Upgrade available',
             message: shouldHideSubscriptionsHint
-              ? queuedPrompt.message
-              : `${queuedPrompt.message} Open Profile > Subscriptions to upgrade.`,
+              ? normalizedMessage
+              : `${normalizedMessage} Open Profile > Subscriptions to upgrade.`,
           });
         }
 
@@ -1557,7 +1643,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isMapFocused, shouldShowAccessToast, restrictedAccessMessage]);
 
   const skipNextFollowTickRef = useRef(false);
   const skipNextRegionChangeRef = useRef(false);
@@ -2617,13 +2703,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       setSelectedPlaceId(null);
       isLoadingSavedRouteRef.current = false;
 
-      const isCreatingNewRoute = !routeDestination && (!Array.isArray(waypoints) || waypoints.length === 0);
-      if (isCreatingNewRoute) {
-        const routeLimit = await enforceDailyRoutePlanLimit();
-        if (!routeLimit) {
-          closeAddPointMenu();
-          return;
-        }
+      const routeLimit = await enforceDailyRoutePlanLimit();
+      if (!routeLimit) {
+        closeAddPointMenu();
+        return;
       }
 
       if (!pendingMapPoint) {
@@ -5072,8 +5155,16 @@ function getStepCompletionThresholds(step = null) {
       "places.regularOpeningHours",
     ];
 
-    if (capabilities.canViewGooglePhotos) {
+    const allowGooglePhotos = capabilities.canViewGooglePhotos && GOOGLE_PLACE_PHOTOS_ENABLED;
+
+    if (allowGooglePhotos) {
       fieldMask.push("places.photos");
+    }
+
+    const cacheKey = getGoogleTextSearchCacheKey(query, latitude, longitude, radius, allowGooglePhotos);
+    const cached = GOOGLE_TEXT_SEARCH_CACHE.get(cacheKey);
+    if (cached && Date.now() - cached.createdAt < GOOGLE_TEXT_SEARCH_CACHE_TTL_MS) {
+      return cached.results;
     }
 
     try {
@@ -5104,9 +5195,16 @@ function getStepCompletionThresholds(step = null) {
       }
 
       const places = json?.places || [];
-      return places
+      const mappedResults = places
         .map((p) => mapGooglePlace(p, capabilities))
         .filter(p => p && p.latitude && p.longitude);
+
+      GOOGLE_TEXT_SEARCH_CACHE.set(cacheKey, {
+        createdAt: Date.now(),
+        results: mappedResults,
+      });
+
+      return mappedResults;
     } catch (error) {
       console.log("[GOOGLE] text search fetch error:", error.message);
       throw error; // Propagate to caller for user-facing error message
@@ -5493,12 +5591,14 @@ function getStepCompletionThresholds(step = null) {
   /* ------------------------------------------------------------ */
 
   async function handleRoute(place) {
-    const isCreatingNewRoute = !routeDestination && (!Array.isArray(waypoints) || waypoints.length === 0);
-    if (isCreatingNewRoute) {
-      const routeLimit = await enforceDailyRoutePlanLimit();
-      if (!routeLimit) {
-        return;
-      }
+    if (!capabilities.canCreateRoutes) {
+      showProUpgradeMessage('create routes');
+      return;
+    }
+
+    const routeLimit = await enforceDailyRoutePlanLimit();
+    if (!routeLimit) {
+      return;
     }
 
     routeRequestId.current += 1;
@@ -8054,6 +8154,15 @@ function getStepCompletionThresholds(step = null) {
         onClose={() => setShowRouteTypeSelector(false)}
       />
 
+      {/* First-load tip for free users */}
+      {showMapTip && (
+        <View pointerEvents="none" style={styles.mapTipToast}>
+          <Text style={styles.mapTipText}>
+            {mapTipMessage}
+          </Text>
+        </View>
+      )}
+
     </View>
   );
 }
@@ -9146,6 +9255,29 @@ const styles = StyleSheet.create({
     color: theme.colors.primaryDark,
     fontSize: 12,
     fontWeight: "700",
+    textAlign: "center",
+  },
+
+  mapTipToast: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 110,
+    backgroundColor: "rgba(15,23,42,0.92)",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 8,
+  },
+
+  mapTipText: {
+    color: "#f8fafc",
+    fontSize: 13,
+    lineHeight: 20,
     textAlign: "center",
   },
 });

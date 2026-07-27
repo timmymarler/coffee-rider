@@ -1,20 +1,16 @@
+import { IOS_SUBSCRIPTIONS_DISABLED_MESSAGE, IOS_SUBSCRIPTIONS_TEMP_DISABLED } from '@core/config/launchFlags';
 import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
-import {
-  IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
-  IOS_SUBSCRIPTIONS_TEMP_DISABLED,
-} from '@core/config/launchFlags';
 import { SUBSCRIPTION_PLANS } from '@core/payments/stripeService';
 import { useAppleSubscriptionV2 } from '@core/payments/useAppleSubscriptionV2';
 import { useStripeSubscription } from '@core/payments/useStripeSubscription';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useContext, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Linking,
     Platform,
     Pressable,
     ScrollView,
@@ -23,9 +19,12 @@ import {
     View,
 } from 'react-native';
 
-const PRIVACY_POLICY_URL = 'https://coffee-rider.co.uk/privacy-policy';
-const TERMS_OF_SERVICE_URL = 'https://coffee-rider.co.uk/terms-of-service';
-const APPLE_EULA_URL = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
+const ENTITLEMENT_SYNC_MAX_ATTEMPTS = 10;
+const ENTITLEMENT_SYNC_INTERVAL_MS = 2500;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export default function SubscriptionsScreen() {
   const router = useRouter();
@@ -34,32 +33,97 @@ export default function SubscriptionsScreen() {
   const theme = useTheme();
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [syncingEntitlement, setSyncingEntitlement] = useState(false);
   const { subscribeToPlan, status: stripeStatus } = useStripeSubscription();
   const {
+    subscribeToPlan: purchaseApplePlan,
+    restorePurchases: restoreApplePurchases,
     productsByPlan: appleProductsByPlan,
-    loadingProducts: appleLoading,
-    processingSku: appleProcessingSku,
-    restoring: appleRestoring,
-    error: appleError,
-    purchaseError: applePurchaseError,
+    iapAvailable,
+    loadingProducts: loadingAppleProducts,
     lastLoadError: appleLoadError,
-    reloadProducts,
-    subscribeToPlan: subscribeToApplePlan,
-    restorePurchases,
+    reloadProducts: reloadAppleProducts,
   } = useAppleSubscriptionV2({ user });
   const isIOS = Platform.OS === 'ios';
   const isIOSSubscriptionsDisabled = isIOS && IOS_SUBSCRIPTIONS_TEMP_DISABLED;
 
-  const openExternalLink = async (url, label) => {
+  useEffect(() => {
+    if (!isIOS || isIOSSubscriptionsDisabled) {
+      return;
+    }
+
+    reloadAppleProducts().catch(() => {});
+  }, [isIOS, isIOSSubscriptionsDisabled, reloadAppleProducts]);
+
+  const waitForEntitlementSync = useCallback(async () => {
+    for (let attempt = 1; attempt <= ENTITLEMENT_SYNC_MAX_ATTEMPTS; attempt += 1) {
+      await refreshProfile();
+
+      if (isSubscribed() || isInTrial()) {
+        return true;
+      }
+
+      if (attempt < ENTITLEMENT_SYNC_MAX_ATTEMPTS) {
+        await sleep(ENTITLEMENT_SYNC_INTERVAL_MS);
+      }
+    }
+
+    return false;
+  }, [isInTrial, isSubscribed, refreshProfile]);
+
+  const handleApplePurchase = async (planId) => {
     try {
-      const canOpen = await Linking.canOpenURL(url);
-      if (!canOpen) {
-        Alert.alert('Unable to open link', `${label} link is currently unavailable.`);
+      setSelectedPlan(planId);
+      setProcessing(true);
+      const result = await purchaseApplePlan(planId);
+      if (result?.cancelled) {
+        Alert.alert('Purchase cancelled', 'No payment was taken.');
         return;
       }
-      await Linking.openURL(url);
-    } catch (_error) {
-      Alert.alert('Unable to open link', `${label} link is currently unavailable.`);
+
+      if (result?.pending) {
+        setSyncingEntitlement(true);
+        const synced = await waitForEntitlementSync();
+        if (!synced) {
+          Alert.alert(
+            'Purchase Processing',
+            'Apple has accepted your purchase and we are still syncing your subscription. Please wait a moment, then tap Restore Purchases if Pro access is not visible yet.'
+          );
+        }
+        return;
+      }
+
+      setSyncingEntitlement(true);
+      const synced = await waitForEntitlementSync();
+      if (synced) {
+        Alert.alert('Subscription Active', 'Welcome to Pro! You now have full access.');
+      }
+    } catch (err) {
+      Alert.alert('Apple Subscription', err?.message || 'Unable to purchase right now. Please try again.');
+    } finally {
+      setSyncingEntitlement(false);
+      setProcessing(false);
+      setSelectedPlan(null);
+    }
+  };
+
+  const handleAppleRestore = async () => {
+    try {
+      setProcessing(true);
+      const result = await restoreApplePurchases();
+      if (result?.restored) {
+        Alert.alert('Purchases Restored', 'Your Apple subscription has been restored.');
+      } else {
+        Alert.alert('No Purchases Found', 'No active Apple subscription was found for this Apple ID.');
+      }
+
+      setSyncingEntitlement(true);
+      await waitForEntitlementSync();
+    } catch (err) {
+      Alert.alert('Restore Purchases', err?.message || 'Unable to restore right now. Please try again.');
+    } finally {
+      setSyncingEntitlement(false);
+      setProcessing(false);
     }
   };
 
@@ -82,76 +146,44 @@ export default function SubscriptionsScreen() {
         'Your Pro subscription is now active. You have access to all Pro features.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
-      await refreshProfile();
+      setSyncingEntitlement(true);
+      await waitForEntitlementSync();
     } catch (err) {
       Alert.alert('Error', err.message || 'Payment failed');
     } finally {
+      setSyncingEntitlement(false);
       setProcessing(false);
       setSelectedPlan(null);
     }
   };
 
-  const handleAppleSubscribe = async (planId) => {
-    if (!user?.email) {
-      Alert.alert('Error', 'Please log in first');
-      return;
-    }
+  const trialDaysLeft = getTrialDaysRemaining();
+  const hasActiveSubscription = isSubscribed();
+  const isCurrentlyInTrial = isInTrial();
+  const isCancellationScheduled = Boolean(subscription?.cancelAtPeriodEnd);
+  const appleActionsDisabled = processing || syncingEntitlement || loadingAppleProducts || !iapAvailable;
+  // (toast messages moved to MapScreen)
+  const annualApplePrice =
+    appleProductsByPlan?.annual?.displayPrice ||
+    appleProductsByPlan?.annual?.localizedPrice ||
+    appleProductsByPlan?.annual?.priceString ||
+    null;
+  const monthlyApplePrice =
+    appleProductsByPlan?.monthly?.displayPrice ||
+    appleProductsByPlan?.monthly?.localizedPrice ||
+    appleProductsByPlan?.monthly?.priceString ||
+    null;
+  const annualPlanForDisplay = annualApplePrice
+    ? { ...SUBSCRIPTION_PLANS.ANNUAL, price: annualApplePrice }
+    : SUBSCRIPTION_PLANS.ANNUAL;
+  const monthlyPlanForDisplay = monthlyApplePrice
+    ? { ...SUBSCRIPTION_PLANS.MONTHLY, price: monthlyApplePrice }
+    : SUBSCRIPTION_PLANS.MONTHLY;
 
-    try {
-      setSelectedPlan(planId);
-      const result = await subscribeToApplePlan(planId);
-      if (result?.cancelled) {
-        return;
-      }
-      if (result?.success) {
-        await refreshProfile();
-        Alert.alert('Subscription Active', 'Your Apple subscription is now active.');
-      }
-    } catch (err) {
-      const message = String(err?.message || '');
-      const normalized = message.toLowerCase();
-      if (normalized.includes('already have an active apple subscription')) {
-        Alert.alert(
-          'Subscription Already Active',
-          'This Apple ID already has an active subscription. Restore purchases to sync access on this account.',
-          [
-            { text: 'Not now', style: 'cancel' },
-            {
-              text: 'Restore Now',
-              onPress: () => {
-                handleAppleRestore();
-              },
-            },
-          ]
-        );
-        return;
-      }
-
-      if (!normalized.includes('temporarily unavailable')) {
-        Alert.alert('Error', message || 'Unable to complete Apple subscription.');
-      }
-    } finally {
-      setSelectedPlan(null);
-    }
-  };
-
-  const handleAppleRestore = async () => {
-    if (!user?.email) {
-      Alert.alert('Error', 'Please log in first');
-      return;
-    }
-
-    try {
-      const result = await restorePurchases();
-      await refreshProfile();
-      if (result?.restored) {
-        Alert.alert('Restored', 'Your Apple subscription has been restored.');
-      } else {
-        Alert.alert('No Active Subscription', 'No active Apple subscription was found to restore.');
-      }
-    } catch (err) {
-      Alert.alert('Error', err?.message || 'Unable to restore Apple purchases.');
-    }
+  const formatDate = (date) => {
+    if (!date) return '';
+    const d = new Date(date?.seconds ? date.seconds * 1000 : date);
+    return d.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
   if (loading) {
@@ -162,22 +194,9 @@ export default function SubscriptionsScreen() {
     );
   }
 
-  const trialDaysLeft = getTrialDaysRemaining();
-  const hasActiveSubscription = isSubscribed();
-  const isCurrentlyInTrial = isInTrial();
-  const isCancellationScheduled = Boolean(subscription?.cancelAtPeriodEnd);
-  const hasAppleMonthly = Boolean(appleProductsByPlan.monthly);
-  const hasAppleAnnual = Boolean(appleProductsByPlan.annual);
-  const hasAnyApplePlan = hasAppleMonthly || hasAppleAnnual;
-
-  const formatDate = (date) => {
-    if (!date) return '';
-    const d = new Date(date?.seconds ? date.seconds * 1000 : date);
-    return d.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
-  };
-
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.primaryDark }]}>
+    <View style={{ flex: 1, backgroundColor: theme.colors.primaryDark }}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 20 }}>
       {/* Header */}
       <View style={styles.header}>
         <MaterialCommunityIcons
@@ -244,6 +263,16 @@ export default function SubscriptionsScreen() {
         </View>
       )}
 
+      {syncingEntitlement && (
+        <View style={[styles.statusCard, { backgroundColor: theme.colors.primaryLight }]}> 
+          <ActivityIndicator size="small" color={theme.colors.accentMid} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.statusTitle, { color: theme.colors.text }]}>Processing upgrade</Text>
+            <Text style={[styles.statusText, { color: theme.colors.textLight }]}>Finalizing your Pro access...</Text>
+          </View>
+        </View>
+      )}
+
       {/* Features List */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
@@ -305,153 +334,60 @@ export default function SubscriptionsScreen() {
             ) : isIOS ? (
               <>
                 <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
-                  Choose your Apple plan
+                  Choose your plan
                 </Text>
 
-                {appleLoading && (
-                  <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginBottom: 12 }]}> 
-                    Loading App Store plans...
-                  </Text>
-                )}
-
-                {appleError && !hasAnyApplePlan && (
-                  <Text style={[styles.trialNote, { color: theme.colors.danger, marginBottom: 12 }]}> 
-                    App Store products failed to load. Please retry in a moment.
-                  </Text>
-                )}
-
-                {appleLoadError && !hasAnyApplePlan && (
-                  <Text style={[styles.trialNote, { color: theme.colors.danger, marginBottom: 12 }]}> 
-                    {appleLoadError?.message || 'App Store returned an unknown product-loading error.'}
-                  </Text>
-                )}
-
-                {applePurchaseError && hasAnyApplePlan && (
-                  <Text style={[styles.trialNote, { color: theme.colors.danger, marginBottom: 12 }]}> 
-                    {applePurchaseError?.message || 'Apple purchase failed. Please try again.'}
-                  </Text>
-                )}
-
-                {!hasAnyApplePlan && (
-                  <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
-                    {appleLoadError ? (
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 11, textAlign: 'center', marginBottom: 8 }}>
-                        {appleLoadError?.message || String(appleLoadError)}
-                      </Text>
-                    ) : null}
-                    <Pressable
-                      style={{
-                        backgroundColor: theme.colors.accentMid,
-                        paddingVertical: 8,
-                        paddingHorizontal: 18,
-                        borderRadius: 8,
-                        alignItems: 'center',
-                      }}
-                      onPress={async () => {
-                        try {
-                          await reloadProducts();
-                        } catch (err) {
-                          Alert.alert('App Store load failed', err?.message || 'Please try again.');
-                        }
-                      }}
-                      disabled={appleLoading}
-                    >
-                      {appleLoading ? (
-                        <ActivityIndicator color={theme.colors.text} />
-                      ) : (
-                        <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: '600' }}>
-                          Reload App Store Plans
-                        </Text>
-                      )}
-                    </Pressable>
-                  </View>
-                )}
-
+                {/* Annual Plan */}
                 <PricingCard
-                  plan={{
-                    ...SUBSCRIPTION_PLANS.ANNUAL,
-                    price: appleProductsByPlan.annual?.displayPrice || SUBSCRIPTION_PLANS.ANNUAL.price,
-                  }}
+                  plan={annualPlanForDisplay}
                   isSelected={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
-                  onPress={() => handleAppleSubscribe('annual')}
-                  processing={selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id && Boolean(appleProcessingSku)}
-                  disabled={appleRestoring || Boolean(appleProcessingSku)}
+                  onPress={() => handleApplePurchase('annual')}
+                  processing={processing && selectedPlan === SUBSCRIPTION_PLANS.ANNUAL.id}
+                  disabled={appleActionsDisabled}
                   theme={theme}
                 />
 
+                {/* Monthly Plan */}
                 <PricingCard
-                  plan={{
-                    ...SUBSCRIPTION_PLANS.MONTHLY,
-                    price: appleProductsByPlan.monthly?.displayPrice || SUBSCRIPTION_PLANS.MONTHLY.price,
-                  }}
+                  plan={monthlyPlanForDisplay}
                   isSelected={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
-                  onPress={() => handleAppleSubscribe('monthly')}
-                  processing={selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id && Boolean(appleProcessingSku)}
-                  disabled={appleRestoring || Boolean(appleProcessingSku)}
+                  onPress={() => handleApplePurchase('monthly')}
+                  processing={processing && selectedPlan === SUBSCRIPTION_PLANS.MONTHLY.id}
+                  disabled={appleActionsDisabled}
                   theme={theme}
                 />
 
-                <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
-                  <Pressable
-                    style={[
-                      {
-                        backgroundColor: theme.colors.accentMid,
-                        paddingVertical: 8,
-                        paddingHorizontal: 18,
-                        borderRadius: 8,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexDirection: 'row',
-                        gap: 8,
-                      },
-                      appleRestoring && { opacity: 0.5 },
-                    ]}
-                    onPress={handleAppleRestore}
-                    disabled={appleLoading || appleRestoring || Boolean(appleProcessingSku)}
-                  >
-                    {appleRestoring ? (
-                      <ActivityIndicator color={theme.colors.text} />
-                    ) : (
-                      <>
-                        <MaterialCommunityIcons
-                          name="restore"
-                          size={20}
-                          color={theme.colors.intext}
-                        />
-                        <Text style={{ color: theme.colors.intext, fontSize: 16, fontWeight: '600' }}>
-                          Restore Apple Purchases
-                        </Text>
-                      </>
-                    )}
-                  </Pressable>
-                </View>
+                {/* Restore Purchases Button */}
+                <Pressable
+                  onPress={handleAppleRestore}
+                  disabled={appleActionsDisabled}
+                >
+                  <View style={[styles.restoreButton, { backgroundColor: theme.colors.primaryLight }]}>
+                    <Text style={[styles.restoreButtonText, { color: theme.colors.accentMid }]}>
+                      {processing
+                        ? 'Restoring...'
+                        : syncingEntitlement
+                        ? 'Finalizing...'
+                        : loadingAppleProducts
+                        ? 'Loading App Store...'
+                        : !iapAvailable
+                        ? 'Apple IAP Unavailable'
+                        : 'Restore Purchases'}
+                    </Text>
+                  </View>
+                </Pressable>
 
-                <View style={[styles.pricingCard, { backgroundColor: theme.colors.primaryLight }]}> 
-                  <Text style={[styles.trialNote, { color: theme.colors.text, marginBottom: 8 }]}> 
-                    By subscribing, payment is charged to your Apple ID account at confirmation.
+                {!iapAvailable && !processing && (
+                  <Text style={[styles.trialNote, { color: theme.colors.textMuted, marginTop: 12 }]}> 
+                    Apple subscriptions are not available in this runtime. Use a local iOS development build or TestFlight. Expo Go does not include Apple IAP.
                   </Text>
-                  <Text style={[styles.trialNote, { color: theme.colors.text, marginBottom: 8 }]}> 
-                    Monthly and annual subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period.
+                )}
+
+                {appleLoadError && !processing && (
+                  <Text style={[styles.trialNote, { color: theme.colors.danger, marginTop: 12 }]}> 
+                    {appleLoadError.message}
                   </Text>
-                  <Pressable
-                    style={[styles.linkButton, { borderColor: theme.colors.accentMid }]}
-                    onPress={() => openExternalLink(PRIVACY_POLICY_URL, 'Privacy Policy')}
-                  >
-                    <Text style={[styles.linkText, { color: theme.colors.accentMid }]}>Privacy Policy</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.linkButton, { borderColor: theme.colors.accentMid }]}
-                    onPress={() => openExternalLink(TERMS_OF_SERVICE_URL, 'Terms of Service')}
-                  >
-                    <Text style={[styles.linkText, { color: theme.colors.accentMid }]}>Terms of Service (EULA)</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.linkButton, { borderColor: theme.colors.accentMid }]}
-                    onPress={() => openExternalLink(APPLE_EULA_URL, 'Apple Standard EULA')}
-                  >
-                    <Text style={[styles.linkText, { color: theme.colors.accentMid }]}>Apple Standard EULA</Text>
-                  </Pressable>
-                </View>
+                )}
               </>
             ) : (
               <>
@@ -498,7 +434,7 @@ export default function SubscriptionsScreen() {
         <FAQItem
           question="Is there a free trial?"
           answer={isIOS
-            ? 'iOS subscriptions are billed by Apple. Any trial eligibility is shown directly by the App Store at checkout.'
+            ? 'iOS subscriptions are currently unavailable while we rebuild this flow.'
             : 'Free trial is not currently offered on Android. Subscribe to start Pro access immediately.'}
           theme={theme}
         />
@@ -511,6 +447,8 @@ export default function SubscriptionsScreen() {
 
       <View style={styles.spacing} />
     </ScrollView>
+
+    </View>
   );
 }
 
@@ -784,4 +722,16 @@ const styles = StyleSheet.create({
   spacing: {
     height: 40,
   },
+  restoreButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  restoreButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
 });

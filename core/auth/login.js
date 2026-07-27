@@ -1,7 +1,7 @@
 // core/auth/login.js
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
-import { shouldShowProUpgradePrompt, showProUpgradePrompt } from "@core/utils/proUpgradePrompt";
+import { buildRestrictedAccessMessage, shouldShowProUpgradePrompt, showProUpgradePrompt } from "@core/utils/proUpgradePrompt";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import theme from "@themes";
 import { useRouter } from "expo-router";
@@ -72,6 +72,7 @@ export default function LoginScreen() {
     try {
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
       let role = null;
+      let profileCreatedAt = null;
       let isDeleted = false;
       let statusCheckFailed = false;
       try {
@@ -79,6 +80,7 @@ export default function LoginScreen() {
         if (profileSnap.exists()) {
           const profileData = profileSnap.data();
           role = profileData?.role || null;
+          profileCreatedAt = profileData?.createdAt || null;
           isDeleted = Boolean(profileData?.deleted);
         } else {
           statusCheckFailed = true;
@@ -112,7 +114,9 @@ export default function LoginScreen() {
       router.replace("map");
       if (shouldShowProUpgradePrompt(role)) {
         setTimeout(() => {
-          showProUpgradePrompt(router);
+          showProUpgradePrompt(router, {
+            message: buildRestrictedAccessMessage(profileCreatedAt || result?.user?.metadata?.creationTime),
+          });
         }, 250);
       }
     } catch (err) {
@@ -193,6 +197,7 @@ export default function LoginScreen() {
     try {
       await signInWithApple();
       let role = null;
+      let profileCreatedAt = null;
       let isDeleted = false;
       let statusCheckFailed = false;
       try {
@@ -202,6 +207,7 @@ export default function LoginScreen() {
           if (profileSnap.exists()) {
             const profileData = profileSnap.data();
             role = profileData?.role || null;
+            profileCreatedAt = profileData?.createdAt || null;
             isDeleted = Boolean(profileData?.deleted);
           } else {
             statusCheckFailed = true;
@@ -241,7 +247,9 @@ export default function LoginScreen() {
       router.replace("map");
       if (shouldShowProUpgradePrompt(role)) {
         setTimeout(() => {
-          showProUpgradePrompt(router);
+          showProUpgradePrompt(router, {
+            message: buildRestrictedAccessMessage(profileCreatedAt || firebaseUser?.metadata?.creationTime),
+          });
         }, 250);
       }
     } catch (err) {

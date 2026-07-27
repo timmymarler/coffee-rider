@@ -2,29 +2,30 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useRouter } from "expo-router";
 import {
-  createUserWithEmailAndPassword,
-  deleteUser,
-  sendEmailVerification,
+    createUserWithEmailAndPassword,
+    deleteUser,
+    sendEmailVerification,
 } from "firebase/auth";
 import { useContext, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
 import {
-  shouldShowProUpgradePrompt,
-  showProUpgradePrompt,
+    buildRestrictedAccessMessage,
+    shouldShowProUpgradePrompt,
+    showProUpgradePrompt,
 } from "@core/utils/proUpgradePrompt";
 import { reserveDisplayName } from "@firebaseLocal/users";
 import theme from "@themes";
@@ -56,11 +57,16 @@ export default function RegisterScreen({ onBack }) {
     try {
       const signInResult = await signInWithApple();
       let role = null;
+      let profileCreatedAt = null;
       try {
         const uid = auth.currentUser?.uid;
         if (uid) {
           const profileSnap = await getDoc(doc(db, "users", uid));
-          role = profileSnap.exists() ? profileSnap.data()?.role : null;
+          if (profileSnap.exists()) {
+            const profileData = profileSnap.data();
+            role = profileData?.role || null;
+            profileCreatedAt = profileData?.createdAt || null;
+          }
         }
       } catch (profileErr) {
         console.warn("Unable to read user profile role after Apple sign-in:", profileErr);
@@ -71,7 +77,9 @@ export default function RegisterScreen({ onBack }) {
       router.replace("map");
       if (!signInResult?.isNewUser && shouldShowProUpgradePrompt(role)) {
         setTimeout(() => {
-          showProUpgradePrompt(router);
+          showProUpgradePrompt(router, {
+            message: buildRestrictedAccessMessage(profileCreatedAt || auth.currentUser?.metadata?.creationTime),
+          });
         }, 250);
       }
     } catch (err) {
