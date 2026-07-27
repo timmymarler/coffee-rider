@@ -98,6 +98,7 @@ export default function PlaceCard({
   routeMeta = null,
   onPlaceCreated,
   onClearRoute = null,
+  onShowRouteOptions = null,
   onRoute,
   onNavigate,
   isLandscape = false,
@@ -1128,11 +1129,11 @@ export default function PlaceCard({
               style={styles.photoActionButton}
               onPress={() => {
                 if (hasRoute) {
-                  // Clear existing route
+                  // Route exists: show the same route action options used by marker long press.
                   try {
-                    onClearRoute?.();
+                    onShowRouteOptions?.(safePlace);
                   } catch (error) {
-                    console.error('[PlaceCard] Error clearing route:', error);
+                    console.error('[PlaceCard] Error opening route options:', error);
                   }
                 } else {
                   // Create new route
@@ -1147,7 +1148,7 @@ export default function PlaceCard({
               }}
             >
               <MaterialCommunityIcons
-                name={hasRoute ? "map-marker-off" : "map-marker-path"}
+                name="map-marker-path"
                 size={18}
                 color="#fff"
               />

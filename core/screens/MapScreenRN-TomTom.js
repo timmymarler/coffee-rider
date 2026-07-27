@@ -7854,6 +7854,27 @@ function getStepCompletionThresholds(step = null) {
             }
             handleRoute(placeArg);
           }}
+          onShowRouteOptions={(placeArg) => {
+            if (!placeArg) {
+              return;
+            }
+
+            const markerPlace = {
+              latitude: placeArg.latitude ?? placeArg.lat,
+              longitude: placeArg.longitude ?? placeArg.lng,
+              title: placeArg.title || placeArg.name || "Selected Place",
+              source: placeArg.source || "cr",
+              id: placeArg.id,
+            };
+
+            if (!Number.isFinite(markerPlace.latitude) || !Number.isFinite(markerPlace.longitude)) {
+              console.warn('[PlaceCard] Unable to open route options due to missing coordinates:', placeArg);
+              return;
+            }
+
+            setPendingMarker(markerPlace);
+            setShowMarkerMenu(true);
+          }}
           onClearRoute={clearRoute}
           onClose={() => {
             setSelectedPlaceId(null);
