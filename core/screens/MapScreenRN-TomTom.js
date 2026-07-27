@@ -1847,9 +1847,23 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     activeRideRef.current = activeRide;
     endRideRef.current = endRide;
 
+    const rideJustEnded = previousActiveRideRef.current !== null && !activeRide;
+
     if (!activeRide) {
       pendingActiveRideRebuildRef.current = false;
       activeRideRebuildInFlightRef.current = false;
+    }
+
+    if (rideJustEnded) {
+      initialFollowCameraRideRef.current = null;
+      clearFollowMeInactivityTimeout();
+      skipNextFollowTickRef.current = false;
+      skipNextRegionChangeRef.current = false;
+      skipRegionChangeUntilRef.current = 0;
+
+      if (followUser) {
+        setFollowUser(false);
+      }
     }
     
     // Only rebuild if ride is NEWLY started (previousActiveRideRef.current was null)
@@ -3467,20 +3481,21 @@ function getStepCompletionThresholds(step = null) {
       return;
     }
 
-    // Let AutoReroute effect handle routing when Follow Me is enabled
-    // It will detect the transition and rebuild the route with the correct travel mode
-    
-    // Recenter + zoom + tilt
-    skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
-    skipNextRegionChangeRef.current = true; // prevent the recenter animation from disabling follow
-    skipRegionChangeUntilRef.current = Date.now() + 2000;
-    preferredFollowZoomRef.current = FOLLOW_ZOOM;
-    await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true });
-
-    // Now enable follow mode and start 15-minute inactivity timer
-    // This triggers the AutoReroute effect to rebuild the route from current location
+    // Enable Follow Me first so a transient recenter failure doesn't require an extra tap.
     setFollowUser(true);
     resetFollowMeInactivityTimeout();
+
+    // Let AutoReroute effect handle routing when Follow Me is enabled.
+    // It will detect the transition and rebuild the route from current location.
+    try {
+      skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
+      skipNextRegionChangeRef.current = true; // prevent recenter animation from disabling follow
+      skipRegionChangeUntilRef.current = Date.now() + 2000;
+      preferredFollowZoomRef.current = FOLLOW_ZOOM;
+      await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true });
+    } catch (error) {
+      console.warn('[FollowMe] Recenter failed during activation:', error?.message || error);
+    }
   }
 
   /* ------------------------------------------------------------ */
@@ -4719,7 +4734,7 @@ function getStepCompletionThresholds(step = null) {
     setMapActions({
       recenter: handleRecentre,
       toggleFollow: toggleFollowMe,
-      isFollowing: () => isNavigationMode,
+      isFollowing: () => followUser,
       showRefreshMenu: () => setShowRefreshRouteMenu(true),
       canRefreshRoute: () => userLocation && (waypoints.length > 0 || routeDestination),
       refreshRoute: handleRefreshRouteToNextWaypoint,
@@ -4733,7 +4748,7 @@ function getStepCompletionThresholds(step = null) {
     return () => {
       setMapActions(null);
     };
-  }, [isNavigationMode, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress, endRide, selectedPlace, selectedPlaceId]);
+  }, [followUser, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress, endRide, selectedPlace, selectedPlaceId]);
 
   useEffect(() => {
     let subscription;

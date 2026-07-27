@@ -44,6 +44,8 @@ export default function useActiveRide(user) {
   const [error, setError] = useState(null);
   const locationSubscriptionRef = useRef(null);
   const lastUpdateRef = useRef(0);
+  const currentRideRef = useRef(null);
+  const endingRideRef = useRef(false);
 
   // Normalize Storage URLs - just pass through now that function returns correct bucket
   const normalizeAvatarUrl = useCallback((url) => {
@@ -67,17 +69,32 @@ export default function useActiveRide(user) {
         incMetric('useActiveRide:snapshot');
         if (snapshot.exists()) {
           const rideData = { id: snapshot.id, ...snapshot.data() };
+
+          // Guard against partial/ghost documents so map UI doesn't enter ride mode unexpectedly.
+          if (!rideData?.rideId || !rideData?.groupId) {
+            console.log('[useActiveRide] Invalid active ride payload detected, clearing record');
+            deleteDoc(activeRideRef).catch(err => console.error('Error clearing invalid ride:', err));
+            currentRideRef.current = null;
+            setActiveRide(null);
+            return;
+          }
+
           // Check if the ride is stale - if so, treat as if it doesn't exist
           // Only delete if it has a valid timestamp AND is older than timeout
           if (isRideStale(rideData)) {
             console.log('[useActiveRide] Detected stale ride record (timestamp:', rideData.lastUpdated, '), clearing it');
             deleteDoc(activeRideRef).catch(err => console.error('Error clearing stale ride:', err));
+            currentRideRef.current = null;
             setActiveRide(null);
           } else {
             console.log('[useActiveRide] Ride snapshot exists:', rideData.rideId);
+            endingRideRef.current = false;
+            currentRideRef.current = rideData;
             setActiveRide(rideData);
           }
         } else {
+          currentRideRef.current = null;
+          endingRideRef.current = false;
           setActiveRide(null);
         }
       },
@@ -85,6 +102,7 @@ export default function useActiveRide(user) {
         // Ignore permission errors when user is logging out
         if (err.code === 'permission-denied') {
           console.log('[useActiveRide] Permission denied - user likely logging out');
+          currentRideRef.current = null;
           setActiveRide(null);
           setError(null);
         } else {
@@ -144,6 +162,20 @@ export default function useActiveRide(user) {
               return;
             }
 
+            if (endingRideRef.current) {
+              return;
+            }
+
+            const liveRide = currentRideRef.current;
+            if (!liveRide?.rideId || !liveRide?.groupId) {
+              return;
+            }
+
+            // Ignore stale callbacks from previous rides after a rapid end/start transition.
+            if (activeRide?.rideId && liveRide.rideId !== activeRide.rideId) {
+              return;
+            }
+
             const { latitude, longitude } = location.coords;
             if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
               console.warn('[useActiveRide] Skipping location update with invalid coordinates:', location.coords);
@@ -168,6 +200,9 @@ export default function useActiveRide(user) {
               const userAvatar = normalizeAvatarUrl(freshProfileData.photoURL || freshProfileData.avatarUrl || user.photoURL || null);
               
               const payload = {
+                rideId: liveRide.rideId,
+                groupId: liveRide.groupId,
+                routeName: liveRide.routeName || null,
                 latitude,
                 longitude,
                 lastLocationUpdate: serverTimestamp(),
@@ -220,6 +255,7 @@ export default function useActiveRide(user) {
 
       setIsStarting(true);
       setError(null);
+      endingRideRef.current = false;
 
       try {
         const profileSnapshot = await getDoc(doc(db, 'users', user.uid));
@@ -270,19 +306,32 @@ export default function useActiveRide(user) {
    * End the active ride and stop location sharing
    */
   const endRide = useCallback(async () => {
-    if (!user?.uid || !activeRide) {
+    if (!user?.uid || !currentRideRef.current) {
       return;
     }
 
     try {
+      endingRideRef.current = true;
+
+      if (locationSubscriptionRef.current) {
+        locationSubscriptionRef.current.remove();
+        locationSubscriptionRef.current = null;
+      }
+
+      // Optimistically clear local ride state to avoid UI relock while Firestore propagates.
+      currentRideRef.current = null;
+      setActiveRide(null);
+
       const activeRideRef = doc(db, 'activeRides', user.uid);
       await deleteDoc(activeRideRef);
       console.log('[useActiveRide] Ended ride');
     } catch (err) {
       console.error('[useActiveRide] Error ending ride:', err);
       setError(err.message);
+    } finally {
+      endingRideRef.current = false;
     }
-  }, [user?.uid, activeRide]);
+  }, [user?.uid]);
 
   return {
     activeRide,

@@ -205,7 +205,7 @@ function FloatingTabBar({ state }) {
             onActivated={() => {
               // Long press: if already navigating, open current route in native maps.
               // Otherwise route to home and start Follow Me.
-              if (activeRide || (mapActions?.isFollowing && mapActions.isFollowing())) {
+              if (mapActions?.isFollowing && mapActions.isFollowing()) {
                 if (mapActions?.openInMaps) {
                   mapActions.openInMaps();
                 }
@@ -229,7 +229,7 @@ function FloatingTabBar({ state }) {
                 name={"navigation-variant"}
                 size={28}
                 color={
-                  activeRide || mapActions?.isFollowing?.()
+                  mapActions?.isFollowing?.()
                     ? theme.colors.danger
                     : "#2196F3"
                 }
