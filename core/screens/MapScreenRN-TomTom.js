@@ -1651,6 +1651,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const skipNextRebuildRef = useRef(false); // Skip next effect rebuild (used by toggleFollowMe)
   const isAnimatingRef = useRef(false); // Track if we're doing a programmatic animation
   const followMeInactivityRef = useRef(null); // Timeout for 15-min inactivity
+  const followActivationInFlightRef = useRef(false); // Prevent overlapping Follow Me activations
+  const followUserStateRef = useRef(false); // Keep latest follow state for deferred callbacks
+  const pendingFollowActivationTimersRef = useRef([]); // Deferred Follow Me activation retries
   const lastUserPanTimeRef = useRef(null); // Track when user last manually panned
   const previousFollowUserRef = useRef(false); // Track previous Follow Me state to detect when it turn off
   const lastFollowHeadingRef = useRef(null); // Cache last usable heading for stable Follow Me offset
@@ -1658,6 +1661,19 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const autoSkippedStartWaypointRef = useRef(false); // Prevent repeated auto-skip bookkeeping
   const pendingFlushRef = useRef(null); // Track pending polyline flush to cancel on clearRoute
   const pendingDisplayTimeoutRef = useRef(null); // Track pending instruction display timeout
+
+  useEffect(() => {
+    followUserStateRef.current = followUser;
+  }, [followUser]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingFollowActivationTimersRef.current.length > 0) {
+        pendingFollowActivationTimersRef.current.forEach((timerId) => clearTimeout(timerId));
+        pendingFollowActivationTimersRef.current = [];
+      }
+    };
+  }, []);
   const {
     waypoints,
     visitedWaypointIndices,
@@ -1918,19 +1934,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       isAnimatingRef.current = false;
       preferredFollowZoomRef.current = FOLLOW_ZOOM;
 
-      if (!followUser) {
-        setFollowUser(true);
-      }
-
-      recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true }).catch((error) => {
-        console.warn('[ACTIVE_RIDE] recenter error:', error);
+      activateFollowMe({ reason: 'ride-start' }).catch((error) => {
+        console.warn('[ACTIVE_RIDE] activate follow error:', error);
       });
 
       if (Platform.OS === 'ios') {
         setTimeout(() => {
           if (activeRideRef.current) {
-            recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true }).catch((error) => {
-              console.warn('[ACTIVE_RIDE] iOS recenter retry error:', error);
+            activateFollowMe({ reason: 'ride-start-ios-retry' }).catch((error) => {
+              console.warn('[ACTIVE_RIDE] iOS activate follow retry error:', error);
             });
           }
         }, 900);
@@ -3458,10 +3470,37 @@ function getStepCompletionThresholds(step = null) {
 
   function resetFollowMeInactivityTimeout() {
     clearFollowMeInactivityTimeout();
-    if (followUser) {
+    if (followUserStateRef.current) {
       followMeInactivityRef.current = setTimeout(() => {
         setFollowUser(false);
       }, 15 * 60 * 1000); // 15 minutes
+    }
+  }
+
+  async function activateFollowMe({ reason = "manual" } = {}) {
+    if (followActivationInFlightRef.current) {
+      return;
+    }
+
+    followActivationInFlightRef.current = true;
+    try {
+      if (!followUserStateRef.current) {
+        setFollowUser(true);
+        followUserStateRef.current = true;
+      }
+      resetFollowMeInactivityTimeout();
+
+      // Let AutoReroute effect handle routing when Follow Me is enabled.
+      // We still recenter immediately for consistent UX on join/load paths.
+      skipNextFollowTickRef.current = true;
+      skipNextRegionChangeRef.current = true;
+      skipRegionChangeUntilRef.current = Date.now() + 2000;
+      preferredFollowZoomRef.current = FOLLOW_ZOOM;
+      await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true });
+    } catch (error) {
+      console.warn(`[FollowMe] Recenter failed during activation (${reason}):`, error?.message || error);
+    } finally {
+      followActivationInFlightRef.current = false;
     }
   }
 
@@ -3471,7 +3510,9 @@ function getStepCompletionThresholds(step = null) {
   async function toggleFollowMe() {
     // Turning OFF: clear inactivity timeout and revert camera
     if (followUser) {
+      followActivationInFlightRef.current = false;
       setFollowUser(false);
+      followUserStateRef.current = false;
       clearFollowMeInactivityTimeout();
       const exitZoom = await captureCurrentMapZoom(preferredFollowZoomRef.current);
       // Revert to normal zoom and no tilt
@@ -3481,21 +3522,7 @@ function getStepCompletionThresholds(step = null) {
       return;
     }
 
-    // Enable Follow Me first so a transient recenter failure doesn't require an extra tap.
-    setFollowUser(true);
-    resetFollowMeInactivityTimeout();
-
-    // Let AutoReroute effect handle routing when Follow Me is enabled.
-    // It will detect the transition and rebuild the route from current location.
-    try {
-      skipNextFollowTickRef.current = true; // prevent immediate follow tick overriding
-      skipNextRegionChangeRef.current = true; // prevent recenter animation from disabling follow
-      skipRegionChangeUntilRef.current = Date.now() + 2000;
-      preferredFollowZoomRef.current = FOLLOW_ZOOM;
-      await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true });
-    } catch (error) {
-      console.warn('[FollowMe] Recenter failed during activation:', error?.message || error);
-    }
+    await activateFollowMe({ reason: "toggle" });
   }
 
   /* ------------------------------------------------------------ */
@@ -4970,12 +4997,27 @@ function getStepCompletionThresholds(step = null) {
     // Enable Follow Me if requested (e.g., when starting an active ride)
     if (enableFollowMeAfterLoad) {
       setEnableFollowMeAfterLoad(false);
-      // Use a delay to ensure route is fully loaded, fitted, and map is ready
-      setTimeout(() => {
-        if (!followUser && userLocation) {
-          toggleFollowMe();
-        }
-      }, 1200); // Increased delay to let route fit complete
+
+      if (pendingFollowActivationTimersRef.current.length > 0) {
+        pendingFollowActivationTimersRef.current.forEach((timerId) => clearTimeout(timerId));
+        pendingFollowActivationTimersRef.current = [];
+      }
+
+      // Route load and map readiness are async; retry activation a few times.
+      const retryDelaysMs = [700, 1400, 2400, 3600];
+      pendingFollowActivationTimersRef.current = retryDelaysMs.map((delayMs) =>
+        setTimeout(() => {
+          if (!activeRideRef.current) {
+            return;
+          }
+          if (followUserStateRef.current) {
+            return;
+          }
+          activateFollowMe({ reason: `route-load-${delayMs}` }).catch((error) => {
+            console.warn('[FollowMe] Deferred activation error:', error?.message || error);
+          });
+        }, delayMs)
+      );
     }
   }, [pendingSavedRouteId]);
 
@@ -5079,9 +5121,16 @@ function getStepCompletionThresholds(step = null) {
       
       clearWaypoints();
       routeFittedRef.current = false;
-      followUserPrevRef.current = false; // Reset Follow Me transition detector for next route
       setCurrentLoadedRouteId(null);
-      setFollowUser(false);          // Disable Follow Me when clearing route
+
+      const hasActiveRide = Boolean(activeRideRef.current);
+      if (!hasActiveRide) {
+        // Regular route clears should exit Follow Me.
+        followUserPrevRef.current = false; // Reset Follow Me transition detector for next route
+        followUserStateRef.current = false;
+        setFollowUser(false);
+      }
+
       setCurrentStepIndex(0);        // Reset step index
       setRouteSteps([]);
       routeStepsLoggedRef.current = false;
