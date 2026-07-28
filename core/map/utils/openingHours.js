@@ -73,7 +73,7 @@ function isOpenFromTodayText(todayText, now) {
     return null;
   }
 
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   for (const range of timeRanges) {
     const parts = range.split(/\s*[-–]\s*/);
     if (parts.length !== 2) continue;
@@ -150,6 +150,22 @@ function formatMinutesAsTime(minutes) {
   return `${hh}:${mm}`;
 }
 
+function resolveOpeningHoursNow(openingHours, now) {
+  const rawOffset =
+    openingHours?.utc_offset_minutes ??
+    openingHours?.utcOffsetMinutes ??
+    openingHours?.utc_offset ??
+    openingHours?.utcOffset ??
+    null;
+  const numericOffset = Number(rawOffset);
+
+  const offsetMinutes = Number.isFinite(numericOffset)
+    ? numericOffset
+    : -now.getTimezoneOffset();
+
+  return new Date(now.getTime() + offsetMinutes * 60000);
+}
+
 function getTodayWeekdayLine(weekdayText, jsDay) {
   if (!Array.isArray(weekdayText) || weekdayText.length === 0) return null;
   const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -192,7 +208,7 @@ function getActivePeriod(openingHours, now) {
     return null;
   }
 
-  const nowWeekMinutes = now.getDay() * 1440 + (now.getHours() * 60 + now.getMinutes());
+  const nowWeekMinutes = now.getUTCDay() * 1440 + (now.getUTCHours() * 60 + now.getUTCMinutes());
   const weekMinutes = 7 * 1440;
 
   for (const p of openingHours.periods) {
@@ -242,7 +258,8 @@ export function getOpeningStatus(openingHours) {
   const openNow = openingHours.open_now ?? openingHours.openNow ?? null;
   const weekdayText = getWeekdayText(openingHours);
   const now = new Date();
-  const todayText = getTodayWeekdayLine(weekdayText, now.getDay());
+  const localNow = resolveOpeningHoursNow(openingHours, now);
+  const todayText = getTodayWeekdayLine(weekdayText, localNow.getUTCDay());
 
   if (!openingHours.periods || !Array.isArray(openingHours.periods)) {
     const has24hToday = String(todayText || "").toLowerCase().includes("open 24 hours");
@@ -257,7 +274,7 @@ export function getOpeningStatus(openingHours) {
     }
 
     if (weekdayText.length > 0) {
-      const inferredOpen = isOpenFromTodayText(todayText, now);
+      const inferredOpen = isOpenFromTodayText(todayText, localNow);
       if (inferredOpen !== null) {
         return {
           label: inferredOpen ? "Open now" : "Closed",
@@ -295,7 +312,7 @@ export function getOpeningStatus(openingHours) {
     return openDay !== null && openTime !== null;
   });
 
-  const activePeriod = getActivePeriod(openingHours, now);
+  const activePeriod = getActivePeriod(openingHours, localNow);
   if (activePeriod) {
     const minsLeft = activePeriod.closeAtWeekMinutes - activePeriod.nowWeekMinutes;
     const closingSoon = minsLeft <= 30;

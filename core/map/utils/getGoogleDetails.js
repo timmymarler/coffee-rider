@@ -5,7 +5,7 @@ export async function getGoogleDetails({ placeId, name, latitude, longitude }) {
   try {
     if (placeId) {
       console.log("[getGoogleDetails] Using placeId:", placeId, "KEY available:", !!KEY);
-      const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,geometry,photos,rating,user_ratings_total,price_level,business_status,opening_hours&key=${KEY}`;
+      const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,geometry,photos,rating,user_ratings_total,price_level,business_status,opening_hours,utc_offset&key=${KEY}`;
       const res = await fetch(url);
       const json = await res.json();
       console.log("[getGoogleDetails] API Response status:", json.status);

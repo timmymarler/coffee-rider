@@ -1063,6 +1063,7 @@ async function doNearbyRequest({ latitude, longitude, radius, includedTypes, cap
     "places.rating",
     "places.userRatingCount",
     "places.regularOpeningHours",
+    "places.utcOffsetMinutes",
   ];
 
   // Photo metadata can be expensive; keep it behind capability + launch flag.
@@ -1128,6 +1129,7 @@ function mapGooglePlace(place, capabilities) {
     rating: place.rating,
     userRatingsTotal: place.userRatingCount,
     regularOpeningHours: place.regularOpeningHours,
+    utcOffsetMinutes: place.utcOffsetMinutes ?? null,
     googlePhotoRefs, // ✅ now defined
     source: "google",
     amenities: [],
@@ -5058,6 +5060,7 @@ function getStepCompletionThresholds(step = null) {
       googleRating: googlePlace.rating,
       googleUserRatingsTotal: googlePlace.userRatingsTotal,
       regularOpeningHours: googlePlace.regularOpeningHours,
+      utcOffsetMinutes: googlePlace.utcOffsetMinutes ?? null,
     };
 
     setTempCrPlace(temp);
@@ -5649,6 +5652,8 @@ function getStepCompletionThresholds(step = null) {
           googleMatch?.userRatingsTotal ?? crPlace.googleUserRatingsTotal,
         regularOpeningHours:
           googleMatch?.regularOpeningHours ?? crPlace.regularOpeningHours,
+        utcOffsetMinutes:
+          googleMatch?.utcOffsetMinutes ?? crPlace.utcOffsetMinutes ?? null,
       };
     }
 
