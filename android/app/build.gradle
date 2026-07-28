@@ -92,8 +92,8 @@ android {
         applicationId 'com.timmy.marler.coffeerider'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 119
-        versionName "2.31.62"
+        versionCode 120
+        versionName "2.31.63"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
