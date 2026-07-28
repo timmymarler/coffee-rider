@@ -7,9 +7,24 @@ function getWeekdayText(openingHours) {
 
 function parseTimeToMinutes(hhmm) {
   const raw = String(hhmm || "").trim();
-  if (!/^\d{4}$/.test(raw)) return null;
-  const hours = Number.parseInt(raw.slice(0, 2), 10);
-  const mins = Number.parseInt(raw.slice(2), 10);
+  if (!raw) return null;
+
+  let hours;
+  let mins;
+
+  if (/^\d{4}$/.test(raw)) {
+    hours = Number.parseInt(raw.slice(0, 2), 10);
+    mins = Number.parseInt(raw.slice(2), 10);
+  } else if (/^\d{3}$/.test(raw)) {
+    hours = Number.parseInt(raw.slice(0, 1), 10);
+    mins = Number.parseInt(raw.slice(1), 10);
+  } else {
+    const clockMatch = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (!clockMatch) return null;
+    hours = Number.parseInt(clockMatch[1], 10);
+    mins = Number.parseInt(clockMatch[2], 10);
+  }
+
   if (!Number.isFinite(hours) || !Number.isFinite(mins)) return null;
   if (hours < 0 || hours > 23 || mins < 0 || mins > 59) return null;
   return hours * 60 + mins;
@@ -138,10 +153,38 @@ function formatMinutesAsTime(minutes) {
 function getTodayWeekdayLine(weekdayText, jsDay) {
   if (!Array.isArray(weekdayText) || weekdayText.length === 0) return null;
   const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const short = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const name = names[jsDay];
+  const shortName = short[jsDay];
   if (!name) return null;
-  const lowerPrefix = `${name.toLowerCase()}:`;
-  return weekdayText.find((line) => String(line || "").toLowerCase().startsWith(lowerPrefix)) || null;
+
+  const normalized = weekdayText.map((line) => String(line || "").trim());
+  const fullPrefix = `${name.toLowerCase()}:`;
+  const fullNoColon = `${name.toLowerCase()} `;
+  const shortPrefix = shortName ? `${shortName.toLowerCase()}:` : null;
+  const shortNoColon = shortName ? `${shortName.toLowerCase()} ` : null;
+
+  const matched = normalized.find((line) => {
+    const lower = line.toLowerCase();
+    return (
+      lower.startsWith(fullPrefix) ||
+      lower === name.toLowerCase() ||
+      lower.startsWith(fullNoColon) ||
+      (shortPrefix && lower.startsWith(shortPrefix)) ||
+      (shortNoColon && lower.startsWith(shortNoColon)) ||
+      (shortName && lower === shortName.toLowerCase())
+    );
+  });
+
+  if (matched) return matched;
+
+  // Fallback for providers that return Monday-first arrays without day labels.
+  if (normalized.length === 7 && normalized.every((line) => line.length > 0)) {
+    const mondayFirstIndex = (jsDay + 6) % 7;
+    return normalized[mondayFirstIndex] || null;
+  }
+
+  return null;
 }
 
 function getActivePeriod(openingHours, now) {
