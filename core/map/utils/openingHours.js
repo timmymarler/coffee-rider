@@ -15,12 +15,116 @@ function parseTimeToMinutes(hhmm) {
   return hours * 60 + mins;
 }
 
+function parseClockTimeToMinutes(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return null;
+
+  const compact = raw.replace(/\s+/g, "");
+  const match = compact.match(/^(\d{1,2})(?::(\d{2}))?(am|pm)?$/i);
+  if (!match) return null;
+
+  let hours = Number.parseInt(match[1], 10);
+  const minutes = Number.parseInt(match[2] || "0", 10);
+  const meridiem = (match[3] || "").toLowerCase();
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (minutes < 0 || minutes > 59) return null;
+
+  if (meridiem) {
+    if (hours < 1 || hours > 12) return null;
+    hours = hours % 12;
+    if (meridiem === "pm") hours += 12;
+  } else if (hours > 23) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
+}
+
+function isOpenFromTodayText(todayText, now) {
+  const line = String(todayText || "").trim();
+  if (!line) return null;
+
+  const lower = line.toLowerCase();
+  if (lower.includes("open 24 hours")) {
+    return true;
+  }
+  if (lower.includes("closed")) {
+    return false;
+  }
+
+  const timeRanges = line.match(/(\d{1,2}(?::\d{2})?\s*[ap]m?)\s*[-–]\s*(\d{1,2}(?::\d{2})?\s*[ap]m?)/gi);
+  if (!timeRanges || timeRanges.length === 0) {
+    return null;
+  }
+
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  for (const range of timeRanges) {
+    const parts = range.split(/\s*[-–]\s*/);
+    if (parts.length !== 2) continue;
+
+    const openMinutes = parseClockTimeToMinutes(parts[0]);
+    const closeMinutes = parseClockTimeToMinutes(parts[1]);
+    if (openMinutes === null || closeMinutes === null) continue;
+
+    if (openMinutes === closeMinutes) {
+      return true;
+    }
+
+    if (closeMinutes > openMinutes) {
+      if (nowMinutes >= openMinutes && nowMinutes < closeMinutes) {
+        return true;
+      }
+    } else {
+      // Overnight window (e.g., 8:00 PM - 2:00 AM)
+      if (nowMinutes >= openMinutes || nowMinutes < closeMinutes) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function parseDayValue(dayValue) {
-  if (Number.isInteger(dayValue)) return dayValue;
-  const parsed = Number.parseInt(String(dayValue ?? ""), 10);
+  if (Number.isInteger(dayValue)) {
+    if (dayValue >= 0 && dayValue <= 6) return dayValue;
+    // Some providers encode weekday as ISO (Mon=1 ... Sun=7)
+    if (dayValue >= 1 && dayValue <= 7) return dayValue % 7;
+    return null;
+  }
+
+  const raw = String(dayValue ?? "").trim().toLowerCase();
+  if (!raw) return null;
+
+  const namedDayMap = {
+    sun: 0,
+    sunday: 0,
+    mon: 1,
+    monday: 1,
+    tue: 2,
+    tues: 2,
+    tuesday: 2,
+    wed: 3,
+    wednesday: 3,
+    thu: 4,
+    thur: 4,
+    thurs: 4,
+    thursday: 4,
+    fri: 5,
+    friday: 5,
+    sat: 6,
+    saturday: 6,
+  };
+  if (Object.prototype.hasOwnProperty.call(namedDayMap, raw)) {
+    return namedDayMap[raw];
+  }
+
+  const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed)) return null;
-  if (parsed < 0 || parsed > 6) return null;
-  return parsed;
+  if (parsed >= 0 && parsed <= 6) return parsed;
+  if (parsed >= 1 && parsed <= 7) return parsed % 7;
+  return null;
 }
 
 function formatMinutesAsTime(minutes) {
@@ -110,6 +214,17 @@ export function getOpeningStatus(openingHours) {
     }
 
     if (weekdayText.length > 0) {
+      const inferredOpen = isOpenFromTodayText(todayText, now);
+      if (inferredOpen !== null) {
+        return {
+          label: inferredOpen ? "Open now" : "Closed",
+          color: inferredOpen ? "#22c55e" : "#DC2626",
+          isOpen: inferredOpen,
+          closingSoon: false,
+          todayText,
+        };
+      }
+
       const label = openNow === true
         ? "Open now"
         : (openNow === false ? "Closed" : "Opening hours available");
@@ -131,6 +246,12 @@ export function getOpeningStatus(openingHours) {
     };
   }
 
+  const hasUsablePeriods = openingHours.periods.some((p) => {
+    const openDay = parseDayValue(p?.open?.day);
+    const openTime = parseTimeToMinutes(p?.open?.time);
+    return openDay !== null && openTime !== null;
+  });
+
   const activePeriod = getActivePeriod(openingHours, now);
   if (activePeriod) {
     const minsLeft = activePeriod.closeAtWeekMinutes - activePeriod.nowWeekMinutes;
@@ -149,6 +270,17 @@ export function getOpeningStatus(openingHours) {
       color: closingSoon && !isAllDay ? "#FACC15" : "#22c55e",
       isOpen: true,
       closingSoon: closingSoon && !isAllDay,
+      todayText,
+    };
+  }
+
+  // If we have valid schedule periods and none is active, trust the schedule over open_now.
+  if (hasUsablePeriods) {
+    return {
+      label: "Closed",
+      color: "#DC2626",
+      isOpen: false,
+      closingSoon: false,
       todayText,
     };
   }
