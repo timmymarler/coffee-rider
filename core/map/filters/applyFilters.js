@@ -1,3 +1,5 @@
+import { getOpeningStatus } from "@/core/map/utils/openingHours";
+
 export function applyFilters(poi, filters) {
   const matchMode = filters.matchMode === "any" ? "any" : "all";
 
@@ -47,6 +49,13 @@ export function applyFilters(poi, filters) {
   // Bike & Brew filter (CR only)
   if (poi.source === "cr" && filters.bikeBrew) {
     activeChecks.push(Boolean(poi.bikeBrew));
+  }
+
+  // Open now filter (CR + Google)
+  if (filters.openNow) {
+    const openingHours = poi.regularOpeningHours || poi.opening_hours || null;
+    const status = getOpeningStatus(openingHours);
+    activeChecks.push(Boolean(status?.isOpen));
   }
 
   if (activeChecks.length === 0) {

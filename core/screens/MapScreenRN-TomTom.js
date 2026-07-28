@@ -614,6 +614,7 @@ const EMPTY_FILTERS = {
   suitability: new Set(),
   categories: new Set(),
   amenities: new Set(),
+  openNow: false,
   sponsor: false,
   bikeBrew: false,
   visited: 'any',
@@ -623,6 +624,7 @@ const DEFAULT_FILTERS = {
   suitability: [],
   categories: [],
   amenities: [],
+  openNow: false,
   sponsor: false,
   bikeBrew: false,
   visited: 'any',
@@ -1325,6 +1327,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     appliedFilters.suitability.size > 0 ||
     appliedFilters.categories.size > 0 ||
     appliedFilters.amenities.size > 0 ||
+    appliedFilters.openNow ||
     appliedFilters.sponsor ||
     appliedFilters.visited === 'show' ||
     appliedFilters.visited === 'hide';
@@ -5521,6 +5524,8 @@ function getStepCompletionThresholds(step = null) {
       appliedFilters.suitability.size ||
       appliedFilters.categories.size ||
       appliedFilters.amenities.size ||
+      appliedFilters.openNow ||
+      appliedFilters.bikeBrew ||
       appliedFilters.sponsor
     ) {
       console.log("[SPONSOR_FILTER] Filter active - sponsored places in list:", Array.from(sponsoredPlaceIds));
@@ -5592,6 +5597,8 @@ function getStepCompletionThresholds(step = null) {
     });
     
     let combined = [...googleResults, ...crSearchMatches];
+
+    combined = combined.filter((p) => applyFilters(p, appliedFilters));
 
     if (appliedFilters.visited === 'show') {
       combined = combined.filter((p) => visitedPlaceIds.has(p.id));
@@ -7588,6 +7595,34 @@ function getStepCompletionThresholds(step = null) {
                   </TouchableOpacity>
                 );
               })}
+
+              <TouchableOpacity
+                key="openNow"
+                style={[
+                  styles.iconButton,
+                  draftFilters.openNow && styles.iconButtonActive,
+                ]}
+                onPress={() =>
+                  setDraftFilters((prev) => ({
+                    ...prev,
+                    openNow: !prev.openNow,
+                  }))
+                }
+              >
+                <MaterialCommunityIcons
+                  name="clock-check-outline"
+                  size={22}
+                  color={draftFilters.openNow ? theme.colors.accentMid : theme.colors.background}
+                />
+                <Text
+                  style={[
+                    styles.iconLabel,
+                    draftFilters.openNow && styles.iconLabelActive,
+                  ]}
+                >
+                  Open Now
+                </Text>
+              </TouchableOpacity>
 
               {/* SPONSORS (ADMIN ONLY) */}
               {role === "admin" && (
