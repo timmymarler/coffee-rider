@@ -6,6 +6,14 @@ function getWeekdayText(openingHours) {
 }
 
 function parseTimeToMinutes(hhmm) {
+  if (hhmm && typeof hhmm === "object") {
+    const hours = Number(hhmm.hour ?? hhmm.hours);
+    const mins = Number(hhmm.minute ?? hhmm.minutes ?? 0);
+    if (!Number.isFinite(hours) || !Number.isFinite(mins)) return null;
+    if (hours < 0 || hours > 23 || mins < 0 || mins > 59) return null;
+    return hours * 60 + mins;
+  }
+
   const raw = String(hhmm || "").trim();
   if (!raw) return null;
 
@@ -348,6 +356,29 @@ export function getOpeningStatus(openingHours) {
     return {
       label: "Closed",
       color: "#DC2626",
+      isOpen: false,
+      closingSoon: false,
+      todayText,
+    };
+  }
+
+  // Periods exist but could not be parsed; use weekday text if possible,
+  // and never trust stale provider open_now as "open" in this case.
+  if (weekdayText.length > 0) {
+    const inferredOpen = isOpenFromTodayText(todayText, localNow);
+    if (inferredOpen !== null) {
+      return {
+        label: inferredOpen ? "Open now" : "Closed",
+        color: inferredOpen ? "#22c55e" : "#DC2626",
+        isOpen: inferredOpen,
+        closingSoon: false,
+        todayText,
+      };
+    }
+
+    return {
+      label: openNow === false ? "Closed" : "Opening hours available",
+      color: openNow === false ? "#DC2626" : "#999",
       isOpen: false,
       closingSoon: false,
       todayText,
