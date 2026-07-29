@@ -221,16 +221,24 @@ function getActivePeriod(openingHours, now) {
 
     const openWeekMinutes = openDay * 1440 + openTime;
 
-    // Missing close block in Google periods commonly means 24-hour opening from open time.
     const closeDay = parseDayValue(p?.close?.day) ?? openDay;
     const parsedCloseTime = parseTimeToMinutes(p?.close?.time);
+
+    // If close is present but malformed, skip this period instead of assuming open.
+    if (p?.close && parsedCloseTime === null) {
+      continue;
+    }
+
+    // Missing close block usually means 24h window from open time.
     const closeTime = parsedCloseTime === null ? openTime : parsedCloseTime;
 
     let closeWeekMinutes = closeDay * 1440 + closeTime;
     if (!p?.close) {
       closeWeekMinutes = openWeekMinutes + 1440;
     } else if (closeWeekMinutes <= openWeekMinutes) {
-      closeWeekMinutes += weekMinutes;
+      // Same-day close <= open means overnight rollover into next day.
+      // Different-day close <= open implies week boundary wrap.
+      closeWeekMinutes += closeDay === openDay ? 1440 : weekMinutes;
     }
 
     const nowCandidates = [nowWeekMinutes, nowWeekMinutes + weekMinutes];
