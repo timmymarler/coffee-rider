@@ -35,7 +35,8 @@ function parseClockTimeToMinutes(value) {
   if (!raw) return null;
 
   const compact = raw.replace(/\s+/g, "");
-  const match = compact.match(/^(\d{1,2})(?::(\d{2}))?(am|pm)?$/i);
+  const normalized = compact.replace(/\./g, "");
+  const match = normalized.match(/^(\d{1,2})(?::(\d{2}))?(am|pm)?$/i);
   if (!match) return null;
 
   let hours = Number.parseInt(match[1], 10);
@@ -68,7 +69,7 @@ function isOpenFromTodayText(todayText, now) {
     return false;
   }
 
-  const timeRanges = line.match(/(\d{1,2}(?::\d{2})?\s*[ap]m?)\s*[-–]\s*(\d{1,2}(?::\d{2})?\s*[ap]m?)/gi);
+  const timeRanges = line.match(/(\d{1,2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?)\s*[-–—]\s*(\d{1,2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?)/gi);
   if (!timeRanges || timeRanges.length === 0) {
     return null;
   }
@@ -293,13 +294,13 @@ export function getOpeningStatus(openingHours) {
         };
       }
 
-      const label = openNow === true
-        ? "Open now"
-        : (openNow === false ? "Closed" : "Opening hours available");
+      // Conservative fallback: if weekday hours exist but parsing fails,
+      // avoid trusting potentially stale provider open_now values.
+      const label = openNow === false ? "Closed" : "Opening hours available";
       return {
         label,
-        color: openNow === true ? "#22c55e" : "#999",
-        isOpen: openNow === true,
+        color: openNow === false ? "#DC2626" : "#999",
+        isOpen: false,
         closingSoon: false,
         todayText,
       };
