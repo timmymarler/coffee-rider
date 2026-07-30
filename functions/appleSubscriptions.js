@@ -142,19 +142,21 @@ const getAppleProductIds = () => {
 
 const normalizeAppleProductId = (value) => String(value || '').trim().toLowerCase();
 
-const buildAppleProductAliases = (value) => {
+const buildAppleProductAliases = (value, { includeVersionAliases = true } = {}) => {
   const normalized = normalizeAppleProductId(value);
   if (!normalized) return [];
 
   const aliases = new Set([normalized]);
-  const base = normalized.replace(/\.v\d+$/i, '');
-  if (base) {
-    aliases.add(base);
-    // Keep historical suffixes accepted during product migrations.
-    aliases.add(`${base}.v1`);
-    aliases.add(`${base}.v2`);
-    aliases.add(`${base}.v3`);
-    aliases.add(`${base}.v4`);
+  if (includeVersionAliases) {
+    const base = normalized.replace(/\.v\d+$/i, '');
+    if (base) {
+      aliases.add(base);
+      // Keep historical suffixes accepted during product migrations.
+      aliases.add(`${base}.v1`);
+      aliases.add(`${base}.v2`);
+      aliases.add(`${base}.v3`);
+      aliases.add(`${base}.v4`);
+    }
   }
 
   return Array.from(aliases);
@@ -168,15 +170,21 @@ const isKnownAppleProductId = (validProductIds, productId) => {
 
 const getAppleProductAliases = (productIds) => {
   const aliases = new Set();
-  const seeded = [
-    productIds?.monthly,
-    productIds?.annual,
-    'com.timmy.marler.coffeerider.pro.monthly.v3',
-    'com.timmy.marler.coffeerider.pro.annual.v3',
-  ];
 
-  seeded.forEach((id) => {
-    buildAppleProductAliases(id).forEach((alias) => aliases.add(alias));
+  // Monthly receives legacy alias expansion.
+  [
+    productIds?.monthly,
+    'com.timmy.marler.coffeerider.pro.monthly.v3',
+  ].forEach((id) => {
+    buildAppleProductAliases(id, { includeVersionAliases: true }).forEach((alias) => aliases.add(alias));
+  });
+
+  // Annual remains strict to configured/canonical IDs.
+  [
+    productIds?.annual,
+    'com.timmy.marler.coffeerider.pro.annual.v3',
+  ].forEach((id) => {
+    buildAppleProductAliases(id, { includeVersionAliases: false }).forEach((alias) => aliases.add(alias));
   });
 
   return aliases;

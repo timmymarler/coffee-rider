@@ -23,18 +23,20 @@ const CANONICAL_APPLE_SUBSCRIPTION_PRODUCTS = {
   ANNUAL: 'com.timmy.marler.coffeerider.pro.annual.v3',
 };
 
-function expandSkuAliases(value) {
+function expandSkuAliases(value, { includeVersionAliases = true } = {}) {
   const normalized = normalizeSkuValue(value).toLowerCase();
   if (!normalized) return [];
 
   const aliases = new Set([normalized]);
-  const base = normalized.replace(/\.v\d+$/i, '');
-  if (base) {
-    aliases.add(base);
-    aliases.add(`${base}.v1`);
-    aliases.add(`${base}.v2`);
-    aliases.add(`${base}.v3`);
-    aliases.add(`${base}.v4`);
+  if (includeVersionAliases) {
+    const base = normalized.replace(/\.v\d+$/i, '');
+    if (base) {
+      aliases.add(base);
+      aliases.add(`${base}.v1`);
+      aliases.add(`${base}.v2`);
+      aliases.add(`${base}.v3`);
+      aliases.add(`${base}.v4`);
+    }
   }
 
   return Array.from(aliases);
@@ -613,17 +615,19 @@ export function useAppleSubscriptionV2({ user }) {
   }, []);
 
   const availableSkus = useMemo(() => {
-    const seeds = [
-      APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY,
-      APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL,
-      CANONICAL_APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY,
-      CANONICAL_APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL,
-    ];
-
     const skuSet = new Set();
-    seeds.forEach((seed) => {
-      expandSkuAliases(seed).forEach((alias) => skuSet.add(alias));
-    });
+
+    // Monthly receives alias expansion for legacy SKU migrations.
+    [APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY, CANONICAL_APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY]
+      .forEach((seed) => {
+        expandSkuAliases(seed, { includeVersionAliases: true }).forEach((alias) => skuSet.add(alias));
+      });
+
+    // Annual stays strict to configured/canonical IDs to minimize risk.
+    [APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL, CANONICAL_APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL]
+      .forEach((seed) => {
+        expandSkuAliases(seed, { includeVersionAliases: false }).forEach((alias) => skuSet.add(alias));
+      });
 
     return Array.from(skuSet).filter(Boolean);
   }, []);
