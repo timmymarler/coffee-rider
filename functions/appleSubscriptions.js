@@ -140,23 +140,53 @@ const getAppleProductIds = () => {
   };
 };
 
-const getAppleProductAliases = (productIds) => {
-  const aliases = new Set([productIds.monthly, productIds.annual]);
+const normalizeAppleProductId = (value) => String(value || '').trim().toLowerCase();
 
-  if (productIds.monthly?.endsWith('.v2')) {
-    aliases.add(productIds.monthly.replace(/\.v2$/, ''));
+const buildAppleProductAliases = (value) => {
+  const normalized = normalizeAppleProductId(value);
+  if (!normalized) return [];
+
+  const aliases = new Set([normalized]);
+  const base = normalized.replace(/\.v\d+$/i, '');
+  if (base) {
+    aliases.add(base);
+    // Keep historical suffixes accepted during product migrations.
+    aliases.add(`${base}.v1`);
+    aliases.add(`${base}.v2`);
+    aliases.add(`${base}.v3`);
+    aliases.add(`${base}.v4`);
   }
-  if (productIds.annual?.endsWith('.v2')) {
-    aliases.add(productIds.annual.replace(/\.v2$/, ''));
-  }
+
+  return Array.from(aliases);
+};
+
+const isKnownAppleProductId = (validProductIds, productId) => {
+  const normalized = normalizeAppleProductId(productId);
+  if (!normalized) return false;
+  return validProductIds.has(normalized);
+};
+
+const getAppleProductAliases = (productIds) => {
+  const aliases = new Set();
+  const seeded = [
+    productIds?.monthly,
+    productIds?.annual,
+    'com.timmy.marler.coffeerider.pro.monthly.v3',
+    'com.timmy.marler.coffeerider.pro.annual.v3',
+  ];
+
+  seeded.forEach((id) => {
+    buildAppleProductAliases(id).forEach((alias) => aliases.add(alias));
+  });
 
   return aliases;
 };
 
 const isAnnualProductId = (productId, configuredAnnualId) => {
-  if (!productId) return false;
-  if (productId === configuredAnnualId) return true;
-  return productId.includes('.annual');
+  const normalizedProductId = normalizeAppleProductId(productId);
+  if (!normalizedProductId) return false;
+  if (normalizedProductId === normalizeAppleProductId(configuredAnnualId)) return true;
+  return normalizedProductId.includes('.annual');
 };
 
 const toMillis = (value) => {
@@ -252,7 +282,7 @@ const resolveCancelAtPeriodEndFromAppStoreApi = async ({
     for (const lastTxn of group.lastTransactions || []) {
       const txnPayload = decodeJwsPayload(lastTxn.signedTransactionInfo);
       const renewalPayload = decodeJwsPayload(lastTxn.signedRenewalInfo);
-      if (txnPayload?.productId && validProductIds.has(txnPayload.productId)) {
+      if (txnPayload?.productId && isKnownAppleProductId(validProductIds, txnPayload.productId)) {
         return resolveCancelAtPeriodEndFromRenewalPayload({
           renewalPayload,
           notificationType: null,
@@ -305,7 +335,7 @@ const resolveFromAppStoreApi = async ({
   outer: for (const group of groups) {
     for (const lastTxn of group.lastTransactions || []) {
       const txnPayload = decodeJwsPayload(lastTxn.signedTransactionInfo);
-      if (txnPayload && validProductIds.has(txnPayload.productId)) {
+      if (txnPayload && isKnownAppleProductId(validProductIds, txnPayload.productId)) {
         matchedApiStatus = lastTxn.status;
         matchedTxnPayload = txnPayload;
         matchedRenewalPayload = decodeJwsPayload(lastTxn.signedRenewalInfo);
@@ -387,7 +417,7 @@ const resolveFromVerifyReceipt = ({
       expiresDateMs: toMillis(item?.expires_date_ms || item?.expires_date),
       purchaseDateMs: toMillis(item?.purchase_date_ms || item?.purchase_date),
     }))
-    .filter((item) => item.productId && validProductIds.has(item.productId));
+    .filter((item) => item.productId && isKnownAppleProductId(validProductIds, item.productId));
 
   if (!normalized.length) return null;
 
@@ -879,7 +909,7 @@ export const appleServerNotification = functions
 
       const productIds = getAppleProductIds();
       const validProducts = getAppleProductAliases(productIds);
-      if (!productId || !validProducts.has(productId)) {
+      if (!productId || !isKnownAppleProductId(validProducts, productId)) {
         if (notificationUUID) {
           await firestore.doc(`appleNotifications/${notificationUUID}`).set({
             createdAt: FieldValue.serverTimestamp(),

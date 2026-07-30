@@ -23,6 +23,23 @@ const CANONICAL_APPLE_SUBSCRIPTION_PRODUCTS = {
   ANNUAL: 'com.timmy.marler.coffeerider.pro.annual.v3',
 };
 
+function expandSkuAliases(value) {
+  const normalized = normalizeSkuValue(value).toLowerCase();
+  if (!normalized) return [];
+
+  const aliases = new Set([normalized]);
+  const base = normalized.replace(/\.v\d+$/i, '');
+  if (base) {
+    aliases.add(base);
+    aliases.add(`${base}.v1`);
+    aliases.add(`${base}.v2`);
+    aliases.add(`${base}.v3`);
+    aliases.add(`${base}.v4`);
+  }
+
+  return Array.from(aliases);
+}
+
 function normalizeId(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -596,18 +613,19 @@ export function useAppleSubscriptionV2({ user }) {
   }, []);
 
   const availableSkus = useMemo(() => {
-    const monthly = APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY;
-    const annual = APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL;
-    const skuSet = new Set([
-      monthly,
-      annual,
+    const seeds = [
+      APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY,
+      APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL,
       CANONICAL_APPLE_SUBSCRIPTION_PRODUCTS.MONTHLY,
       CANONICAL_APPLE_SUBSCRIPTION_PRODUCTS.ANNUAL,
-    ]);
+    ];
 
-    return Array.from(skuSet)
-      .map((value) => normalizeSkuValue(value))
-      .filter(Boolean);
+    const skuSet = new Set();
+    seeds.forEach((seed) => {
+      expandSkuAliases(seed).forEach((alias) => skuSet.add(alias));
+    });
+
+    return Array.from(skuSet).filter(Boolean);
   }, []);
 
   const productsByPlan = useMemo(() => {
@@ -960,7 +978,9 @@ export function useAppleSubscriptionV2({ user }) {
       }
 
       const appleSubscriptions = allHistory
-        .filter((purchase) => availableSkus.includes(getPurchaseProductId(purchase)))
+        .filter((purchase) =>
+          availableSkus.includes(normalizeSkuValue(getPurchaseProductId(purchase)).toLowerCase())
+        )
         .sort((a, b) => Number(b.transactionDate || 0) - Number(a.transactionDate || 0));
 
       let latest = appleSubscriptions[0];
