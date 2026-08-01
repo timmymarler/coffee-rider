@@ -5288,16 +5288,19 @@ function getStepCompletionThresholds(step = null) {
   useEffect(() => {
     if (!activeQuery || !searchOrigin) return;
 
-    // 🔒 HARD GATE: guests (or restricted roles) cannot hit Google
-    if (!canUseGooglePlacesApi) {
-      console.log("[SEARCH] Google search blocked for role");
-      setGooglePois([]); // ensure no stale results linger
+    const restrictedToCrSearch = !canUseGooglePlacesApi;
+
+    if (restrictedToCrSearch) {
+      console.log("[SEARCH] Google search blocked for role; running CR-only search");
+      setGooglePois([]); // ensure no stale Google results linger
       setSearchNotice({
         title: "Search restricted",
         message: "Only Pro users can use Google Search. Standard users can only search Coffee Rider places.",
-      });      
-      return;
-    }    
+      });
+    } else {
+      setSearchNotice(null);
+    }
+
     // Prevent duplicate searches
     if (lastSearchRef.current === activeQuery) return;
     lastSearchRef.current = activeQuery;
@@ -5312,34 +5315,34 @@ function getStepCompletionThresholds(step = null) {
         latitudeDelta < 0.08 ? 30000 :
         50000;
 
-
+      const crSearchResults = crPlaces.filter((p) => p.source === "cr" && matchesQuery(p, activeQuery));
       let results = [];
-      try {
-        results = await doTextSearch({
-          query: activeQuery,
-          latitude,
-          longitude,
-          radius,
-          capabilities,
-        });
+      if (!restrictedToCrSearch) {
+        try {
+          results = await doTextSearch({
+            query: activeQuery,
+            latitude,
+            longitude,
+            radius,
+            capabilities,
+          });
 
-        if (cancelled) return;
+          if (cancelled) return;
 
-        setGooglePois(results);
-      } catch (error) {
-        if (cancelled) return;
-        console.log("[SEARCH] Google search failed:", error.message);
-        setGooglePois([]);
-        // Don't return - continue to search local CR places
+          setGooglePois(results);
+        } catch (error) {
+          if (cancelled) return;
+          console.log("[SEARCH] Google search failed:", error.message);
+          setGooglePois([]);
+          // Don't return - continue to search local CR places
+        }
       }
 
       // --- Center map on exact match if found ---
       let exactMatch = null;
       // Check CR places for exact match
 
-      exactMatch = crPlaces.find(
-        (p) => p.source === "cr" && isExactMatch(p, activeQuery)
-      );
+      exactMatch = crSearchResults.find((p) => isExactMatch(p, activeQuery));
       // If not found, check Google results for exact match
       if (!exactMatch && results.length) {
         exactMatch = results.find((p) => isExactMatch(p, activeQuery));
@@ -5362,10 +5365,11 @@ function getStepCompletionThresholds(step = null) {
         return; // Centered on exact match, skip fitToCoordinates
       }
 
-      // Fallback: fit to all results as before
-      if (results.length && mapRef.current) {
+      // Fallback: fit to all available search results
+      const fitResults = [...crSearchResults, ...results];
+      if (fitResults.length && mapRef.current) {
         mapRef.current.fitToCoordinates(
-          results.map(p => ({
+          fitResults.map(p => ({
             latitude: p.latitude,
             longitude: p.longitude,
           })),
@@ -5378,9 +5382,8 @@ function getStepCompletionThresholds(step = null) {
     }
 
     run();
-    setSearchNotice(null);
     return () => { cancelled = true; };
-  }, [activeQuery, searchOrigin, canUseGooglePlacesApi]);
+  }, [activeQuery, searchOrigin, canUseGooglePlacesApi, crPlaces]);
 
   useEffect(() => {
     
