@@ -181,6 +181,7 @@ export default function PlaceCard({
   const user = auth?.user || null;
   const role = auth?.profile?.role || "guest"; // or auth.role if that’s what you store
   const capabilities = getCapabilities(role);
+  const canUseGooglePlacesApi = capabilities?.isAdmin === true || role === "pro";
   const distanceUnits = auth?.profile?.unitsPreference === "metric" ? "metric" : "imperial";
   const canNavigate = capabilities.canNavigate === true;
   const canRate = capabilities.canRate === true;
@@ -341,6 +342,7 @@ export default function PlaceCard({
   useEffect(() => {
     if (!googlePlaceId) return;
     if (!capabilities?.canViewGooglePhotos) return;
+    if (!canUseGooglePlacesApi) return;
 
     const hasStoredPhotos = Array.isArray(safePlace.photos?.google) && safePlace.photos.google.length > 0;
     const hasStoredRating =
@@ -385,7 +387,7 @@ export default function PlaceCard({
 
     loadGoogleDetails();
     return () => (mounted = false);
-  }, [googlePlaceId, capabilities?.canViewGooglePhotos, capabilities?.maxGooglePhotosPerPlace, googlePhotos.length, googleRatingLive, safePlace.photos?.google, safePlace.googleRating, safePlace.rating]);
+  }, [googlePlaceId, capabilities?.canViewGooglePhotos, capabilities?.maxGooglePhotosPerPlace, googlePhotos.length, googleRatingLive, safePlace.photos?.google, safePlace.googleRating, safePlace.rating, canUseGooglePlacesApi]);
 
   useEffect(() => {
     if (!safePlace?.id) return;
@@ -516,11 +518,12 @@ export default function PlaceCard({
   const crRatingCount = safePlace.crRatings?.count ?? 0;
   
   const rawGooglePhotos = useMemo(() => {
+    if (!canUseGooglePlacesApi) return [];
     if (!Array.isArray(safePlace.photos?.google)) return [];
     return safePlace.photos.google
       .map(ref => buildGooglePhotoUrl(ref))
       .filter(Boolean);
-  }, [safePlace.photos]);
+  }, [safePlace.photos, canUseGooglePlacesApi]);
 
   const photos = useMemo(() => {
     const crPhotos = Array.isArray(safePlace.photos?.cr)
@@ -549,6 +552,13 @@ export default function PlaceCard({
   const combinedPhotos = useMemo(() => {
     const list = [];
     
+    if (!canUseGooglePlacesApi) {
+      if (Array.isArray(safePlace.photos.cr)) {
+        list.push(...safePlace.photos.cr);
+      }
+      return list;
+    }
+
     // Add all Google photos as URLs
     if (Array.isArray(googlePhotos) && googlePhotos.length > 0) {
       googlePhotos.forEach(photoRef => {
@@ -563,7 +573,7 @@ export default function PlaceCard({
     }
     
     return list;
-  }, [googlePhotos, safePlace.photos.cr]);
+  }, [googlePhotos, safePlace.photos.cr, canUseGooglePlacesApi]);
 
 
   /* ------------------------------------------------------------------ */
@@ -998,6 +1008,11 @@ export default function PlaceCard({
   };
 
   const handleResyncWithGoogle = async () => {
+    if (!canUseGooglePlacesApi) {
+      Alert.alert("Search restricted", "Only Pro/Admin can sync with Google Places.");
+      return;
+    }
+
     try {
       const match = await findGoogleMatch(safePlace);
 
@@ -1208,7 +1223,7 @@ export default function PlaceCard({
               />
             </TouchableOpacity>
           )}
-          {!googlePlaceId && (
+          {!googlePlaceId && canUseGooglePlacesApi && (
             <TouchableOpacity
               style={styles.photoActionButton}
               onPress={handleResyncWithGoogle}

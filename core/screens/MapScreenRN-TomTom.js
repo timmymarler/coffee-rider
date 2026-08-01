@@ -1375,6 +1375,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const user = auth?.user || null;
   const role = auth?.role || auth?.profile?.role || "guest";
   const capabilities = auth?.capabilities || getCapabilities(role);
+  const canUseGooglePlacesApi = capabilities?.isAdmin === true || role === "pro";
   const profileRole = auth?.profile?.role || "guest";
   const isFreeUser = role === "user";
   const isMapFocused = useIsFocused();
@@ -4955,7 +4956,7 @@ function getStepCompletionThresholds(step = null) {
     skipNextRegionChangeRef.current = false;
     
     // Temporarily disable requests to Google Places
-    if (!ENABLE_GOOGLE_AUTO_FETCH || !capabilities.canSearchGoogle) {
+    if (!ENABLE_GOOGLE_AUTO_FETCH || !canUseGooglePlacesApi) {
       return;
     }
     const radius =
@@ -5199,7 +5200,7 @@ function getStepCompletionThresholds(step = null) {
   /* Used for Follow Me mode */
 
   async function doTextSearch({ query, latitude, longitude, radius = 50000 }) {
-    if (!capabilities?.canSearchGoogle) {
+    if (!canUseGooglePlacesApi) {
       console.log("[GOOGLE] doTextSearch blocked by capability");
       return [];
     }
@@ -5288,12 +5289,12 @@ function getStepCompletionThresholds(step = null) {
     if (!activeQuery || !searchOrigin) return;
 
     // 🔒 HARD GATE: guests (or restricted roles) cannot hit Google
-    if (!capabilities.canSearchGoogle) {
+    if (!canUseGooglePlacesApi) {
       console.log("[SEARCH] Google search blocked for role");
       setGooglePois([]); // ensure no stale results linger
       setSearchNotice({
         title: "Search restricted",
-        message: "You must log in to use the search function.",
+        message: "Google search is available to Pro/Admin only. Showing Coffee Rider places only.",
       });      
       return;
     }    
@@ -5379,7 +5380,7 @@ function getStepCompletionThresholds(step = null) {
     run();
     setSearchNotice(null);
     return () => { cancelled = true; };
-  }, [activeQuery, searchOrigin]);
+  }, [activeQuery, searchOrigin, canUseGooglePlacesApi]);
 
   useEffect(() => {
     
@@ -6474,7 +6475,7 @@ function getStepCompletionThresholds(step = null) {
       
 
       if (poi.source === "google") {
-        if (!capabilities.canSearchGoogle) return;
+        if (!canUseGooglePlacesApi) return;
 
         // Check for CR place at this location (proximity or Google Place ID)
         const PROXIMITY_THRESHOLD = 40; // meters
