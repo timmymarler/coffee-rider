@@ -5294,7 +5294,7 @@ function getStepCompletionThresholds(step = null) {
       setGooglePois([]); // ensure no stale results linger
       setSearchNotice({
         title: "Search restricted",
-        message: "Google search is available to Pro/Admin only. Showing Coffee Rider places only.",
+        message: "Only Pro users can use Google Search. Standard users can only search Coffee Rider places.",
       });      
       return;
     }    

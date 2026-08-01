@@ -1009,7 +1009,7 @@ export default function PlaceCard({
 
   const handleResyncWithGoogle = async () => {
     if (!canUseGooglePlacesApi) {
-      Alert.alert("Search restricted", "Only Pro/Admin can sync with Google Places.");
+      Alert.alert("Search restricted", "Only Pro users can use Google Search. Standard users can only search Coffee Rider places.");
       return;
     }
 
