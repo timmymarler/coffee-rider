@@ -105,9 +105,21 @@ export default function PlaceCard({
   isVisited = false,
   onMarkVisited = null,
 }) {
-  const [googlePhotos, setGooglePhotos] = useState([]);
-  const [googleRatingLive, setGoogleRatingLive] = useState(null);
-  const [googleRatingCountLive, setGoogleRatingCountLive] = useState(null);
+  const initialStoredGooglePhotos = Array.isArray(place?.googlePhotoRefs)
+    ? place.googlePhotoRefs
+    : (Array.isArray(place?.photos?.google) ? place.photos.google : []);
+  const initialStoredGoogleRating =
+    typeof place?.googleRating === "number"
+      ? place.googleRating
+      : (typeof place?.rating === "number" ? place.rating : null);
+  const initialStoredGoogleRatingCount =
+    typeof place?.googleUserRatingsTotal === "number"
+      ? place.googleUserRatingsTotal
+      : (typeof place?.userRatingsTotal === "number" ? place.userRatingsTotal : null);
+
+  const [googlePhotos, setGooglePhotos] = useState(initialStoredGooglePhotos);
+  const [googleRatingLive, setGoogleRatingLive] = useState(initialStoredGoogleRating);
+  const [googleRatingCountLive, setGoogleRatingCountLive] = useState(initialStoredGoogleRatingCount);
   const [loadingGooglePhotos, setLoadingGooglePhotos] = useState(false);
   const [hoursExpanded, setHoursExpanded] = useState(false);
   const [currentPlace, setCurrentPlace] = useState(place);
@@ -125,7 +137,9 @@ export default function PlaceCard({
     photos: {
       google: Array.isArray(currentPlace.googlePhotoRefs)
         ? currentPlace.googlePhotoRefs
-        : [],
+        : (Array.isArray(currentPlace.photos?.google)
+          ? currentPlace.photos.google
+          : []),
       cr: Array.isArray(currentPlace.photos?.cr)
         ? currentPlace.photos.cr
         : [],
@@ -300,30 +314,70 @@ export default function PlaceCard({
   }, [safePlace?.id]);
 
   useEffect(() => {
+    const storedGooglePhotos = Array.isArray(safePlace.photos?.google)
+      ? safePlace.photos.google
+      : [];
+    if (storedGooglePhotos.length > 0) {
+      setGooglePhotos(storedGooglePhotos);
+    }
+
+    const storedRating =
+      typeof safePlace.googleRating === "number"
+        ? safePlace.googleRating
+        : (typeof safePlace.rating === "number" ? safePlace.rating : null);
+    if (storedRating !== null) {
+      setGoogleRatingLive(storedRating);
+    }
+
+    const storedRatingCount =
+      typeof safePlace.googleUserRatingsTotal === "number"
+        ? safePlace.googleUserRatingsTotal
+        : (typeof safePlace.userRatingsTotal === "number" ? safePlace.userRatingsTotal : null);
+    if (storedRatingCount !== null) {
+      setGoogleRatingCountLive(storedRatingCount);
+    }
+  }, [safePlace?.id, safePlace.photos?.google, safePlace.googleRating, safePlace.rating, safePlace.googleUserRatingsTotal, safePlace.userRatingsTotal]);
+
+  useEffect(() => {
     if (!googlePlaceId) return;
     if (!capabilities?.canViewGooglePhotos) return;
-    if (googlePhotos.length > 0 && googleRatingLive !== null) return;
+
+    const hasStoredPhotos = Array.isArray(safePlace.photos?.google) && safePlace.photos.google.length > 0;
+    const hasStoredRating =
+      typeof safePlace.googleRating === "number" ||
+      typeof safePlace.rating === "number" ||
+      googleRatingLive !== null;
+
+    // Avoid billable Google lookups when we already have stored data.
+    if ((googlePhotos.length > 0 || hasStoredPhotos) && hasStoredRating) return;
 
     let mounted = true;
 
     async function loadGoogleDetails() {
+      const needPhotos = GOOGLE_PLACE_PHOTOS_ENABLED && googlePhotos.length === 0 && !hasStoredPhotos;
+      const needRating = !hasStoredRating;
+
+      if (!needPhotos && !needRating) {
+        return;
+      }
+
       const maxPhotosToFetch = GOOGLE_PLACE_PHOTOS_ENABLED
         ? (capabilities?.maxGooglePhotosPerPlace || 5)
         : 0;
       const [refs, ratingInfo] = await Promise.all([
-        GOOGLE_PLACE_PHOTOS_ENABLED
+        needPhotos
           ? (googlePhotos.length > 0
             ? Promise.resolve(googlePhotos)
             : fetchGooglePhotoRefs(googlePlaceId, maxPhotosToFetch))
           : Promise.resolve([]),
-        fetchGoogleRating(googlePlaceId),
+        needRating ? fetchGoogleRating(googlePlaceId) : Promise.resolve(null),
       ]);
 
       if (!mounted) return;
 
-      if (googlePhotos.length === 0) setGooglePhotos(refs || []);
+      if (needPhotos && googlePhotos.length === 0) setGooglePhotos(refs || []);
 
-      if (ratingInfo) {
+      if (needRating && ratingInfo) {
         setGoogleRatingLive(ratingInfo.rating);
         setGoogleRatingCountLive(ratingInfo.userRatingCount);
       }
@@ -331,7 +385,7 @@ export default function PlaceCard({
 
     loadGoogleDetails();
     return () => (mounted = false);
-  }, [googlePlaceId, capabilities?.canViewGooglePhotos, capabilities?.maxGooglePhotosPerPlace]);
+  }, [googlePlaceId, capabilities?.canViewGooglePhotos, capabilities?.maxGooglePhotosPerPlace, googlePhotos.length, googleRatingLive, safePlace.photos?.google, safePlace.googleRating, safePlace.rating]);
 
   useEffect(() => {
     if (!safePlace?.id) return;

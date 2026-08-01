@@ -1066,11 +1066,6 @@ async function doNearbyRequest({ latitude, longitude, radius, includedTypes, cap
     "places.utcOffsetMinutes",
   ];
 
-  // Photo metadata can be expensive; keep it behind capability + launch flag.
-  if (capabilities.canViewGooglePhotos && GOOGLE_PLACE_PHOTOS_ENABLED) {
-    fieldMask.push("places.photos");
-  }
-
 
   const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
     method: "POST",
@@ -5225,11 +5220,7 @@ function getStepCompletionThresholds(step = null) {
       "places.regularOpeningHours",
     ];
 
-    const allowGooglePhotos = capabilities.canViewGooglePhotos && GOOGLE_PLACE_PHOTOS_ENABLED;
-
-    if (allowGooglePhotos) {
-      fieldMask.push("places.photos");
-    }
+    const allowGooglePhotos = false;
 
     const cacheKey = getGoogleTextSearchCacheKey(query, latitude, longitude, radius, allowGooglePhotos);
     const cached = GOOGLE_TEXT_SEARCH_CACHE.get(cacheKey);
