@@ -18,6 +18,7 @@ const INITIAL_FREE_MAP_TOAST_MS = 3500;
 const MAP_TIP_DISPLAY_MS = 5000;
 const GOOGLE_TEXT_SEARCH_CACHE = new Map();
 const GOOGLE_TEXT_SEARCH_INFLIGHT = new Map();
+const AUTO_REROUTE_DAILY_COUNTER_PREFIX = "@cr_auto_reroute_counter";
 
 function getGoogleTextSearchCacheKey(query, latitude, longitude, radius, allowPhotos) {
   const latBucket = Number(latitude || 0).toFixed(2);
@@ -2402,6 +2403,26 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       return false;
     }
 
+    const activeHeading = resolveActiveRerouteHeading(origin);
+    const isWaypointBehindHeading = (from, waypoint, heading) => {
+      if (!Number.isFinite(heading) || !waypoint) return false;
+
+      const normalizedWaypoint = normalizeCoord(waypoint);
+      if (!normalizedWaypoint) return false;
+
+      const distance = distanceBetweenMeters(from, normalizedWaypoint);
+      if (!Number.isFinite(distance) || distance > AUTO_REROUTE_BEHIND_MAX_DISTANCE_METERS) {
+        return false;
+      }
+
+      const bearingToWaypoint = calculateBearing(from, normalizedWaypoint);
+      if (!Number.isFinite(bearingToWaypoint)) return false;
+
+      let delta = Math.abs(heading - bearingToWaypoint);
+      if (delta > 180) delta = 360 - delta;
+      return delta >= AUTO_REROUTE_BEHIND_ANGLE_DEGREES;
+    };
+
     const unvisitedEntries = getUnvisitedWaypointEntries();
     let remainingEntries = unvisitedEntries;
     let skippedEntry = null;
@@ -2421,6 +2442,29 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
       if (markSkippedVisited) {
         markWaypointVisited(skippedEntry.index);
+      }
+    }
+
+    // Auto-reroutes should prefer continuing forward. If the next waypoint is
+    // clearly behind the current heading, mark it visited and route to the next
+    // meaningful target instead of forcing a turn-back.
+    if (source === 'auto-offroute' && Number.isFinite(activeHeading) && remainingEntries.length > 0) {
+      while (remainingEntries.length > 0) {
+        const nextEntry = remainingEntries[0];
+        const canSkip = routeDestination
+          ? true
+          : remainingEntries.length > 1;
+
+        if (!canSkip) break;
+        if (!isWaypointBehindHeading(origin, nextEntry.waypoint, activeHeading)) break;
+
+        markWaypointVisited(nextEntry.index);
+        remainingEntries = remainingEntries.slice(1);
+        console.log(`[REROUTE] (${source}) Auto-skipped behind waypoint ${nextEntry.index}: ${nextEntry.waypoint?.title || 'untitled waypoint'}`);
+        trackUsageEventSafe('route', 'auto_reroute_skipped_behind_waypoint', {
+          cooldownMs: 1000,
+          meta: { waypointIndex: nextEntry.index },
+        });
       }
     }
 
@@ -2450,9 +2494,13 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     console.log(`[REROUTE] (${source}) Destination: ${rerouteDestination?.title || 'destination'}, waypoints: ${rerouteWaypoints.length}`);
 
     const requestId = ++routeRequestId.current;
-    const activeHeading = resolveActiveRerouteHeading(origin);
+    const rerouteOrigin =
+      source === 'auto-offroute' && Number.isFinite(activeHeading)
+        ? (offsetCoordinateByHeadingMeters(origin, activeHeading, AUTO_REROUTE_FORWARD_ORIGIN_BIAS_METERS) || origin)
+        : origin;
+
     const success = await mapRoute({
-      origin,
+      origin: rerouteOrigin,
       waypoints: rerouteWaypoints,
       destination: rerouteDestination,
       travelMode: userTravelMode,
@@ -4350,13 +4398,142 @@ function getStepCompletionThresholds(step = null) {
   const consecutiveOffRouteRef = useRef(0);
   const lastOffRouteDistanceRef = useRef(null);
   const lastGpsRerouteLogRef = useRef(0);
+  const autoRerouteSessionCountRef = useRef(0);
+  const autoRerouteDailyCountRef = useRef(0);
+  const autoRerouteDailyLoadedRef = useRef(false);
+  const autoRerouteDailyDateRef = useRef(null);
+  const autoRerouteNoticeRef = useRef({ reason: null, shownAt: 0 });
   const REROUTE_COOLDOWN_SECONDS = 5; // Minimum seconds between reroute attempts
+  const AUTO_REROUTE_SESSION_CAP = 12;
+  const AUTO_REROUTE_DAILY_CAP = 40;
+  const AUTO_REROUTE_FORWARD_ORIGIN_BIAS_METERS = 15;
+  const AUTO_REROUTE_BEHIND_ANGLE_DEGREES = 110;
+  const AUTO_REROUTE_BEHIND_MAX_DISTANCE_METERS = 450;
   const MIN_MOVEMENT_BEFORE_CHECK = 20; // Only check off-route after user moves 20m
   const MIN_GPS_ACCURACY = 35; // Ignore off-route checks if GPS accuracy is worse than this (meters)
   const BASE_OFF_ROUTE_THRESHOLD_METERS = 20;
   const MAX_SPEED_BUFFER_METERS = 20;
   const OFF_ROUTE_CONFIRMATION_COUNT = 2; // Consecutive off-route readings required before rerouting
   const OFF_ROUTE_MONITOR_PADDING = 10;
+
+  const buildAutoRerouteCounterKey = useCallback(() => {
+    const identity = user?.uid || "anon";
+    return `${AUTO_REROUTE_DAILY_COUNTER_PREFIX}:${identity}`;
+  }, [user?.uid]);
+
+  const getAutoRerouteCooldownSeconds = useCallback((sessionCount) => {
+    if (sessionCount >= 10) return 60;
+    if (sessionCount >= 6) return 30;
+    if (sessionCount >= 3) return 15;
+    return REROUTE_COOLDOWN_SECONDS;
+  }, []);
+
+  const maybeShowAutoRerouteNotice = useCallback((reason) => {
+    const now = Date.now();
+    const previous = autoRerouteNoticeRef.current;
+    if (previous.reason === reason && now - previous.shownAt < 60000) {
+      return;
+    }
+
+    autoRerouteNoticeRef.current = { reason, shownAt: now };
+
+    if (reason === 'session-cap') {
+      setPostbox({
+        type: 'info',
+        title: 'Auto reroute paused',
+        message: 'Too many automatic reroutes this ride. Use Route Refresh to reroute manually.',
+      });
+      return;
+    }
+
+    if (reason === 'daily-cap') {
+      setPostbox({
+        type: 'info',
+        title: 'Auto reroute daily limit reached',
+        message: 'Automatic rerouting is paused for today. You can still reroute manually.',
+      });
+    }
+  }, []);
+
+  const loadAutoRerouteDailyCounter = useCallback(async () => {
+    const today = getLocalDateKey();
+    const storageKey = buildAutoRerouteCounterKey();
+
+    try {
+      const raw = await AsyncStorage.getItem(storageKey);
+      const parsed = raw ? JSON.parse(raw) : null;
+      const dailyCount = parsed?.date === today ? Number(parsed?.count || 0) : 0;
+      autoRerouteDailyDateRef.current = today;
+      autoRerouteDailyCountRef.current = Number.isFinite(dailyCount) ? dailyCount : 0;
+      autoRerouteDailyLoadedRef.current = true;
+    } catch (error) {
+      console.warn('[AutoReroute] Failed to load daily counter:', error);
+      autoRerouteDailyDateRef.current = today;
+      autoRerouteDailyCountRef.current = 0;
+      autoRerouteDailyLoadedRef.current = true;
+    }
+  }, [buildAutoRerouteCounterKey, getLocalDateKey]);
+
+  const consumeAutoRerouteBudget = useCallback(async () => {
+    if (!autoRerouteDailyLoadedRef.current) {
+      await loadAutoRerouteDailyCounter();
+    }
+
+    const today = getLocalDateKey();
+    if (autoRerouteDailyDateRef.current !== today) {
+      autoRerouteDailyDateRef.current = today;
+      autoRerouteDailyCountRef.current = 0;
+    }
+
+    const sessionUsed = autoRerouteSessionCountRef.current;
+    if (sessionUsed >= AUTO_REROUTE_SESSION_CAP) {
+      return { allowed: false, reason: 'session-cap' };
+    }
+
+    const dailyUsed = autoRerouteDailyCountRef.current;
+    if (dailyUsed >= AUTO_REROUTE_DAILY_CAP) {
+      return { allowed: false, reason: 'daily-cap' };
+    }
+
+    const dynamicCooldownSeconds = getAutoRerouteCooldownSeconds(sessionUsed);
+    const now = Date.now();
+    const secondsSinceLast = (now - lastRerouteAttemptRef.current) / 1000;
+
+    if (secondsSinceLast < dynamicCooldownSeconds) {
+      return {
+        allowed: false,
+        reason: 'cooldown',
+        remainingSeconds: Math.max(1, Math.ceil(dynamicCooldownSeconds - secondsSinceLast)),
+      };
+    }
+
+    const nextSession = sessionUsed + 1;
+    const nextDaily = dailyUsed + 1;
+    autoRerouteSessionCountRef.current = nextSession;
+    autoRerouteDailyCountRef.current = nextDaily;
+    lastRerouteAttemptRef.current = now;
+
+    const storageKey = buildAutoRerouteCounterKey();
+    AsyncStorage.setItem(storageKey, JSON.stringify({ date: today, count: nextDaily })).catch((error) => {
+      console.warn('[AutoReroute] Failed to persist daily counter:', error);
+    });
+
+    return {
+      allowed: true,
+      sessionUsed: nextSession,
+      dailyUsed: nextDaily,
+      dynamicCooldownSeconds,
+    };
+  }, [
+    buildAutoRerouteCounterKey,
+    getAutoRerouteCooldownSeconds,
+    getLocalDateKey,
+    loadAutoRerouteDailyCounter,
+  ]);
+
+  useEffect(() => {
+    loadAutoRerouteDailyCounter();
+  }, [loadAutoRerouteDailyCounter]);
   
   useEffect(() => {
     // Detect Follow Me enable transition
@@ -4369,6 +4546,9 @@ function getStepCompletionThresholds(step = null) {
 
     // On Follow Me start: delay navigation if GPS is poor
     if (justEnabledFollowMe) {
+      autoRerouteSessionCountRef.current = 0;
+      autoRerouteNoticeRef.current = { reason: null, shownAt: 0 };
+
       if (userLocation && routeDestination) {
         if (userLocation.accuracy && userLocation.accuracy > MAX_LOCATION_ACCURACY) {
           // Delay navigation start until GPS improves
@@ -4518,26 +4698,58 @@ function getStepCompletionThresholds(step = null) {
     consecutiveOffRouteRef.current = 0;
     lastOffRouteDistanceRef.current = null;
 
-    // User is confirmed off route - initiate reroute
-    const now = Date.now();
-    const timeSinceLastReroute = (now - lastRerouteAttemptRef.current) / 1000;
-    
-    if (timeSinceLastReroute < REROUTE_COOLDOWN_SECONDS) {
-      console.log(`[AutoReroute] Cooldown active (${timeSinceLastReroute.toFixed(0)}s/${REROUTE_COOLDOWN_SECONDS}s), skipping reroute`);
-      return; // Still in cooldown period
-    }
+    // User is confirmed off route - apply cooldown/backoff and hard caps before rerouting.
+    const runAutoReroute = async () => {
+      const budget = await consumeAutoRerouteBudget();
 
-    // All conditions met: user confirmed off-route and cooldown elapsed
-    console.log(`[AutoReroute] User off-route (${effectiveDistance.toFixed(0)}m effective), rerouting...`);
-    lastRerouteAttemptRef.current = now;
-    
-    rerouteFromCurrentLocation({
-      originOverride: checkPosition,
-      source: 'auto-offroute',
-    }).catch((error) => {
-      console.warn('[AutoReroute] rerouteFromCurrentLocation error:', error);
+      if (!budget.allowed) {
+        if (budget.reason === 'cooldown') {
+          const currentCooldown = getAutoRerouteCooldownSeconds(autoRerouteSessionCountRef.current);
+          console.log(`[AutoReroute] Cooldown active (${budget.remainingSeconds}s/${currentCooldown}s), skipping reroute`);
+          trackUsageEventSafe('route', 'auto_reroute_blocked_cooldown', {
+            cooldownMs: 1500,
+            meta: { remainingSeconds: budget.remainingSeconds || 0 },
+          });
+          return;
+        }
+
+        if (budget.reason === 'session-cap' || budget.reason === 'daily-cap') {
+          console.log(`[AutoReroute] Blocked by ${budget.reason}`);
+          maybeShowAutoRerouteNotice(budget.reason);
+          trackUsageEventSafe('route', budget.reason === 'session-cap'
+            ? 'auto_reroute_blocked_session_cap'
+            : 'auto_reroute_blocked_daily_cap', {
+            cooldownMs: 1500,
+          });
+        }
+        return;
+      }
+
+      console.log(`[AutoReroute] User off-route (${effectiveDistance.toFixed(0)}m effective), rerouting... session=${budget.sessionUsed}/${AUTO_REROUTE_SESSION_CAP}, daily=${budget.dailyUsed}/${AUTO_REROUTE_DAILY_CAP}, cooldown=${budget.dynamicCooldownSeconds}s`);
+      trackUsageEventSafe('route', 'auto_reroute_attempt', {
+        cooldownMs: 700,
+        meta: {
+          distanceMeters: Math.round(effectiveDistance),
+          sessionUsed: budget.sessionUsed,
+          dailyUsed: budget.dailyUsed,
+        },
+      });
+
+      rerouteFromCurrentLocation({
+        originOverride: checkPosition,
+        source: 'auto-offroute',
+      }).catch((error) => {
+        console.warn('[AutoReroute] rerouteFromCurrentLocation error:', error);
+      });
+    };
+
+    runAutoReroute().catch((error) => {
+      console.warn('[AutoReroute] Guarded reroute flow failed:', error);
     });
   }, [
+    consumeAutoRerouteBudget,
+    getAutoRerouteCooldownSeconds,
+    maybeShowAutoRerouteNotice,
     userLocation,
     followUser,
     routeCoords,
@@ -7930,6 +8142,7 @@ function getStepCompletionThresholds(step = null) {
           isLandscape={isLandscape}
         />
       )}
+      
 
       {selectedPlace && (
         <PlaceCard
