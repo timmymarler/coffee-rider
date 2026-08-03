@@ -342,6 +342,20 @@ export default function PlaceCard({
   }, [safePlace?.id, safePlace.photos?.google, safePlace.googleRating, safePlace.rating, safePlace.googleUserRatingsTotal, safePlace.userRatingsTotal]);
 
   useEffect(() => {
+    if (!safePlace?.id) return;
+
+    // Count an explicit place-card open interaction, even when data is cached
+    // and no extra Google API call is needed.
+    trackUsageEventSafe("search", "place_card_opened", {
+      cooldownMs: 1200,
+      meta: {
+        source: safePlace?.source || "unknown",
+        hasGooglePlaceId: Boolean(googlePlaceId),
+      },
+    });
+  }, [safePlace?.id]);
+
+  useEffect(() => {
     if (!googlePlaceId) return;
     if (!capabilities?.canViewGooglePhotos) return;
     if (!canUseGooglePlacesApi) return;
@@ -363,6 +377,20 @@ export default function PlaceCard({
 
       if (!needPhotos && !needRating) {
         return;
+      }
+
+      if (needRating) {
+        trackUsageEventSafe("search", "google_place_rating_fetch", {
+          cooldownMs: 1200,
+          meta: { source: safePlace?.source || "unknown" },
+        });
+      }
+
+      if (needPhotos) {
+        trackUsageEventSafe("photo", "google_place_photos_fetch", {
+          cooldownMs: 1200,
+          meta: { source: safePlace?.source || "unknown" },
+        });
       }
 
       const maxPhotosToFetch = GOOGLE_PLACE_PHOTOS_ENABLED
