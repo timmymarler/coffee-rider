@@ -17,6 +17,7 @@ import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
 const INITIAL_FREE_MAP_TOAST_MS = 3500;
 const MAP_TIP_DISPLAY_MS = 5000;
 const GOOGLE_TEXT_SEARCH_CACHE = new Map();
+const GOOGLE_TEXT_SEARCH_INFLIGHT = new Map();
 
 function getGoogleTextSearchCacheKey(query, latitude, longitude, radius, allowPhotos) {
   const latBucket = Number(latitude || 0).toFixed(2);
@@ -5234,48 +5235,60 @@ function getStepCompletionThresholds(step = null) {
       return cached.results;
     }
 
-    try {
-      const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": apiKey,
-          "X-Goog-FieldMask": fieldMask.join(","),
-        },
-        body: JSON.stringify({
-          textQuery: query,
-          locationBias: {
-            circle: {
-              center: { latitude, longitude },
-              radius,
-            },
-          },
-          maxResultCount: 20,
-        }),
-        
-      });
-
-      const json = await res.json();
-      if (!res.ok) {
-        console.log("[GOOGLE] text search error:", json?.error || json);
-        return [];
-      }
-
-      const places = json?.places || [];
-      const mappedResults = places
-        .map((p) => mapGooglePlace(p, capabilities))
-        .filter(p => p && p.latitude && p.longitude);
-
-      GOOGLE_TEXT_SEARCH_CACHE.set(cacheKey, {
-        createdAt: Date.now(),
-        results: mappedResults,
-      });
-
-      return mappedResults;
-    } catch (error) {
-      console.log("[GOOGLE] text search fetch error:", error.message);
-      throw error; // Propagate to caller for user-facing error message
+    const inflight = GOOGLE_TEXT_SEARCH_INFLIGHT.get(cacheKey);
+    if (inflight) {
+      return inflight;
     }
+
+    const requestPromise = (async () => {
+      try {
+        const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask": fieldMask.join(","),
+          },
+          body: JSON.stringify({
+            textQuery: query,
+            locationBias: {
+              circle: {
+                center: { latitude, longitude },
+                radius,
+              },
+            },
+            maxResultCount: 20,
+          }),
+          
+        });
+
+        const json = await res.json();
+        if (!res.ok) {
+          console.log("[GOOGLE] text search error:", json?.error || json);
+          return [];
+        }
+
+        const places = json?.places || [];
+        const mappedResults = places
+          .map((p) => mapGooglePlace(p, capabilities))
+          .filter(p => p && p.latitude && p.longitude);
+
+        GOOGLE_TEXT_SEARCH_CACHE.set(cacheKey, {
+          createdAt: Date.now(),
+          results: mappedResults,
+        });
+
+        return mappedResults;
+      } catch (error) {
+        console.log("[GOOGLE] text search fetch error:", error.message);
+        throw error; // Propagate to caller for user-facing error message
+      } finally {
+        GOOGLE_TEXT_SEARCH_INFLIGHT.delete(cacheKey);
+      }
+    })();
+
+    GOOGLE_TEXT_SEARCH_INFLIGHT.set(cacheKey, requestPromise);
+    return requestPromise;
   }
 
   useEffect(() => {
