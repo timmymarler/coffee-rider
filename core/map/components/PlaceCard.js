@@ -8,6 +8,7 @@ import { useTheme } from "@context/ThemeContext";
 import { GOOGLE_PLACE_PHOTOS_ENABLED } from "@core/config/launchFlags";
 import { getCapabilities } from "@core/roles/capabilities";
 import { incMetric } from "@core/utils/devMetrics";
+import { trackUsageEventSafe } from "@core/utils/usageTelemetry";
 import { uploadImage } from "@core/utils/uploadImage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Constants from 'expo-constants';
@@ -264,6 +265,7 @@ export default function PlaceCard({
 
   const scrollViewRef = useRef(null);
   const commentInputRef = useRef(null);
+  const lastTrackedPhotoIndexRef = useRef(0);
 
   const [suitabilityState, setSuitabilityState] = useState(defaultSuitability);
   const [amenitiesState, setAmenitiesState] = useState(defaultAmenities);
@@ -574,6 +576,27 @@ export default function PlaceCard({
     
     return list;
   }, [googlePhotos, safePlace.photos.cr, canUseGooglePlacesApi]);
+
+  useEffect(() => {
+    // Reset per-place photo scroll tracking when card context changes.
+    lastTrackedPhotoIndexRef.current = 0;
+    setPhotoIndex(0);
+  }, [safePlace?.id]);
+
+  useEffect(() => {
+    if (!Array.isArray(combinedPhotos) || combinedPhotos.length <= 1) return;
+    if (photoIndex <= 0) return;
+    if (photoIndex === lastTrackedPhotoIndexRef.current) return;
+
+    lastTrackedPhotoIndexRef.current = photoIndex;
+    trackUsageEventSafe("photo", "photo_scrolled", {
+      cooldownMs: 900,
+      meta: {
+        photoIndex,
+        hasGooglePhotos: rawGooglePhotos.length > 0,
+      },
+    });
+  }, [photoIndex, combinedPhotos, rawGooglePhotos.length]);
 
 
   /* ------------------------------------------------------------------ */

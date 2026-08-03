@@ -5235,14 +5235,6 @@ function getStepCompletionThresholds(step = null) {
     }
 
     try {
-      trackUsageEventSafe("search", "google_text_search", {
-        cooldownMs: 1200,
-        meta: {
-          radius,
-          queryLength: String(query || "").length,
-        },
-      });
-
       const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
         method: "POST",
         headers: {
@@ -5714,11 +5706,21 @@ function getStepCompletionThresholds(step = null) {
     
     // Build route with explicit structure (don't rely on state being updated)
     console.log('[handleRoute] Building with explicit structure');
-    await buildRoute({ 
+    const routeMapped = await buildRoute({ 
       waypointsOverride: structure.waypoints,
       destinationOverride: structure.destination,
       requestId 
     });
+
+    if (routeMapped) {
+      trackUsageEventSafe("route", "route_mapped", {
+        cooldownMs: 1200,
+        meta: {
+          hasDestination: Boolean(structure?.destination),
+          waypointCount: Array.isArray(structure?.waypoints) ? structure.waypoints.length : 0,
+        },
+      });
+    }
 
     routeFittedRef.current = false;
   }
@@ -5980,18 +5982,18 @@ function getStepCompletionThresholds(step = null) {
     
     if (!effectiveDestination && effectiveWaypoints?.length === 0) {
       console.log("[buildRoute] No destination or waypoints, returning");
-      return;
+      return false;
     }
     if (!userLocation) {
       console.log("[buildRoute] No user location, returning");
-      return;
+      return false;
     }
 
     const destination = effectiveDestination || null;
 
     if (!destination && !effectiveWaypoints?.length) {
       console.log("[buildRoute] No destination and no waypoints, returning");
-      return;
+      return false;
     }
 
     // Track what we're using for comparison
@@ -6054,7 +6056,7 @@ function getStepCompletionThresholds(step = null) {
     const skipFit = (activeRide || followUser) ? true : false;
 
     // Call the core mapRoute function
-    await mapRoute({
+    const mapped = await mapRoute({
       origin,
       waypoints: waypointsAfterStartSkip,
       destination,
@@ -6064,6 +6066,8 @@ function getStepCompletionThresholds(step = null) {
       requestId: finalRequestId,
       skipFitToView: skipFit,
     });
+
+    return mapped === true;
   }
 
   async function loadSavedRouteById(routeId) {

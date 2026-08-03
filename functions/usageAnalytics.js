@@ -45,6 +45,22 @@ async function assertAdmin(uid) {
   }
 }
 
+function readTypeCount(row, type) {
+  const nested = row?.counts?.[type];
+  if (Number.isFinite(Number(nested))) {
+    return Number(nested);
+  }
+
+  // Backward compatibility for documents that may have been written with
+  // literal dotted keys (e.g. "counts.search") instead of nested maps.
+  const dotted = row?.[`counts.${type}`];
+  if (Number.isFinite(Number(dotted))) {
+    return Number(dotted);
+  }
+
+  return 0;
+}
+
 export const trackUsageEvent = functions
   .region(REGION)
   .runWith(RUNTIME_OPTS)
@@ -62,9 +78,13 @@ export const trackUsageEvent = functions
     const roleKey = typeof userRole === 'string' ? userRole : 'unknown';
 
     const docRef = firestore.doc(`usageDaily/${dayKey}`);
-    const payload = {
+
+    await docRef.set({
       dayKey,
       createdAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    const payload = {
       updatedAt: FieldValue.serverTimestamp(),
       totalCount: FieldValue.increment(1),
       [`counts.${type}`]: FieldValue.increment(1),
@@ -72,7 +92,7 @@ export const trackUsageEvent = functions
       [`roles.${roleKey}`]: FieldValue.increment(1),
     };
 
-    await docRef.set(payload, { merge: true });
+    await docRef.update(payload);
 
     return { ok: true, dayKey, type, event };
   });
@@ -106,16 +126,15 @@ export const getDailyUsageStats = functions
     const statsByDay = new Map();
     snap.docs.forEach((docSnap) => {
       const row = docSnap.data() || {};
-      const counts = row.counts || {};
       statsByDay.set(row.dayKey, {
         dayKey: row.dayKey,
         totalCount: Number(row.totalCount || 0),
         counts: {
-          search: Number(counts.search || 0),
-          route: Number(counts.route || 0),
-          photo: Number(counts.photo || 0),
-          navigation: Number(counts.navigation || 0),
-          other: Number(counts.other || 0),
+          search: readTypeCount(row, 'search'),
+          route: readTypeCount(row, 'route'),
+          photo: readTypeCount(row, 'photo'),
+          navigation: readTypeCount(row, 'navigation'),
+          other: readTypeCount(row, 'other'),
         },
       });
     });
