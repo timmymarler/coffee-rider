@@ -1217,6 +1217,29 @@ export default function ProfileScreen() {
       </CRCard>
       </View>
 
+      {role === "admin" && (
+        <View style={styles.cardWrap}>
+          <CRCard>
+            <CRButton
+              title="Admin Usage Dashboard"
+              variant="accentMid"
+              onPress={() => router.push("/admin-usage")}
+              style={{ width: "100%" }}
+            />
+            <Text
+              style={{
+                color: theme.colors.textMuted,
+                fontSize: 12,
+                marginTop: theme.spacing.sm,
+                textAlign: "center",
+              }}
+            >
+              View daily app usage by event type.
+            </Text>
+          </CRCard>
+        </View>
+      )}
+
       {/* Report Issue */}
       <View style={styles.cardWrap}>
         <CRCard>

@@ -3,6 +3,7 @@ import { deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'fir
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { db } from '../../../config/firebase';
 import { incMetric } from '../../utils/devMetrics';
+import { trackUsageEventSafe } from '@core/utils/usageTelemetry';
 
 // Validate if an active ride record is still fresh
 // Rides older than 30 minutes are considered stale (likely abandoned)
@@ -290,6 +291,11 @@ export default function useActiveRide(user) {
         console.log('[useActiveRide] Writing activeRide document:', payload);
         await setDoc(activeRideRef, payload, { merge: true });
         console.log('[useActiveRide] Successfully wrote activeRide document');
+
+        trackUsageEventSafe('navigation', 'group_ride_started', {
+          cooldownMs: 10_000,
+          meta: { hasRouteName: Boolean(routeName) },
+        });
 
         console.log('[useActiveRide] Started ride:', { rideId, groupId, routeName });
       } catch (err) {

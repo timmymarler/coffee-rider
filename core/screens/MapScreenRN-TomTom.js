@@ -238,6 +238,7 @@ import { WaypointsContext } from "@core/map/waypoints/WaypointsContext";
 import WaypointsList from "@core/map/waypoints/WaypointsList";
 import { getCapabilities } from "@core/roles/capabilities";
 import { buildRestrictedAccessMessage, PRO_UPGRADE_PROMPT_QUEUE_KEY } from "@core/utils/proUpgradePrompt";
+import { trackUsageEventSafe } from "@core/utils/usageTelemetry";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import theme from "@themes";
@@ -3488,6 +3489,10 @@ function getStepCompletionThresholds(step = null) {
       if (!followUserStateRef.current) {
         setFollowUser(true);
         followUserStateRef.current = true;
+        trackUsageEventSafe("navigation", "follow_me_started", {
+          cooldownMs: 10_000,
+          meta: { reason },
+        });
       }
       resetFollowMeInactivityTimeout();
 
@@ -5230,6 +5235,14 @@ function getStepCompletionThresholds(step = null) {
     }
 
     try {
+      trackUsageEventSafe("search", "google_text_search", {
+        cooldownMs: 1200,
+        meta: {
+          radius,
+          queryLength: String(query || "").length,
+        },
+      });
+
       const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
         method: "POST",
         headers: {
@@ -5304,6 +5317,14 @@ function getStepCompletionThresholds(step = null) {
     // Prevent duplicate searches
     if (lastSearchRef.current === activeQuery) return;
     lastSearchRef.current = activeQuery;
+
+    trackUsageEventSafe("search", "search_query", {
+      cooldownMs: 800,
+      meta: {
+        restrictedToCrSearch,
+        queryLength: String(activeQuery || "").length,
+      },
+    });
 
     let cancelled = false;
 

@@ -41,6 +41,15 @@ function warn(...args) {
   console.warn(TAG, ...args);
 }
 
+function describeBleError(error) {
+  if (!error) return 'Unknown BLE error';
+  const message = error?.message || String(error);
+  const reason = error?.reason ? ` reason=${String(error.reason)}` : '';
+  const errorCode = error?.errorCode ? ` errorCode=${String(error.errorCode)}` : '';
+  const att = error?.attErrorCode ? ` attErrorCode=${String(error.attErrorCode)}` : '';
+  return `${message}${reason}${errorCode}${att}`;
+}
+
 function encodePayloadToBase64(payload) {
   // Keep payload ASCII-safe for BLE transport across JS runtimes.
   try {
@@ -119,7 +128,9 @@ export function initBleTransport() {
   stateSubscription = manager.onStateChange((state) => {
     if (state === State.PoweredOn) {
       log('BLE powered on — preparing scan');
-      startScan();
+      void startScan().catch((error) => {
+        warn('startScan failed from state change:', describeBleError(error));
+      });
     } else if (state === State.PoweredOff || state === State.Unsupported) {
       warn(`BLE state: ${state} — cannot scan`);
       stopEverything();
@@ -131,11 +142,19 @@ export function destroyBleTransport() {
   isDestroyed = true;
   stopEverything();
   if (stateSubscription?.remove) {
-    stateSubscription.remove();
+    try {
+      stateSubscription.remove();
+    } catch (error) {
+      warn('Failed to remove BLE state subscription:', describeBleError(error));
+    }
     stateSubscription = null;
   }
   if (manager) {
-    manager.destroy();
+    try {
+      manager.destroy();
+    } catch (error) {
+      warn('BLE manager destroy failed:', describeBleError(error));
+    }
     manager = null;
   }
   if (globalThis.__CR_BLE_DIRECTIONS_SEND__ === sendPayload) {
@@ -149,7 +168,11 @@ export function destroyBleTransport() {
 function stopEverything() {
   clearReconnectTimer();
   if (isScanning && manager) {
-    manager.stopDeviceScan();
+    try {
+      manager.stopDeviceScan();
+    } catch (error) {
+      warn('stopDeviceScan failed during stopEverything:', describeBleError(error));
+    }
     isScanning = false;
   }
   activeCharacteristic = null;
@@ -169,7 +192,9 @@ function scheduleReconnect() {
   reconnectTimer = setTimeout(() => {
     if (!isDestroyed && !activeDevice) {
       log('Reconnect attempt...');
-      startScan();
+      void startScan().catch((error) => {
+        warn('startScan failed during reconnect:', describeBleError(error));
+      });
     }
   }, RECONNECT_DELAY_MS);
 }
@@ -192,7 +217,11 @@ async function startScan() {
   // Auto-stop scan after timeout to save battery.
   const scanTimeout = setTimeout(() => {
     if (isScanning && manager) {
-      manager.stopDeviceScan();
+      try {
+        manager.stopDeviceScan();
+      } catch (error) {
+        warn('stopDeviceScan failed on timeout:', describeBleError(error));
+      }
       isScanning = false;
       if (!activeDevice) {
         log('Scan timed out — will retry');
@@ -216,9 +245,15 @@ async function startScan() {
       if (device && (device.localName === deviceName || device.name === deviceName)) {
         log(`Found "${device.name || device.localName}" (${device.id})`);
         clearTimeout(scanTimeout);
-        manager.stopDeviceScan();
+        try {
+          manager.stopDeviceScan();
+        } catch (stopError) {
+          warn('stopDeviceScan failed after finding device:', describeBleError(stopError));
+        }
         isScanning = false;
-        connectToDevice(device.id);
+        void connectToDevice(device.id).catch((connectError) => {
+          warn('connectToDevice failed after scan:', describeBleError(connectError));
+        });
       }
     }
   );
@@ -243,7 +278,11 @@ async function connectToDevice(deviceId) {
 
     if (!target) {
       warn(`Characteristic ${characteristicUuid} not found — disconnecting`);
-      await device.cancelConnection();
+      try {
+        await device.cancelConnection();
+      } catch (disconnectError) {
+        warn('cancelConnection failed after missing characteristic:', describeBleError(disconnectError));
+      }
       scheduleReconnect();
       return;
     }
@@ -266,7 +305,7 @@ async function connectToDevice(deviceId) {
     });
 
   } catch (error) {
-    warn('Connection error:', error.message);
+    warn('Connection error:', describeBleError(error));
     activeDevice = null;
     activeCharacteristic = null;
     scheduleReconnect();
@@ -287,7 +326,7 @@ async function sendPayload(payload) {
     // WRITE_NR (write without response) is faster and sufficient here.
     await activeCharacteristic.writeWithoutResponse(encoded);
   } catch (error) {
-    warn('Write error:', error.message);
+    warn('Write error:', describeBleError(error));
     // If the write fails the device likely disconnected — clean up and reconnect.
     activeDevice = null;
     activeCharacteristic = null;

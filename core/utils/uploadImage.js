@@ -1,4 +1,5 @@
 import { auth, functions } from '@config/firebase';
+import { trackUsageEventSafe } from '@core/utils/usageTelemetry';
 import { httpsCallable } from 'firebase/functions';
 
 export async function uploadImage({
@@ -28,6 +29,11 @@ export async function uploadImage({
       placeId,
       imageBase64,
       idToken: freshToken,
+    });
+
+    trackUsageEventSafe('photo', 'image_upload', {
+      cooldownMs: 500,
+      meta: { uploadType: type === 'profile' ? 'profile' : 'place' },
     });
 
     console.log('[uploadImage] Success:', { path: result.data.path, urlLength: result.data.url?.length });

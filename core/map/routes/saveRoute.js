@@ -1,4 +1,5 @@
 import { db } from "@config/firebase";
+import { trackUsageEventSafe } from "@core/utils/usageTelemetry";
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/firestore";
 
 export async function saveRoute({
@@ -46,10 +47,14 @@ export async function saveRoute({
     // Update existing route
     const routeRef = doc(db, "routes", routeId);
     await updateDoc(routeRef, routeData);
+    trackUsageEventSafe("route", "route_updated", {
+      cooldownMs: 500,
+      meta: { hasName: Boolean(name) },
+    });
     return { id: routeId };
   } else {
     // Create new route
-    return addDoc(collection(db, "routes"), {
+    const created = await addDoc(collection(db, "routes"), {
       ownerId: user.uid,
       visibility,
       name: name || null,
@@ -58,5 +63,10 @@ export async function saveRoute({
       deleted: false,
       ...routeData,
     });
+    trackUsageEventSafe("route", "route_saved", {
+      cooldownMs: 500,
+      meta: { visibility: visibility || "private" },
+    });
+    return created;
   }
 }

@@ -9,4 +9,5 @@ export {
 } from './stripeSubscriptions.js';
 export { activateAppleSubscription, appleServerNotification } from './appleSubscriptions.js';
 export { uploadImage } from './uploadImage.js';
+export { getDailyUsageStats, trackUsageEvent } from './usageAnalytics.js';
 

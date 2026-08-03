@@ -1,4 +1,5 @@
 import { db } from "@config/firebase";
+import { trackUsageEventSafe } from "@core/utils/usageTelemetry";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
 /**
@@ -181,5 +182,10 @@ export async function saveRide({
     console.warn('[saveRide] ⚠️  Document is large (>', (estimatedSize / 1024 / 1024).toFixed(2), 'MB). Consider simplifying further.');
   }
   
-  return addDoc(collection(db, "routes"), documentData);
+  const created = await addDoc(collection(db, "routes"), documentData);
+  trackUsageEventSafe("route", "ride_saved", {
+    cooldownMs: 500,
+    meta: { hasWaypoints: Array.isArray(waypoints) && waypoints.length > 0 },
+  });
+  return created;
 }
