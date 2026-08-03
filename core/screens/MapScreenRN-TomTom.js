@@ -2067,6 +2067,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const positionSmoothingRef = useRef(null); // Smoothed position for Kalman-like filtering
   const lastRouteBuildLocationRef = useRef(null); // Track location used for last route build to avoid excessive rebuilds
   const lastRouteTypeRef = useRef(null); // Track the route type used for last route build to rebuild when it changes
+  const lastRouteTelemetryRef = useRef({ signature: null, trackedAt: 0 });
   const lastAvoidMotorwaysRef = useRef(null);
   const lastWaypoints = useRef([]); // Track waypoints from last route build to rebuild when they change
   const lastManualStartPointRef = useRef(null); // Track manual start point to detect Follow Me transitions
@@ -5725,16 +5726,6 @@ function getStepCompletionThresholds(step = null) {
       requestId 
     });
 
-    if (routeMapped) {
-      trackUsageEventSafe("route", "route_mapped", {
-        cooldownMs: 1200,
-        meta: {
-          hasDestination: Boolean(structure?.destination),
-          waypointCount: Array.isArray(structure?.waypoints) ? structure.waypoints.length : 0,
-        },
-      });
-    }
-
     routeFittedRef.current = false;
   }
 
@@ -6079,6 +6070,40 @@ function getStepCompletionThresholds(step = null) {
       requestId: finalRequestId,
       skipFitToView: skipFit,
     });
+
+    // Count user planning reroutes (including waypoint updates) once per distinct
+    // route shape, while avoiding Follow Me / active-ride background reroutes.
+    if (mapped === true && !skipFit) {
+      const toKey = (point) => {
+        const lat = Number(point?.latitude ?? point?.lat);
+        const lng = Number(point?.longitude ?? point?.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "x";
+        return `${lat.toFixed(4)},${lng.toFixed(4)}`;
+      };
+
+      const destinationKey = toKey(destination);
+      const waypointsKey = Array.isArray(waypointsAfterStartSkip)
+        ? waypointsAfterStartSkip.map(toKey).join("|")
+        : "";
+      const signature = `${userTravelMode || "na"}|${userRouteType || "na"}|${destinationKey}|${waypointsKey}`;
+      const now = Date.now();
+      const isDuplicateRecent =
+        lastRouteTelemetryRef.current.signature === signature &&
+        now - (lastRouteTelemetryRef.current.trackedAt || 0) < 20_000;
+
+      if (!isDuplicateRecent) {
+        lastRouteTelemetryRef.current = { signature, trackedAt: now };
+        trackUsageEventSafe("route", "route_mapped", {
+          cooldownMs: 1200,
+          meta: {
+            hasDestination: Boolean(destination),
+            waypointCount: Array.isArray(waypointsAfterStartSkip)
+              ? waypointsAfterStartSkip.length
+              : 0,
+          },
+        });
+      }
+    }
 
     return mapped === true;
   }
