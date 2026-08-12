@@ -38,6 +38,9 @@ export default function LoginScreen() {
   const [socialProcess, setSocialProcess] = useState(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
 
+  const loginEmailDomain = email.trim().toLowerCase().split("@")[1] || "";
+  const isOutlookOrHotmailEmail = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(loginEmailDomain);
+
   useEffect(() => {
     setAppleAvailable(isAppleSignInAvailable());
   }, []);
@@ -176,9 +179,14 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       await sendEmailVerification(user);
+      const resendMessage = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(
+        (user.email || "").trim().toLowerCase().split("@")[1] || ""
+      )
+        ? `A verification email has been sent to ${user.email}. Outlook and Hotmail may delay or block it, so please also check junk or try another email address if needed.`
+        : `A verification email has been sent to ${user.email}. Please check your inbox and spam folder.`;
       Alert.alert(
         "Email sent",
-        `A verification email has been sent to ${user.email}. Please check your inbox and spam folder.`
+        resendMessage
       );
     } catch (err) {
       console.error("Resend verification error:", err);
@@ -283,6 +291,11 @@ export default function LoginScreen() {
               <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600", marginBottom: spacing.lg }}>
                 {user.email}
               </Text>
+              {(["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(((user.email || "").trim().toLowerCase().split("@")[1] || ""))) && (
+                <Text style={{ color: "#f0b44c", fontSize: 13, marginBottom: spacing.md, lineHeight: 18 }}>
+                  Outlook and Hotmail sometimes block or delay verification emails. Please check junk mail or try a different email if it doesn't arrive.
+                </Text>
+              )}
               <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: spacing.md }}>
                 Click the link in the email to verify your account. You won't be able to access the full app until your email is verified.
               </Text>
@@ -339,6 +352,11 @@ export default function LoginScreen() {
           placeholderTextColor={colors.textMuted}
           style={styles.input}
         />
+        {isOutlookOrHotmailEmail && (
+          <Text style={styles.warningText}>
+            Outlook and Hotmail addresses may not receive verification emails right away.
+          </Text>
+        )}
       </View>
 
       <View style={styles.field}>
@@ -446,6 +464,12 @@ const styles = StyleSheet.create({
     color: theme.colors.accentMid,
     fontSize: 14,
     fontWeight: "500",
+  },
+  warningText: {
+    color: "#f0b44c",
+    fontSize: 12,
+    marginTop: 6,
+    lineHeight: 16,
   },
   socialButton: {
     marginTop: theme.spacing.md,

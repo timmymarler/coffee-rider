@@ -1,10 +1,11 @@
 import { getOpeningStatus } from "@/core/map/utils/openingHours";
 
-export function applyFilters(poi, filters) {
+export function applyFilters(poi, filters, options = {}) {
+  const { allowUnknownGoogle = false } = options;
   const matchMode = filters.matchMode === "any" ? "any" : "all";
 
   // Hide unclassified Google POIs (noise reduction)
-  if (poi.source === "google" && poi.category === "unknown") {
+  if (!allowUnknownGoogle && poi.source === "google" && poi.category === "unknown") {
     return false;
   }
 

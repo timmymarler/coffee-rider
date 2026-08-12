@@ -1108,6 +1108,14 @@ async function doNearbyRequest({ latitude, longitude, radius, includedTypes, cap
 function mapGooglePlace(place, capabilities) {
   const types = Array.isArray(place.types) ? place.types : [];
   const category = classifyPoi({ types });
+  const fallbackTitleFromAddress = typeof place.formattedAddress === "string"
+    ? place.formattedAddress.split(",")[0]?.trim()
+    : "";
+  const resolvedTitle =
+    place.displayName?.text ||
+    place.displayName ||
+    fallbackTitleFromAddress ||
+    "Unnamed place";
   const googlePhotoRefs =
     capabilities?.canViewGooglePhotos && GOOGLE_PLACE_PHOTOS_ENABLED && Array.isArray(place.photos)
       ? place.photos
@@ -1118,7 +1126,7 @@ function mapGooglePlace(place, capabilities) {
 
   return {
     id: place.id,
-    title: place.displayName?.text || "",
+    title: resolvedTitle,
     address: place.formattedAddress || null,
     latitude: place.location?.latitude,
     longitude: place.location?.longitude,
@@ -5588,8 +5596,8 @@ function getStepCompletionThresholds(step = null) {
       }
 
       if (exactMatch && mapRef.current) {
-        // Only show Place Card if Coffee Rider place
-        if (exactMatch.source === "cr") {
+        // Open place card for exact matches (CR and Google) so submit feels immediate.
+        if (exactMatch.source === "cr" || exactMatch.source === "google") {
           setSelectedPlaceId(exactMatch.id);
         }
         mapRef.current.animateCamera(
@@ -5835,7 +5843,7 @@ function getStepCompletionThresholds(step = null) {
     
     let combined = [...googleResults, ...crSearchMatches];
 
-    combined = combined.filter((p) => applyFilters(p, appliedFilters));
+    combined = combined.filter((p) => applyFilters(p, appliedFilters, { allowUnknownGoogle: true }));
 
     if (appliedFilters.visited === 'show') {
       combined = combined.filter((p) => visitedPlaceIds.has(p.id));

@@ -47,6 +47,9 @@ export default function RegisterScreen({ onBack }) {
   const [socialProcess, setSocialProcess] = useState(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
 
+  const emailDomain = email.trim().toLowerCase().split("@")[1] || "";
+  const isOutlookOrHotmailEmail = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(emailDomain);
+
   useEffect(() => {
     setAppleAvailable(isAppleSignInAvailable());
   }, []);
@@ -144,6 +147,13 @@ export default function RegisterScreen({ onBack }) {
 
       setSubmitting(false);
 
+      if (isOutlookOrHotmailEmail) {
+        Alert.alert(
+          "Check your email",
+          "Outlook and Hotmail addresses may delay or block our verification email. If you don't see it, try Gmail or iCloud, or check your junk folder."
+        );
+      }
+
       Alert.alert(
         "Verification email sent",
         "Please check your email to verify your account before logging in.",
@@ -234,6 +244,11 @@ export default function RegisterScreen({ onBack }) {
               placeholderTextColor={colors.textMuted}
               style={styles.input}
             />
+            {isOutlookOrHotmailEmail && (
+              <Text style={styles.warningText}>
+                Outlook and Hotmail addresses may not receive the verification email right away.
+              </Text>
+            )}
           </View>
 
           {/* Password */}
@@ -353,6 +368,12 @@ const styles = StyleSheet.create({
     color: theme.colors.accentMid,
     fontSize: 14,
     fontWeight: "500",
+  },
+  warningText: {
+    color: "#f0b44c",
+    fontSize: 12,
+    marginTop: 6,
+    lineHeight: 16,
   },
   socialButton: {
     marginTop: theme.spacing.md,

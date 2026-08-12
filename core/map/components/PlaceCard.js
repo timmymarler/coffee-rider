@@ -106,6 +106,15 @@ export default function PlaceCard({
   isVisited = false,
   onMarkVisited = null,
 }) {
+  const resolvePlaceLabel = (value) => {
+    if (typeof value?.title === "string" && value.title.trim()) return value.title.trim();
+    if (typeof value?.name === "string" && value.name.trim()) return value.name.trim();
+    if (typeof value?.address === "string" && value.address.trim()) {
+      return value.address.split(",")[0]?.trim() || value.address.trim();
+    }
+    return "";
+  };
+
   const initialStoredGooglePhotos = Array.isArray(place?.googlePhotoRefs)
     ? place.googlePhotoRefs
     : (Array.isArray(place?.photos?.google) ? place.photos.google : []);
@@ -233,12 +242,20 @@ export default function PlaceCard({
   /* ------------------------------------------------------------------ */
 
   const [manualName, setManualName] = useState(
-    (isGoogleNew || safePlace._temp) ? safePlace.title ?? "" : ""
+    (isGoogleNew || safePlace._temp || safePlace.source === "google")
+      ? resolvePlaceLabel(safePlace)
+      : ""
   );
 
   const [manualCategory, setManualCategory] = useState(
     (isGoogleNew || safePlace._temp) ? safePlace.category ?? null : null
   );
+
+  useEffect(() => {
+    if (safePlace.source === "google" || isGoogleNew || safePlace._temp) {
+      setManualName(resolvePlaceLabel(safePlace));
+    }
+  }, [safePlace.id, safePlace.source, safePlace.title, safePlace.name, isGoogleNew, safePlace._temp]);
   const formattedAddress = useMemo(
     () => formatAddress(place.address),
     [place.address]
@@ -1327,7 +1344,7 @@ export default function PlaceCard({
             />
           ) : (
             <Text style={styles.title}>
-              {isManualOnly ? "Save this place" : safePlace.title}
+              {isManualOnly ? "Save this place" : (resolvePlaceLabel(safePlace) || "Place")}
             </Text>
           )}
 

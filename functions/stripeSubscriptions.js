@@ -337,6 +337,11 @@ const handleSubscriptionSync = async (subscription) => {
     cancelAtPeriodEnd,
     cancellationEffectiveDate,
   };
+  if ((status === 'active' || status === 'trial') && !existingSub?.activatedAt && !existingSub?.subscriptionActivatedAt) {
+    subscriptionUpdate.activatedAt = FieldValue.serverTimestamp();
+  } else if (existingSub?.activatedAt || existingSub?.subscriptionActivatedAt) {
+    subscriptionUpdate.activatedAt = existingSub.activatedAt || existingSub.subscriptionActivatedAt;
+  }
   if (nextPlanId) {
     subscriptionUpdate.plan = nextPlanId;
   }
@@ -348,6 +353,11 @@ const handleSubscriptionSync = async (subscription) => {
     subscriptionExpiresAt: renewalDate,
     subscriptionCancelAtPeriodEnd: cancelAtPeriodEnd,
   };
+  if ((status === 'active' || status === 'trial') && !existingSub?.activatedAt && !existingSub?.subscriptionActivatedAt) {
+    profileUpdate.subscriptionActivatedAt = FieldValue.serverTimestamp();
+  } else if (existingSub?.activatedAt || existingSub?.subscriptionActivatedAt) {
+    profileUpdate.subscriptionActivatedAt = existingSub.activatedAt || existingSub.subscriptionActivatedAt;
+  }
   if (nextPlanId) {
     profileUpdate.subscriptionPlan = nextPlanId;
   }

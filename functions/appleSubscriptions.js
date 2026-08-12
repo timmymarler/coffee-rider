@@ -709,6 +709,10 @@ export const activateAppleSubscription = functions
           status: finalResolved.status,
         });
 
+        const activationTimestamp = (finalResolved.status === 'active' || finalResolved.status === 'trial')
+          ? FieldValue.serverTimestamp()
+          : null;
+
         // verifyReceipt can occasionally lag auto-renew disable state.
         // Cross-check App Store Server API before persisting if still active/not-cancelled.
         if (!cancelAtPeriodEnd && finalResolved.status === 'active') {
@@ -743,6 +747,7 @@ export const activateAppleSubscription = functions
               email: email || null,
               updatedAt: FieldValue.serverTimestamp(),
               lastRenewal: finalResolved.status === 'active' ? FieldValue.serverTimestamp() : null,
+              ...(activationTimestamp ? { activatedAt: activationTimestamp } : {}),
             },
             { merge: true }
           );
@@ -752,6 +757,7 @@ export const activateAppleSubscription = functions
           subscriptionPlan: finalResolved.status === 'active' ? finalResolved.plan : null,
           subscriptionExpiresAt: finalResolved.status === 'active' ? finalResolved.renewalDateMs : null,
           subscriptionCancelAtPeriodEnd: finalResolved.status === 'active' ? cancelAtPeriodEnd : false,
+          ...(activationTimestamp ? { subscriptionActivatedAt: activationTimestamp } : {}),
           updatedAt: FieldValue.serverTimestamp(),
         });
 
@@ -803,6 +809,9 @@ export const activateAppleSubscription = functions
             email: email || null,
             updatedAt: FieldValue.serverTimestamp(),
             lastRenewal: apiResolved.status === 'active' ? FieldValue.serverTimestamp() : null,
+            ...((apiResolved.status === 'active' || apiResolved.status === 'trial')
+              ? { activatedAt: FieldValue.serverTimestamp() }
+              : {}),
           },
           { merge: true }
         );
@@ -812,6 +821,9 @@ export const activateAppleSubscription = functions
         subscriptionPlan: apiResolved.status === 'active' ? apiResolved.plan : null,
         subscriptionExpiresAt: apiResolved.status === 'active' ? apiResolved.renewalDateMs : null,
         subscriptionCancelAtPeriodEnd: apiResolved.status === 'active' ? apiResolved.cancelAtPeriodEnd : false,
+        ...((apiResolved.status === 'active' || apiResolved.status === 'trial')
+          ? { subscriptionActivatedAt: FieldValue.serverTimestamp() }
+          : {}),
         updatedAt: FieldValue.serverTimestamp(),
       });
 

@@ -15,6 +15,7 @@ const firestore = admin.firestore();
 const { FieldValue } = admin.firestore;
 
 const ALLOWED_TYPES = new Set(['search', 'route', 'photo', 'navigation', 'other']);
+const SUBSCRIPTION_PROVIDERS = new Set(['stripe', 'apple_iap']);
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -59,6 +60,61 @@ function readTypeCount(row, type) {
   }
 
   return 0;
+}
+
+function toMillis(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  if (value?.toDate && typeof value.toDate === 'function') {
+    const date = value.toDate();
+    return Number.isFinite(date?.getTime?.()) ? date.getTime() : 0;
+  }
+
+  if (typeof value?.seconds === 'number') {
+    return value.seconds * 1000;
+  }
+
+  return 0;
+}
+
+function getDocTimestampMs(docSnap, row, fieldNames = []) {
+  for (const fieldName of fieldNames) {
+    const candidate = row?.[fieldName];
+    const ms = toMillis(candidate);
+    if (ms > 0) return ms;
+  }
+
+  const metaCandidates = [docSnap?.createTime, docSnap?.updateTime, docSnap?.readTime];
+  for (const candidate of metaCandidates) {
+    const ms = toMillis(candidate);
+    if (ms > 0) return ms;
+  }
+
+  return 0;
+}
+
+function inferSubscriptionProvider(row) {
+  const provider = String(row?.provider || '').trim().toLowerCase();
+  if (SUBSCRIPTION_PROVIDERS.has(provider)) {
+    return provider;
+  }
+
+  if (row?.appleTransactionId || row?.appleOriginalTransactionId || row?.appleProductId) {
+    return 'apple_iap';
+  }
+
+  if (row?.stripeSubscriptionId) {
+    return 'stripe';
+  }
+
+  return null;
 }
 
 export const trackUsageEvent = functions
@@ -116,12 +172,24 @@ export const getDailyUsageStats = functions
     const start = new Date();
     start.setDate(start.getDate() - (days - 1));
     const startKey = start.toISOString().slice(0, 10);
+    const endKey = new Date().toISOString().slice(0, 10);
+    const startMs = start.getTime();
+    const endMs = new Date(`${endKey}T23:59:59.999Z`).getTime();
 
-    const snap = await firestore
-      .collection('usageDaily')
-      .where('dayKey', '>=', startKey)
-      .orderBy('dayKey', 'asc')
-      .get();
+    const [snap, activeProSnap, registrationsSnap, subscriptionSnap] = await Promise.all([
+      firestore
+        .collection('usageDaily')
+        .where('dayKey', '>=', startKey)
+        .orderBy('dayKey', 'asc')
+        .get(),
+      firestore.collection('users').where('subscriptionStatus', 'in', ['active', 'trial']).get(),
+      firestore
+        .collection('users')
+        .where('createdAt', '>=', start.toISOString())
+        .where('createdAt', '<=', `${endKey}T23:59:59.999Z`)
+        .get(),
+      firestore.collectionGroup('subscription').get(),
+    ]);
 
     const statsByDay = new Map();
     snap.docs.forEach((docSnap) => {
@@ -137,6 +205,39 @@ export const getDailyUsageStats = functions
           other: readTypeCount(row, 'other'),
         },
       });
+    });
+
+    let newAppleSubscriptions = 0;
+    let newAndroidSubscriptions = 0;
+
+    subscriptionSnap.docs.forEach((docSnap) => {
+      const row = docSnap.data() || {};
+      const provider = inferSubscriptionProvider(row);
+      if (!provider) return;
+
+      const status = String(row?.status || '').trim().toLowerCase();
+      if (status && !['active', 'trial'].includes(status)) {
+        return;
+      }
+
+      const startedAtMs = getDocTimestampMs(docSnap, row, [
+        'subscriptionActivatedAt',
+        'activatedAt',
+        'createdAt',
+        'purchaseDate',
+        'trialStartedAt',
+        'updatedAt',
+      ]);
+
+      if (startedAtMs < startMs || startedAtMs > endMs) {
+        return;
+      }
+
+      if (provider === 'apple_iap') {
+        newAppleSubscriptions += 1;
+      } else if (provider === 'stripe') {
+        newAndroidSubscriptions += 1;
+      }
     });
 
     const daysList = [];
@@ -164,6 +265,12 @@ export const getDailyUsageStats = functions
     return {
       ok: true,
       days,
+      summary: {
+        activeProUsers: activeProSnap.docs.length,
+        newRegistrations: registrationsSnap.docs.length,
+        newAppleSubscriptions,
+        newAndroidSubscriptions,
+      },
       rows: daysList,
       generatedAt: new Date().toISOString(),
     };

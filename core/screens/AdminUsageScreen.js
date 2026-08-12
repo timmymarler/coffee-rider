@@ -23,6 +23,25 @@ function EmptyRow() {
   );
 }
 
+function SummaryMetric({ label, value, note, theme }) {
+  return (
+    <View
+      style={{
+        flex: 1,
+        minWidth: '48%',
+        backgroundColor: theme.colors.primaryDark,
+        borderRadius: theme.radius.md,
+        padding: theme.spacing.md,
+        gap: 4,
+      }}
+    >
+      <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '700' }}>{label}</Text>
+      <Text style={{ color: theme.colors.text, fontSize: 24, fontWeight: '800' }}>{value}</Text>
+      {note ? <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>{note}</Text> : null}
+    </View>
+  );
+}
+
 export default function AdminUsageScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -35,6 +54,7 @@ export default function AdminUsageScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [rows, setRows] = useState([]);
+  const [summary, setSummary] = useState(null);
 
   const isAdmin = profile?.role === 'admin';
 
@@ -85,6 +105,11 @@ export default function AdminUsageScreen() {
       fontSize: 16,
       fontWeight: '700',
       marginBottom: 10,
+    },
+    summaryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
     },
     chipsRow: {
       flexDirection: 'row',
@@ -202,6 +227,7 @@ export default function AdminUsageScreen() {
     try {
       const data = await getDailyUsageStats(rangeDays);
       setRows(Array.isArray(data?.rows) ? data.rows : []);
+      setSummary(data?.summary || null);
     } catch (err) {
       setError(err?.message || 'Failed to load usage stats.');
     } finally {
@@ -252,7 +278,7 @@ export default function AdminUsageScreen() {
 
         <View>
           <Text style={styles.title}>Admin Usage Dashboard</Text>
-          <Text style={styles.subtitle}>Daily totals by usage type</Text>
+          <Text style={styles.subtitle}>Active Pro users, registrations, subscriptions, and daily totals</Text>
         </View>
 
         {!isAdmin ? (
@@ -264,6 +290,40 @@ export default function AdminUsageScreen() {
           </View>
         ) : (
           <>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Audience & Subscriptions</Text>
+              {loading ? (
+                <ActivityIndicator color={theme.colors.accentMid} />
+              ) : (
+                <View style={styles.summaryGrid}>
+                  <SummaryMetric
+                    label="Active Pro Users"
+                    value={summary?.activeProUsers ?? 0}
+                    note="Current accounts with Pro access"
+                    theme={theme}
+                  />
+                  <SummaryMetric
+                    label="New Registrations"
+                    value={summary?.newRegistrations ?? 0}
+                    note={`Last ${days} days`}
+                    theme={theme}
+                  />
+                  <SummaryMetric
+                    label="New Apple Subscriptions"
+                    value={summary?.newAppleSubscriptions ?? 0}
+                    note={`Last ${days} days`}
+                    theme={theme}
+                  />
+                  <SummaryMetric
+                    label="New Android Subscriptions"
+                    value={summary?.newAndroidSubscriptions ?? 0}
+                    note={`Last ${days} days`}
+                    theme={theme}
+                  />
+                </View>
+              )}
+            </View>
+
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Range</Text>
               <View style={styles.chipsRow}>
