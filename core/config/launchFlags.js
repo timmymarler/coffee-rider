@@ -7,6 +7,12 @@ export const IOS_SUBSCRIPTIONS_DISABLED_MESSAGE =
 // Keep this true while monitoring billing spikes.
 export const GOOGLE_PLACES_COST_SAVER_MODE = true;
 
+// Block Google Places requests when the user is in a region with excessive API spend.
+// This is a coarse client-side safety net; the real enforcement should happen in a server-side geo gate.
+export const GOOGLE_PLACES_BLOCKED_REGION_BOUNDS = [
+  { minLat: 18, maxLat: 55, minLng: 70, maxLng: 150 },
+];
+
 // Photos are enabled again and controlled per-role so Pro can see them and users stay capped.
 export const GOOGLE_PLACE_PHOTOS_ENABLED = true;
 

@@ -1,4 +1,4 @@
-import { db } from "@config/firebase";
+import { db, functions } from "@config/firebase";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useTheme } from "@context/ThemeContext";
@@ -8,7 +8,9 @@ import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import { GOOGLE_PLACES_BLOCKED_REGION_BOUNDS } from "@core/config/launchFlags";
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, useColorScheme, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,12 +21,29 @@ const MAP_TIP_DISPLAY_MS = 5000;
 const GOOGLE_TEXT_SEARCH_CACHE = new Map();
 const GOOGLE_TEXT_SEARCH_INFLIGHT = new Map();
 const AUTO_REROUTE_DAILY_COUNTER_PREFIX = "@cr_auto_reroute_counter";
+const checkGooglePlacesAccessCallable = httpsCallable(functions, 'checkGooglePlacesAccess');
 
 function getGoogleTextSearchCacheKey(query, latitude, longitude, radius, allowPhotos) {
   const latBucket = Number(latitude || 0).toFixed(2);
   const lngBucket = Number(longitude || 0).toFixed(2);
   const normalizedQuery = String(query || "").trim().toLowerCase();
   return `${normalizedQuery}|${latBucket}|${lngBucket}|${Math.round(radius)}|${allowPhotos ? "photos" : "nop"}`;
+}
+
+function isUserInBlockedGoogleRegion(latitude, longitude) {
+  if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
+    return false;
+  }
+
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+
+  return GOOGLE_PLACES_BLOCKED_REGION_BOUNDS.some((bounds) => (
+    lat >= bounds.minLat &&
+    lat <= bounds.maxLat &&
+    lng >= bounds.minLng &&
+    lng <= bounds.maxLng
+  ));
 }
 
 function showPlatformToast(message, duration = 'LONG') {
@@ -1050,6 +1069,18 @@ const INCLUDED_TYPES = [
 ];
 
 async function doNearbyRequest({ latitude, longitude, radius, includedTypes, capabilities }) {
+  const geoCheck = await checkGooglePlacesAccessCallable({ latitude, longitude }).catch(() => ({ data: { allowed: true, blocked: false } }));
+
+  if (geoCheck?.data?.blocked || geoCheck?.data?.allowed === false) {
+    console.log("[GOOGLE] Server blocked region for nearby request; skipping Google Places call.");
+    return { places: [], error: "Region blocked" };
+  }
+
+  if (isUserInBlockedGoogleRegion(latitude, longitude)) {
+    console.log("[GOOGLE] Local blocked region for nearby request; skipping Google Places call.");
+    return { places: [], error: "Region blocked" };
+  }
+
   const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
   if (!apiKey) {
@@ -5429,6 +5460,18 @@ function getStepCompletionThresholds(step = null) {
   async function doTextSearch({ query, latitude, longitude, radius = 50000 }) {
     if (!canUseGooglePlacesApi) {
       console.log("[GOOGLE] doTextSearch blocked by capability");
+      return [];
+    }
+
+    const geoCheck = await checkGooglePlacesAccessCallable({ latitude, longitude }).catch(() => ({ data: { allowed: true, blocked: false } }));
+
+    if (geoCheck?.data?.blocked || geoCheck?.data?.allowed === false) {
+      console.log("[GOOGLE] Server blocked region for text search; skipping Google Places call.");
+      return [];
+    }
+
+    if (isUserInBlockedGoogleRegion(latitude, longitude)) {
+      console.log("[GOOGLE] Local blocked region for text search; skipping Google Places call.");
       return [];
     }
 
