@@ -26,7 +26,17 @@ const MAP_TIP_DISPLAY_MS = 5000;
 const GOOGLE_TEXT_SEARCH_CACHE = new Map();
 const GOOGLE_TEXT_SEARCH_INFLIGHT = new Map();
 const AUTO_REROUTE_DAILY_COUNTER_PREFIX = "@cr_auto_reroute_counter";
+const LOCATION_ERROR_LOG_COOLDOWN_MS = 30000;
+const LOCATION_ERROR_LAST_LOG_AT = new Map();
 const checkGooglePlacesAccessCallable = httpsCallable(functions, 'checkGooglePlacesAccess');
+
+function shouldLogLocationIssue(key, cooldownMs = LOCATION_ERROR_LOG_COOLDOWN_MS) {
+  const now = Date.now();
+  const last = LOCATION_ERROR_LAST_LOG_AT.get(key) || 0;
+  if (now - last < cooldownMs) return false;
+  LOCATION_ERROR_LAST_LOG_AT.set(key, now);
+  return true;
+}
 
 function getGoogleTextSearchCacheKey(query, latitude, longitude, radius, allowPhotos) {
   const latBucket = Number(latitude || 0).toFixed(2);
@@ -5092,7 +5102,18 @@ function getStepCompletionThresholds(step = null) {
             setUserLocation(current.coords);
           }
         } catch (initialLocationError) {
-          console.warn('[MAP] Initial location fetch failed, waiting for watcher update:', initialLocationError?.message || initialLocationError);
+          const message = String(initialLocationError?.message || initialLocationError || 'Unknown location error');
+          const isTransientUnavailable =
+            message.includes('Cannot obtain current location') ||
+            message.includes('kCLErrorDomain error 0');
+
+          if (isTransientUnavailable) {
+            if (shouldLogLocationIssue('initial-transient-unavailable')) {
+              debugLog('GPS_UNAVAILABLE', 'Initial location temporarily unavailable; watcher will retry.');
+            }
+          } else if (shouldLogLocationIssue(`initial-${message}`)) {
+            console.warn('[MAP] Initial location fetch failed, waiting for watcher update:', message);
+          }
         }
 
         // 2️⃣ CONTINUOUS updates (Follow Me)
@@ -5187,18 +5208,48 @@ function getStepCompletionThresholds(step = null) {
           }
         },
         (error) => {
-          console.error("[MAP] Location watch error:", error);
-          
+          const message = String(error?.message || error || 'Unknown location error');
+          const code = error?.code;
+          const isPermissionError =
+            code === 'PERMISSION_DENIED' ||
+            message.toLowerCase().includes('permission');
+          const isTransientUnavailable =
+            code === 'POSITION_UNAVAILABLE' ||
+            code === 0 ||
+            message.includes('Cannot obtain current location') ||
+            message.includes('kCLErrorDomain error 0');
+          const isTimeout = code === 'TIMEOUT';
+
+          const errorKey = isPermissionError
+            ? 'watch-permission'
+            : isTransientUnavailable
+              ? 'watch-transient-unavailable'
+              : isTimeout
+                ? 'watch-timeout'
+                : `watch-${code || 'unknown'}-${message}`;
+          const shouldLog = shouldLogLocationIssue(errorKey);
+
           // Handle specific location permission/service errors
-          if (error?.code === 'PERMISSION_DENIED' || error?.message?.includes('permission')) {
+          if (isPermissionError) {
+            if (shouldLog) {
+              console.warn('[MAP] Location permission error from watcher:', message);
+            }
             showPlatformToast('Location permission required to use map', 'SHORT');
-          } else if (error?.code === 'POSITION_UNAVAILABLE' || error?.message?.includes('Cannot obtain')) {
+          } else if (isTransientUnavailable) {
             // This is a temporary GPS signal loss - don't overwhelm with ToastAndroid
-            debugLog("GPS_UNAVAILABLE", "GPS signal temporarily unavailable");
-          } else if (error?.code === 'TIMEOUT') {
-            debugLog("GPS_TIMEOUT", "Location request timeout");
+            if (shouldLog) {
+              debugLog("GPS_UNAVAILABLE", "GPS signal temporarily unavailable", { code, message });
+            }
+          } else if (isTimeout) {
+            if (shouldLog) {
+              console.warn('[MAP] Location watcher timeout:', message);
+              debugLog("GPS_TIMEOUT", "Location request timeout", { code, message });
+            }
           } else {
-            debugLog("GPS_ERROR", "Unexpected location error: " + error?.message || error);
+            console.error("[MAP] Location watch error:", error);
+            if (shouldLog) {
+              debugLog("GPS_ERROR", "Unexpected location error: " + message, { code, message });
+            }
           }
         }
       );
