@@ -8,7 +8,12 @@ import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
-import { GOOGLE_PLACES_BLOCKED_REGION_BOUNDS } from "@core/config/launchFlags";
+import {
+  GOOGLE_PLACES_BLOCKED_REGION_BOUNDS,
+  GOOGLE_PLACES_LIVE_SEARCH_ENABLED,
+  GOOGLE_TEXT_SEARCH_DAILY_LIMIT,
+  GOOGLE_TEXT_SEARCH_DAILY_LIMIT_ENABLED,
+} from "@core/config/launchFlags";
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -54,6 +59,32 @@ function showPlatformToast(message, duration = 'LONG') {
     return;
   }
   console.log('[Toast]', message);
+}
+
+async function checkGoogleTextSearchBudget(userId = 'guest') {
+  if (!GOOGLE_TEXT_SEARCH_DAILY_LIMIT_ENABLED) {
+    return { allowed: true, remaining: GOOGLE_TEXT_SEARCH_DAILY_LIMIT, count: 0 };
+  }
+
+  const dayKey = new Date().toISOString().slice(0, 10);
+  const storageKey = `@cr_google_text_search_${userId || 'guest'}_${dayKey}`;
+
+  try {
+    const raw = await AsyncStorage.getItem(storageKey);
+    const currentCount = Number(raw || 0);
+    const nextCount = Number.isFinite(currentCount) ? currentCount : 0;
+
+    if (nextCount >= GOOGLE_TEXT_SEARCH_DAILY_LIMIT) {
+      return { allowed: false, remaining: 0, count: nextCount };
+    }
+
+    const updatedCount = nextCount + 1;
+    await AsyncStorage.setItem(storageKey, String(updatedCount));
+    return { allowed: true, remaining: Math.max(0, GOOGLE_TEXT_SEARCH_DAILY_LIMIT - updatedCount), count: updatedCount };
+  } catch (error) {
+    console.warn('[GOOGLE] Failed to read/write text-search budget:', error?.message || error);
+    return { allowed: true, remaining: GOOGLE_TEXT_SEARCH_DAILY_LIMIT, count: 0 };
+  }
 }
 
 function isRoundaboutManeuver(maneuver = "") {
@@ -273,7 +304,7 @@ const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
 const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17; // Android: 17, iOS: 7 - More zoomed in for better detail
 const FOLLOW_CENTER_AHEAD_METERS_PORTRAIT = 120;
 const FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE = 66;
-const ENABLE_GOOGLE_AUTO_FETCH = true;
+const ENABLE_GOOGLE_AUTO_FETCH = false;
 
 // Follow Me smoothing constants
 const MAX_LOCATION_ACCURACY = 25; // Meters - ignore readings worse than this
@@ -1069,6 +1100,11 @@ const INCLUDED_TYPES = [
 ];
 
 async function doNearbyRequest({ latitude, longitude, radius, includedTypes, capabilities }) {
+  if (!GOOGLE_PLACES_LIVE_SEARCH_ENABLED) {
+    console.log("[GOOGLE] Live Google Places access is disabled globally; skipping nearby request.");
+    return { places: [], error: "Google Places disabled" };
+  }
+
   const geoCheck = await checkGooglePlacesAccessCallable({ latitude, longitude }).catch(() => ({ data: { allowed: true, blocked: false } }));
 
   if (geoCheck?.data?.blocked || geoCheck?.data?.allowed === false) {
@@ -1417,7 +1453,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const user = auth?.user || null;
   const role = auth?.role || auth?.profile?.role || "guest";
   const capabilities = auth?.capabilities || getCapabilities(role);
-  const canUseGooglePlacesApi = capabilities?.isAdmin === true || role === "pro";
+  const canUseGooglePlacesApi = GOOGLE_PLACES_LIVE_SEARCH_ENABLED && (capabilities?.isAdmin === true || role === "pro");
   const profileRole = auth?.profile?.role || "guest";
   const isFreeUser = role === "user";
   const isMapFocused = useIsFocused();
@@ -5458,8 +5494,18 @@ function getStepCompletionThresholds(step = null) {
   /* Used for Follow Me mode */
 
   async function doTextSearch({ query, latitude, longitude, radius = 50000 }) {
-    if (!canUseGooglePlacesApi) {
-      console.log("[GOOGLE] doTextSearch blocked by capability");
+    if (!GOOGLE_PLACES_LIVE_SEARCH_ENABLED || !canUseGooglePlacesApi) {
+      console.log("[GOOGLE] doTextSearch blocked by global disable or role capability");
+      return [];
+    }
+
+    const budget = await checkGoogleTextSearchBudget(user?.uid || 'guest');
+    if (!budget.allowed) {
+      console.log("[GOOGLE] doTextSearch blocked by daily budget limit", { count: budget.count, limit: GOOGLE_TEXT_SEARCH_DAILY_LIMIT });
+      setSearchNotice({
+        title: "Daily Google search limit reached",
+        message: "Google text search has reached the daily limit. You can still search the Coffee Rider cached places.",
+      });
       return [];
     }
 
@@ -5573,11 +5619,11 @@ function getStepCompletionThresholds(step = null) {
     const restrictedToCrSearch = !canUseGooglePlacesApi;
 
     if (restrictedToCrSearch) {
-      console.log("[SEARCH] Google search blocked for role; running CR-only search");
+      console.log("[SEARCH] Google text search blocked by role capability; running CR-only search");
       setGooglePois([]); // ensure no stale Google results linger
       setSearchNotice({
-        title: "Search restricted",
-        message: "Only Pro users can use Google Search. Standard users can only search Coffee Rider places.",
+        title: "Google search limited",
+        message: "Google text search is available to Pro/Admin users only. Free users can search Coffee Rider cached places.",
       });
     } else {
       setSearchNotice(null);
