@@ -22,6 +22,7 @@ import {
 
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
+import { buildEmailVerificationActionCodeSettings } from "@core/auth/actionCodeSettings";
 import {
     buildRestrictedAccessMessage,
     shouldShowProUpgradePrompt,
@@ -46,6 +47,7 @@ export default function RegisterScreen({ onBack }) {
   const [socialSubmitting, setSocialSubmitting] = useState(false);
   const [socialProcess, setSocialProcess] = useState(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
+  const [verificationResendBlockedUntil, setVerificationResendBlockedUntil] = useState(0);
 
   const emailDomain = email.trim().toLowerCase().split("@")[1] || "";
   const isOutlookOrHotmailEmail = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(emailDomain);
@@ -139,7 +141,8 @@ export default function RegisterScreen({ onBack }) {
       await setDoc(doc(db, "users", user.uid), userData);
 
       try {
-        await sendEmailVerification(user);
+        await user.reload();
+        await sendEmailVerification(user, buildEmailVerificationActionCodeSettings());
         console.log("Verification email sent to:", user.email);
       } catch (emailErr) {
         console.error("Failed to send verification email:", emailErr);
@@ -156,7 +159,7 @@ export default function RegisterScreen({ onBack }) {
 
       Alert.alert(
         "Verification email sent",
-        "Please check your email to verify your account before logging in.",
+        "Please use the newest verification email link. Older links can show as expired.",
         [
           {
             text: "OK",

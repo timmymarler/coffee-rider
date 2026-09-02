@@ -22,6 +22,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { Alert, Animated, Dimensions, Linking, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { EMAIL_VERIFICATION_ENFORCED } from "@core/config/launchFlags";
 
 
 function FloatingTabBar({ state }) {
@@ -52,7 +53,7 @@ function FloatingTabBar({ state }) {
   const canAccessMap = capabilities?.canAccessMap === true;
   const canAccessSavedRoutes = capabilities?.canAccessSavedRoutes === true;
   const canAccessGroups = capabilities?.canAccessGroups === true;
-  const canAccessCalendar = capabilities?.canAccessCalendar === true && emailVerified;
+  const canAccessCalendar = capabilities?.canAccessCalendar === true && (!EMAIL_VERIFICATION_ENFORCED || emailVerified);
   const canAccessProfile = capabilities?.canAccessProfile === true;
 
   const isMapScreen =
@@ -334,7 +335,7 @@ function LayoutContent() {
   }
 
   // Not authenticated and not in guest mode, OR authenticated but not verified: show login screen
-  const showLoginScreen = (!user && !isGuest) || (user && !emailVerified);
+  const showLoginScreen = (!user && !isGuest) || (EMAIL_VERIFICATION_ENFORCED && user && !emailVerified);
   
   const LoginScreen = require("@/core/auth/login").default;
   const mainContent = showLoginScreen ? <LoginScreen /> : (

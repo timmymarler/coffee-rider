@@ -1,6 +1,7 @@
 // core/auth/login.js
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
+import { buildEmailVerificationActionCodeSettings } from "@core/auth/actionCodeSettings";
 import { buildRestrictedAccessMessage, shouldShowProUpgradePrompt, showProUpgradePrompt } from "@core/utils/proUpgradePrompt";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import theme from "@themes";
@@ -28,7 +29,7 @@ import { isAppleSignInAvailable, signInWithApple } from "./socialAuth";
 export default function LoginScreen() {
   const router = useRouter();
   const { colors, spacing } = theme;
-  const { enterGuestMode, user, emailVerified } = useContext(AuthContext);
+  const { enterGuestMode, user, emailVerified, refreshAuthUser } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,9 +38,35 @@ export default function LoginScreen() {
   const [socialSubmitting, setSocialSubmitting] = useState(false);
   const [socialProcess, setSocialProcess] = useState(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
+  const [verificationResendBlockedUntil, setVerificationResendBlockedUntil] = useState(0);
 
   const loginEmailDomain = email.trim().toLowerCase().split("@")[1] || "";
   const isOutlookOrHotmailEmail = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(loginEmailDomain);
+
+  useEffect(() => {
+    if (!user || emailVerified || typeof refreshAuthUser !== "function") return;
+
+    let cancelled = false;
+
+    const refreshVerification = async () => {
+      try {
+        const refreshedUser = await refreshAuthUser();
+        if (!cancelled && refreshedUser?.emailVerified) {
+          router.replace("map");
+        }
+      } catch {
+        // Ignore transient refresh errors while waiting for email verification.
+      }
+    };
+
+    refreshVerification();
+    const intervalId = setInterval(refreshVerification, 10000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [user, emailVerified, refreshAuthUser, router]);
 
   useEffect(() => {
     setAppleAvailable(isAppleSignInAvailable());
@@ -176,14 +203,23 @@ export default function LoginScreen() {
       return;
     }
 
+    const now = Date.now();
+    if (verificationResendBlockedUntil > now) {
+      const secondsRemaining = Math.ceil((verificationResendBlockedUntil - now) / 1000);
+      Alert.alert("Please wait", `You can request another verification email in ${secondsRemaining}s.`);
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await sendEmailVerification(user);
+      await user.reload();
+      await sendEmailVerification(user, buildEmailVerificationActionCodeSettings());
+      setVerificationResendBlockedUntil(Date.now() + 60 * 1000);
       const resendMessage = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(
         (user.email || "").trim().toLowerCase().split("@")[1] || ""
       )
-        ? `A verification email has been sent to ${user.email}. Outlook and Hotmail may delay or block it, so please also check junk or try another email address if needed.`
-        : `A verification email has been sent to ${user.email}. Please check your inbox and spam folder.`;
+        ? `A verification email has been sent to ${user.email}. Use the newest email link only. Outlook and Hotmail may delay or block it, so also check junk.`
+        : `A verification email has been sent to ${user.email}. Use the newest email link only, then check inbox and spam.`;
       Alert.alert(
         "Email sent",
         resendMessage
@@ -194,6 +230,29 @@ export default function LoginScreen() {
         "Failed to send",
         err.message || "Could not send verification email. Please try again."
       );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleCheckVerificationStatus() {
+    if (!auth.currentUser || typeof refreshAuthUser !== "function") {
+      Alert.alert("Session expired", "Please log in again.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const refreshedUser = await refreshAuthUser();
+      if (refreshedUser?.emailVerified) {
+        Alert.alert("Email verified", "Your account is now verified.");
+        router.replace("map");
+      } else {
+        Alert.alert("Not verified yet", "Please open the latest verification email and tap the link.");
+      }
+    } catch (err) {
+      console.error("Check verification status error:", err);
+      Alert.alert("Could not refresh status", err?.message || "Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -302,10 +361,18 @@ export default function LoginScreen() {
             </View>
 
             <TouchableOpacity
+              onPress={handleCheckVerificationStatus}
+              disabled={submitting}
+              style={[styles.button, { backgroundColor: colors.accentStrong, marginTop: spacing.md }]}
+            >
+              <Text style={styles.buttonText}>{submitting ? "Checking..." : "I've Verified - Continue"}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               onPress={handleLogout}
               style={[styles.button, { backgroundColor: colors.accentMid }]}
             >
-              <Text style={styles.buttonText}>Continue</Text>
+              <Text style={styles.buttonText}>Log Out</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

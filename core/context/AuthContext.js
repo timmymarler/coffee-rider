@@ -265,6 +265,20 @@ export default function AuthProvider({ children }) {
     return updated;
   }
 
+  async function refreshAuthUser() {
+    if (!auth.currentUser) {
+      setUser(null);
+      setEmailVerified(false);
+      return null;
+    }
+
+    await auth.currentUser.reload();
+    const refreshedUser = auth.currentUser;
+    setUser(refreshedUser);
+    setEmailVerified(Boolean(refreshedUser?.emailVerified));
+    return refreshedUser;
+  }
+
   // ----------------------------------------
   // INITIALIZATION: Restore guest mode and session on app startup
   // ----------------------------------------
@@ -374,6 +388,11 @@ export default function AuthProvider({ children }) {
       if (state === 'active' && user) {
         // App came to foreground, refresh session
         await updateSessionLastUsed();
+        try {
+          await refreshAuthUser();
+        } catch (err) {
+          console.warn('[AuthContext] Failed to refresh auth user on foreground:', err?.message || err);
+        }
       }
     });
 
@@ -456,6 +475,7 @@ export default function AuthProvider({ children }) {
     login,
     logout,
     register,
+    refreshAuthUser,
     refreshProfile,
     enterGuestMode,
     exitGuestMode,
