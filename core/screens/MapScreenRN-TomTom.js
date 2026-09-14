@@ -1,21 +1,20 @@
-import { db, functions } from "@config/firebase";
+import { db } from "@config/firebase";
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useTheme } from "@context/ThemeContext";
 import { sendBleDirectionsFrame } from "@core/ble/directionsTransmitter";
+import { canUseGooglePlacesAccess } from "@core/google/googlePlacesAccess";
 import MapView, { Marker, Polyline } from "@core/map/nativeMaps";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import {
-  GOOGLE_PLACES_BLOCKED_REGION_BOUNDS,
   GOOGLE_PLACES_LIVE_SEARCH_ENABLED,
   GOOGLE_TEXT_SEARCH_DAILY_LIMIT,
   GOOGLE_TEXT_SEARCH_DAILY_LIMIT_ENABLED,
 } from "@core/config/launchFlags";
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, useColorScheme, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,10 +24,10 @@ const INITIAL_FREE_MAP_TOAST_MS = 3500;
 const MAP_TIP_DISPLAY_MS = 5000;
 const GOOGLE_TEXT_SEARCH_CACHE = new Map();
 const GOOGLE_TEXT_SEARCH_INFLIGHT = new Map();
+const GOOGLE_TEXT_SEARCH_PERSIST_PREFIX = "@cr_google_text_search_cache_v1";
 const AUTO_REROUTE_DAILY_COUNTER_PREFIX = "@cr_auto_reroute_counter";
 const LOCATION_ERROR_LOG_COOLDOWN_MS = 30000;
 const LOCATION_ERROR_LAST_LOG_AT = new Map();
-const checkGooglePlacesAccessCallable = httpsCallable(functions, 'checkGooglePlacesAccess');
 
 function shouldLogLocationIssue(key, cooldownMs = LOCATION_ERROR_LOG_COOLDOWN_MS) {
   const now = Date.now();
@@ -43,22 +42,6 @@ function getGoogleTextSearchCacheKey(query, latitude, longitude, radius, allowPh
   const lngBucket = Number(longitude || 0).toFixed(2);
   const normalizedQuery = String(query || "").trim().toLowerCase();
   return `${normalizedQuery}|${latBucket}|${lngBucket}|${Math.round(radius)}|${allowPhotos ? "photos" : "nop"}`;
-}
-
-function isUserInBlockedGoogleRegion(latitude, longitude) {
-  if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
-    return false;
-  }
-
-  const lat = Number(latitude);
-  const lng = Number(longitude);
-
-  return GOOGLE_PLACES_BLOCKED_REGION_BOUNDS.some((bounds) => (
-    lat >= bounds.minLat &&
-    lat <= bounds.maxLat &&
-    lng >= bounds.minLng &&
-    lng <= bounds.maxLng
-  ));
 }
 
 function showPlatformToast(message, duration = 'LONG') {
@@ -94,6 +77,42 @@ async function checkGoogleTextSearchBudget(userId = 'guest') {
   } catch (error) {
     console.warn('[GOOGLE] Failed to read/write text-search budget:', error?.message || error);
     return { allowed: true, remaining: GOOGLE_TEXT_SEARCH_DAILY_LIMIT, count: 0 };
+  }
+}
+
+async function readPersistedGoogleTextSearch(cacheKey, ttlMs) {
+  const storageKey = `${GOOGLE_TEXT_SEARCH_PERSIST_PREFIX}:${cacheKey}`;
+
+  try {
+    const raw = await AsyncStorage.getItem(storageKey);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.createdAt !== "number" || !Array.isArray(parsed.results)) {
+      return null;
+    }
+
+    if (Date.now() - parsed.createdAt > ttlMs) {
+      return null;
+    }
+
+    return parsed.results;
+  } catch (error) {
+    console.warn("[GOOGLE] Failed to read persisted text-search cache:", error?.message || error);
+    return null;
+  }
+}
+
+async function writePersistedGoogleTextSearch(cacheKey, results) {
+  const storageKey = `${GOOGLE_TEXT_SEARCH_PERSIST_PREFIX}:${cacheKey}`;
+
+  try {
+    await AsyncStorage.setItem(storageKey, JSON.stringify({
+      createdAt: Date.now(),
+      results: Array.isArray(results) ? results : [],
+    }));
+  } catch (error) {
+    console.warn("[GOOGLE] Failed to write persisted text-search cache:", error?.message || error);
   }
 }
 
@@ -1115,15 +1134,12 @@ async function doNearbyRequest({ latitude, longitude, radius, includedTypes, cap
     return { places: [], error: "Google Places disabled" };
   }
 
-  const geoCheck = await checkGooglePlacesAccessCallable({ latitude, longitude }).catch(() => ({ data: { allowed: true, blocked: false } }));
-
-  if (geoCheck?.data?.blocked || geoCheck?.data?.allowed === false) {
-    console.log("[GOOGLE] Server blocked region for nearby request; skipping Google Places call.");
-    return { places: [], error: "Region blocked" };
-  }
-
-  if (isUserInBlockedGoogleRegion(latitude, longitude)) {
-    console.log("[GOOGLE] Local blocked region for nearby request; skipping Google Places call.");
+  const allowedForNearby = await canUseGooglePlacesAccess({
+    latitude,
+    longitude,
+    context: "map_nearby_request",
+  });
+  if (!allowedForNearby) {
     return { places: [], error: "Region blocked" };
   }
 
@@ -3699,7 +3715,9 @@ function getStepCompletionThresholds(step = null) {
       await debugLog("ROUTE_TO_HOME", "Geocoding address: " + homeAddress);
       
       // Geocode the home address
-      const homeCoords = await geocodeAddress(homeAddress);
+      const homeCoords = canUseGooglePlacesApi
+        ? await geocodeAddress(homeAddress, { allowExternalLookup: true })
+        : null;
       
       if (!homeCoords) {
         console.log("[ROUTE_TO_HOME] Geocoding failed");
@@ -5550,6 +5568,27 @@ function getStepCompletionThresholds(step = null) {
       return [];
     }
 
+    const allowGooglePhotos = false;
+    const cacheKey = getGoogleTextSearchCacheKey(query, latitude, longitude, radius, allowGooglePhotos);
+    const cached = GOOGLE_TEXT_SEARCH_CACHE.get(cacheKey);
+    if (cached && Date.now() - cached.createdAt < GOOGLE_TEXT_SEARCH_CACHE_TTL_MS) {
+      return cached.results;
+    }
+
+    const persistedResults = await readPersistedGoogleTextSearch(cacheKey, GOOGLE_TEXT_SEARCH_CACHE_TTL_MS);
+    if (persistedResults) {
+      GOOGLE_TEXT_SEARCH_CACHE.set(cacheKey, {
+        createdAt: Date.now(),
+        results: persistedResults,
+      });
+      return persistedResults;
+    }
+
+    const inflight = GOOGLE_TEXT_SEARCH_INFLIGHT.get(cacheKey);
+    if (inflight) {
+      return inflight;
+    }
+
     const budget = await checkGoogleTextSearchBudget(user?.uid || 'guest');
     if (!budget.allowed) {
       console.log("[GOOGLE] doTextSearch blocked by daily budget limit", { count: budget.count, limit: GOOGLE_TEXT_SEARCH_DAILY_LIMIT });
@@ -5560,15 +5599,12 @@ function getStepCompletionThresholds(step = null) {
       return [];
     }
 
-    const geoCheck = await checkGooglePlacesAccessCallable({ latitude, longitude }).catch(() => ({ data: { allowed: true, blocked: false } }));
-
-    if (geoCheck?.data?.blocked || geoCheck?.data?.allowed === false) {
-      console.log("[GOOGLE] Server blocked region for text search; skipping Google Places call.");
-      return [];
-    }
-
-    if (isUserInBlockedGoogleRegion(latitude, longitude)) {
-      console.log("[GOOGLE] Local blocked region for text search; skipping Google Places call.");
+    const allowedForTextSearch = await canUseGooglePlacesAccess({
+      latitude,
+      longitude,
+      context: "map_text_search",
+    });
+    if (!allowedForTextSearch) {
       return [];
     }
 
@@ -5587,19 +5623,6 @@ function getStepCompletionThresholds(step = null) {
       "places.userRatingCount",
       "places.regularOpeningHours",
     ];
-
-    const allowGooglePhotos = false;
-
-    const cacheKey = getGoogleTextSearchCacheKey(query, latitude, longitude, radius, allowGooglePhotos);
-    const cached = GOOGLE_TEXT_SEARCH_CACHE.get(cacheKey);
-    if (cached && Date.now() - cached.createdAt < GOOGLE_TEXT_SEARCH_CACHE_TTL_MS) {
-      return cached.results;
-    }
-
-    const inflight = GOOGLE_TEXT_SEARCH_INFLIGHT.get(cacheKey);
-    if (inflight) {
-      return inflight;
-    }
 
     const requestPromise = (async () => {
       try {
@@ -5638,6 +5661,7 @@ function getStepCompletionThresholds(step = null) {
           createdAt: Date.now(),
           results: mappedResults,
         });
+        writePersistedGoogleTextSearch(cacheKey, mappedResults);
 
         return mappedResults;
       } catch (error) {
@@ -7529,10 +7553,14 @@ function getStepCompletionThresholds(step = null) {
             if (nearbyCrPlace) {
               label = nearbyCrPlace.title || nearbyCrPlace.name;
             } else {
-              try {
-                label = await getPlaceLabel(latitude, longitude);
-              } catch (err) {
-                console.warn("[MAP] getPlaceLabel failed", err);
+              if (canUseGooglePlacesApi) {
+                try {
+                  label = await getPlaceLabel(latitude, longitude, { allowExternalLookup: true });
+                } catch (err) {
+                  console.warn("[MAP] getPlaceLabel failed", err);
+                }
+              } else {
+                label = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
               }
             }
 

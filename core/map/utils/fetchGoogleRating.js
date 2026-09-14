@@ -1,7 +1,18 @@
+import { canUseGooglePlacesAccess } from "@core/google/googlePlacesAccess";
+
 const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
-export async function fetchGoogleRating(placeId) {
+export async function fetchGoogleRating(placeId, options = {}) {
   try {
+    const allowed = await canUseGooglePlacesAccess({
+      latitude: options?.latitude,
+      longitude: options?.longitude,
+      context: options?.context || "fetch_google_rating",
+    });
+    if (!allowed) {
+      return { rating: null, userRatingCount: null };
+    }
+
     const res = await fetch(
       `https://places.googleapis.com/v1/places/${placeId}?fields=rating,userRatingCount`,
       {

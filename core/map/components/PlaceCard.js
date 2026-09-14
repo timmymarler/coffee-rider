@@ -6,6 +6,7 @@ import { db } from "@config/firebase";
 import { AuthContext } from "@context/AuthContext";
 import { useTheme } from "@context/ThemeContext";
 import { GOOGLE_PLACE_PHOTOS_ENABLED } from "@core/config/launchFlags";
+import { canUseGooglePlacesAccess, isInBlockedGoogleRegion } from "@core/google/googlePlacesAccess";
 import { getCapabilities } from "@core/roles/capabilities";
 import { incMetric } from "@core/utils/devMetrics";
 import { trackUsageEventSafe } from "@core/utils/usageTelemetry";
@@ -389,6 +390,13 @@ export default function PlaceCard({
     let mounted = true;
 
     async function loadGoogleDetails() {
+      const allowedForPlace = await canUseGooglePlacesAccess({
+        latitude: safePlace?.latitude,
+        longitude: safePlace?.longitude,
+        context: "place_card_load",
+      });
+      if (!allowedForPlace) return;
+
       const needPhotos = GOOGLE_PLACE_PHOTOS_ENABLED && googlePhotos.length === 0 && !hasStoredPhotos;
       const needRating = !hasStoredRating;
 
@@ -417,9 +425,17 @@ export default function PlaceCard({
         needPhotos
           ? (googlePhotos.length > 0
             ? Promise.resolve(googlePhotos)
-            : fetchGooglePhotoRefs(googlePlaceId, maxPhotosToFetch))
+            : fetchGooglePhotoRefs(googlePlaceId, maxPhotosToFetch, {
+              latitude: safePlace?.latitude,
+              longitude: safePlace?.longitude,
+              context: "place_card_load_photos",
+            }))
           : Promise.resolve([]),
-        needRating ? fetchGoogleRating(googlePlaceId) : Promise.resolve(null),
+        needRating ? fetchGoogleRating(googlePlaceId, {
+          latitude: safePlace?.latitude,
+          longitude: safePlace?.longitude,
+          context: "place_card_load_rating",
+        }) : Promise.resolve(null),
       ]);
 
       if (!mounted) return;
@@ -566,11 +582,12 @@ export default function PlaceCard({
   
   const rawGooglePhotos = useMemo(() => {
     if (!canUseGooglePlacesApi) return [];
+    if (isInBlockedGoogleRegion(safePlace?.latitude, safePlace?.longitude)) return [];
     if (!Array.isArray(safePlace.photos?.google)) return [];
     return safePlace.photos.google
       .map(ref => buildGooglePhotoUrl(ref))
       .filter(Boolean);
-  }, [safePlace.photos, canUseGooglePlacesApi]);
+  }, [safePlace.photos, safePlace?.latitude, safePlace?.longitude, canUseGooglePlacesApi]);
 
   const photos = useMemo(() => {
     const crPhotos = Array.isArray(safePlace.photos?.cr)
@@ -621,6 +638,12 @@ export default function PlaceCard({
     
     return list;
   }, [googlePhotos, safePlace.photos.cr, canUseGooglePlacesApi]);
+
+  const showUserPhotoUpgradeMessage =
+    GOOGLE_PLACE_PHOTOS_ENABLED &&
+    (role === "user" || role === "guest") &&
+    !capabilities.canViewGooglePhotos &&
+    !combinedPhotos.length;
 
   useEffect(() => {
     // Reset per-place photo scroll tracking when card context changes.
@@ -1081,6 +1104,16 @@ export default function PlaceCard({
       return;
     }
 
+    const allowedForPlace = await canUseGooglePlacesAccess({
+      latitude: safePlace?.latitude,
+      longitude: safePlace?.longitude,
+      context: "place_card_resync",
+    });
+    if (!allowedForPlace) {
+      Alert.alert("Google blocked", "Google lookups are currently blocked for this region.");
+      return;
+    }
+
     try {
       const match = await findGoogleMatch(safePlace);
 
@@ -1113,11 +1146,23 @@ export default function PlaceCard({
       return;
     }
 
+    const allowedForPlace = await canUseGooglePlacesAccess({
+      latitude: safePlace?.latitude,
+      longitude: safePlace?.longitude,
+      context: "place_card_refresh",
+    });
+    if (!allowedForPlace) {
+      Alert.alert("Google blocked", "Google lookups are currently blocked for this region.");
+      return;
+    }
+
     try {
       console.log("[REFRESH] Fetching Google data for:", safePlace.googlePlaceId);
       
       const googleData = await getGoogleDetails({
         placeId: safePlace.googlePlaceId,
+        latitude: safePlace?.latitude,
+        longitude: safePlace?.longitude,
       });
 
       if (!googleData) {
@@ -1244,6 +1289,11 @@ export default function PlaceCard({
             <Text style={styles.noGooglePhotosHint}>
               No Google photos available for this place
             </Text>
+          )}
+          {showUserPhotoUpgradeMessage && (
+            <View style={styles.photoPlaceholder}>
+              <Text style={styles.photoPlaceholderText}>To view photos please upgrade to Pro</Text>
+            </View>
           )}
 
         </View>
@@ -2101,6 +2151,53 @@ function createStyles(theme, isLandscape) {
       position: "relative",
     },
 
+    upgradeHint: {
+      position: "absolute",
+      bottom: 12,
+      left: 12,
+      right: 12,
+      backgroundColor: "rgba(10,10,12,0.7)",
+      color: "#fff",
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 12,
+      overflow: "hidden",
+      fontSize: 12,
+      textAlign: "center",
+    },
+
+    noGooglePhotosHint: {
+      position: "absolute",
+      bottom: 12,
+      left: 12,
+      right: 12,
+      backgroundColor: "rgba(10,10,12,0.7)",
+      color: "#fff",
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 12,
+      overflow: "hidden",
+      fontSize: 12,
+      textAlign: "center",
+    },
+
+    photoPlaceholder: {
+      position: "absolute",
+      inset: 0,
+      backgroundColor: "rgba(12, 14, 16, 0.72)",
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 24,
+    },
+
+    photoPlaceholderText: {
+      color: "#fff",
+      fontSize: 15,
+      fontWeight: "600",
+      textAlign: "center",
+      lineHeight: 22,
+    },
+
     photoActionBar: {
       position: "absolute",
       right: 12,
@@ -2125,10 +2222,6 @@ function createStyles(theme, isLandscape) {
 
     visitedActionButton: {
       backgroundColor: "#10b981",
-    },
-
-    primaryAction: {
-      backgroundColor: theme.colors.primary, // primary blue
     },
 
     savedHint: {

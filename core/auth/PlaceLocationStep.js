@@ -2,7 +2,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import theme from "@themes";
 import Constants from "expo-constants";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -13,6 +13,9 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+  import { AuthContext } from "@context/AuthContext";
+  import { getCapabilities } from "@core/roles/capabilities";
+  import { geocodeAddress } from "@core/lib/geocode";
 
 const GOOGLE_KEY = Constants.expoConfig?.extra?.googlePlacesApiKey;
 
@@ -23,6 +26,11 @@ export default function PlaceLocationStep({
   onBack,
   isLoading,
 }) {
+  const auth = useContext(AuthContext);
+  const role = auth?.profile?.role || "guest";
+  const capabilities = getCapabilities(role);
+  const canUseGooglePlaces = Boolean(capabilities?.canSearchGoogle);
+
   const [address, setAddress] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -32,10 +40,10 @@ export default function PlaceLocationStep({
   // Search Google Places for the place name
   useEffect(() => {
     searchPlace();
-  }, []);
+  }, [canUseGooglePlaces, placeName]);
 
   const searchPlace = async () => {
-    if (!placeName.trim() || !GOOGLE_KEY) {
+    if (!placeName?.trim() || !GOOGLE_KEY || !canUseGooglePlaces) {
       console.log("[PlaceLocationStep] Missing placeName or GOOGLE_KEY");
       setShowManualEntry(true);
       return;
@@ -79,31 +87,26 @@ export default function PlaceLocationStep({
   };
 
   const handleGeocodeAddress = async () => {
-    if (!address.trim() || !GOOGLE_KEY) {
+    if (!address.trim()) {
       Alert.alert("Error", "Please enter an address");
+      return;
+    }
+
+    if (!canUseGooglePlaces) {
+      Alert.alert("Pro feature", "Place search is available for Pro and Admin accounts.");
       return;
     }
 
     setGeocoding(true);
     try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-        address.trim()
-      )}&key=${GOOGLE_KEY}`;
-
       console.log("[PlaceLocationStep] Geocoding address:", address.trim());
-      const response = await fetch(url);
-      const data = await response.json();
+      const coords = await geocodeAddress(address.trim(), { allowExternalLookup: true });
 
-      console.log("[PlaceLocationStep] Geocode response:", data);
-      
-      if (data.results && data.results.length > 0) {
-        const location = data.results[0].geometry.location;
-        console.log("[PlaceLocationStep] Extracted coordinates:", location);
-        
+      if (coords?.lat != null && coords?.lng != null) {
         onLocationSelected({
-          latitude: location.lat,
-          longitude: location.lng,
-          address: data.results[0].formatted_address,
+          latitude: coords.lat,
+          longitude: coords.lng,
+          address: address.trim(),
         });
       } else {
         console.log("[PlaceLocationStep] No results from geocoding");
@@ -119,6 +122,14 @@ export default function PlaceLocationStep({
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {!canUseGooglePlaces ? (
+        <View style={styles.infoBanner}>
+          <Text style={styles.infoBannerText}>
+            Place search is available for Pro and Admin accounts.
+          </Text>
+        </View>
+      ) : null}
+
       <Text style={styles.title}>Set Location for "{placeName}"</Text>
       <Text style={styles.subtitle}>
         Help others find your place by confirming its location
@@ -243,6 +254,20 @@ export default function PlaceLocationStep({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: theme.colors.bg,
+  },
+  infoBanner: {
+    marginBottom: theme.spacing.md,
+    padding: theme.spacing.md,
+    borderRadius: 8,
+    backgroundColor: theme.colors.primaryMid,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+  },
+  infoBannerText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: theme.colors.primary,
+    lineHeight: 18,
   },
   title: {
     fontSize: 24,

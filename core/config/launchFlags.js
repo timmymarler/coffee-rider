@@ -21,8 +21,8 @@ export const GOOGLE_PLACES_BLOCKED_REGION_BOUNDS = [
   { minLat: 18, maxLat: 55, minLng: 70, maxLng: 150 },
 ];
 
-// Photos are disabled by default until a place has been cached locally and normalized.
-export const GOOGLE_PLACE_PHOTOS_ENABLED = false;
+// Google photos are enabled, but access is controlled by role limits to keep usage low.
+export const GOOGLE_PLACE_PHOTOS_ENABLED = true;
 
 // Cap manual Google text-search usage so Pro/Admin can still search without creating runaway spend.
 export const GOOGLE_TEXT_SEARCH_DAILY_LIMIT = 50;

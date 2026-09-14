@@ -3,14 +3,46 @@
 // Tries a nearby Place (POI/business) first, then falls back to town/locality.
 
 import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 const GOOGLE_KEY = Constants.expoConfig.extra.googleMapsApiKey;
 
 const GEO_CACHE = {};
+const GEO_PLACE_LABEL_CACHE_PREFIX = "@cr_geo_place_label_v1";
+const GEO_ADDRESS_CACHE_PREFIX = "@cr_geo_address_v1";
+const PLACE_LABEL_TTL_MS = 24 * 60 * 60 * 1000;
+const ADDRESS_TTL_MS = 24 * 60 * 60 * 1000;
+
+async function readPersistedGeoCache(prefix, key, ttlMs) {
+  try {
+    const raw = await AsyncStorage.getItem(`${prefix}:${key}`);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.createdAt !== "number") return null;
+    if (Date.now() - parsed.createdAt > ttlMs) return null;
+    return parsed.value ?? null;
+  } catch (error) {
+    console.warn("[geocode] Failed reading persisted cache", error?.message || error);
+    return null;
+  }
+}
+
+async function writePersistedGeoCache(prefix, key, value) {
+  try {
+    await AsyncStorage.setItem(`${prefix}:${key}`, JSON.stringify({
+      createdAt: Date.now(),
+      value,
+    }));
+  } catch (error) {
+    console.warn("[geocode] Failed writing persisted cache", error?.message || error);
+  }
+}
 
 // Main API
-export async function getPlaceLabel(lat, lng) {
+export async function getPlaceLabel(lat, lng, options = {}) {
+  const allowExternalLookup = options?.allowExternalLookup === true;
 
-  if (!GOOGLE_KEY) {
+  if (!GOOGLE_KEY || !allowExternalLookup) {
     console.warn("Missing EXPO_PUBLIC_GOOGLE_MAPS_API_KEY for geocoding.");
     return null;
   }
@@ -18,6 +50,12 @@ export async function getPlaceLabel(lat, lng) {
   const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
   if (GEO_CACHE[cacheKey]) {
     return GEO_CACHE[cacheKey];
+  }
+
+  const persisted = await readPersistedGeoCache(GEO_PLACE_LABEL_CACHE_PREFIX, cacheKey, PLACE_LABEL_TTL_MS);
+  if (persisted) {
+    GEO_CACHE[cacheKey] = persisted;
+    return persisted;
   }
 
   try {
@@ -81,6 +119,9 @@ export async function getPlaceLabel(lat, lng) {
     }
 
     GEO_CACHE[cacheKey] = label;
+    if (label) {
+      writePersistedGeoCache(GEO_PLACE_LABEL_CACHE_PREFIX, cacheKey, label);
+    }
     return label;
   } catch (err) {
     console.error("Error in getPlaceLabel:", err);
@@ -91,16 +132,25 @@ export async function getPlaceLabel(lat, lng) {
 /**
  * Geocode an address string to lat/lng coordinates
  * @param {string} address - Address to geocode
+ * @param {Object} options - Lookup control options
  * @returns {Promise<{lat: number, lng: number} | null>}
  */
-export async function geocodeAddress(address) {
-  if (!GOOGLE_KEY) {
+export async function geocodeAddress(address, options = {}) {
+  const allowExternalLookup = options?.allowExternalLookup === true;
+
+  if (!GOOGLE_KEY || !allowExternalLookup) {
     console.warn("Missing EXPO_PUBLIC_GOOGLE_MAPS_API_KEY for geocoding.");
     return null;
   }
 
   if (!address || !address.trim()) {
     return null;
+  }
+
+  const normalizedAddress = address.trim().toLowerCase();
+  const persisted = await readPersistedGeoCache(GEO_ADDRESS_CACHE_PREFIX, normalizedAddress, ADDRESS_TTL_MS);
+  if (persisted && persisted.lat != null && persisted.lng != null) {
+    return persisted;
   }
 
   try {
@@ -115,6 +165,11 @@ export async function geocodeAddress(address) {
     if (json?.results?.length > 0) {
       const location = json.results[0].geometry?.location;
       if (location?.lat != null && location?.lng != null) {
+        const result = {
+          lat: location.lat,
+          lng: location.lng,
+        };
+        writePersistedGeoCache(GEO_ADDRESS_CACHE_PREFIX, normalizedAddress, result);
         return {
           lat: location.lat,
           lng: location.lng,

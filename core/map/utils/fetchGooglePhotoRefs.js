@@ -1,8 +1,16 @@
 import Constants from 'expo-constants';
+import { canUseGooglePlacesAccess } from "@core/google/googlePlacesAccess";
 const GOOGLE_KEY = Constants.expoConfig?.extra?.googlePlacesApiKey;
 
-export async function fetchGooglePhotoRefs(placeId, limit = 1) {
+export async function fetchGooglePhotoRefs(placeId, limit = 1, options = {}) {
   try {
+    const allowed = await canUseGooglePlacesAccess({
+      latitude: options?.latitude,
+      longitude: options?.longitude,
+      context: options?.context || "fetch_google_photo_refs",
+    });
+    if (!allowed) return [];
+
     const res = await fetch(
       `https://places.googleapis.com/v1/places/${placeId}?fields=photos`,
       {
