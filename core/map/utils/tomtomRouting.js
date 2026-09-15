@@ -1,5 +1,6 @@
 import polyline from "@mapbox/polyline";
 import Constants from "expo-constants";
+import { GOOGLE_DIRECTIONS_API_ENABLED } from "@core/config/launchFlags";
 
 const isUTurnManeuver = (maneuver = "") => {
   if (!maneuver) return false;
@@ -380,13 +381,13 @@ export async function fetchGoogleRoute(origin, destination, waypoints = [], mode
  */
 export async function fetchTomTomRoute(origin, destination, waypoints = [], vehicleType = "car", routeTypeId = null, routeTypeMap = null, customHilliness = null, customWindingness = null, avoidMotorways = false, vehicleHeading = null) {
   // Use Google Maps API for pedestrian routing (better depth of routing)
-  if (vehicleType === "pedestrian") {
+  if (GOOGLE_DIRECTIONS_API_ENABLED && vehicleType === "pedestrian") {
     console.log('[tomtomRouting] Delegating pedestrian routing to Google Maps API');
     return fetchGoogleRoute(origin, destination, waypoints, 'walking');
   }
   
   // Use Google Maps for scenic cycling routes (better at finding dedicated cycle paths)
-  if (vehicleType === "bike" && (routeTypeId === "curvy" || routeTypeId === "scenic")) {
+  if (GOOGLE_DIRECTIONS_API_ENABLED && vehicleType === "bike" && (routeTypeId === "curvy" || routeTypeId === "scenic")) {
     console.log('[tomtomRouting] Using Google Maps for scenic cycling route');
     return fetchGoogleRoute(origin, destination, waypoints, 'bicycling');
   }

@@ -1,6 +1,6 @@
 // lib/geocode.js
-// Helper to turn lat/lng into a nice place label.
-// Tries a nearby Place (POI/business) first, then falls back to town/locality.
+// Helper to turn lat/lng into a location label.
+// Uses Geocoding only (no Places NearbySearch) to avoid Places API spend.
 
 import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -59,62 +59,41 @@ export async function getPlaceLabel(lat, lng, options = {}) {
   }
 
   try {
-    // 1) Try to get a nearby POI (e.g. "Two Flags Café")
-    const nearbyUrl =
-      `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
-      `?location=${lat},${lng}` +
-      `&radius=50` +
+    const geoUrl =
+      `https://maps.googleapis.com/maps/api/geocode/json` +
+      `?latlng=${lat},${lng}` +
       `&key=${GOOGLE_KEY}`;
 
+    const geoRes = await fetch(geoUrl);
+    const geoJson = await geoRes.json();
+
     let label = null;
+    if (geoJson?.results?.length > 0) {
+      const comps = geoJson.results[0].address_components || [];
 
-    const nearbyRes = await fetch(nearbyUrl);
-    const nearbyJson = await nearbyRes.json();
+      const getComp = (type) =>
+        comps.find((c) => c.types.includes(type))?.long_name || null;
 
-    if (nearbyJson?.results?.length > 0) {
-      const first = nearbyJson.results[0];
-      if (first?.name) {
-        label = first.name; // e.g. "Two Flags Café"
-      }
-    }
+      // Prefer road name/number if available
+      const road = getComp("route");
+      const town =
+        getComp("locality") ||
+        getComp("postal_town") ||
+        getComp("administrative_area_level_2") ||
+        null;
+      const houseNumber = getComp("street_number");
 
-    // 2) If no POI name found, fall back to Geocoding (road name/number, then town/locality)
-    if (!label) {
-      const geoUrl =
-        `https://maps.googleapis.com/maps/api/geocode/json` +
-        `?latlng=${lat},${lng}` +
-        `&key=${GOOGLE_KEY}`;
-
-      const geoRes = await fetch(geoUrl);
-      const geoJson = await geoRes.json();
-
-      if (geoJson?.results?.length > 0) {
-        const comps = geoJson.results[0].address_components || [];
-
-        const getComp = (type) =>
-          comps.find((c) => c.types.includes(type))?.long_name || null;
-
-        // Prefer road name/number if available
-        const road = getComp("route");
-        const town =
-          getComp("locality") ||
-          getComp("postal_town") ||
-          getComp("administrative_area_level_2") ||
-          null;
-        const houseNumber = getComp("street_number");
-
-        // Only use house number if no road name is present
-        if (road && town) {
-          label = `${road}, near ${town}`;
-        } else if (road) {
-          label = road;
-        } else if (houseNumber && town) {
-          label = `${houseNumber}, near ${town}`;
-        } else if (houseNumber) {
-          label = houseNumber;
-        } else {
-          label = town;
-        }
+      // Only use house number if no road name is present
+      if (road && town) {
+        label = `${road}, near ${town}`;
+      } else if (road) {
+        label = road;
+      } else if (houseNumber && town) {
+        label = `${houseNumber}, near ${town}`;
+      } else if (houseNumber) {
+        label = houseNumber;
+      } else {
+        label = town;
       }
     }
 

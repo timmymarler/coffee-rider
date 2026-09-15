@@ -8,6 +8,8 @@ export async function getGoogleDetails({ placeId, name, latitude, longitude }) {
       latitude,
       longitude,
       context: "get_google_details",
+      allowMissingCoordinates: true,
+      requireServerCheck: false,
     });
     if (!allowed) return null;
 

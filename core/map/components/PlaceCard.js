@@ -132,6 +132,8 @@ export default function PlaceCard({
   const [googleRatingLive, setGoogleRatingLive] = useState(initialStoredGoogleRating);
   const [googleRatingCountLive, setGoogleRatingCountLive] = useState(initialStoredGoogleRatingCount);
   const [loadingGooglePhotos, setLoadingGooglePhotos] = useState(false);
+  const [allowGooglePhotoFetch, setAllowGooglePhotoFetch] = useState(false);
+  const [attemptedGooglePhotoFetch, setAttemptedGooglePhotoFetch] = useState(false);
   const [hoursExpanded, setHoursExpanded] = useState(false);
   const [currentPlace, setCurrentPlace] = useState(place);
   // Bike & Brew state (must be before JSX)
@@ -304,6 +306,8 @@ export default function PlaceCard({
     GOOGLE_PLACE_PHOTOS_ENABLED &&
     capabilities.canViewGooglePhotos &&
     googlePlaceId &&
+    attemptedGooglePhotoFetch &&
+    !loadingGooglePhotos &&
     googlePhotos.length === 0;
 
   useEffect(() => {
@@ -338,8 +342,10 @@ export default function PlaceCard({
     const storedGooglePhotos = Array.isArray(safePlace.photos?.google)
       ? safePlace.photos.google
       : [];
+    setAttemptedGooglePhotoFetch(false);
     if (storedGooglePhotos.length > 0) {
       setGooglePhotos(storedGooglePhotos);
+      setAttemptedGooglePhotoFetch(true);
     }
 
     const storedRating =
@@ -394,63 +400,92 @@ export default function PlaceCard({
         latitude: safePlace?.latitude,
         longitude: safePlace?.longitude,
         context: "place_card_load",
+        allowMissingCoordinates: true,
+        requireServerCheck: false,
       });
       if (!allowedForPlace) return;
 
-      const needPhotos = GOOGLE_PLACE_PHOTOS_ENABLED && googlePhotos.length === 0 && !hasStoredPhotos;
+      const crPhotoCount = Array.isArray(safePlace.photos?.cr) ? safePlace.photos.cr.length : 0;
+      const canFetchGooglePhotosNow = crPhotoCount === 0 || allowGooglePhotoFetch;
+      const needPhotos = GOOGLE_PLACE_PHOTOS_ENABLED && canFetchGooglePhotosNow && googlePhotos.length === 0 && !hasStoredPhotos;
       const needRating = !hasStoredRating;
 
       if (!needPhotos && !needRating) {
         return;
       }
 
-      if (needRating) {
-        trackUsageEventSafe("search", "google_place_rating_fetch", {
-          cooldownMs: 1200,
-          meta: { source: safePlace?.source || "unknown" },
-        });
-      }
+      try {
+        if (needRating) {
+          trackUsageEventSafe("search", "google_place_rating_fetch", {
+            cooldownMs: 1200,
+            meta: { source: safePlace?.source || "unknown" },
+          });
+        }
 
-      if (needPhotos) {
-        trackUsageEventSafe("photo", "google_place_photos_fetch", {
-          cooldownMs: 1200,
-          meta: { source: safePlace?.source || "unknown" },
-        });
-      }
+        if (needPhotos) {
+          trackUsageEventSafe("photo", "google_place_photos_fetch", {
+            cooldownMs: 1200,
+            meta: { source: safePlace?.source || "unknown" },
+          });
+        }
 
-      const maxPhotosToFetch = GOOGLE_PLACE_PHOTOS_ENABLED
-        ? (capabilities?.maxGooglePhotosPerPlace || 5)
-        : 0;
-      const [refs, ratingInfo] = await Promise.all([
-        needPhotos
-          ? (googlePhotos.length > 0
-            ? Promise.resolve(googlePhotos)
-            : fetchGooglePhotoRefs(googlePlaceId, maxPhotosToFetch, {
-              latitude: safePlace?.latitude,
-              longitude: safePlace?.longitude,
-              context: "place_card_load_photos",
-            }))
-          : Promise.resolve([]),
-        needRating ? fetchGoogleRating(googlePlaceId, {
-          latitude: safePlace?.latitude,
-          longitude: safePlace?.longitude,
-          context: "place_card_load_rating",
-        }) : Promise.resolve(null),
-      ]);
+        const maxPhotosToFetch = GOOGLE_PLACE_PHOTOS_ENABLED
+          ? (capabilities?.maxGooglePhotosPerPlace || 5)
+          : 0;
+        if (needPhotos) {
+          setLoadingGooglePhotos(true);
+          setAttemptedGooglePhotoFetch(true);
+        }
 
-      if (!mounted) return;
+        const [refs, ratingInfo] = await Promise.all([
+          needPhotos
+            ? (googlePhotos.length > 0
+              ? Promise.resolve(googlePhotos)
+              : fetchGooglePhotoRefs(googlePlaceId, maxPhotosToFetch, {
+                latitude: safePlace?.latitude,
+                longitude: safePlace?.longitude,
+                context: "place_card_load_photos",
+              }))
+            : Promise.resolve([]),
+          needRating ? fetchGoogleRating(googlePlaceId, {
+            latitude: safePlace?.latitude,
+            longitude: safePlace?.longitude,
+            context: "place_card_load_rating",
+          }) : Promise.resolve(null),
+        ]);
 
-      if (needPhotos && googlePhotos.length === 0) setGooglePhotos(refs || []);
+        if (!mounted) return;
 
-      if (needRating && ratingInfo) {
-        setGoogleRatingLive(ratingInfo.rating);
-        setGoogleRatingCountLive(ratingInfo.userRatingCount);
+        if (needPhotos && googlePhotos.length === 0) setGooglePhotos(refs || []);
+        if (needPhotos) setLoadingGooglePhotos(false);
+
+        if (needRating && ratingInfo) {
+          setGoogleRatingLive(ratingInfo.rating);
+          setGoogleRatingCountLive(ratingInfo.userRatingCount);
+        }
+      } catch (error) {
+        if (needPhotos) setLoadingGooglePhotos(false);
+        console.warn("[PlaceCard] Google details load failed:", error?.message || error);
       }
     }
 
     loadGoogleDetails();
     return () => (mounted = false);
-  }, [googlePlaceId, capabilities?.canViewGooglePhotos, capabilities?.maxGooglePhotosPerPlace, googlePhotos.length, googleRatingLive, safePlace.photos?.google, safePlace.googleRating, safePlace.rating, canUseGooglePlacesApi]);
+  }, [googlePlaceId, capabilities?.canViewGooglePhotos, capabilities?.maxGooglePhotosPerPlace, googlePhotos.length, googleRatingLive, safePlace.photos?.google, safePlace.photos?.cr, safePlace.googleRating, safePlace.rating, canUseGooglePlacesApi, allowGooglePhotoFetch]);
+
+  useEffect(() => {
+    if (!safePlace?.id) return;
+
+    const crPhotoCount = Array.isArray(safePlace.photos?.cr) ? safePlace.photos.cr.length : 0;
+    if (crPhotoCount === 0) {
+      setAllowGooglePhotoFetch(true);
+      return;
+    }
+
+    // Wait until the user reaches the last CR photo before enabling Google fetch.
+    // For a single CR photo, index 0 is also the last photo.
+    setAllowGooglePhotoFetch(photoIndex >= crPhotoCount - 1);
+  }, [safePlace?.id, safePlace.photos?.cr, photoIndex]);
 
   useEffect(() => {
     if (!safePlace?.id) return;
@@ -623,17 +658,17 @@ export default function PlaceCard({
       return list;
     }
 
-    // Add all Google photos as URLs
+    // Add CR photos first to reduce initial Google media calls.
+    if (Array.isArray(safePlace.photos.cr)) {
+      list.push(...safePlace.photos.cr);
+    }
+
+    // Add Google photos after CR photos.
     if (Array.isArray(googlePhotos) && googlePhotos.length > 0) {
       googlePhotos.forEach(photoRef => {
         const url = buildGooglePhotoUrl(photoRef);
         if (url) list.push(url);
       });
-    }
-    
-    // Add CR photos
-    if (Array.isArray(safePlace.photos.cr)) {
-      list.push(...safePlace.photos.cr);
     }
     
     return list;
@@ -1270,12 +1305,22 @@ export default function PlaceCard({
             }
             renderItem={({ item }) => {
               const uri = typeof item === "string" ? item : item.url;
+              const isGooglePhoto = typeof item === "string";
 
               return (
-                <Image
-                  source={{ uri }}
-                  style={styles.photo}
-                />              
+                <View style={styles.photoItem}>
+                  <Image
+                    source={{ uri }}
+                    style={styles.photo}
+                  />
+                  <View style={styles.photoSourceBadge}>
+                    <MaterialCommunityIcons
+                      name={isGooglePhoto ? "google" : "coffee"}
+                      size={10}
+                      color="#fff"
+                    />
+                  </View>
+                </View>
               );
             }}
           />
@@ -1883,6 +1928,22 @@ function createStyles(theme, isLandscape) {
       height: isLandscape ? 120 : 180,      
       backgroundColor: "#000",
       resizeMode: "contain"
+    },
+    photoItem: {
+      width: isLandscape ? (screenWidth - 430) : (screenWidth - 20),
+      height: isLandscape ? 120 : 180,
+      position: "relative",
+    },
+    photoSourceBadge: {
+      position: "absolute",
+      left: 8,
+      bottom: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      backgroundColor: "rgba(0,0,0,0.42)",
     },
     info: { padding: 12 },
     title: {

@@ -20,15 +20,27 @@ export function isInBlockedGoogleRegion(latitude, longitude) {
   ));
 }
 
-export async function canUseGooglePlacesAccess({ latitude, longitude, context = "google_places" } = {}) {
-  if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
+export async function canUseGooglePlacesAccess({
+  latitude,
+  longitude,
+  context = "google_places",
+  allowMissingCoordinates = false,
+  requireServerCheck = true,
+} = {}) {
+  const hasValidCoordinates = Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
+
+  if (!hasValidCoordinates && !allowMissingCoordinates) {
     console.log(`[GOOGLE] Missing or invalid coordinates for ${context}; skipping Google call.`);
     return false;
   }
 
-  if (isInBlockedGoogleRegion(latitude, longitude)) {
+  if (hasValidCoordinates && isInBlockedGoogleRegion(latitude, longitude)) {
     console.log(`[GOOGLE] Local blocked region for ${context}; skipping Google call.`);
     return false;
+  }
+
+  if (!requireServerCheck || !hasValidCoordinates) {
+    return true;
   }
 
   const geoCheck = await checkGooglePlacesAccessCallable({ latitude, longitude }).catch((error) => {

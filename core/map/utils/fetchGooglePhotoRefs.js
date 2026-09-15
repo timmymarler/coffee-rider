@@ -8,6 +8,8 @@ export async function fetchGooglePhotoRefs(placeId, limit = 1, options = {}) {
       latitude: options?.latitude,
       longitude: options?.longitude,
       context: options?.context || "fetch_google_photo_refs",
+      allowMissingCoordinates: true,
+      requireServerCheck: false,
     });
     if (!allowed) return [];
 

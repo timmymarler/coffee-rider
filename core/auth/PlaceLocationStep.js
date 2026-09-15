@@ -14,6 +14,7 @@ import {
     View,
 } from "react-native";
   import { AuthContext } from "@context/AuthContext";
+  import { GOOGLE_PLACES_LIVE_SEARCH_ENABLED } from "@core/config/launchFlags";
   import { getCapabilities } from "@core/roles/capabilities";
   import { geocodeAddress } from "@core/lib/geocode";
 
@@ -43,7 +44,7 @@ export default function PlaceLocationStep({
   }, [canUseGooglePlaces, placeName]);
 
   const searchPlace = async () => {
-    if (!placeName?.trim() || !GOOGLE_KEY || !canUseGooglePlaces) {
+    if (!GOOGLE_PLACES_LIVE_SEARCH_ENABLED || !placeName?.trim() || !GOOGLE_KEY || !canUseGooglePlaces) {
       console.log("[PlaceLocationStep] Missing placeName or GOOGLE_KEY");
       setShowManualEntry(true);
       return;

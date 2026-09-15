@@ -8,6 +8,8 @@ export async function fetchGoogleRating(placeId, options = {}) {
       latitude: options?.latitude,
       longitude: options?.longitude,
       context: options?.context || "fetch_google_rating",
+      allowMissingCoordinates: true,
+      requireServerCheck: false,
     });
     if (!allowed) {
       return { rating: null, userRatingCount: null };
