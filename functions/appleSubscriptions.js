@@ -521,8 +521,9 @@ const resolveUidFromAppleTransaction = async ({ originalTransactionId, transacti
   return null;
 };
 
-const deriveNotificationStatus = ({ notificationType, expiresDateMs }) => {
+const deriveNotificationStatus = ({ notificationType, expiresDateMs, currentStatus = null }) => {
   const now = Date.now();
+  const hasExpiryValue = Number.isFinite(expiresDateMs) && expiresDateMs > 0;
   const hasFutureExpiry = Number.isFinite(expiresDateMs) && expiresDateMs > now;
 
   if (notificationType === 'REFUND' || notificationType === 'REVOKE') {
@@ -535,6 +536,15 @@ const deriveNotificationStatus = ({ notificationType, expiresDateMs }) => {
 
   if (notificationType === 'DID_FAIL_TO_RENEW' && !hasFutureExpiry) {
     return 'expired';
+  }
+
+  // Some App Store notifications may omit expiration timestamps.
+  // Do not downgrade to expired for non-terminal notifications without expiry data.
+  if (!hasExpiryValue) {
+    if (currentStatus === 'active' || currentStatus === 'trial') {
+      return currentStatus;
+    }
+    return 'active';
   }
 
   return hasFutureExpiry ? 'active' : 'expired';
@@ -964,16 +974,27 @@ export const appleServerNotification = functions
         return;
       }
 
+      const currentSubRef = firestore.doc(`users/${uid}/subscription/current`);
+      const currentSubSnap = await currentSubRef.get();
+      const currentSub = currentSubSnap.exists ? currentSubSnap.data() : null;
+      const currentStatus = currentSub?.status || null;
+      const currentRenewalDateMs = toMillis(currentSub?.renewalDate);
+
       const plan = isAnnualProductId(productId, productIds.annual) ? 'annual' : 'monthly';
-      const status = deriveNotificationStatus({ notificationType, expiresDateMs });
+      const status = deriveNotificationStatus({
+        notificationType,
+        expiresDateMs,
+        currentStatus,
+      });
       const cancelAtPeriodEnd = resolveCancelAtPeriodEndFromRenewalPayload({
         renewalPayload,
         notificationType,
         notificationSubtype: subtype,
         status,
       });
+      const effectiveRenewalDateMs = expiresDateMs || currentRenewalDateMs || null;
 
-      await firestore.doc(`users/${uid}/subscription/current`).set(
+      await currentSubRef.set(
         {
           status,
           plan: status === 'active' ? plan : plan,
@@ -982,7 +1003,7 @@ export const appleServerNotification = functions
           appleTransactionId: transactionId || null,
           appleOriginalTransactionId: originalTransactionId || transactionId || null,
           purchaseDate: purchaseDateMs || null,
-          renewalDate: expiresDateMs || null,
+          renewalDate: effectiveRenewalDateMs,
           appleNotificationType: notificationType,
           appleNotificationSubtype: subtype,
           appleNotificationUUID: notificationUUID,
@@ -997,7 +1018,7 @@ export const appleServerNotification = functions
       await syncSubscriptionRole(uid, status, {
         subscriptionStatus: status,
         subscriptionPlan: status === 'active' ? plan : null,
-        subscriptionExpiresAt: status === 'active' ? expiresDateMs || null : null,
+        subscriptionExpiresAt: status === 'active' ? effectiveRenewalDateMs : null,
         subscriptionCancelAtPeriodEnd: status === 'active' ? cancelAtPeriodEnd : false,
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -1013,7 +1034,7 @@ export const appleServerNotification = functions
           notificationType,
           subtype,
           status,
-          expiresDateMs: expiresDateMs || null,
+          expiresDateMs: effectiveRenewalDateMs,
         });
       }
 

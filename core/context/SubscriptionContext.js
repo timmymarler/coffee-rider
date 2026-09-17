@@ -6,6 +6,8 @@ import { createContext, useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 const syncStripeSubscriptionStateCallable = httpsCallable(functions, 'syncStripeSubscriptionState');
+const activateAppleSubscriptionCallable = httpsCallable(functions, 'activateAppleSubscription');
+const APPLE_LOCAL_EXPIRY_GRACE_MS = 3 * 60 * 1000;
 
 export const SubscriptionContext = createContext();
 
@@ -17,6 +19,61 @@ export function SubscriptionProvider({ children, userId }) {
   const expirationCheckRef = useRef(null);
   const userSyncRef = useRef({ status: null, expiresAt: null });
   const pendingSyncRef = useRef({ inFlight: false, lastSubscriptionId: null, lastAttemptAt: 0 });
+  const pendingAppleSyncRef = useRef({ inFlight: false, lastKey: null, lastAttemptAt: 0 });
+
+  const toDate = useCallback((value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return new Date(value);
+    }
+    if (value?.seconds && Number.isFinite(value.seconds)) {
+      return new Date(value.seconds * 1000);
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+    return parsed;
+  }, []);
+
+  const maybeRecoverAppleSubscription = useCallback(async (subData) => {
+    if (!userId || !subData) return;
+    if (subData.status !== 'active' || subData.provider !== 'apple_iap') return;
+
+    const originalTransactionId = subData.appleOriginalTransactionId || subData.appleTransactionId || null;
+    const transactionId = subData.appleTransactionId || subData.appleOriginalTransactionId || null;
+    const productId = subData.appleProductId || null;
+    if (!originalTransactionId || !transactionId || !productId) {
+      return;
+    }
+
+    const now = Date.now();
+    const syncKey = `${originalTransactionId}:${transactionId}`;
+    const isSameKey = pendingAppleSyncRef.current.lastKey === syncKey;
+    const isCoolingDown = isSameKey && now - pendingAppleSyncRef.current.lastAttemptAt < 60_000;
+    if (pendingAppleSyncRef.current.inFlight || isCoolingDown) {
+      return;
+    }
+
+    pendingAppleSyncRef.current.inFlight = true;
+    pendingAppleSyncRef.current.lastKey = syncKey;
+    pendingAppleSyncRef.current.lastAttemptAt = now;
+
+    try {
+      const result = await activateAppleSubscriptionCallable({
+        userId,
+        email: subData.email || null,
+        productId,
+        transactionId,
+        originalTransactionId,
+        purchaseDateMs: Number.isFinite(subData.purchaseDate) ? subData.purchaseDate : Date.now(),
+      });
+      console.log('[Subscription] Apple renewal recovery sync attempted:', result?.data || null);
+    } catch (err) {
+      console.error('[Subscription] Apple renewal recovery sync failed:', err);
+    } finally {
+      pendingAppleSyncRef.current.inFlight = false;
+    }
+  }, [userId]);
 
   const maybeRecoverPendingStripeSubscription = useCallback(async (subData) => {
     if (!userId || !subData) return;
@@ -68,13 +125,10 @@ export function SubscriptionProvider({ children, userId }) {
     // Check if trial is active
     if (subData.status === 'trial') {
       // Handle different date formats: numeric (ms), Timestamp object, or Date
-      let trialEndDate;
-      if (typeof subData.trialEndsAt === 'number') {
-        trialEndDate = new Date(subData.trialEndsAt); // Already in milliseconds
-      } else if (subData.trialEndsAt?.seconds) {
-        trialEndDate = new Date(subData.trialEndsAt.seconds * 1000); // Firestore Timestamp
-      } else {
-        trialEndDate = new Date(subData.trialEndsAt); // Date object or string
+      const trialEndDate = toDate(subData.trialEndsAt);
+      if (!trialEndDate) {
+        console.log('[Subscription] Trial end date missing/invalid, keeping current trial state');
+        return subData;
       }
       
       const now = new Date();
@@ -117,18 +171,26 @@ export function SubscriptionProvider({ children, userId }) {
     // Check if subscription is active
     if (subData.status === 'active') {
       // Handle different date formats
-      let renewalDate;
-      if (typeof subData.renewalDate === 'number') {
-        renewalDate = new Date(subData.renewalDate);
-      } else if (subData.renewalDate?.seconds) {
-        renewalDate = new Date(subData.renewalDate.seconds * 1000);
-      } else {
-        renewalDate = new Date(subData.renewalDate);
+      const renewalDate = toDate(subData.renewalDate);
+      if (!renewalDate) {
+        console.log('[Subscription] Renewal date missing/invalid, keeping active state for now');
+        if (subData.provider === 'apple_iap') {
+          maybeRecoverAppleSubscription(subData);
+        }
+        return subData;
       }
       
       const now = new Date();
       console.log('[Subscription] Renewal date:', renewalDate.toISOString(), 'Current time:', now.toISOString());
       if (renewalDate <= now) {
+        if (subData.provider === 'apple_iap') {
+          maybeRecoverAppleSubscription(subData);
+          const expiryAgeMs = now.getTime() - renewalDate.getTime();
+          if (expiryAgeMs >= 0 && expiryAgeMs <= APPLE_LOCAL_EXPIRY_GRACE_MS) {
+            console.log('[Subscription] Apple renewal grace window active, delaying local downgrade');
+            return subData;
+          }
+        }
         // Subscription has expired - update user profile in Firestore
         console.log('[Subscription] Subscription has expired, updating user profile and clearing subscription');
         if (userId) {
@@ -177,7 +239,7 @@ export function SubscriptionProvider({ children, userId }) {
       });
     }
     return null;
-  }, [userId, syncUserSubscriptionProfile]);
+  }, [userId, syncUserSubscriptionProfile, toDate, maybeRecoverAppleSubscription]);
 
   // Set up real-time listener and expiration check
   useEffect(() => {

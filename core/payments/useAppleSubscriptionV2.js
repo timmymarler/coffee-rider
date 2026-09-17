@@ -536,6 +536,7 @@ export function useAppleSubscriptionV2({ user }) {
   const iapAvailable = Platform.OS === 'ios' && Boolean(iap);
   const [phase, setPhase] = useState('idle');
   const [products, setProducts] = useState([]);
+  const [storefront, setStorefront] = useState(null);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [processingSku, setProcessingSku] = useState(null);
   const [restoring, setRestoring] = useState(false);
@@ -681,6 +682,7 @@ export function useAppleSubscriptionV2({ user }) {
 
     try {
       storefrontCode = await getStorefrontCodeResilient();
+      setStorefront(storefrontCode || null);
       queueDebugLog('APPLE_IAP', 'Resolved App Store storefront', {
         storefront: storefrontCode,
       });
@@ -705,8 +707,18 @@ export function useAppleSubscriptionV2({ user }) {
         await ensureIapConnection();
         const nextProducts = (await fetchStoreProductsResilient(availableSkus)).map(normalizeStoreProduct);
         if (nextProducts.length > 0) {
+          const productCurrencies = Array.from(
+            new Set(
+              nextProducts
+                .map((product) => String(product?.currency || product?.currencyCode || '').trim().toUpperCase())
+                .filter(Boolean)
+            )
+          );
+
           queueDebugLog('APPLE_IAP', 'Loaded App Store plans', {
             count: nextProducts.length,
+            storefront: storefrontCode,
+            currencies: productCurrencies,
             products: nextProducts.map((product) => ({
               id: product?.id || product?.productId || product?.sku || null,
               displayPrice: product?.displayPrice || null,
@@ -1232,6 +1244,7 @@ export function useAppleSubscriptionV2({ user }) {
   return {
     iapAvailable,
     phase,
+    storefront,
     products,
     productsByPlan,
     loadingProducts,

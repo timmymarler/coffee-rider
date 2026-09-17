@@ -1,13 +1,13 @@
-import { IOS_SUBSCRIPTIONS_DISABLED_MESSAGE, IOS_SUBSCRIPTIONS_TEMP_DISABLED } from '@core/config/launchFlags';
 import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
+import { IOS_SUBSCRIPTIONS_DISABLED_MESSAGE, IOS_SUBSCRIPTIONS_TEMP_DISABLED } from '@core/config/launchFlags';
 import { SUBSCRIPTION_PLANS } from '@core/payments/stripeService';
-import { useAppleSubscriptionV2 } from '@core/payments/useAppleSubscriptionV2';
 import { useStripeSubscription } from '@core/payments/useStripeSubscription';
+import { useAppleSubscriptionV2 } from '@core/payments/useAppleSubscriptionV2';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -39,6 +39,8 @@ export default function SubscriptionsScreen() {
     subscribeToPlan: purchaseApplePlan,
     restorePurchases: restoreApplePurchases,
     productsByPlan: appleProductsByPlan,
+    storefront: appleStorefront,
+    products: appleProducts,
     iapAvailable,
     loadingProducts: loadingAppleProducts,
     lastLoadError: appleLoadError,
@@ -179,6 +181,14 @@ export default function SubscriptionsScreen() {
   const monthlyPlanForDisplay = monthlyApplePrice
     ? { ...SUBSCRIPTION_PLANS.MONTHLY, price: monthlyApplePrice }
     : SUBSCRIPTION_PLANS.MONTHLY;
+  const appleCurrencies = Array.from(
+    new Set(
+      (appleProducts || [])
+        .map((product) => String(product?.currency || product?.currencyCode || '').trim().toUpperCase())
+        .filter(Boolean)
+    )
+  );
+  const hasNonGbpPricing = appleCurrencies.length > 0 && !appleCurrencies.includes('GBP');
 
   const formatDate = (date) => {
     if (!date) return '';
@@ -386,6 +396,18 @@ export default function SubscriptionsScreen() {
                 {appleLoadError && !processing && (
                   <Text style={[styles.trialNote, { color: theme.colors.danger, marginTop: 12 }]}> 
                     {appleLoadError.message}
+                  </Text>
+                )}
+
+                {hasNonGbpPricing && !processing && !appleLoadError && (
+                  <Text style={[styles.trialNote, { color: theme.colors.accentMid, marginTop: 12 }]}> 
+                    Prices are provided by your App Store region ({appleStorefront || 'unknown'}). Current currency: {appleCurrencies.join(', ')}.
+                  </Text>
+                )}
+
+                {appleStorefront && !processing && !appleLoadError && (
+                  <Text style={[styles.trialNote, { color: theme.colors.textMuted, marginTop: 8 }]}> 
+                    App Store storefront: {appleStorefront}
                   </Text>
                 )}
               </>

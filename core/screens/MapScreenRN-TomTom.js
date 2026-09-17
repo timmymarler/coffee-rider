@@ -1088,23 +1088,62 @@ function getIconForCategory(category) {
   }
 }
 
+const SEARCH_STOP_WORDS = new Set([
+  "the",
+  "a",
+  "an",
+  "and",
+  "&",
+]);
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeSearchText(value) {
+  return normalizeSearchText(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token && !SEARCH_STOP_WORDS.has(token));
+}
+
+function isGoodTextMatch(haystack, query) {
+  const normalizedNeedle = normalizeSearchText(query);
+  if (!normalizedNeedle) return false;
+
+  const normalizedHaystack = normalizeSearchText(haystack);
+  if (!normalizedHaystack) return false;
+
+  if (normalizedHaystack.includes(normalizedNeedle)) {
+    return true;
+  }
+
+  const queryTokens = tokenizeSearchText(query);
+  if (!queryTokens.length) return false;
+
+  const haystackTokens = new Set(tokenizeSearchText(haystack));
+  return queryTokens.every((token) => haystackTokens.has(token));
+}
+
 function matchesQuery(place, query) {
   if (!query) return false;
-  const q = query.toLowerCase();
+  const title = place.title || "";
+  const address = place.address || "";
 
-  const title = place.title?.toLowerCase() || "";
-  const address = place.address?.toLowerCase() || "";
-
-  return title.includes(q) || address.includes(q);
+  return isGoodTextMatch(title, query) || isGoodTextMatch(address, query);
 }
 
 function isExactMatch(place, query) {
   if (!query) return false;
-  const q = query.toLowerCase();
-  const title = place.title?.toLowerCase() || "";
-  
-  // Exact match if title starts with query or is exact word match
-  return title.startsWith(q);
+  const title = place.title || "";
+
+  // Treat "good match" title hits as exact for search UX (e.g. "Bobs" -> "Bob's Cafe").
+  return isGoodTextMatch(title, query);
 }
 
 function toggleFilter(set, value) {
@@ -1477,10 +1516,12 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   
   const auth = useContext(AuthContext);
   const user = auth?.user || null;
-  const role = auth?.role || auth?.profile?.role || "guest";
+  const rawRole = auth?.role || auth?.profile?.role || "guest";
+  const role = String(rawRole || "guest").trim().toLowerCase();
   const capabilities = auth?.capabilities || getCapabilities(role);
-  const canUseGooglePlacesApi = GOOGLE_PLACES_LIVE_SEARCH_ENABLED && (capabilities?.isAdmin === true || role === "pro");
-  const profileRole = auth?.profile?.role || "guest";
+  const hasGoogleSearchRoleAccess = capabilities?.canSearchGoogle === true;
+  const canUseGooglePlacesApi = GOOGLE_PLACES_LIVE_SEARCH_ENABLED && hasGoogleSearchRoleAccess;
+  const profileRole = String(auth?.profile?.role || "guest").trim().toLowerCase();
   const isFreeUser = role === "user";
   const isMapFocused = useIsFocused();
   const hasRestrictedFreeRouting = Boolean(user) && !capabilities?.isAdmin && role !== "pro" && role !== "place-owner";
@@ -5692,8 +5733,9 @@ function getStepCompletionThresholds(step = null) {
     if (!activeQuery || !searchOrigin) return;
 
     const restrictedToCrSearch = !canUseGooglePlacesApi;
+    const isRoleRestricted = !hasGoogleSearchRoleAccess;
 
-    if (restrictedToCrSearch) {
+    if (isRoleRestricted) {
       console.log("[SEARCH] Google text search blocked by role capability; running CR-only search");
       setGooglePois([]); // ensure no stale Google results linger
       setSearchNotice({
@@ -5794,7 +5836,7 @@ function getStepCompletionThresholds(step = null) {
 
     run();
     return () => { cancelled = true; };
-  }, [activeQuery, searchOrigin, canUseGooglePlacesApi, crPlaces]);
+  }, [activeQuery, searchOrigin, canUseGooglePlacesApi, hasGoogleSearchRoleAccess, crPlaces]);
 
   useEffect(() => {
     
