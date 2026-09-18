@@ -13,7 +13,7 @@ export const GOOGLE_PLACES_COST_SAVER_MODE = true;
 
 // Manual Google Places text search is allowed only for Pro/Admin users.
 // Auto nearby fetch remains disabled to prevent runaway billing from map movement.
-export const GOOGLE_PLACES_LIVE_SEARCH_ENABLED = false;
+export const GOOGLE_PLACES_LIVE_SEARCH_ENABLED = true;
 
 // Block Google Places requests when the user is in a region with excessive API spend.
 // This is a coarse client-side safety net; the real enforcement should happen in a server-side geo gate.

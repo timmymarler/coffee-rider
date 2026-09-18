@@ -16,7 +16,7 @@ import {
 } from "@core/config/launchFlags";
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, useColorScheme, useWindowDimensions, View } from "react-native";
+import { Alert, AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, useColorScheme, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Circle, Path, Polygon, Svg, Text as SvgText } from "react-native-svg";
 
@@ -1088,62 +1088,23 @@ function getIconForCategory(category) {
   }
 }
 
-const SEARCH_STOP_WORDS = new Set([
-  "the",
-  "a",
-  "an",
-  "and",
-  "&",
-]);
-
-function normalizeSearchText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[’']/g, "")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function tokenizeSearchText(value) {
-  return normalizeSearchText(value)
-    .split(" ")
-    .map((token) => token.trim())
-    .filter((token) => token && !SEARCH_STOP_WORDS.has(token));
-}
-
-function isGoodTextMatch(haystack, query) {
-  const normalizedNeedle = normalizeSearchText(query);
-  if (!normalizedNeedle) return false;
-
-  const normalizedHaystack = normalizeSearchText(haystack);
-  if (!normalizedHaystack) return false;
-
-  if (normalizedHaystack.includes(normalizedNeedle)) {
-    return true;
-  }
-
-  const queryTokens = tokenizeSearchText(query);
-  if (!queryTokens.length) return false;
-
-  const haystackTokens = new Set(tokenizeSearchText(haystack));
-  return queryTokens.every((token) => haystackTokens.has(token));
-}
-
 function matchesQuery(place, query) {
   if (!query) return false;
-  const title = place.title || "";
-  const address = place.address || "";
+  const q = query.toLowerCase();
 
-  return isGoodTextMatch(title, query) || isGoodTextMatch(address, query);
+  const title = place.title?.toLowerCase() || "";
+  const address = place.address?.toLowerCase() || "";
+
+  return title.includes(q) || address.includes(q);
 }
 
 function isExactMatch(place, query) {
   if (!query) return false;
-  const title = place.title || "";
+  const q = query.toLowerCase();
+  const title = place.title?.toLowerCase() || "";
 
-  // Treat "good match" title hits as exact for search UX (e.g. "Bobs" -> "Bob's Cafe").
-  return isGoodTextMatch(title, query);
+  // Exact match if title starts with query or is exact word match
+  return title.startsWith(q);
 }
 
 function toggleFilter(set, value) {
@@ -1516,12 +1477,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   
   const auth = useContext(AuthContext);
   const user = auth?.user || null;
-  const rawRole = auth?.role || auth?.profile?.role || "guest";
-  const role = String(rawRole || "guest").trim().toLowerCase();
+  const role = auth?.role || auth?.profile?.role || "guest";
   const capabilities = auth?.capabilities || getCapabilities(role);
-  const hasGoogleSearchRoleAccess = capabilities?.canSearchGoogle === true;
-  const canUseGooglePlacesApi = GOOGLE_PLACES_LIVE_SEARCH_ENABLED && hasGoogleSearchRoleAccess;
-  const profileRole = String(auth?.profile?.role || "guest").trim().toLowerCase();
+  const canUseGooglePlacesApi = GOOGLE_PLACES_LIVE_SEARCH_ENABLED && (capabilities?.isAdmin === true || role === "pro");
+  const profileRole = auth?.profile?.role || "guest";
   const isFreeUser = role === "user";
   const isMapFocused = useIsFocused();
   const hasRestrictedFreeRouting = Boolean(user) && !capabilities?.isAdmin && role !== "pro" && role !== "place-owner";
@@ -5733,15 +5692,60 @@ function getStepCompletionThresholds(step = null) {
     if (!activeQuery || !searchOrigin) return;
 
     const restrictedToCrSearch = !canUseGooglePlacesApi;
-    const isRoleRestricted = !hasGoogleSearchRoleAccess;
+    const crSearchResults = crPlaces.filter((p) => p.source === "cr" && matchesQuery(p, activeQuery));
+    const exactCrMatch = crSearchResults.find((p) => isExactMatch(p, activeQuery));
 
-    if (isRoleRestricted) {
+    const finishWithResults = (results) => {
+      if (cancelled) return;
+
+      // --- Center map on exact match if found ---
+      let exactMatch = exactCrMatch || null;
+
+      if (!exactMatch && results.length) {
+        exactMatch = results.find((p) => isExactMatch(p, activeQuery));
+      }
+
+      if (exactMatch && mapRef.current) {
+        if (exactMatch.source === "cr" || exactMatch.source === "google") {
+          setSelectedPlaceId(exactMatch.id);
+        }
+        mapRef.current.animateCamera(
+          {
+            center: {
+              latitude: exactMatch.latitude,
+              longitude: exactMatch.longitude,
+            },
+          },
+          { duration: 600 }
+        );
+        return true;
+      }
+
+      const fitResults = [...crSearchResults, ...results];
+      if (fitResults.length && mapRef.current) {
+        mapRef.current.fitToCoordinates(
+          fitResults.map(p => ({
+            latitude: p.latitude,
+            longitude: p.longitude,
+          })),
+          {
+            edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
+            animated: true,
+          }
+        );
+      }
+
+      return false;
+    };
+
+    if (restrictedToCrSearch) {
       console.log("[SEARCH] Google text search blocked by role capability; running CR-only search");
       setGooglePois([]); // ensure no stale Google results linger
       setSearchNotice({
         title: "Google search limited",
         message: "Google text search is available to Pro/Admin users only. Free users can search Coffee Rider cached places.",
       });
+      finishWithResults([]);
     } else {
       setSearchNotice(null);
     }
@@ -5768,11 +5772,19 @@ function getStepCompletionThresholds(step = null) {
         latitudeDelta < 0.08 ? 30000 :
         50000;
 
-      const crSearchResults = crPlaces.filter((p) => p.source === "cr" && matchesQuery(p, activeQuery));
-      let results = [];
-      if (!restrictedToCrSearch) {
+      if (exactCrMatch) {
+        finishWithResults([]);
+        return;
+      }
+
+      if (restrictedToCrSearch) {
+        finishWithResults([]);
+        return;
+      }
+
+      const runGoogleSearch = async () => {
         try {
-          results = await doTextSearch({
+          const results = await doTextSearch({
             query: activeQuery,
             latitude,
             longitude,
@@ -5783,60 +5795,28 @@ function getStepCompletionThresholds(step = null) {
           if (cancelled) return;
 
           setGooglePois(results);
+          finishWithResults(results);
         } catch (error) {
           if (cancelled) return;
           console.log("[SEARCH] Google search failed:", error.message);
           setGooglePois([]);
-          // Don't return - continue to search local CR places
+          finishWithResults([]);
         }
-      }
+      };
 
-      // --- Center map on exact match if found ---
-      let exactMatch = null;
-      // Check CR places for exact match
-
-      exactMatch = crSearchResults.find((p) => isExactMatch(p, activeQuery));
-      // If not found, check Google results for exact match
-      if (!exactMatch && results.length) {
-        exactMatch = results.find((p) => isExactMatch(p, activeQuery));
-      }
-
-      if (exactMatch && mapRef.current) {
-        // Open place card for exact matches (CR and Google) so submit feels immediate.
-        if (exactMatch.source === "cr" || exactMatch.source === "google") {
-          setSelectedPlaceId(exactMatch.id);
-        }
-        mapRef.current.animateCamera(
-          {
-            center: {
-              latitude: exactMatch.latitude,
-              longitude: exactMatch.longitude,
-            },
-          },
-          { duration: 600 }
-        );
-        return; // Centered on exact match, skip fitToCoordinates
-      }
-
-      // Fallback: fit to all available search results
-      const fitResults = [...crSearchResults, ...results];
-      if (fitResults.length && mapRef.current) {
-        mapRef.current.fitToCoordinates(
-          fitResults.map(p => ({
-            latitude: p.latitude,
-            longitude: p.longitude,
-          })),
-          {
-            edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
-            animated: true,
-          }
-        );
-      }
+      Alert.alert(
+        "Search Google too?",
+        `No exact Coffee Rider match was found for “${activeQuery}”. Search Google places as well?`,
+        [
+          { text: "Not now", style: "cancel", onPress: () => finishWithResults([]) },
+          { text: "Search Google", onPress: runGoogleSearch },
+        ]
+      );
     }
 
     run();
     return () => { cancelled = true; };
-  }, [activeQuery, searchOrigin, canUseGooglePlacesApi, hasGoogleSearchRoleAccess, crPlaces]);
+  }, [activeQuery, searchOrigin, canUseGooglePlacesApi, crPlaces]);
 
   useEffect(() => {
     
