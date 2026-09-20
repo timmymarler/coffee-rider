@@ -192,9 +192,10 @@ export default function PlaceCard({
   const styles = createStyles(theme, isLandscape);
   const auth = useContext(AuthContext);
   const user = auth?.user || null;
-  const role = auth?.profile?.role || "guest"; // or auth.role if that’s what you store
+  const rawRole = auth?.role || auth?.profile?.role || "guest";
+  const role = String(rawRole || "guest").trim().toLowerCase();
   const capabilities = getCapabilities(role);
-  const canUseGooglePlacesApi = capabilities?.isAdmin === true || role === "pro";
+  const canUseGooglePlacesApi = capabilities?.canSearchGoogle === true;
   const distanceUnits = auth?.profile?.unitsPreference === "metric" ? "metric" : "imperial";
   const canNavigate = capabilities.canNavigate === true;
   const canRate = capabilities.canRate === true;
