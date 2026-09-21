@@ -3,8 +3,7 @@ import theme from "@themes";
 import { Linking, Modal, Platform, Text, TouchableOpacity, View } from "react-native";
 
 const ANDROID_STORE_URL = "https://play.google.com/store/apps/details?id=com.timmy.marler.coffeerider";
-const IOS_TESTFLIGHT_WEB_URL = "https://testflight.apple.com";
-const IOS_TESTFLIGHT_APP_URL = "itms-beta://";
+const IOS_APP_STORE_URL = "https://apps.apple.com/gb/app/coffee-rider/id6758542797";
 
 export function VersionUpgradeModal({
   visible,
@@ -19,12 +18,7 @@ export function VersionUpgradeModal({
     if (storeUrl) return storeUrl;
     if (Platform.OS === "android") return ANDROID_STORE_URL;
 
-    try {
-      const canOpenTestFlight = await Linking.canOpenURL(IOS_TESTFLIGHT_APP_URL);
-      return canOpenTestFlight ? IOS_TESTFLIGHT_APP_URL : IOS_TESTFLIGHT_WEB_URL;
-    } catch {
-      return IOS_TESTFLIGHT_WEB_URL;
-    }
+    return IOS_APP_STORE_URL;
   };
 
   const handleUpdate = async () => {
