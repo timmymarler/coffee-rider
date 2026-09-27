@@ -124,18 +124,23 @@ export function initBleTransport() {
     return;
   }
 
-  // Wait for BLE to be powered on before scanning.
-  stateSubscription = manager.onStateChange((state) => {
-    if (state === State.PoweredOn) {
-      log('BLE powered on — preparing scan');
-      void startScan().catch((error) => {
-        warn('startScan failed from state change:', describeBleError(error));
-      });
-    } else if (state === State.PoweredOff || state === State.Unsupported) {
-      warn(`BLE state: ${state} — cannot scan`);
-      stopEverything();
-    }
-  }, true); // true = emit current state immediately
+  // Avoid BleManager's emitCurrentState path, which can reject without a handler.
+  stateSubscription = manager.onStateChange(handleBleState);
+  manager.state().then(handleBleState).catch((error) => {
+    warn('BLE initial state check failed:', describeBleError(error));
+  });
+}
+
+function handleBleState(state) {
+  if (state === State.PoweredOn) {
+    log('BLE powered on — preparing scan');
+    void startScan().catch((error) => {
+      warn('startScan failed from state change:', describeBleError(error));
+    });
+  } else if (state === State.PoweredOff || state === State.Unsupported) {
+    warn(`BLE state: ${state} — cannot scan`);
+    stopEverything();
+  }
 }
 
 export function destroyBleTransport() {
@@ -151,7 +156,10 @@ export function destroyBleTransport() {
   }
   if (manager) {
     try {
-      manager.destroy();
+      const destroyPromise = manager.destroy();
+      destroyPromise?.catch?.((error) => {
+        warn('BLE manager destroy failed:', describeBleError(error));
+      });
     } catch (error) {
       warn('BLE manager destroy failed:', describeBleError(error));
     }
@@ -168,11 +176,7 @@ export function destroyBleTransport() {
 function stopEverything() {
   clearReconnectTimer();
   if (isScanning && manager) {
-    try {
-      manager.stopDeviceScan();
-    } catch (error) {
-      warn('stopDeviceScan failed during stopEverything:', describeBleError(error));
-    }
+    stopDeviceScanSafely('during stopEverything');
     isScanning = false;
   }
   activeCharacteristic = null;
@@ -183,6 +187,19 @@ function clearReconnectTimer() {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
+  }
+}
+
+function stopDeviceScanSafely(context) {
+  if (!manager) return;
+
+  try {
+    const stopPromise = manager.stopDeviceScan();
+    stopPromise?.catch?.((error) => {
+      warn(`stopDeviceScan failed ${context}:`, describeBleError(error));
+    });
+  } catch (error) {
+    warn(`stopDeviceScan failed ${context}:`, describeBleError(error));
   }
 }
 
@@ -217,11 +234,7 @@ async function startScan() {
   // Auto-stop scan after timeout to save battery.
   const scanTimeout = setTimeout(() => {
     if (isScanning && manager) {
-      try {
-        manager.stopDeviceScan();
-      } catch (error) {
-        warn('stopDeviceScan failed on timeout:', describeBleError(error));
-      }
+      stopDeviceScanSafely('on timeout');
       isScanning = false;
       if (!activeDevice) {
         log('Scan timed out — will retry');
@@ -230,33 +243,36 @@ async function startScan() {
     }
   }, SCAN_TIMEOUT_MS);
 
-  manager.startDeviceScan(
-    null,
-    { allowDuplicates: false },
-    (error, device) => {
-      if (error) {
-        warn('Scan error:', error.message);
-        clearTimeout(scanTimeout);
-        isScanning = false;
-        scheduleReconnect();
-        return;
-      }
-
-      if (device && (device.localName === deviceName || device.name === deviceName)) {
-        log(`Found "${device.name || device.localName}" (${device.id})`);
-        clearTimeout(scanTimeout);
-        try {
-          manager.stopDeviceScan();
-        } catch (stopError) {
-          warn('stopDeviceScan failed after finding device:', describeBleError(stopError));
+  try {
+    await manager.startDeviceScan(
+      null,
+      { allowDuplicates: false },
+      (error, device) => {
+        if (error) {
+          warn('Scan error:', describeBleError(error));
+          clearTimeout(scanTimeout);
+          isScanning = false;
+          scheduleReconnect();
+          return;
         }
-        isScanning = false;
-        void connectToDevice(device.id).catch((connectError) => {
-          warn('connectToDevice failed after scan:', describeBleError(connectError));
-        });
+
+        if (device && (device.localName === deviceName || device.name === deviceName)) {
+          log(`Found "${device.name || device.localName}" (${device.id})`);
+          clearTimeout(scanTimeout);
+          stopDeviceScanSafely('after finding device');
+          isScanning = false;
+          void connectToDevice(device.id).catch((connectError) => {
+            warn('connectToDevice failed after scan:', describeBleError(connectError));
+          });
+        }
       }
-    }
-  );
+    );
+  } catch (error) {
+    clearTimeout(scanTimeout);
+    isScanning = false;
+    scheduleReconnect();
+    throw error;
+  }
 }
 
 async function connectToDevice(deviceId) {

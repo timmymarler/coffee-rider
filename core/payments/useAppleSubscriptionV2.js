@@ -445,38 +445,24 @@ async function requestSubscriptionResilient(sku) {
     throw new Error('Missing App Store SKU for selected plan.');
   }
 
-  const attempts = [];
-
-  // On iOS, requestSubscription tends to provide more consistent subscription flow behavior.
-  if (typeof iap?.requestSubscription === 'function') {
-    attempts.push(() => iap.requestSubscription({ sku: skuValue }));
-    attempts.push(() => iap.requestSubscription(skuValue));
+  if (typeof iap?.requestPurchase !== 'function') {
+    throw new Error('Apple purchase API is unavailable in this build. Please update the app and try again.');
   }
 
-  if (typeof iap?.requestPurchase === 'function') {
-    attempts.push(() =>
-      iap.requestPurchase({
-        type: 'subs',
-        request: {
-          apple: { sku: skuValue },
-        },
-      })
-    );
-  }
+  queueDebugLog('APPLE_IAP', 'Starting subscription purchase with react-native-iap requestPurchase', {
+    productId: skuValue,
+  });
 
-  let lastErr = null;
-  for (const run of attempts) {
-    try {
-      return await withTimeout(run(), 25000, 'Apple purchase timed out. Please try again.');
-    } catch (err) {
-      lastErr = err;
-      if (isUserCancelledError(err)) {
-        throw err;
-      }
-    }
-  }
-
-  throw lastErr || new Error('Unable to start Apple subscription purchase.');
+  return withTimeout(
+    iap.requestPurchase({
+      type: 'subs',
+      request: {
+        apple: { sku: skuValue },
+      },
+    }),
+    25000,
+    'Apple purchase request timed out. Please try again.'
+  );
 }
 
 async function waitForMatchingAppleTransactionResilient({ skuCandidates = [], timeoutMs = 150000, pollMs = 5000 } = {}) {
@@ -490,17 +476,24 @@ async function waitForMatchingAppleTransactionResilient({ skuCandidates = [], ti
   if (!normalizedSkuSet.size) return null;
 
   const deadline = Date.now() + Math.max(1000, Number(timeoutMs) || 150000);
+  let pollCount = 0;
+  let pendingTransactionCount = 0;
+  let allTransactionCount = 0;
+  let lastHistoryError = null;
 
   while (Date.now() < deadline) {
+    pollCount += 1;
     const history = [];
 
     if (typeof iap?.getPendingTransactionsIOS === 'function') {
       try {
         const pending = await iap.getPendingTransactionsIOS();
         if (Array.isArray(pending) && pending.length) {
+          pendingTransactionCount = Math.max(pendingTransactionCount, pending.length);
           history.push(...pending);
         }
-      } catch (_) {
+      } catch (error) {
+        lastHistoryError = error?.message || String(error);
         // Best-effort polling path.
       }
     }
@@ -509,9 +502,11 @@ async function waitForMatchingAppleTransactionResilient({ skuCandidates = [], ti
       try {
         const allTransactions = await iap.getAllTransactionsIOS();
         if (Array.isArray(allTransactions) && allTransactions.length) {
+          allTransactionCount = Math.max(allTransactionCount, allTransactions.length);
           history.push(...allTransactions);
         }
-      } catch (_) {
+      } catch (error) {
+        lastHistoryError = error?.message || String(error);
         // Best-effort polling path.
       }
     }
@@ -521,6 +516,11 @@ async function waitForMatchingAppleTransactionResilient({ skuCandidates = [], ti
       .sort((a, b) => Number(normalizePurchaseDateMs(b) || 0) - Number(normalizePurchaseDateMs(a) || 0))[0];
 
     if (latestMatch) {
+      queueDebugLog('APPLE_IAP', 'Matching transaction found in StoreKit history', {
+        pollCount,
+        productId: getPurchaseProductId(latestMatch),
+        hasTransactionId: Boolean(getPurchaseTransactionId(latestMatch)),
+      });
       return latestMatch;
     }
 
@@ -528,6 +528,14 @@ async function waitForMatchingAppleTransactionResilient({ skuCandidates = [], ti
     if (remainingMs <= 0) break;
     await new Promise((resolve) => setTimeout(resolve, Math.min(pollMs, remainingMs)));
   }
+
+  queueDebugLog('APPLE_IAP', 'No matching transaction found in StoreKit history', {
+    pollCount,
+    candidateSkuCount: normalizedSkuSet.size,
+    pendingTransactionCount,
+    allTransactionCount,
+    lastHistoryError,
+  });
 
   return null;
 }
@@ -845,6 +853,16 @@ export function useAppleSubscriptionV2({ user }) {
 
     const purchaseUpdateSubscription = iap.purchaseUpdatedListener(async (purchase) => {
       try {
+        queueDebugLog('APPLE_IAP', 'StoreKit purchase update received', {
+          productId: getPurchaseProductId(purchase),
+          hasTransactionId: Boolean(getPurchaseTransactionId(purchase)),
+          hasOriginalTransactionId: Boolean(getOriginalTransactionId(purchase)),
+          hasReceipt: Boolean(
+            purchase?.transactionReceipt ||
+            purchase?.transactionReceiptIOS ||
+            purchase?.receiptData
+          ),
+        });
         const activation = await syncPurchaseToProfile(purchase, { finish: true });
         resolvePurchaseOperation({
           success: true,
@@ -860,6 +878,7 @@ export function useAppleSubscriptionV2({ user }) {
         setPurchaseError(mappedError);
         queueDebugLog('APPLE_IAP', 'purchaseUpdatedListener activation failed', {
           error: mappedError?.message || String(mappedError),
+          code: err?.code || null,
         });
         rejectPurchaseOperation(mappedError);
       }
@@ -1075,6 +1094,12 @@ export function useAppleSubscriptionV2({ user }) {
 
         const operation = beginPurchaseOperation();
         const result = await requestSubscriptionResilient(sku);
+        queueDebugLog('APPLE_IAP', 'requestPurchase promise resolved', {
+          attemptId,
+          resultType: Array.isArray(result) ? 'array' : typeof result,
+          resultCount: Array.isArray(result) ? result.length : result ? 1 : 0,
+          hasTransactionId: Boolean(getPurchaseTransactionId(normalizePurchaseResult(result))),
+        });
 
         const purchase = normalizePurchaseResult(result);
         if (purchase) {

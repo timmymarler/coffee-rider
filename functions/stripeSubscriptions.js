@@ -54,6 +54,15 @@ const getPriceId = (plan) => {
   return readEnv(`STRIPE_LIVE_PRICE_${suffix}`) || readEnv(`STRIPE_TEST_PRICE_${suffix}`);
 };
 
+const getConfiguredTrialDays = () => {
+  const configured = Number.parseInt(
+    readEnv('STRIPE_TRIAL_DAYS') || readEnv('INTRO_TRIAL_DAYS') || '30',
+    10
+  );
+  if (!Number.isFinite(configured)) return 30;
+  return Math.max(0, Math.min(configured, 365));
+};
+
 const KNOWN_PLAN_IDS = new Set(['daily', 'monthly', 'annual']);
 
 const normalizePlanId = (plan) => {
@@ -265,7 +274,11 @@ const handleSubscriptionSync = async (subscription) => {
     : null; // Stripe sometimes nests period info on the item
   const cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
   const cancellationEffectiveDate = cancelAtPeriodEnd && renewalDate ? renewalDate : null;
-  const status = mapStripeStatus(subscription.status);
+  const hasPendingSetup = Boolean(subscription.pending_setup_intent);
+  const hasPaymentMethod = Boolean(subscription.default_payment_method);
+  const status = subscription.status === 'trialing' && hasPendingSetup && !hasPaymentMethod
+    ? 'pending'
+    : mapStripeStatus(subscription.status);
 
   // Stripe can emit non-active states for stale/incomplete subscriptions.
   // Do not downgrade a still-valid active/trial Stripe record to pending.
@@ -475,6 +488,11 @@ export const createSubscriptionPaymentSheet = functions
     functions.logger.info('Stripe price resolved', { planId, priceId });
 
     const customerId = await ensureCustomerForUid(context.auth.uid);
+    const userRef = firestore.doc(`users/${context.auth.uid}`);
+    const userSnap = await userRef.get();
+    const userData = userSnap.exists ? userSnap.data() : {};
+    const hasUsedIntroTrial = Boolean(userData?.introTrialUsedAt || userData?.trialUsedAt);
+    const trialDays = hasUsedIntroTrial ? 0 : getConfiguredTrialDays();
     functions.logger.info('Stripe customer ready', { uid: context.auth.uid, customerId });
     const stripe = getStripe();
     const ephemeralKey = await stripe.ephemeralKeys.create(
@@ -487,17 +505,32 @@ export const createSubscriptionPaymentSheet = functions
       customer: customerId,
       items: [{ price: priceId }],
       payment_behavior: 'default_incomplete',
+      ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
       payment_settings: { save_default_payment_method: 'on_subscription' },
-      expand: ['latest_invoice.payment_intent'],
+      expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
       metadata: {
         firebaseUID: context.auth.uid,
         planId,
+        introTrialDays: String(trialDays),
       },
     });
 
     const paymentIntent = subscription.latest_invoice?.payment_intent;
-    if (!paymentIntent?.client_secret) {
+    const setupIntent = subscription.pending_setup_intent;
+    if (!paymentIntent?.client_secret && !setupIntent?.client_secret) {
       throw new functions.https.HttpsError('internal', 'Failed to create a payment intent.');
+    }
+
+    if (trialDays > 0) {
+      await userRef.set(
+        {
+          introTrialUsedAt: FieldValue.serverTimestamp(),
+          introTrialDays: trialDays,
+          introTrialPlan: planId,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
     }
 
     await upsertSubscriptionDocument(context.auth.uid, {
@@ -520,7 +553,10 @@ export const createSubscriptionPaymentSheet = functions
     return {
       customerId,
       ephemeralKeySecret: ephemeralKey.secret,
-      paymentIntentClientSecret: paymentIntent.client_secret,
+      paymentIntentClientSecret: paymentIntent?.client_secret || null,
+      setupIntentClientSecret: setupIntent?.client_secret || null,
+      trialDays,
+      trialEndsAt: trialDays > 0 ? Date.now() + trialDays * 24 * 60 * 60 * 1000 : null,
       subscriptionId: subscription.id,
     };
   });
@@ -544,9 +580,11 @@ export const cancelStripeSubscription = functions
       throw new functions.https.HttpsError('permission-denied', 'Subscription does not belong to this user.');
     }
 
-    const updatedSubscription = await stripe.subscriptions.update(subscriptionId, {
-      cancel_at_period_end: true,
-    });
+    const updatedSubscription = data?.cancelImmediately
+      ? await stripe.subscriptions.cancel(subscriptionId)
+      : await stripe.subscriptions.update(subscriptionId, {
+        cancel_at_period_end: true,
+      });
 
     await handleSubscriptionSync(updatedSubscription);
 

@@ -38,3 +38,11 @@ export const GOOGLE_TEXT_SEARCH_CACHE_TTL_MS = GOOGLE_PLACES_COST_SAVER_MODE ? 5
 // Outside this one-time window, non-subscribed users fall back to guest-level capabilities.
 export const RESTRICTED_FREE_ACCESS_WINDOW_ENABLED = true;
 export const RESTRICTED_FREE_ACCESS_WINDOW_DAYS = 7;
+
+// Second-launch policy. Keep the launch date configurable so enforcement can be
+// activated for existing sessions without requiring users to log out.
+export const SECOND_LAUNCH_REQUIRED = true;
+export const SECOND_LAUNCH_EFFECTIVE_AT = "2026-09-22T00:00:00.000Z";
+export const MANDATORY_REGISTRATION_ENABLED = true;
+export const MANDATORY_SUBSCRIPTION_ENABLED = true;
+export const INTRO_TRIAL_DAYS = 30;
