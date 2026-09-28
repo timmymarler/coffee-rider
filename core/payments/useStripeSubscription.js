@@ -41,21 +41,17 @@ export function useStripeSubscription() {
           customerId,
           ephemeralKeySecret,
           paymentIntentClientSecret,
-          setupIntentClientSecret,
           subscriptionId,
         } = paymentSheetResponse.data || {};
 
-        const paymentSheetClientSecret = paymentIntentClientSecret || setupIntentClientSecret;
-        if (!paymentSheetClientSecret || !customerId || !ephemeralKeySecret) {
+        if (!paymentIntentClientSecret || !customerId || !ephemeralKeySecret) {
           throw new Error('Stripe payment sheet configuration is incomplete.');
         }
 
         const initResult = await initPaymentSheet({
           customerId,
           customerEphemeralKeySecret: ephemeralKeySecret,
-          ...(paymentIntentClientSecret
-            ? { paymentIntentClientSecret }
-            : { setupIntentClientSecret }),
+          paymentIntentClientSecret,
           merchantDisplayName: 'Coffee Rider',
           returnURL: paymentSheetReturnUrl,
         });
@@ -66,18 +62,10 @@ export function useStripeSubscription() {
 
         setStatus('ready');
 
-        const presentResult = await presentPaymentSheet({ clientSecret: paymentSheetClientSecret });
+        const presentResult = await presentPaymentSheet({ clientSecret: paymentIntentClientSecret });
         if (presentResult.error) {
           const wasCancelled = presentResult.error.code === 'Canceled' || presentResult.error.code === 'CanceledByUser';
           if (wasCancelled) {
-            if (subscriptionId) {
-              await cancelStripeSubscriptionCallable({
-                stripeSubscriptionId: subscriptionId,
-                cancelImmediately: true,
-              }).catch((cancelError) => {
-                console.warn('[Stripe] Failed to cancel abandoned trial setup:', cancelError?.message || cancelError);
-              });
-            }
             console.info('[Stripe] Payment sheet cancelled by user');
             setStatus('idle');
             setError(null);

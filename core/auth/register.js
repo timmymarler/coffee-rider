@@ -6,7 +6,7 @@ import {
     deleteUser,
     sendEmailVerification,
 } from "firebase/auth";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -20,23 +20,24 @@ import {
     View
 } from "react-native";
 
+import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
 import { buildEmailVerificationActionCodeSettings } from "@core/auth/actionCodeSettings";
+import {
+    buildRestrictedAccessMessage,
+    shouldShowProUpgradePrompt,
+    showProUpgradePrompt,
+} from "@core/utils/proUpgradePrompt";
 import { reserveDisplayName } from "@firebaseLocal/users";
 import theme from "@themes";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import AuthLayout from "./AuthLayout";
-import {
-  initializeGoogleSignIn,
-  isAppleSignInAvailable,
-  isGoogleSignInAvailable,
-  signInWithApple,
-  signInWithGoogle,
-} from "./socialAuth";
+import { isAppleSignInAvailable, signInWithApple } from "./socialAuth";
 
 export default function RegisterScreen({ onBack }) {
   const router = useRouter();
   const { colors, spacing } = theme;
+  const { enterGuestMode } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,42 +47,46 @@ export default function RegisterScreen({ onBack }) {
   const [socialSubmitting, setSocialSubmitting] = useState(false);
   const [socialProcess, setSocialProcess] = useState(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
-  const [googleAvailable, setGoogleAvailable] = useState(false);
-  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [verificationResendBlockedUntil, setVerificationResendBlockedUntil] = useState(0);
 
   const emailDomain = email.trim().toLowerCase().split("@")[1] || "";
   const isOutlookOrHotmailEmail = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(emailDomain);
 
   useEffect(() => {
-    initializeGoogleSignIn();
-    setGoogleAvailable(isGoogleSignInAvailable());
     setAppleAvailable(isAppleSignInAvailable());
   }, []);
-
-  async function handleGoogleSignIn() {
-    setSocialSubmitting(true);
-    setSocialProcess('google');
-    try {
-      await signInWithGoogle();
-      router.replace("map");
-    } catch (err) {
-      if (!err.message?.includes("cancelled")) {
-        Alert.alert("Sign-in Failed", err.message || "Google sign-in failed. Please try again.");
-      }
-    } finally {
-      setSocialSubmitting(false);
-      setSocialProcess(null);
-    }
-  }
 
   async function handleAppleSignIn() {
     setSocialSubmitting(true);
     setSocialProcess('apple');
     try {
-      await signInWithApple();
+      const signInResult = await signInWithApple();
+      let role = null;
+      let profileCreatedAt = null;
+      try {
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+          const profileSnap = await getDoc(doc(db, "users", uid));
+          if (profileSnap.exists()) {
+            const profileData = profileSnap.data();
+            role = profileData?.role || null;
+            profileCreatedAt = profileData?.createdAt || null;
+          }
+        }
+      } catch (profileErr) {
+        console.warn("Unable to read user profile role after Apple sign-in:", profileErr);
+      }
+
       setSocialSubmitting(false);
       setSocialProcess(null);
       router.replace("map");
+      if (!signInResult?.isNewUser && shouldShowProUpgradePrompt(role)) {
+        setTimeout(() => {
+          showProUpgradePrompt(router, {
+            message: buildRestrictedAccessMessage(profileCreatedAt || auth.currentUser?.metadata?.creationTime),
+          });
+        }, 250);
+      }
     } catch (err) {
       setSocialSubmitting(false);
       setSocialProcess(null);
@@ -189,6 +194,19 @@ export default function RegisterScreen({ onBack }) {
     }
   }
 
+  async function handleGuestMode() {
+    try {
+      await enterGuestMode();
+      router.replace("/map");
+    } catch (err) {
+      console.error("Guest mode error:", err);
+      Alert.alert(
+        "Error",
+        "Could not enter guest mode. Please try again."
+      );
+    }
+  }
+
   return (
     <AuthLayout
       title="Create account"
@@ -204,45 +222,6 @@ export default function RegisterScreen({ onBack }) {
           contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }}
           keyboardShouldPersistTaps="handled"
         >
-          {!showEmailForm && (
-            <View>
-              {Platform.OS === "ios" && appleAvailable && (
-                <TouchableOpacity
-                  onPress={handleAppleSignIn}
-                  disabled={socialSubmitting}
-                  style={[styles.socialButton, styles.appleButton, { opacity: socialSubmitting ? 0.7 : 1 }]}
-                >
-                  <MaterialCommunityIcons name="apple" size={20} color="white" style={{ marginRight: spacing.sm }} />
-                  <Text style={styles.socialButtonText}>
-                    {socialSubmitting && socialProcess === 'apple' ? 'Signing in...' : 'Continue with Apple'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {Platform.OS === "android" && googleAvailable && (
-                <TouchableOpacity
-                  onPress={handleGoogleSignIn}
-                  disabled={socialSubmitting}
-                  style={[styles.socialButton, styles.googleButton, { opacity: socialSubmitting ? 0.7 : 1 }]}
-                >
-                  <MaterialCommunityIcons name="google" size={20} color="#fff" style={{ marginRight: spacing.sm }} />
-                  <Text style={styles.socialButtonText}>
-                    {socialSubmitting && socialProcess === 'google' ? 'Signing in...' : 'Continue with Google'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                onPress={() => setShowEmailForm(true)}
-                style={{ marginTop: spacing.lg, alignItems: "center" }}
-              >
-                <Text style={[styles.linkText, { color: colors.textMuted }]}>Register with email</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {showEmailForm && (
-            <View>
           {/* Display Name */}
           <View style={styles.field}>
             <Text style={styles.label}>Display Name</Text>
@@ -316,8 +295,6 @@ export default function RegisterScreen({ onBack }) {
               <Text style={styles.buttonText}>Create account</Text>
             )}
           </TouchableOpacity>
-            </View>
-          )}
 
           {/* Back to login */}
           <TouchableOpacity
@@ -329,14 +306,28 @@ export default function RegisterScreen({ onBack }) {
             </Text>
           </TouchableOpacity>
 
-          {showEmailForm && (
+          {appleAvailable && (
             <TouchableOpacity
-              onPress={() => setShowEmailForm(false)}
-              style={{ marginTop: spacing.md, alignItems: "center" }}
+              onPress={handleAppleSignIn}
+              disabled={socialSubmitting && socialProcess === 'apple'}
+              style={[styles.socialButton, styles.appleButton, { opacity: socialSubmitting && socialProcess === 'apple' ? 0.7 : 1 }]}
             >
-              <Text style={[styles.linkText, { color: colors.textMuted }]}>Use Google or Apple instead</Text>
+              <MaterialCommunityIcons name="apple" size={20} color="white" style={{ marginRight: spacing.sm }} />
+              <Text style={styles.socialButtonText}>
+                {socialSubmitting && socialProcess === 'apple' ? 'Signing in...' : 'Sign in with Apple'}
+              </Text>
             </TouchableOpacity>
           )}
+
+          {/* Continue as Guest */}
+          <TouchableOpacity
+            onPress={handleGuestMode}
+            style={{ marginTop: spacing.lg, alignItems: "center" }}
+          >
+            <Text style={[styles.linkText, { color: colors.textMuted }]}>
+              Continue as Guest
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -399,9 +390,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
     borderWidth: 1,
     borderColor: "#fff",
-  },
-  googleButton: {
-    backgroundColor: "#4285F4",
   },
   socialButtonText: {
     color: "#fff",

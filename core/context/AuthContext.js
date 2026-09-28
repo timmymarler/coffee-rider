@@ -14,12 +14,8 @@ import { createContext, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import {
-  MANDATORY_REGISTRATION_ENABLED,
-  MANDATORY_SUBSCRIPTION_ENABLED,
     RESTRICTED_FREE_ACCESS_WINDOW_DAYS,
     RESTRICTED_FREE_ACCESS_WINDOW_ENABLED,
-  SECOND_LAUNCH_EFFECTIVE_AT,
-  SECOND_LAUNCH_REQUIRED,
 } from "@core/config/launchFlags";
 import { getCapabilities } from "@core/roles/capabilities";
 import { checkVersionStatus, fetchVersionInfo } from "@core/utils/versionCheck";
@@ -61,20 +57,6 @@ function hasRestrictedFreeAccessWindow(profile, authUser) {
 
   const windowMs = RESTRICTED_FREE_ACCESS_WINDOW_DAYS * 24 * 60 * 60 * 1000;
   return Date.now() <= createdAtMs + windowMs;
-}
-
-function isSecondLaunchActive() {
-  if (!SECOND_LAUNCH_REQUIRED) return false;
-  const effectiveAtMs = Date.parse(SECOND_LAUNCH_EFFECTIVE_AT);
-  return Number.isFinite(effectiveAtMs) && Date.now() >= effectiveAtMs;
-}
-
-function hasSubscriptionEntitlement(profile) {
-  const status = profile?.subscriptionStatus;
-  if (status !== 'active' && status !== 'trial') return false;
-
-  const expiresAtMs = toMillis(profile?.subscriptionExpiresAt);
-  return !Number.isFinite(expiresAtMs) || expiresAtMs > Date.now();
 }
 
 export const AuthContext = createContext(null);
@@ -241,10 +223,6 @@ export default function AuthProvider({ children }) {
   }
 
   async function enterGuestMode() {
-    if (MANDATORY_REGISTRATION_ENABLED && isSecondLaunchActive()) {
-      throw new Error('Please register or sign in to continue.');
-    }
-
     console.log('[AuthContext] Entering guest mode');
     setIsGuest(true);
     setLoading(false);
@@ -307,11 +285,9 @@ export default function AuthProvider({ children }) {
   useEffect(() => {
     async function init() {
       const wasInGuestMode = await loadGuestMode();
-      if (wasInGuestMode && !(MANDATORY_REGISTRATION_ENABLED && isSecondLaunchActive())) {
+      if (wasInGuestMode) {
         console.log('[AuthContext] Restoring guest mode from storage');
         setIsGuest(true);
-      } else if (wasInGuestMode) {
-        await clearGuestMode();
       }
     }
     init();
@@ -486,15 +462,6 @@ export default function AuthProvider({ children }) {
   })();
   const capabilities = getCapabilities(role);
   const effectiveProfile = profile ? { ...profile, role: displayRole } : profile;
-  const mandatoryLaunchActive = isSecondLaunchActive();
-  const requiresSubscription = Boolean(
-    mandatoryLaunchActive &&
-    MANDATORY_SUBSCRIPTION_ENABLED &&
-    user &&
-    role !== 'admin' &&
-    role !== 'place-owner' &&
-    !hasSubscriptionEntitlement(profile)
-  );
 
   const value = {
     user,
@@ -505,8 +472,6 @@ export default function AuthProvider({ children }) {
     emailVerified,
     loading,
     versionStatus,
-    mandatoryLaunchActive,
-    requiresSubscription,
     login,
     logout,
     register,

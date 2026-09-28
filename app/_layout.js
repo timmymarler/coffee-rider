@@ -306,14 +306,7 @@ function ThemeAwareLayoutContent() {
 function LayoutContent() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [versionModalDismissed, setVersionModalDismissed] = useState(false);
-  const {
-    user,
-    loading,
-    versionStatus,
-    isGuest,
-    emailVerified,
-    requiresSubscription,
-  } = useContext(AuthContext);
+  const { user, loading, versionStatus, isGuest, emailVerified } = useContext(AuthContext);
 
   // Show version modal when status changes and update is available
   useEffect(() => {
@@ -345,8 +338,7 @@ function LayoutContent() {
   const showLoginScreen = (!user && !isGuest) || (EMAIL_VERIFICATION_ENFORCED && user && !emailVerified);
   
   const LoginScreen = require("@/core/auth/login").default;
-  const SubscriptionScreen = require("@/core/screens/SubscriptionsScreen").default;
-  const mainContent = showLoginScreen ? <LoginScreen /> : requiresSubscription ? <SubscriptionScreen /> : (
+  const mainContent = showLoginScreen ? <LoginScreen /> : (
     <Tabs
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <FloatingTabBar {...props} />}

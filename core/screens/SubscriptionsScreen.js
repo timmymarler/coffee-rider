@@ -1,17 +1,13 @@
 import { AuthContext } from '@core/context/AuthContext';
 import { SubscriptionContext } from '@core/context/SubscriptionContext';
 import { useTheme } from '@core/context/ThemeContext';
-import {
-  INTRO_TRIAL_DAYS,
-  IOS_SUBSCRIPTIONS_DISABLED_MESSAGE,
-  IOS_SUBSCRIPTIONS_TEMP_DISABLED,
-} from '@core/config/launchFlags';
+import { IOS_SUBSCRIPTIONS_DISABLED_MESSAGE, IOS_SUBSCRIPTIONS_TEMP_DISABLED } from '@core/config/launchFlags';
 import { SUBSCRIPTION_PLANS } from '@core/payments/stripeService';
 import { useStripeSubscription } from '@core/payments/useStripeSubscription';
 import { useAppleSubscriptionV2 } from '@core/payments/useAppleSubscriptionV2';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -92,8 +88,8 @@ export default function SubscriptionsScreen() {
         const synced = await waitForEntitlementSync();
         if (!synced) {
           Alert.alert(
-            'Purchase Not Confirmed Yet',
-            'Coffee Rider has not received a confirmed subscription transaction yet. Wait a moment and tap Restore Purchases before trying to subscribe again.'
+            'Purchase Processing',
+            'Apple has accepted your purchase and we are still syncing your subscription. Please wait a moment, then tap Restore Purchases if Pro access is not visible yet.'
           );
         }
         return;
@@ -179,15 +175,12 @@ export default function SubscriptionsScreen() {
     appleProductsByPlan?.monthly?.localizedPrice ||
     appleProductsByPlan?.monthly?.priceString ||
     null;
-  const applePriceFallback = appleLoadError ? 'Price unavailable' : 'Loading price...';
-  const annualPlanForDisplay = {
-    ...SUBSCRIPTION_PLANS.ANNUAL,
-    price: annualApplePrice || applePriceFallback,
-  };
-  const monthlyPlanForDisplay = {
-    ...SUBSCRIPTION_PLANS.MONTHLY,
-    price: monthlyApplePrice || applePriceFallback,
-  };
+  const annualPlanForDisplay = annualApplePrice
+    ? { ...SUBSCRIPTION_PLANS.ANNUAL, price: annualApplePrice }
+    : SUBSCRIPTION_PLANS.ANNUAL;
+  const monthlyPlanForDisplay = monthlyApplePrice
+    ? { ...SUBSCRIPTION_PLANS.MONTHLY, price: monthlyApplePrice }
+    : SUBSCRIPTION_PLANS.MONTHLY;
   const appleCurrencies = Array.from(
     new Set(
       (appleProducts || [])
@@ -225,11 +218,9 @@ export default function SubscriptionsScreen() {
         <Text style={[styles.subtitle, { color: theme.colors.accentMid }]}> 
           {isIOSSubscriptionsDisabled
             ? 'Soft launch access is active while subscriptions are unavailable on iOS'
-            : hasActiveSubscription
-            ? isCurrentlyInTrial
-              ? `Your free period is active. ${trialDaysLeft} days remaining.`
-              : 'Your Pro subscription is active.'
-            : `Subscribe now for full access. Your first payment starts after ${INTRO_TRIAL_DAYS} days.`}
+            : isIOS
+            ? 'Unlock Pro with Apple subscriptions'
+            : 'Unlock all features with a Pro subscription'}
         </Text>
       </View>
 
@@ -243,7 +234,7 @@ export default function SubscriptionsScreen() {
           />
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={[styles.statusTitle, { color: theme.colors.text }]}>
-                  Introductory period active
+              Free Trial Active!
             </Text>
             <Text style={[styles.statusText, { color: theme.colors.textLight }]}>
               {trialDaysLeft} days remaining
@@ -295,14 +286,14 @@ export default function SubscriptionsScreen() {
       {/* Features List */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-          What&apos;s included
+          What's included
         </Text>
         <Features theme={theme} />
       </View>
 
       {/* Pricing & Management */}
       <View style={styles.section}>
-        {hasActiveSubscription ? (
+        {hasActiveSubscription && !isCurrentlyInTrial ? (
           <>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
               Manage your subscription
@@ -335,16 +326,6 @@ export default function SubscriptionsScreen() {
           </>
         ) : (
           <>
-                {!isIOSSubscriptionsDisabled && !hasActiveSubscription && (
-                  <View style={[styles.trialOffer, { backgroundColor: theme.colors.primaryLight }]}>
-                    <Text style={[styles.trialOfferTitle, { color: theme.colors.text }]}>
-                      Subscribe now and get {INTRO_TRIAL_DAYS} days free
-                    </Text>
-                    <Text style={[styles.trialNote, { color: theme.colors.textSecondary }]}>
-                      Get full Pro access immediately. Add your payment method today; your first subscription payment is due after the {INTRO_TRIAL_DAYS}-day free period. This offer can only be used once per account.
-                    </Text>
-                  </View>
-                )}
             {isIOSSubscriptionsDisabled ? (
               <>
                 <Text style={[styles.sectionTitle, { color: theme.colors.text }]}> 
@@ -474,7 +455,9 @@ export default function SubscriptionsScreen() {
         />
         <FAQItem
           question="Is there a free trial?"
-          answer={`Yes. Choose monthly or annual, provide payment details today, and get full Pro access immediately. Your first charge starts after ${INTRO_TRIAL_DAYS} days. This introductory period can only be used once per Coffee Rider account.`}
+          answer={isIOS
+            ? 'iOS subscriptions are currently unavailable while we rebuild this flow.'
+            : 'Free trial is not currently offered on Android. Subscribe to start Pro access immediately.'}
           theme={theme}
         />
         <FAQItem
@@ -728,17 +711,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     marginTop: 8,
-  },
-  trialOffer: {
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 20,
-  },
-  trialOfferTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
   linkButton: {
     borderWidth: 1,
     borderRadius: 8,
@@ -750,6 +722,7 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 14,
     fontWeight: '600',
+  },
   },
   faqItem: {
     paddingVertical: 12,
