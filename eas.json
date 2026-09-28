@@ -120,6 +120,8 @@
           "EXPO_PUBLIC_STRIPE_PRICE_DAILY_LIVE": "price_1THKjLE1Vx0zrcr85qDD92be",
           "EXPO_PUBLIC_STRIPE_PRICE_MONTHLY_LIVE": "price_1TGOYeCf7uzxcAVCnrrHXtzo",
           "EXPO_PUBLIC_STRIPE_PRICE_ANNUAL_LIVE": "price_1TGOYfCf7uzxcAVCU4cSYasc",
+          "EXPO_PUBLIC_STRIPE_PRICE_MONTHLY_TRIAL_LIVE": "to_1UKb15Cf7uzxcAVCNUmfjSgV",
+          "EXPO_PUBLIC_STRIPE_PRICE_ANNUAL_TRIAL_LIVE": "to_1UKb2YCf7uzxcAVCnciQSYnE",
           "EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.monthly.v3",
           "EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID": "com.timmy.marler.coffeerider.pro.annual.v3",
           "EXPO_PUBLIC_BLE_DIRECTIONS_ENABLED": "true"
