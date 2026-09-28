@@ -26,7 +26,13 @@ import { reserveDisplayName } from "@firebaseLocal/users";
 import theme from "@themes";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import AuthLayout from "./AuthLayout";
-import { isAppleSignInAvailable, signInWithApple } from "./socialAuth";
+import {
+  initializeGoogleSignIn,
+  isAppleSignInAvailable,
+  isGoogleSignInAvailable,
+  signInWithApple,
+  signInWithGoogle,
+} from "./socialAuth";
 
 export default function RegisterScreen({ onBack }) {
   const router = useRouter();
@@ -40,14 +46,33 @@ export default function RegisterScreen({ onBack }) {
   const [socialSubmitting, setSocialSubmitting] = useState(false);
   const [socialProcess, setSocialProcess] = useState(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
+  const [googleAvailable, setGoogleAvailable] = useState(false);
   const [verificationResendBlockedUntil, setVerificationResendBlockedUntil] = useState(0);
 
   const emailDomain = email.trim().toLowerCase().split("@")[1] || "";
   const isOutlookOrHotmailEmail = ["outlook.com", "hotmail.com", "live.com", "msn.com"].includes(emailDomain);
 
   useEffect(() => {
+    initializeGoogleSignIn();
+    setGoogleAvailable(isGoogleSignInAvailable());
     setAppleAvailable(isAppleSignInAvailable());
   }, []);
+
+  async function handleGoogleSignIn() {
+    setSocialSubmitting(true);
+    setSocialProcess('google');
+    try {
+      await signInWithGoogle();
+      router.replace("map");
+    } catch (err) {
+      if (!err.message?.toLowerCase().includes("cancelled")) {
+        Alert.alert("Google Sign-in", err.message || "Google sign-in failed. Please try again.");
+      }
+    } finally {
+      setSocialSubmitting(false);
+      setSocialProcess(null);
+    }
+  }
 
   async function handleAppleSignIn() {
     setSocialSubmitting(true);
@@ -276,6 +301,19 @@ export default function RegisterScreen({ onBack }) {
             </TouchableOpacity>
           )}
 
+          {Platform.OS === "android" && googleAvailable && (
+            <TouchableOpacity
+              onPress={handleGoogleSignIn}
+              disabled={socialSubmitting}
+              style={[styles.socialButton, styles.googleButton, { opacity: socialSubmitting ? 0.7 : 1 }]}
+            >
+              <MaterialCommunityIcons name="google" size={20} color="#fff" style={{ marginRight: spacing.sm }} />
+              <Text style={styles.socialButtonText}>
+                {socialSubmitting && socialProcess === 'google' ? 'Signing in...' : 'Sign in with Google'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -338,6 +376,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
     borderWidth: 1,
     borderColor: "#fff",
+  },
+  googleButton: {
+    backgroundColor: "#4285F4",
   },
   socialButtonText: {
     color: "#fff",
