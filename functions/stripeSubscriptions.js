@@ -42,7 +42,13 @@ const getStripe = () => {
   return stripeClient;
 };
 
-const getPriceId = (plan) => {
+/**
+ * Get the appropriate price ID for a plan
+ * @param {string} plan - The plan ID ('daily', 'monthly', 'annual')
+ * @param {boolean} useTrial - If true, use trial price; otherwise use regular price
+ * @returns {string|null} The Stripe price ID
+ */
+const getPriceId = (plan, useTrial = false) => {
   const normalizedPlan = (plan || '').toLowerCase();
   let suffix = 'MONTHLY';
   if (normalizedPlan === 'annual') {
@@ -51,7 +57,38 @@ const getPriceId = (plan) => {
     suffix = 'DAILY';
   }
 
+  // If requesting trial price, try trial first, then fall back to regular
+  if (useTrial) {
+    const trialPrice = readEnv(`STRIPE_LIVE_PRICE_${suffix}_TRIAL`) || readEnv(`STRIPE_TEST_PRICE_${suffix}_TRIAL`);
+    if (trialPrice) {
+      return trialPrice;
+    }
+    // Fall back to regular price if trial isn't configured
+  }
+
   return readEnv(`STRIPE_LIVE_PRICE_${suffix}`) || readEnv(`STRIPE_TEST_PRICE_${suffix}`);
+};
+
+/**
+ * Check if a user has an existing Stripe subscription (any status)
+ * @param {string} uid - The Firebase user ID
+ * @returns {Promise<boolean>} True if user has an existing subscription
+ */
+const userHasExistingSubscription = async (uid) => {
+  try {
+    const subRef = firestore.doc(`users/${uid}/subscription/current`);
+    const subSnap = await subRef.get();
+    if (!subSnap.exists) {
+      return false;
+    }
+
+    const data = subSnap.data();
+    // User has existing subscription if they have a stripeSubscriptionId
+    return Boolean(data?.stripeSubscriptionId);
+  } catch (err) {
+    functions.logger.error('Failed to check for existing subscription', { uid, err: err?.message });
+    return false;
+  }
 };
 
 const KNOWN_PLAN_IDS = new Set(['daily', 'monthly', 'annual']);
@@ -64,8 +101,14 @@ const normalizePlanId = (plan) => {
 const resolvePlanIdFromPriceId = (priceId) => {
   if (!priceId) return null;
 
+  // Check both regular and trial prices for each plan
   for (const plan of KNOWN_PLAN_IDS) {
-    if (getPriceId(plan) === priceId) {
+    // Check regular price
+    if (getPriceId(plan, false) === priceId) {
+      return plan;
+    }
+    // Check trial price
+    if (getPriceId(plan, true) === priceId) {
       return plan;
     }
   }
@@ -462,17 +505,29 @@ export const createSubscriptionPaymentSheet = functions
     const planId = (data?.planId || '').toLowerCase();
     const liveSecretKey = readEnv('STRIPE_LIVE_SECRET_KEY');
     const secretKeyPrefix = liveSecretKey ? liveSecretKey.slice(0, 3) : null;
+
+    // Check if this is a first-time subscription for the user
+    const isFirstSubscription = !(await userHasExistingSubscription(context.auth.uid));
+    
     functions.logger.info('createSubscriptionPaymentSheet invoked', {
       uid: context.auth.uid,
       planId,
+      isFirstSubscription,
       secretKeyPrefix,
       hasLiveSecretKey: Boolean(liveSecretKey),
     });
-    const priceId = getPriceId(planId);
+
+    // Use trial price for first-time subscribers, regular price otherwise
+    const priceId = getPriceId(planId, isFirstSubscription);
     if (!priceId) {
-      throw new functions.https.HttpsError('invalid-argument', 'Unknown plan selected.');
+      throw new functions.https.HttpsError('invalid-argument', 'Unknown plan selected or trial price not configured.');
     }
-    functions.logger.info('Stripe price resolved', { planId, priceId });
+    functions.logger.info('Stripe price resolved', {
+      planId,
+      priceId,
+      isFirstSubscription,
+      priceSuffix: isFirstSubscription ? 'TRIAL' : 'REGULAR',
+    });
 
     const customerId = await ensureCustomerForUid(context.auth.uid);
     functions.logger.info('Stripe customer ready', { uid: context.auth.uid, customerId });

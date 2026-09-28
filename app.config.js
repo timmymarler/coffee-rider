@@ -23,6 +23,12 @@ const stripePriceAnnual = process.env.EXPO_PUBLIC_STRIPE_PRICE_ANNUAL || null;
 const stripePriceDailyLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_DAILY_LIVE || null;
 const stripePriceMonthlyLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_MONTHLY_LIVE || null;
 const stripePriceAnnualLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_ANNUAL_LIVE || null;
+const stripePriceDailyTrial = process.env.EXPO_PUBLIC_STRIPE_PRICE_DAILY_TRIAL || null;
+const stripePriceMonthlyTrial = process.env.EXPO_PUBLIC_STRIPE_PRICE_MONTHLY_TRIAL || null;
+const stripePriceAnnualTrial = process.env.EXPO_PUBLIC_STRIPE_PRICE_ANNUAL_TRIAL || null;
+const stripePriceDailyTrialLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_DAILY_TRIAL_LIVE || null;
+const stripePriceMonthlyTrialLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_MONTHLY_TRIAL_LIVE || null;
+const stripePriceAnnualTrialLive = process.env.EXPO_PUBLIC_STRIPE_PRICE_ANNUAL_TRIAL_LIVE || null;
 const stripeMerchantIdentifier = process.env.STRIPE_MERCHANT_IDENTIFIER || 'merchant.com.timmy.marler.coffeerider';
 const appleIapMonthlyProductId = process.env.EXPO_PUBLIC_APPLE_IAP_MONTHLY_PRODUCT_ID || null;
 const appleIapAnnualProductId = process.env.EXPO_PUBLIC_APPLE_IAP_ANNUAL_PRODUCT_ID || null;
@@ -89,12 +95,18 @@ export default {
         publishableKey: stripePublishableKey,
         publishableKeyLive: stripePublishableKeyLive,
         merchantIdentifier: stripeMerchantIdentifier,
-          priceDaily: stripePriceDaily,
+        priceDaily: stripePriceDaily,
         priceMonthly: stripePriceMonthly,
         priceAnnual: stripePriceAnnual,
-          priceDailyLive: stripePriceDailyLive,
+        priceDailyLive: stripePriceDailyLive,
         priceMonthlyLive: stripePriceMonthlyLive,
         priceAnnualLive: stripePriceAnnualLive,
+        priceDailyTrial: stripePriceDailyTrial,
+        priceMonthlyTrial: stripePriceMonthlyTrial,
+        priceAnnualTrial: stripePriceAnnualTrial,
+        priceDailyTrialLive: stripePriceDailyTrialLive,
+        priceMonthlyTrialLive: stripePriceMonthlyTrialLive,
+        priceAnnualTrialLive: stripePriceAnnualTrialLive,
       },
       appleIap: {
         monthlyProductId: appleIapMonthlyProductId,

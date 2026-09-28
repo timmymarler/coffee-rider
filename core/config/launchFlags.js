@@ -38,3 +38,6 @@ export const GOOGLE_TEXT_SEARCH_CACHE_TTL_MS = GOOGLE_PLACES_COST_SAVER_MODE ? 5
 // Outside this one-time window, non-subscribed users fall back to guest-level capabilities.
 export const RESTRICTED_FREE_ACCESS_WINDOW_ENABLED = true;
 export const RESTRICTED_FREE_ACCESS_WINDOW_DAYS = 7;
+
+// Require signed-in non-subscribers to choose a plan before entering the app.
+export const MANDATORY_SUBSCRIPTION_REQUIRED = true;

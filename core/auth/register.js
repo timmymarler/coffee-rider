@@ -6,7 +6,7 @@ import {
     deleteUser,
     sendEmailVerification,
 } from "firebase/auth";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -20,24 +20,17 @@ import {
     View
 } from "react-native";
 
-import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
 import { buildEmailVerificationActionCodeSettings } from "@core/auth/actionCodeSettings";
-import {
-    buildRestrictedAccessMessage,
-    shouldShowProUpgradePrompt,
-    showProUpgradePrompt,
-} from "@core/utils/proUpgradePrompt";
 import { reserveDisplayName } from "@firebaseLocal/users";
 import theme from "@themes";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import AuthLayout from "./AuthLayout";
 import { isAppleSignInAvailable, signInWithApple } from "./socialAuth";
 
 export default function RegisterScreen({ onBack }) {
   const router = useRouter();
   const { colors, spacing } = theme;
-  const { enterGuestMode } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,33 +53,10 @@ export default function RegisterScreen({ onBack }) {
     setSocialSubmitting(true);
     setSocialProcess('apple');
     try {
-      const signInResult = await signInWithApple();
-      let role = null;
-      let profileCreatedAt = null;
-      try {
-        const uid = auth.currentUser?.uid;
-        if (uid) {
-          const profileSnap = await getDoc(doc(db, "users", uid));
-          if (profileSnap.exists()) {
-            const profileData = profileSnap.data();
-            role = profileData?.role || null;
-            profileCreatedAt = profileData?.createdAt || null;
-          }
-        }
-      } catch (profileErr) {
-        console.warn("Unable to read user profile role after Apple sign-in:", profileErr);
-      }
-
+      await signInWithApple();
       setSocialSubmitting(false);
       setSocialProcess(null);
       router.replace("map");
-      if (!signInResult?.isNewUser && shouldShowProUpgradePrompt(role)) {
-        setTimeout(() => {
-          showProUpgradePrompt(router, {
-            message: buildRestrictedAccessMessage(profileCreatedAt || auth.currentUser?.metadata?.creationTime),
-          });
-        }, 250);
-      }
     } catch (err) {
       setSocialSubmitting(false);
       setSocialProcess(null);
@@ -190,19 +160,6 @@ export default function RegisterScreen({ onBack }) {
       Alert.alert(
         "Registration failed",
         err.message || "Please try again."
-      );
-    }
-  }
-
-  async function handleGuestMode() {
-    try {
-      await enterGuestMode();
-      router.replace("/map");
-    } catch (err) {
-      console.error("Guest mode error:", err);
-      Alert.alert(
-        "Error",
-        "Could not enter guest mode. Please try again."
       );
     }
   }
@@ -319,15 +276,6 @@ export default function RegisterScreen({ onBack }) {
             </TouchableOpacity>
           )}
 
-          {/* Continue as Guest */}
-          <TouchableOpacity
-            onPress={handleGuestMode}
-            style={{ marginTop: spacing.lg, alignItems: "center" }}
-          >
-            <Text style={[styles.linkText, { color: colors.textMuted }]}>
-              Continue as Guest
-            </Text>
-          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
 

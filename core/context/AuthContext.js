@@ -286,8 +286,9 @@ export default function AuthProvider({ children }) {
     async function init() {
       const wasInGuestMode = await loadGuestMode();
       if (wasInGuestMode) {
-        console.log('[AuthContext] Restoring guest mode from storage');
-        setIsGuest(true);
+        console.log('[AuthContext] Clearing legacy guest mode; sign-in is required');
+        await clearGuestMode();
+        setIsGuest(false);
       }
     }
     init();
@@ -326,6 +327,9 @@ export default function AuthProvider({ children }) {
           await handleDeletedAccountDetected();
           return;
         }
+        if (initialProfileSnap.exists()) {
+          setProfile(initialProfileSnap.data());
+        }
 
         console.log('[AuthContext] firebaseUser detected:', firebaseUser.email);
         console.log('[AuthContext] emailVerified:', firebaseUser.emailVerified);
@@ -336,6 +340,9 @@ export default function AuthProvider({ children }) {
         await saveSession(firebaseUser);
 
         await ensureUserDocument(firebaseUser.uid, firebaseUser);
+        if (!initialProfileSnap.exists()) {
+          setProfile(await getUserProfile(firebaseUser.uid));
+        }
 
         // Set up real-time listener for profile changes (e.g., when subscription expires and role changes)
         profileUnsubscribeRef.current = onSnapshot(

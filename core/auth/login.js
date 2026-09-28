@@ -2,7 +2,6 @@
 import { AuthContext } from "@/core/context/AuthContext";
 import { auth, db } from "@config/firebase";
 import { buildEmailVerificationActionCodeSettings } from "@core/auth/actionCodeSettings";
-import { buildRestrictedAccessMessage, shouldShowProUpgradePrompt, showProUpgradePrompt } from "@core/utils/proUpgradePrompt";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import theme from "@themes";
 import { useRouter } from "expo-router";
@@ -29,12 +28,13 @@ import { isAppleSignInAvailable, signInWithApple } from "./socialAuth";
 export default function LoginScreen() {
   const router = useRouter();
   const { colors, spacing } = theme;
-  const { enterGuestMode, user, emailVerified, refreshAuthUser } = useContext(AuthContext);
+  const { user, emailVerified, refreshAuthUser } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [socialSubmitting, setSocialSubmitting] = useState(false);
   const [socialProcess, setSocialProcess] = useState(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
@@ -101,17 +101,12 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
-      let role = null;
-      let profileCreatedAt = null;
       let isDeleted = false;
       let statusCheckFailed = false;
       try {
         const profileSnap = await getDoc(doc(db, "users", credential.user.uid));
         if (profileSnap.exists()) {
-          const profileData = profileSnap.data();
-          role = profileData?.role || null;
-          profileCreatedAt = profileData?.createdAt || null;
-          isDeleted = Boolean(profileData?.deleted);
+          isDeleted = Boolean(profileSnap.data()?.deleted);
         } else {
           statusCheckFailed = true;
         }
@@ -142,13 +137,6 @@ export default function LoginScreen() {
 
       setSubmitting(false);
       router.replace("map");
-      if (shouldShowProUpgradePrompt(role)) {
-        setTimeout(() => {
-          showProUpgradePrompt(router, {
-            message: buildRestrictedAccessMessage(profileCreatedAt || result?.user?.metadata?.creationTime),
-          });
-        }, 250);
-      }
     } catch (err) {
       const errorCode = err?.code || "";
       const isExpectedLoginError = [
@@ -171,19 +159,6 @@ export default function LoginScreen() {
       Alert.alert(
         "Login failed",
         loginMessage
-      );
-    }
-  }
-
-  async function handleGuestMode() {
-    try {
-      await enterGuestMode();
-      // App will automatically show main tabs when guest mode is active
-    } catch (err) {
-      console.error("Guest mode error:", err);
-      Alert.alert(
-        "Error",
-        "Could not enter guest mode. Please try again."
       );
     }
   }
@@ -263,8 +238,6 @@ export default function LoginScreen() {
     setSocialProcess('apple');
     try {
       await signInWithApple();
-      let role = null;
-      let profileCreatedAt = null;
       let isDeleted = false;
       let statusCheckFailed = false;
       try {
@@ -273,8 +246,7 @@ export default function LoginScreen() {
           const profileSnap = await getDoc(doc(db, "users", uid));
           if (profileSnap.exists()) {
             const profileData = profileSnap.data();
-            role = profileData?.role || null;
-            profileCreatedAt = profileData?.createdAt || null;
+
             isDeleted = Boolean(profileData?.deleted);
           } else {
             statusCheckFailed = true;
@@ -312,13 +284,6 @@ export default function LoginScreen() {
       setSocialSubmitting(false);
       setSocialProcess(null);
       router.replace("map");
-      if (shouldShowProUpgradePrompt(role)) {
-        setTimeout(() => {
-          showProUpgradePrompt(router, {
-            message: buildRestrictedAccessMessage(profileCreatedAt || firebaseUser?.metadata?.creationTime),
-          });
-        }, 250);
-      }
     } catch (err) {
       setSocialSubmitting(false);
       setSocialProcess(null);
@@ -405,91 +370,106 @@ export default function LoginScreen() {
     keyboardShouldPersistTaps="handled"
   >
     <AuthLayout
-      title="Welcome back"
-      subtitle="Log in to Coffee Rider"
+      title={showEmailLogin ? "Sign in with email" : "Welcome back"}
+      subtitle={showEmailLogin ? "Log in to your Coffee Rider account" : "Sign in to Coffee Rider"}
     >
-      <View style={styles.field}>
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholder="you@example.com"
-          placeholderTextColor={colors.textMuted}
-          style={styles.input}
-        />
-        {isOutlookOrHotmailEmail && (
-          <Text style={styles.warningText}>
-            Outlook and Hotmail addresses may not receive verification emails right away.
-          </Text>
-        )}
-      </View>
+      {!showEmailLogin && (
+        <>
+          {Platform.OS === "ios" && appleAvailable && (
+            <TouchableOpacity
+              onPress={handleAppleSignIn}
+              disabled={socialSubmitting}
+              style={[styles.socialButton, styles.appleButton, { opacity: socialSubmitting ? 0.7 : 1 }]}
+            >
+              <MaterialCommunityIcons name="apple" size={20} color="white" style={{ marginRight: spacing.sm }} />
+              <Text style={styles.socialButtonText}>
+                {socialSubmitting ? 'Signing in...' : 'Sign in with Apple'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
-      <View style={styles.field}>
-        <Text style={styles.label}>Password</Text>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          placeholder="••••••••"
-          placeholderTextColor={colors.textMuted}
-          style={styles.input}
-        />
-      </View>
+          <TouchableOpacity
+            onPress={() => setShowEmailLogin(true)}
+            style={{ marginTop: spacing.lg, alignItems: "center" }}
+          >
+            <Text style={[styles.linkText, { color: colors.textMuted }]}>Sign in with email</Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[ 
-          styles.button,
-          submitting && { opacity: 0.7 },
-        ]}
-        disabled={submitting}
-        onPress={handleLogin}
-      >
-        {submitting ? (
-          <ActivityIndicator size="small" color={colors.primaryDark} />
-        ) : (
-          <Text style={styles.buttonText}>Log in</Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        onPress={handleResetPassword}
-        style={{ marginTop: spacing.sm, alignItems: "center" }}
-      >
-        <Text style={[styles.linkText, { color: colors.accentMid }]}>Reset Password</Text>
-      </TouchableOpacity>
-
-      {appleAvailable && (
-        <TouchableOpacity
-          onPress={handleAppleSignIn}
-          disabled={socialSubmitting && socialProcess === 'apple'}
-          style={[styles.socialButton, styles.appleButton, { opacity: socialSubmitting && socialProcess === 'apple' ? 0.7 : 1 }]}
-        >
-          <MaterialCommunityIcons name="apple" size={20} color="white" style={{ marginRight: spacing.sm }} />
-          <Text style={styles.socialButtonText}>
-            {socialSubmitting && socialProcess === 'apple' ? 'Signing in...' : 'Sign in with Apple'}
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setShowRegister(true)}
+            style={{ marginTop: spacing.sm, alignItems: "center" }}
+          >
+            <Text style={[styles.linkText, { color: colors.textMuted }]}>Register with email</Text>
+          </TouchableOpacity>
+        </>
       )}
 
-      <TouchableOpacity
-        onPress={() => setShowRegister(true)}
-        style={{ marginTop: spacing.md, alignItems: "center" }}
-      >
-        <Text style={styles.linkText}>
-          Don't have an account? Register
-        </Text>
-      </TouchableOpacity>
+      {showEmailLogin && (
+        <>
+          <View style={styles.field}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder="you@example.com"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+            />
+            {isOutlookOrHotmailEmail && (
+              <Text style={styles.warningText}>
+                Outlook and Hotmail addresses may not receive verification emails right away.
+              </Text>
+            )}
+          </View>
 
-      <TouchableOpacity
-        onPress={handleGuestMode}
-        style={{ marginTop: spacing.lg, alignItems: "center" }}
-      >
-        <Text style={[styles.linkText, { color: colors.textMuted }]}>
-          Continue as Guest
-        </Text>
-      </TouchableOpacity>
+          <View style={styles.field}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              placeholder="••••••••"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.button, submitting && { opacity: 0.7 }]}
+            disabled={submitting}
+            onPress={handleLogin}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color={colors.primaryDark} />
+            ) : (
+              <Text style={styles.buttonText}>Log in</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleResetPassword}
+            style={{ marginTop: spacing.sm, alignItems: "center" }}
+          >
+            <Text style={[styles.linkText, { color: colors.accentMid }]}>Reset Password</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowRegister(true)}
+            style={{ marginTop: spacing.md, alignItems: "center" }}
+          >
+            <Text style={styles.linkText}>Register with email</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowEmailLogin(false)}
+            style={{ marginTop: spacing.sm, alignItems: "center" }}
+          >
+            <Text style={[styles.linkText, { color: colors.textMuted }]}>Back to sign-in options</Text>
+          </TouchableOpacity>
+        </>
+      )}
     </AuthLayout>
   </ScrollView>
 </KeyboardAvoidingView>

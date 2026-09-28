@@ -22,7 +22,10 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { Alert, Animated, Dimensions, Linking, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { EMAIL_VERIFICATION_ENFORCED } from "@core/config/launchFlags";
+import {
+  EMAIL_VERIFICATION_ENFORCED,
+  MANDATORY_SUBSCRIPTION_REQUIRED,
+} from "@core/config/launchFlags";
 
 
 function FloatingTabBar({ state }) {
@@ -306,7 +309,7 @@ function ThemeAwareLayoutContent() {
 function LayoutContent() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [versionModalDismissed, setVersionModalDismissed] = useState(false);
-  const { user, loading, versionStatus, isGuest, emailVerified } = useContext(AuthContext);
+  const { user, profile, role, loading, versionStatus, emailVerified } = useContext(AuthContext);
 
   // Show version modal when status changes and update is available
   useEffect(() => {
@@ -334,11 +337,21 @@ function LayoutContent() {
     return null;
   }
 
-  // Not authenticated and not in guest mode, OR authenticated but not verified: show login screen
-  const showLoginScreen = (!user && !isGuest) || (EMAIL_VERIFICATION_ENFORCED && user && !emailVerified);
-  
+  // Registration is required; persisted guest sessions return to sign-in.
+  const showLoginScreen = !user || (EMAIL_VERIFICATION_ENFORCED && !emailVerified);
+  const hasPrivilegedOrProAccess = ['pro', 'admin', 'place-owner'].includes(role);
+  const requiresSubscription = Boolean(
+    MANDATORY_SUBSCRIPTION_REQUIRED &&
+    user &&
+    !showLoginScreen &&
+    !hasPrivilegedOrProAccess
+  );
+
   const LoginScreen = require("@/core/auth/login").default;
-  const mainContent = showLoginScreen ? <LoginScreen /> : (
+  const SubscriptionScreen = require("@/core/screens/SubscriptionsScreen").default;
+  const mainContent = showLoginScreen ? <LoginScreen /> : requiresSubscription ? (
+    <SubscriptionScreen requiredToContinue />
+  ) : (
     <Tabs
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <FloatingTabBar {...props} />}

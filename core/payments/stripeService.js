@@ -9,18 +9,20 @@ const appleIapExtra = Constants.expoConfig?.extra?.appleIap || {};
 const cancelStripeSubscriptionCallable = httpsCallable(functions, 'cancelStripeSubscription');
 const activateAppleSubscriptionCallable = httpsCallable(functions, 'activateAppleSubscription');
 
-async function updateUserSubscriptionFields(userId, fields) {
-  await setDoc(doc(db, 'users', userId), fields, { merge: true });
-}
-
 /**
- * Stripe subscription products
- * Replace with actual Stripe product IDs when account is set up
+ * Trial price IDs include 30-day free trial; regular prices do not.
+ * Use trial prices for first-time users during checkout.
  */
 export const STRIPE_PRODUCTS = {
   DAILY: stripeExtra.priceDailyLive || stripeExtra.priceDaily || 'price_test_daily_PLACEHOLDER',
   MONTHLY: stripeExtra.priceMonthlyLive || stripeExtra.priceMonthly || 'price_test_monthly_PLACEHOLDER',
   ANNUAL: stripeExtra.priceAnnualLive || stripeExtra.priceAnnual || 'price_test_annual_PLACEHOLDER',
+};
+
+export const STRIPE_PRODUCTS_TRIAL = {
+  DAILY: stripeExtra.priceDailyTrialLive || stripeExtra.priceDailyTrial || 'price_test_daily_trial_PLACEHOLDER',
+  MONTHLY: stripeExtra.priceMonthlyTrialLive || stripeExtra.priceMonthlyTrial || 'price_test_monthly_trial_PLACEHOLDER',
+  ANNUAL: stripeExtra.priceAnnualTrialLive || stripeExtra.priceAnnualTrial || 'price_test_annual_trial_PLACEHOLDER',
 };
 
 export const SUBSCRIPTION_PLANS = {

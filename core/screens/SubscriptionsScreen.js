@@ -26,7 +26,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export default function SubscriptionsScreen() {
+export default function SubscriptionsScreen({ requiredToContinue = false } = {}) {
   const router = useRouter();
   const { user, refreshProfile } = useContext(AuthContext);
   const { subscription, isSubscribed, isInTrial, getTrialDaysRemaining, loading } = useContext(SubscriptionContext);
@@ -146,7 +146,9 @@ export default function SubscriptionsScreen() {
       Alert.alert(
         'Payment Successful',
         'Your Pro subscription is now active. You have access to all Pro features.',
-        [{ text: 'OK', onPress: () => router.back() }]
+        [{ text: 'OK', onPress: () => {
+          if (!requiredToContinue) router.back();
+        } }]
       );
       setSyncingEntitlement(true);
       await waitForEntitlementSync();
@@ -214,9 +216,13 @@ export default function SubscriptionsScreen() {
           size={48}
           color={theme.colors.accentMid}
         />
-        <Text style={[styles.title, { color: theme.colors.text }]}>Pro Features</Text>
+        <Text style={[styles.title, { color: theme.colors.text }]}>
+          {requiredToContinue ? 'Subscribe to continue' : 'Pro Features'}
+        </Text>
         <Text style={[styles.subtitle, { color: theme.colors.accentMid }]}> 
-          {isIOSSubscriptionsDisabled
+          {requiredToContinue
+            ? 'Choose a plan to continue using Coffee Rider.'
+            : isIOSSubscriptionsDisabled
             ? 'Soft launch access is active while subscriptions are unavailable on iOS'
             : isIOS
             ? 'Unlock Pro with Apple subscriptions'
