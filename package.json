@@ -1,8 +1,8 @@
 {
   "name": "coffee-rider-v2",
   "main": "expo-router/entry",
-  "version": "2.31.84",
-  "buildNumber": "141",
+  "version": "2.31.85",
+  "buildNumber": "142",
   "scripts": {
     "start": "expo start --dev-client",
     "start:go": "expo start",
