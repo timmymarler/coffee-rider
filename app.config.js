@@ -135,7 +135,7 @@ export default {
         NSBluetoothAlwaysUsageDescription: "Coffee Rider uses Bluetooth to connect to your navigation pod and send turn-by-turn directions while you ride.",
         NSBluetoothPeripheralUsageDescription: "Coffee Rider uses Bluetooth to connect to your navigation pod and compatible riding accessories.",
         NSMotionUsageDescription: "Coffee Rider uses motion data to improve location accuracy.",
-        UIBackgroundModes: ["location", "fetch"],
+        UIBackgroundModes: ["location", "fetch", "bluetooth-central", "audio"],
         ITSAppUsesNonExemptEncryption: false
       }
     },
@@ -145,7 +145,9 @@ export default {
       versionCode: 138,
       permissions: [
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
       blockedPermissions: [
         "android.permission.READ_MEDIA_IMAGES",
