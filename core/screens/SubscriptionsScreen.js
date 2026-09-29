@@ -423,6 +423,23 @@ export default function SubscriptionsScreen({ requiredToContinue = false } = {})
                   Choose your plan
                 </Text>
 
+                {/* Free Trial Banner */}
+                <View style={[styles.trialBanner, { backgroundColor: theme.colors.accentMid }]}>
+                  <MaterialCommunityIcons
+                    name="gift-open"
+                    size={24}
+                    color={theme.colors.text}
+                  />
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={[styles.trialBannerTitle, { color: theme.colors.text }]}>
+                      🎉 30-Day Free Trial
+                    </Text>
+                    <Text style={[styles.trialBannerText, { color: theme.colors.textLight }]}>
+                      Try Pro features risk-free. Cancel anytime.
+                    </Text>
+                  </View>
+                </View>
+
                 {/* Annual Plan */}
                 <PricingCard
                   plan={SUBSCRIPTION_PLANS.ANNUAL}
@@ -463,7 +480,7 @@ export default function SubscriptionsScreen({ requiredToContinue = false } = {})
           question="Is there a free trial?"
           answer={isIOS
             ? 'iOS subscriptions are currently unavailable while we rebuild this flow.'
-            : 'Free trial is not currently offered on Android. Subscribe to start Pro access immediately.'}
+            : 'Yes! All new subscribers get a 30-day free trial. You can cancel anytime during the trial with no charges.'}
           theme={theme}
         />
         <FAQItem
@@ -531,12 +548,19 @@ function PricingCard({ plan, isSelected, onPress, processing, isPopular, theme, 
       
       <Text style={[styles.planName, { color: theme.colors.text }]}>{plan.name}</Text>
       
+      {/* Trial Info Badge */}
+      <View style={[styles.trialBadge, { backgroundColor: theme.colors.primary + '20' }]}>
+        <MaterialCommunityIcons name="lightning-bolt" size={14} color={theme.colors.primary} />
+        <Text style={[styles.trialBadgeText, { color: theme.colors.primary }]}>First 30 days free</Text>
+      </View>
+      
       <View style={styles.priceRow}>
         <Text style={[styles.price, { color: theme.colors.primary }]}>{plan.price}</Text>
         <Text style={[styles.period, { color: theme.colors.textLight }]}>
           {plan.period}
         </Text>
       </View>
+      <Text style={[styles.trialNote, { color: theme.colors.textLight, marginBottom: 12 }]}>Then auto-renews at full price</Text>
 
       <Pressable
         style={[
@@ -717,6 +741,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     marginTop: 8,
+  },
+  trialBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginVertical: 16,
+    borderRadius: 12,
+  },
+  trialBannerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  trialBannerText: {
+    fontSize: 14,
+  },
+  trialBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginVertical: 8,
+    gap: 6,
+  },
+  trialBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   linkButton: {
     borderWidth: 1,
     borderRadius: 8,
@@ -728,7 +781,6 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 14,
     fontWeight: '600',
-  },
   },
   faqItem: {
     paddingVertical: 12,
