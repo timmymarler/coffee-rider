@@ -46,7 +46,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile, loading, logout, refreshProfile, isGuest, exitGuestMode } = useContext(AuthContext);
   const { theme: userTheme, setTheme: setUserTheme } = useContext(RoutingPreferencesContext);
-  const { subscription } = useContext(SubscriptionContext);
+  const { subscription, isSubscribed, isInTrial } = useContext(SubscriptionContext);
   const [showRegisterScreen, setShowRegisterScreen] = useState(false);
   const { theme: dynamicTheme } = useThemeControls();
   // Use dynamic theme for all rendering (colors, spacing) while keeping static import for StyleSheet
@@ -812,7 +812,7 @@ export default function ProfileScreen() {
             {contactEmail || user?.email || "(No contact email)"}
           </Text>
           <View style={{ marginTop: theme.spacing.sm }}>
-            <CRInfoBadge label={role.charAt(0).toUpperCase() + role.slice(1)} />
+            <CRInfoBadge label={isSubscribed() ? (isInTrial() ? "Pro (Trial)" : "Pro") : role.charAt(0).toUpperCase() + role.slice(1)} />
             {showSubscriptionButton && (
               <CRButton
                 title={subscriptionButtonTitle}
