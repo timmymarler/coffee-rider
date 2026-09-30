@@ -5111,6 +5111,18 @@ function getStepCompletionThresholds(step = null) {
           return;
         }
 
+        // Also request background location permission for locked screen tracking
+        try {
+          const bgStatus = await Location.requestBackgroundPermissionsAsync();
+          if (bgStatus.status === "granted") {
+            console.log("[MAP] Background location permission granted - voice will work when locked");
+          } else {
+            console.warn("[MAP] Background location permission denied - voice won't work with locked screen");
+          }
+        } catch (bgPermError) {
+          console.warn("[MAP] Failed to request background location:", bgPermError.message);
+        }
+
         // 1️⃣ IMMEDIATE location (fixes first tap issue)
         try {
           const current = await Location.getCurrentPositionAsync({
