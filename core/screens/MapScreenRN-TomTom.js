@@ -3859,6 +3859,14 @@ function getStepCompletionThresholds(step = null) {
     suppressionStartedAt: null,
   });
 
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const subscription = AppState.addEventListener('change', () => {
+      Speech.stop();
+    });
+    return () => subscription.remove();
+  }, []);
+
   // Unified route progress tracking: determine current step based on location projection
   // onto the polyline, then display next junction and track progression
   useEffect(() => {
@@ -4157,6 +4165,7 @@ function getStepCompletionThresholds(step = null) {
     schedule.suppressionStartedAt = null;
 
     const speakInstruction = (overrideText = null) => {
+      if (Platform.OS === 'android' && AppState.currentState !== 'active') return false;
       let spokenInstruction = overrideText;
       const currentStep = routeSteps[currentStepIndex];
 
@@ -4329,7 +4338,8 @@ function getStepCompletionThresholds(step = null) {
         const distToWaypoint = distanceBetweenMeters(userLocation, waypointCoord);
         
         const waypointKey = String(idx);
-        if (distToWaypoint <= waypointSpeechMeters && isTtsEnabled && !waypointAnnouncedRef.current.has(waypointKey)) {
+        if (distToWaypoint <= waypointSpeechMeters && isTtsEnabled && !waypointAnnouncedRef.current.has(waypointKey) &&
+          (Platform.OS !== 'android' || AppState.currentState === 'active')) {
           const waypointLabel = typeof waypoint.title === 'string' && waypoint.title.trim().length > 0
             ? waypoint.title.trim()
             : `Waypoint ${idx + 1}`;
