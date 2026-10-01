@@ -27,7 +27,7 @@ class TomTomNavigationModule(
 
   @ReactMethod
   fun initialize(telemetryEnabled: Boolean, promise: Promise) {
-    if (BuildConfig.TOMTOM_API_KEY.isBlank()) {
+    if (BuildConfig.TOMTOM_NAVIGATION_SDK_KEY.isBlank()) {
       promise.reject("E_TOMTOM_KEY_MISSING", "TomTom Navigation SDK API key is not configured")
       return
     }
@@ -38,7 +38,7 @@ class TomTomNavigationModule(
           val consent = if (telemetryEnabled) UserConsent.TelemetryOn else UserConsent.TelemetryOff
           val configuration = buildSdkConfiguration(
             context = reactApplicationContext.applicationContext,
-            apiKey = BuildConfig.TOMTOM_API_KEY,
+            apiKey = BuildConfig.TOMTOM_NAVIGATION_SDK_KEY,
             telemetryUserConsent = suspend { consent },
           )
           TomTomSdk.initialize(
@@ -55,7 +55,7 @@ class TomTomNavigationModule(
 
   private fun statusMap() = Arguments.createMap().apply {
     putBoolean("available", true)
-    putBoolean("configured", BuildConfig.TOMTOM_API_KEY.isNotBlank())
+    putBoolean("configured", BuildConfig.TOMTOM_NAVIGATION_SDK_KEY.isNotBlank())
     putBoolean("initialized", TomTomSdk.isInitialized)
     putString("platform", "android")
     putString("sdkVersion", SDK_VERSION)
