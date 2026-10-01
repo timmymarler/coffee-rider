@@ -59,6 +59,11 @@ export default function TomTomPocScreen() {
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
+        {status?.initialized ? (
+          <Text style={styles.notice}>
+            SDK already initialized for this app session. Restart the proof app to test a different telemetry choice.
+          </Text>
+        ) : null}
         {isLoading ? <ActivityIndicator color="#E6B93F" /> : null}
 
         <View style={styles.actions}>
@@ -66,7 +71,12 @@ export default function TomTomPocScreen() {
             accessibilityRole="button"
             disabled={isLoading || status?.initialized}
             onPress={() => initialize(false)}
-            style={({ pressed }) => [styles.button, styles.secondaryButton, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.button,
+              styles.secondaryButton,
+              status?.initialized && styles.disabledButton,
+              pressed && !status?.initialized && styles.pressed,
+            ]}
           >
             <Ionicons name="shield-checkmark-outline" size={20} color="#F5F5F0" />
             <Text style={styles.buttonText}>Initialize without telemetry</Text>
@@ -75,7 +85,12 @@ export default function TomTomPocScreen() {
             accessibilityRole="button"
             disabled={isLoading || status?.initialized}
             onPress={() => initialize(true)}
-            style={({ pressed }) => [styles.button, styles.primaryButton, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.button,
+              styles.primaryButton,
+              status?.initialized && styles.disabledButton,
+              pressed && !status?.initialized && styles.pressed,
+            ]}
           >
             <Ionicons name="analytics-outline" size={20} color="#17191A" />
             <Text style={styles.primaryButtonText}>Allow telemetry and initialize</Text>
@@ -145,4 +160,6 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#17191A', fontSize: 15, fontWeight: '700' },
   pressed: { opacity: 0.72 },
   error: { color: '#FF8C82', fontSize: 14, lineHeight: 20 },
+  notice: { color: '#E6B93F', fontSize: 14, lineHeight: 20 },
+  disabledButton: { opacity: 0.45 },
 });
