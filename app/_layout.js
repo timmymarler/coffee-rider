@@ -361,6 +361,7 @@ function LayoutContent() {
       <Tabs.Screen name="groups" />
       <Tabs.Screen name="calendar" />
       <Tabs.Screen name="profile" />
+      <Tabs.Screen name="tomtom-poc" options={{ href: null }} />
     </Tabs>
   );
 

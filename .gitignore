@@ -58,9 +58,27 @@ credentials/
 # Allow tracking native version metadata files used by release builds.
 !android/
 android/*
+!android/build.gradle
 !android/app/
 android/app/*
 !android/app/build.gradle
+!android/app/src/
+android/app/src/*
+!android/app/src/main/
+android/app/src/main/*
+!android/app/src/main/java/
+android/app/src/main/java/*
+!android/app/src/main/java/com/
+android/app/src/main/java/com/*
+!android/app/src/main/java/com/timmy/
+android/app/src/main/java/com/timmy/*
+!android/app/src/main/java/com/timmy/marler/
+android/app/src/main/java/com/timmy/marler/*
+!android/app/src/main/java/com/timmy/marler/coffeerider/
+android/app/src/main/java/com/timmy/marler/coffeerider/*
+!android/app/src/main/java/com/timmy/marler/coffeerider/MainApplication.kt
+!android/app/src/main/java/com/timmy/marler/coffeerider/TomTomNavigationModule.kt
+!android/app/src/main/java/com/timmy/marler/coffeerider/TomTomNavigationPackage.kt
 
 !ios/
 ios/*

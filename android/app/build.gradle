@@ -3,6 +3,7 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def tomtomApiKey = findProperty("tomtomApiKey") ?: System.getenv("EXPO_PUBLIC_TOMTOM_API_KEY_ANDROID") ?: ""
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -90,12 +91,18 @@ android {
     namespace 'com.timmy.marler.coffeerider'
     defaultConfig {
         applicationId 'com.timmy.marler.coffeerider'
-        minSdkVersion rootProject.ext.minSdkVersion
+        minSdkVersion 26
         targetSdkVersion rootProject.ext.targetSdkVersion
 versionCode 145
     versionName "2.31.88"
 
+        ndk {
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
+        missingDimensionStrategy 'tomtom-sdk-version', 'complete'
+
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
+        buildConfigField "String", "TOMTOM_API_KEY", "\"${tomtomApiKey}\""
     }
     signingConfigs {
         debug {
@@ -155,6 +162,13 @@ versionCode 145
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+
+    def tomtomSdkVersion = "2.6.1"
+    implementation("com.tomtom.sdk:init:${tomtomSdkVersion}")
+    implementation("com.tomtom.sdk.common:configuration:${tomtomSdkVersion}")
+    implementation("com.tomtom.sdk.location:provider-default:${tomtomSdkVersion}")
+    implementation("com.tomtom.sdk.routing:route-planner:${tomtomSdkVersion}")
+    implementation("com.tomtom.sdk:tts:${tomtomSdkVersion}")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
