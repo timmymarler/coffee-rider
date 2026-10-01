@@ -5,6 +5,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import android.content.Intent
 import com.tomtom.sdk.common.configuration.buildSdkConfiguration
 import com.tomtom.sdk.init.TomTomSdk
 import com.tomtom.sdk.telemetry.UserConsent
@@ -50,6 +51,23 @@ class TomTomNavigationModule(
       } catch (error: Throwable) {
         promise.reject("E_TOMTOM_INITIALIZATION", error.message, error)
       }
+    }
+  }
+
+  @ReactMethod
+  fun openMapDemo(promise: Promise) {
+    if (!TomTomSdk.isInitialized) {
+      promise.reject("E_TOMTOM_NOT_INITIALIZED", "Initialize the TomTom SDK before opening the map")
+      return
+    }
+
+    try {
+      val intent = Intent(reactApplicationContext, TomTomMapActivity::class.java)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      reactApplicationContext.startActivity(intent)
+      promise.resolve(null)
+    } catch (error: Throwable) {
+      promise.reject("E_TOMTOM_MAP_LAUNCH", error.message, error)
     }
   }
 

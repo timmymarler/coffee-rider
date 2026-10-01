@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } fr
 import {
   getTomTomNavigationStatus,
   initializeTomTomNavigation,
+  openTomTomMapDemo,
 } from '@/core/map/tomtomNavigationSdk';
 
 export default function TomTomPocScreen() {
@@ -40,6 +41,15 @@ export default function TomTomPocScreen() {
     }
   };
 
+  const openMap = async () => {
+    setError(null);
+    try {
+      await openTomTomMapDemo();
+    } catch (mapError) {
+      setError(mapError.message);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -67,6 +77,20 @@ export default function TomTomPocScreen() {
         {isLoading ? <ActivityIndicator color="#E6B93F" /> : null}
 
         <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!status?.initialized}
+            onPress={openMap}
+            style={({ pressed }) => [
+              styles.button,
+              styles.mapButton,
+              !status?.initialized && styles.disabledButton,
+              pressed && status?.initialized && styles.pressed,
+            ]}
+          >
+            <Ionicons name="map-outline" size={20} color="#17191A" />
+            <Text style={styles.primaryButtonText}>Open TomTom map</Text>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             disabled={isLoading || status?.initialized}
@@ -148,6 +172,7 @@ const styles = StyleSheet.create({
     gap: 9,
   },
   primaryButton: { backgroundColor: '#E6B93F' },
+  mapButton: { backgroundColor: '#74C4B1' },
   secondaryButton: { borderWidth: 1, borderColor: '#586164', backgroundColor: '#24292B' },
   iconButton: {
     minHeight: 44,

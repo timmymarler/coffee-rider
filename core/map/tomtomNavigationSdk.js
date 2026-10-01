@@ -24,3 +24,10 @@ export async function initializeTomTomNavigation({ telemetryEnabled }) {
   }
   return nativeModule.initialize(telemetryEnabled);
 }
+
+export async function openTomTomMapDemo() {
+  if (!nativeModule) {
+    throw new Error(`TomTom Navigation SDK is not available on ${Platform.OS}`);
+  }
+  return nativeModule.openMapDemo();
+}

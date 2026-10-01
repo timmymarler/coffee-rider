@@ -41,6 +41,7 @@
         <data android:scheme="exp+coffee-rider-v2"/>
       </intent-filter>
     </activity>
+    <activity android:name=".TomTomMapActivity" android:exported="false" android:label="TomTom Map Proof" />
     <uses-library android:name="org.apache.http.legacy" android:required="false"/>
   </application>
 </manifest>
