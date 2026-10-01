@@ -1,17 +1,29 @@
 package com.timmy.marler.coffeerider
 
 import android.os.Bundle
+import android.graphics.Color
 import android.view.Gravity
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
 import com.tomtom.sdk.init.TomTomSdk
+import com.tomtom.sdk.init.createRoutePlanner
 import com.tomtom.sdk.location.GeoPoint
 import com.tomtom.sdk.map.display.MapOptions
 import com.tomtom.sdk.map.display.camera.InitialCameraOptions
+import com.tomtom.sdk.map.display.route.RouteOptions
 import com.tomtom.sdk.map.display.ui.MapFragment
+import com.tomtom.sdk.routing.RoutePlanningCallback
+import com.tomtom.sdk.routing.RoutePlanner
+import com.tomtom.sdk.routing.RoutePlanningResponse
+import com.tomtom.sdk.routing.RoutingFailure
+import com.tomtom.sdk.routing.buildRoutePlanningOptions
+import com.tomtom.sdk.routing.options.Itinerary
+import com.tomtom.sdk.routing.route.Route
 
 class TomTomMapActivity : FragmentActivity() {
+  private var routePlanner: RoutePlanner? = null
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     if (!TomTomSdk.isInitialized || BuildConfig.TOMTOM_NAVIGATION_SDK_KEY.isBlank()) {
@@ -53,8 +65,54 @@ class TomTomMapActivity : FragmentActivity() {
       .commit()
 
     mapFragment.getMapAsync {
-      runOnUiThread { mapStatus.text = "TomTom map ready" }
+      runOnUiThread { mapStatus.text = "Map ready · planning sample route..." }
+      planSampleRoute(it, mapStatus)
     }
+  }
+
+  private fun planSampleRoute(
+    tomTomMap: com.tomtom.sdk.map.display.TomTomMap,
+    mapStatus: TextView,
+  ) {
+    val origin = GeoPoint(latitude = 51.5007, longitude = -0.1246)
+    val destination = GeoPoint(latitude = 51.4826, longitude = -0.0077)
+    routePlanner = TomTomSdk.createRoutePlanner()
+
+    val options = buildRoutePlanningOptions(
+      itinerary = Itinerary(origin = origin, destination = destination),
+    )
+    routePlanner?.planRoute(options, object : RoutePlanningCallback {
+      override fun onSuccess(result: RoutePlanningResponse) {
+        val route: Route? = result.routes.firstOrNull()
+        if (route == null) {
+          runOnUiThread { mapStatus.text = "Route planning returned no route" }
+          return
+        }
+
+        runOnUiThread {
+          tomTomMap.addRoute(
+            RouteOptions(
+              geometry = route.geometry,
+              color = Color.rgb(37, 125, 186),
+              departureMarkerVisible = true,
+              destinationMarkerVisible = true,
+            ),
+          )
+          tomTomMap.zoomToRoutes(72)
+          mapStatus.text = "TomTom route ready · ${route.geometry.size} points"
+        }
+      }
+
+      override fun onFailure(failure: RoutingFailure) {
+        runOnUiThread { mapStatus.text = "Route failed · ${failure.message}" }
+      }
+    })
+  }
+
+  override fun onDestroy() {
+    routePlanner?.close()
+    routePlanner = null
+    super.onDestroy()
   }
 
   companion object {
