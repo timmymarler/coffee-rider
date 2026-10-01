@@ -18,6 +18,7 @@ import { StripeProvider, useStripe } from "@stripe/stripe-react-native";
 import theme from "@themes";
 import Constants from "expo-constants";
 import { Tabs, usePathname, useRouter } from "expo-router";
+import TomTomPocScreen from "./tomtom-poc";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Alert, Animated, Dimensions, Linking, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView, LongPressGestureHandler } from "react-native-gesture-handler";
@@ -472,6 +473,10 @@ export default function Layout() {
   const handleSplashComplete = () => {
     setShowSplash(false);
   };
+
+  if (__DEV__) {
+    return <TomTomPocScreen />;
+  }
 
   // Don't render anything until we've checked splash status
   if (!splashChecked) {

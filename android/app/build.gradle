@@ -114,6 +114,7 @@ versionCode 145
     }
     buildTypes {
         debug {
+            applicationIdSuffix ".tomtom.poc"
             signingConfig signingConfigs.debug
         }
         release {
