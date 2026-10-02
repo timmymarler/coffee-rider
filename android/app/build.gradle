@@ -168,7 +168,9 @@ dependencies {
     implementation("com.tomtom.sdk:init:${tomtomSdkVersion}")
     implementation("com.tomtom.sdk.common:configuration:${tomtomSdkVersion}")
     implementation("com.tomtom.sdk.location:provider-default:${tomtomSdkVersion}")
+    implementation("com.tomtom.sdk.location:provider-simulation:${tomtomSdkVersion}")
     implementation("com.tomtom.sdk.maps:map-display-standard:${tomtomSdkVersion}")
+    implementation("com.tomtom.sdk.navigation:navigation:${tomtomSdkVersion}")
     implementation("com.tomtom.sdk.routing:route-planner:${tomtomSdkVersion}")
     implementation("com.tomtom.sdk:tts:${tomtomSdkVersion}")
 
