@@ -55,7 +55,7 @@ class TomTomNavigationModule(
   }
 
   @ReactMethod
-  fun openMapDemo(promise: Promise) {
+  fun openMapDemo(coffeeShopsJson: String, promise: Promise) {
     if (!TomTomSdk.isInitialized) {
       promise.reject("E_TOMTOM_NOT_INITIALIZED", "Initialize the TomTom SDK before opening the map")
       return
@@ -63,6 +63,7 @@ class TomTomNavigationModule(
 
     try {
       val intent = Intent(reactApplicationContext, TomTomMapActivity::class.java)
+        .putExtra(TomTomMapActivity.EXTRA_COFFEE_SHOPS, coffeeShopsJson)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
       reactApplicationContext.startActivity(intent)
       promise.resolve(null)

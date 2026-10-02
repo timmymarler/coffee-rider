@@ -1,12 +1,47 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { collection, getDocs } from 'firebase/firestore';
 
+import { db } from '@/config/firebase';
 import {
   getTomTomNavigationStatus,
   initializeTomTomNavigation,
   openTomTomMapDemo,
 } from '@/core/map/tomtomNavigationSdk';
+
+const TOMTOM_DESTINATION = { latitude: 51.4826, longitude: -0.0077 };
+const COFFEE_SHOP_RADIUS_METERS = 15000;
+
+function distanceFromDestinationMeters(latitude, longitude) {
+  const latitudeDelta = (latitude - TOMTOM_DESTINATION.latitude) * 111320;
+  const longitudeScale = 111320 * Math.cos((TOMTOM_DESTINATION.latitude * Math.PI) / 180);
+  const longitudeDelta = (longitude - TOMTOM_DESTINATION.longitude) * longitudeScale;
+  return Math.hypot(latitudeDelta, longitudeDelta);
+}
+
+async function loadNearbyCoffeeShops() {
+  const snapshot = await getDocs(collection(db, 'places'));
+  return snapshot.docs
+    .map((placeDoc) => {
+      const place = placeDoc.data();
+      const latitude = Number(place.location?.latitude ?? place.latitude);
+      const longitude = Number(place.location?.longitude ?? place.longitude);
+      const name = String(place.name || place.title || '').trim();
+      const category = String(place.category || '').toLowerCase();
+      const isCoffeeShop = ['cafe', 'coffee_shop'].includes(category) || /cafe|café|coffee/i.test(name);
+      const distance = distanceFromDestinationMeters(latitude, longitude);
+      if (!name || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !isCoffeeShop || distance > COFFEE_SHOP_RADIUS_METERS) {
+        return null;
+      }
+      const createdAt = place.createdAt?.toMillis?.() || Date.parse(place.createdAt || '') || 0;
+      return { id: placeDoc.id, name, latitude, longitude, distance, createdAt };
+    })
+    .filter(Boolean)
+    .sort((first, second) => second.createdAt - first.createdAt || first.distance - second.distance)
+    .slice(0, 2)
+    .map(({ id, name, latitude, longitude }) => ({ id, name, latitude, longitude }));
+}
 
 export default function TomTomPocScreen() {
   const [status, setStatus] = useState(null);
@@ -42,11 +77,15 @@ export default function TomTomPocScreen() {
   };
 
   const openMap = async () => {
+    setIsLoading(true);
     setError(null);
     try {
-      await openTomTomMapDemo();
+      const coffeeShops = await loadNearbyCoffeeShops();
+      await openTomTomMapDemo(coffeeShops);
     } catch (mapError) {
       setError(mapError.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
