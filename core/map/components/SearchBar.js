@@ -58,7 +58,7 @@ export function SearchBar({
             }}
             placeholder="Search places…"
             placeholderTextColor={'#635021'}
-            style={[styles.searchInput, { color: theme.colors.accentMid }]}
+            style={[styles.searchInput, { color: theme.colors.tabBarInactive }]}
             returnKeyType="search"
             clearButtonMode="while-editing"
           />
@@ -91,7 +91,7 @@ export function SearchBar({
           <Ionicons
             name="options"
             size={28}
-            color={filtersActive ? theme.colors.accentMid : '#635021'}
+            color={filtersActive ? theme.colors.accentMid : theme.colors.tabBarInactive}
           />
         </TouchableOpacity>
 
@@ -105,7 +105,7 @@ export function SearchBar({
             <MaterialCommunityIcons
               name="shuffle-variant"
               size={28}
-              color={routeTypeActive ? theme.colors.accentMid : '#635021'}
+              color={routeTypeActive ? theme.colors.accentMid : theme.colors.tabBarInactive}
             />
           </TouchableOpacity>
         )}

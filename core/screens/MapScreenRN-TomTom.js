@@ -5,6 +5,9 @@ import { useTheme } from "@context/ThemeContext";
 import { sendBleDirectionsFrame } from "@core/ble/directionsTransmitter";
 import { canUseGooglePlacesAccess } from "@core/google/googlePlacesAccess";
 import MapView, { Marker, Polyline } from "@core/map/nativeMaps";
+import TomTomEmbeddedMap from "@core/map/tomtomEmbeddedMap";
+import { getSdkRoundaboutPanel } from "@core/map/sdkRoundaboutPanel";
+import { getNativeTomTomRoute, initializeTomTomNavigation, isTomTomTesterBuild, simulateTomTomDetour, startTomTomNavigation, stopTomTomNavigation, subscribeTomTomNavigation } from "@core/map/tomtomNavigationSdk";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -126,7 +129,7 @@ function getRoundaboutExitAngleDegrees(maneuver = "", exitNumber, turnAngle = nu
 
   const isLeftHalf = (angle) => angle >= 90 && angle <= 270;
 
-  if (Number.isFinite(parsedTurnAngle)) {
+  if (turnAngle != null && Number.isFinite(parsedTurnAngle)) {
     const normalizedTurn = ((parsedTurnAngle % 360) + 360) % 360;
     const signedCandidate = ((270 + parsedTurnAngle) % 360 + 360) % 360;
     const absoluteCandidate = normalizedTurn;
@@ -302,6 +305,8 @@ import { SearchBar } from "../map/components/SearchBar";
 
 import { saveRide } from "@/core/map/routes/saveRide";
 import { saveRoute } from "@/core/map/routes/saveRoute";
+import { shareRoute, startRide as activateSharedRoute } from "@core/map/routes/sharedRides";
+import { sendRideInvites } from "@core/map/routes/rideInvites";
 import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
 import {
@@ -312,6 +317,8 @@ import {
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
 import { useNetworkStatus } from "@core/hooks/useNetworkStatus";
 import useActiveRide from "@core/map/routes/useActiveRide";
+import { useAllUserGroups, useGroupMembers } from "@core/groups/hooks";
+import { searchUsersByNameOrEmail } from "@firebaseLocal/users";
 import useActiveRideLocations from "@core/map/routes/useActiveRideLocations";
 import { fetchRoute, getRouteStyle, shouldRenderOutline } from "@core/map/routingEngine";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
@@ -326,7 +333,6 @@ import theme from "@themes";
 import { useRouter } from "expo-router";
 import { RIDER_AMENITIES } from "../config/amenities/rider";
 import { RIDER_CATEGORIES } from "../config/categories/rider";
-import { RIDER_SUITABILITY } from "../config/suitability/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
@@ -676,13 +682,12 @@ const FREE_DAILY_ROUTE_PLAN_COUNTER_PREFIX = "@coffee_rider_daily_route_plans";
   };
 
 /* Rider focussed for now - add theme specific later */
-const FILTER_SUITABILITIES = [
-  ...RIDER_SUITABILITY,
-  {
-    key: "bikeBrew",
-    label: "Bike & Brew",
-    icon: "handshake",
-  },
+const FILTER_MEETUPS = [
+  { key: "bikers", label: "Bikes", icon: "motorbike", filter: "suitability" },
+  { key: "scooters", label: "Scooters", icon: "moped", filter: "suitability" },
+  { key: "cars", label: "Cars", icon: "car", filter: "suitability" },
+  { key: "cyclists", label: "Cyclists", icon: "bike", filter: "suitability" },
+  { key: "bikeBrew", label: "Bike & Brew", icon: "handshake", filter: "bikeBrew" },
 ];
 const FILTER_CATEGORIES = RIDER_CATEGORIES;
 const FILTER_AMENITIES = RIDER_AMENITIES;
@@ -845,6 +850,18 @@ function formatDistanceForSpeech(meters, units) {
     return `in ${miles.toFixed(1)} miles`;
   }
   return `in ${Math.round(miles)} miles`;
+}
+
+function formatSdkAnnouncementForUnits(message, units) {
+  if (units === "metric" || typeof message !== "string") return message;
+  return message.replace(/\b(in|after)\s+(\d+(?:[.,]\d+)?)\s*(kilometers?|kilometres?|km|meters?|metres?|m)\b/gi,
+    (match, prefix, value, unit, offset) => {
+      const distance = Number(value.replace(",", ".")) * (/^(k|kil)/i.test(unit) ? 1000 : 1);
+      const imperial = formatDistanceForSpeech(distance, "imperial");
+      if (imperial === "now") return offset === 0 ? "Now" : "now";
+      return `${prefix} ${imperial.replace(/^in\s+/i, "")}`;
+    },
+  );
 }
 
 function buildSpokenInstruction(baseInstruction, distanceMeters, units) {
@@ -1429,12 +1446,32 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     appliedFilters.categories.size > 0 ||
     appliedFilters.amenities.size > 0 ||
     appliedFilters.openNow ||
+    appliedFilters.bikeBrew ||
     appliedFilters.sponsor ||
     appliedFilters.visited === 'show' ||
     appliedFilters.visited === 'hide';
   const [userLocation, setUserLocation] = useState(null);
   const [locationWaitExceeded, setLocationWaitExceeded] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [isTesterBuild, setIsTesterBuild] = useState(false);
+  const [useTomTomMap, setUseTomTomMap] = useState(false);
+  const [tomTomCameraTarget, setTomTomCameraTarget] = useState(null);
+  const [tomTomFollowZoom, setTomTomFollowZoom] = useState(FOLLOW_ZOOM);
+
+  useEffect(() => {
+    let cancelled = false;
+    isTomTomTesterBuild().then(async testerBuild => {
+      if (!testerBuild || cancelled) return;
+      setIsTesterBuild(true);
+      try {
+        await initializeTomTomNavigation({ telemetryEnabled: false });
+        if (!cancelled) setUseTomTomMap(true);
+      } catch (error) {
+        if (!cancelled) Alert.alert("TomTom map unavailable", error.message);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const [mapRegion, setMapRegion] = useState(userLocation);
 
@@ -1467,6 +1504,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   const hasRoute = routeCoords.length > 0;
   const [routeMeta, setRouteMeta] = useState(null);
+  const [routeAlternatives, setRouteAlternatives] = useState([]);
+  const [isSelectingAlternative, setIsSelectingAlternative] = useState(false);
   const [followUser, setFollowUser] = useState(false);
   const [persistentTravelledPath, setPersistentTravelledPath] = useState([]); // Separate accumulated travelled path for Follow Me
   const { setMapActions, setActiveRide } = useContext(TabBarContext);
@@ -1654,12 +1693,14 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const { 
     routeType: userRouteType, 
     avoidMotorways,
+    avoidOptions,
     travelMode: userTravelMode, 
     routeTypeMap,
     theme: currentTheme,
     getDefaultsForBrand,
     customHilliness,
     customWindingness,
+    restorePreferences: restoreRoutingPreferences,
   } = useContext(RoutingPreferencesContext);
 
   // Keep route-type button highlighted whenever a route is visible.
@@ -1830,10 +1871,21 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   const [routeDistanceMeters, setRouteDistanceMeters] = useState(null);
   const [routeSteps, setRouteSteps] = useState([]);
+  const sdkRouteStepsRef = useRef(routeSteps);
+  sdkRouteStepsRef.current = routeSteps;
   const routeStepsLoggedRef = useRef(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [nextJunctionDistance, setNextJunctionDistance] = useState(null);
+  const [nativeRouteId, setNativeRouteId] = useState(null);
+  const [sdkProgress, setSdkProgress] = useState(null);
+  const [sdkInstruction, setSdkInstruction] = useState(null);
+  const [simulateSdkNavigation, setSimulateSdkNavigation] = useState(false);
   const [isTtsEnabled, setIsTtsEnabled] = useState(true);
+  const sdkVoiceEnabledRef = useRef(isTtsEnabled);
+  sdkVoiceEnabledRef.current = isTtsEnabled;
+  const sdkDistanceUnitsRef = useRef("imperial");
+  const sdkWaypointStateRef = useRef(null);
+  sdkWaypointStateRef.current = { waypoints, visitedWaypointIndices, markWaypointVisited };
   const [showDirectionsFullscreen, setShowDirectionsFullscreen] = useState(false);
   const [showMiniMapFullscreen, setShowMiniMapFullscreen] = useState(false);
   const [hasArrivedAtDestination, setHasArrivedAtDestination] = useState(false);
@@ -1844,11 +1896,162 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const waypointAnnouncedRef = useRef(new Set());
   
   // Active ride & location sharing
-  const { activeRide, endRide } = useActiveRide(user);
+  const { activeRide, endRide, startRide: startActiveRide, isStarting: isStartingActiveRide } = useActiveRide(user);
+  const { groups: rideInviteGroups, loading: rideInviteGroupsLoading } = useAllUserGroups(user?.uid);
   const { riderLocations } = useActiveRideLocations(activeRide, user?.uid);
   
   // Navigation mode is active when Follow Me is enabled OR user is on an active ride
-  const isNavigationMode = followUser || !!activeRide;
+  const isNavigationMode = followUser;
+  const sdkNavigationEnabled = useTomTomMap && isNavigationMode &&
+    userTravelMode !== "bike" && userTravelMode !== "pedestrian" &&
+    Boolean(nativeRouteId) &&
+    Boolean(routeDestination || waypoints.length);
+  const sdkPreparationKey = nativeRouteId ? "ready" : JSON.stringify({
+    locationReady: Boolean(userLocation),
+    destination: routeDestination,
+    waypoints,
+    points: routeCoords.length,
+  });
+
+  useEffect(() => {
+    if (!sdkNavigationEnabled || hasArrivedAtDestination) return;
+    if (!nativeRouteId) {
+      if (!userLocation || isLoadingSavedRouteRef.current || activeRideRebuildInFlightRef.current) return;
+      const requestId = ++routeRequestId.current;
+      mapRoute({
+        origin: userLocation,
+        waypoints,
+        destination: routeDestination,
+        travelMode: userTravelMode,
+        routeType: userRouteType,
+        avoidMotorways,
+        requestId,
+        skipFitToView: true,
+      }).catch(error => console.warn("[TomTomNavigation] Route preparation failed:", error.message));
+      return;
+    }
+    let disposed = false;
+    let lastProgressLogAt = 0;
+    let receivedSdkInstruction = false;
+    let receivedSdkDistance = false;
+    setSdkProgress(null);
+    setSdkInstruction(null);
+    Speech.stop();
+    const subscription = subscribeTomTomNavigation((event) => {
+      if (disposed || event.routeId !== nativeRouteId) return;
+      if (event.type === "waypointArrived") {
+        const state = sdkWaypointStateRef.current;
+        let nearestIndex = -1;
+        let nearestDistance = 100;
+        state.waypoints.forEach((waypoint, index) => {
+          if (state.visitedWaypointIndices.includes(index)) return;
+          const coordinate = normalizeCoord(waypoint);
+          if (!coordinate) return;
+          const distance = distanceBetweenMeters(event, coordinate);
+          if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearestIndex = index;
+          }
+        });
+        if (nearestIndex >= 0) state.markWaypointVisited(nearestIndex);
+      }
+      if (event.type === "deviation") {
+        console.log("[TomTomNavigation] SDK deviation", { hasDeviated: event.hasDeviated });
+        if (event.hasDeviated) {
+          setSdkInstruction(null);
+          setNextJunctionDistance(null);
+          Speech.stop();
+          showPlatformToast("Off route. TomTom is recalculating.", "SHORT");
+        }
+      }
+      if (event.type === "routeChanged") {
+        const route = event.route;
+        const coordinates = simplifyPolyline(route?.polyline || [], 0.00001).filter(
+          point => point && Number.isFinite(point.latitude) && Number.isFinite(point.longitude),
+        );
+        if (coordinates.length < 2) {
+          console.warn("[TomTomNavigation] Ignoring incomplete SDK route update");
+          return;
+        }
+        const distance = route.distanceMeters ?? route.distance;
+        setRouteCoordsWithFlush(coordinates, { distance, steps: route.steps ?? [] });
+        setRouteMeta({
+          distanceMeters: distance,
+          durationSeconds: route.durationSeconds ?? route.duration,
+          speedLimits: route.speedLimits ?? [],
+        });
+        setLastEncodedPolyline(route.polyline);
+        setRouteAlternatives([]);
+        setSdkInstruction(null);
+        setSdkProgress(null);
+        setNextJunctionDistance(null);
+        setCurrentStepIndex(0);
+        stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0, closestStepEndDistance: Infinity };
+        console.log("[TomTomNavigation] SDK active route replaced", { points: coordinates.length, distance });
+      }
+      if (event.type === "progress") {
+        setSdkProgress(event);
+        if (Date.now() - lastProgressLogAt > 10000) {
+          lastProgressLogAt = Date.now();
+          console.log("[TomTomNavigation] SDK progress", { traveled: event.distanceAlongRoute, remaining: event.remainingDistance, seconds: event.remainingTime });
+        }
+      }
+      if (event.type === "instruction") {
+        receivedSdkInstruction = true;
+        setSdkInstruction(event);
+        const routeOffset = Number(event.routeOffsetMeters);
+        if (Number.isFinite(routeOffset) && sdkRouteStepsRef.current.length) {
+          let nearestIndex = 0;
+          let nearestOffsetDifference = Infinity;
+          sdkRouteStepsRef.current.forEach((step, index) => {
+            const stepOffset = Number(step.routeOffsetMeters);
+            if (!Number.isFinite(stepOffset)) return;
+            const difference = Math.abs(stepOffset - routeOffset);
+            if (difference < nearestOffsetDifference) {
+              nearestOffsetDifference = difference;
+              nearestIndex = index;
+            }
+          });
+          // The panel renders each step's nextManeuver, so select the preceding
+          // route step to show the instruction at the SDK's current route offset.
+          setCurrentStepIndex(Math.max(0, nearestIndex - 1));
+        }
+      }
+      if (event.type === "guidance") {
+        receivedSdkDistance = true;
+        setNextJunctionDistance(event.distanceToNextInstruction);
+      }
+      if (event.type === "announcement" && sdkVoiceEnabledRef.current) {
+        console.log("[TomTomNavigation] SDK announcement received");
+        Speech.stop();
+        Speech.speak(formatSdkAnnouncementForUnits(event.message, sdkDistanceUnitsRef.current), { language: "en-GB", pitch: 1, rate: 0.95 });
+      }
+      if (event.type === "arrived") {
+        setHasArrivedAtDestination(true);
+        setSdkProgress({ remainingDistance: 0, remainingTime: 0 });
+      }
+      if (event.type === "started") {
+        if (!receivedSdkInstruction) setCurrentStepIndex(0);
+        const firstDistance = Number(sdkRouteStepsRef.current[0]?.distance);
+        if (!receivedSdkDistance && Number.isFinite(firstDistance)) setNextJunctionDistance(firstDistance);
+        console.log("[TomTomNavigation] SDK session started", { simulated: event.simulated });
+      }
+    });
+    startTomTomNavigation(nativeRouteId, { simulate: simulateSdkNavigation }).catch((error) => {
+      if (disposed) return;
+      console.warn("[TomTomNavigation] Start failed:", error.message);
+      setFollowUser(false);
+      setPostbox({ type: "error", title: "Navigation error", message: error.message });
+    });
+    return () => {
+      disposed = true;
+      subscription.remove();
+      Speech.stop();
+      stopTomTomNavigation()
+        .then(() => console.log("[TomTomNavigation] SDK session stopped"))
+        .catch((error) => console.warn("[TomTomNavigation] Stop failed:", error.message));
+    };
+  }, [sdkNavigationEnabled, nativeRouteId, sdkPreparationKey, simulateSdkNavigation, hasArrivedAtDestination]);
 
   const openDirectionsFullscreen = useCallback(() => {
     setShowDirectionsFullscreen(true);
@@ -1935,29 +2138,6 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [routeCoords.length, routeDestination, waypoints.length, followUser, userLocation]);
 
-  const handleAvoidMotorwaysChange = useCallback(() => {
-    if (lastAvoidMotorwaysRef.current === null) {
-      lastAvoidMotorwaysRef.current = avoidMotorways;
-      return;
-    }
-    if (lastAvoidMotorwaysRef.current === avoidMotorways) {
-      return;
-    }
-    lastAvoidMotorwaysRef.current = avoidMotorways;
-
-    if (routeCoords.length > 0 && (routeDestination || waypoints.length > 0) && !followUser && userLocation) {
-      console.log('[AVOID_MOTORWAYS_CHANGE] User toggled avoid motorways, rebuilding route...');
-      const requestId = ++routeRequestId.current;
-      buildRoute({ requestId }).catch(error => {
-        console.warn('[AVOID_MOTORWAYS_CHANGE] buildRoute error:', error);
-      });
-    }
-  }, [avoidMotorways, routeCoords.length, routeDestination, waypoints.length, followUser, userLocation]);
-
-  useEffect(() => {
-    handleAvoidMotorwaysChange();
-  }, [avoidMotorways, handleAvoidMotorwaysChange]);
-
   // IMPORTANT: activeRide syncing and rebuild
   // Use regular useEffect (not useFocusEffect) so it responds to activeRide changes immediately
   // Only rebuild if ride is NEWLY started (previousActiveRideRef.current was null)
@@ -1991,7 +2171,10 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     const rideJustStarted = previousActiveRideRef.current === null && activeRide;
 
     if (rideJustStarted) {
-      pendingActiveRideRebuildRef.current = true;
+      pendingActiveRideRebuildRef.current = !preserveLoadedRouteForNextRide;
+      if (preserveLoadedRouteForNextRide) {
+        setPreserveLoadedRouteForNextRide(false);
+      }
     }
 
     const shouldRebuildActiveRideRoute =
@@ -2038,6 +2221,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
       skipRegionChangeUntilRef.current = Date.now() + 2500;
       isAnimatingRef.current = false;
       preferredFollowZoomRef.current = FOLLOW_ZOOM;
+      setTomTomFollowZoom(FOLLOW_ZOOM);
 
       activateFollowMe({ reason: 'ride-start' }).catch((error) => {
         console.warn('[ACTIVE_RIDE] activate follow error:', error);
@@ -2056,7 +2240,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     
     // Update ref for next comparison
     previousActiveRideRef.current = activeRide;
-  }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType]);
+  }, [activeRide, endRide, setActiveRide, routeDestination, userLocation, followUser, waypoints, userTravelMode, userRouteType, preserveLoadedRouteForNextRide, setPreserveLoadedRouteForNextRide]);
 
   // One-time camera lock for joined rides: ensure initial Follow Me zoom/pitch is applied
   // after route geometry is loaded (prevents needing to tap Follow Me again).
@@ -2076,6 +2260,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     skipNextRegionChangeRef.current = true;
     skipRegionChangeUntilRef.current = Date.now() + 2500;
     preferredFollowZoomRef.current = FOLLOW_ZOOM;
+    setTomTomFollowZoom(FOLLOW_ZOOM);
 
     recenterOnUser({
       zoom: FOLLOW_ZOOM,
@@ -2095,6 +2280,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         if (!routeCoords || routeCoords.length < 2) return;
 
         preferredFollowZoomRef.current = FOLLOW_ZOOM;
+        setTomTomFollowZoom(FOLLOW_ZOOM);
         recenterOnUser({
           zoom: FOLLOW_ZOOM,
           pitch: 35,
@@ -2139,6 +2325,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
 
   const [showSaveRouteModal, setShowSaveRouteModal] = useState(false);
   const [saveRouteName, setSaveRouteName] = useState("");
+  const [showRideInviteModal, setShowRideInviteModal] = useState(false);
+  const [rideInviteSearch, setRideInviteSearch] = useState("");
+  const [rideInviteGroupId, setRideInviteGroupId] = useState(null);
+  const [rideInviteRecipientMode, setRideInviteRecipientMode] = useState("group");
+  const [rideInviteRecipientId, setRideInviteRecipientId] = useState(null);
+  const [rideInviteStartTime, setRideInviteStartTime] = useState("");
+  const [rideInviteRouteName, setRideInviteRouteName] = useState("");
+  const [sendingRideInvite, setSendingRideInvite] = useState(false);
+  const { members: rideInviteMembers, loading: rideInviteMembersLoading } = useGroupMembers(rideInviteGroupId);
   const [currentLoadedRouteId, setCurrentLoadedRouteId] = useState(null);
 
   const [showSaveRideModal, setShowSaveRideModal] = useState(false);
@@ -2152,6 +2347,8 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setPendingSavedRouteId,
     enableFollowMeAfterLoad,
     setEnableFollowMeAfterLoad,
+    preserveLoadedRouteForNextRide,
+    setPreserveLoadedRouteForNextRide,
   } = useContext(WaypointsContext);
   const mapReadyRef = useRef(false);
   const pendingFitRef = useRef(null);
@@ -2170,7 +2367,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const lastRouteBuildLocationRef = useRef(null); // Track location used for last route build to avoid excessive rebuilds
   const lastRouteTypeRef = useRef(null); // Track the route type used for last route build to rebuild when it changes
   const lastRouteTelemetryRef = useRef({ signature: null, trackedAt: 0 });
-  const lastAvoidMotorwaysRef = useRef(null);
+  const lastRoutePreferencesRef = useRef(null);
   const lastWaypoints = useRef([]); // Track waypoints from last route build to rebuild when they change
   const lastManualStartPointRef = useRef(null); // Track manual start point to detect Follow Me transitions
   const lastExplicitBuildRef = useRef({ waypointsId: null, destinationId: null }); // Track last explicit build to prevent duplicate rebuilds
@@ -2179,6 +2376,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const MIN_ROUTE_REBUILD_DISTANCE_METERS = 10; // Only rebuild routes if user moves more than 10 meters
   const effectiveUnitsPreference = auth?.profile?.unitsPreference || localUnitsPreference || "imperial";
   const distanceUnits = effectiveUnitsPreference === "metric" ? "metric" : "imperial";
+  sdkDistanceUnitsRef.current = distanceUnits;
   const speedBias = distanceUnits === "metric" ? 3 : 2;
   const minDisplaySpeed = distanceUnits === "metric" ? 8 : 5;
   const speedUnitLabel = distanceUnits === "metric" ? "km/h" : "mph";
@@ -3047,7 +3245,15 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         source: wp.source ?? "manual",
       })),
       routeMeta,
-      polyline: lastEncodedPolyline, // see note below
+      polyline: lastEncodedPolyline || routeCoords,
+      routingPreferences: {
+        theme: currentTheme,
+        travelMode: userTravelMode,
+        routeType: userRouteType,
+        customHilliness,
+        customWindingness,
+        avoidOptions,
+      },
       // Debug: Save TomTom steps, guidance, and rawRoute for analysis
       tomtomSteps: routeSteps,
       tomtomGuidance: (routeSteps && routeSteps.length > 0 && routeSteps[0].instruction) ? undefined : undefined, // Placeholder, see below
@@ -3065,6 +3271,128 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     setShowSaveRouteModal(false);
     setSaveRouteName("");
 
+  }
+
+  function openRideInviteModal() {
+    if (!user?.uid || routeCoords.length < 2 || !routeMeta || !capabilities.canSaveRoutes || !capabilities.canShareRoutes) {
+      Alert.alert("Unable to invite", "Save and share ride invitations require a planned route and route-sharing access.");
+      return;
+    }
+    if (activeRide || followUser) {
+      Alert.alert("Navigation already active", "End your current ride before sending a new ride invitation.");
+      return;
+    }
+    const proposedStart = new Date(Date.now() + 30 * 60 * 1000);
+    setRideInviteSearch("");
+    setRideInviteGroupId(null);
+    setRideInviteRecipientMode("group");
+    setRideInviteRecipientId(null);
+    const username = (auth?.profile?.displayName || user.displayName || user.email?.split("@")[0] || "Rider")
+      .trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9_-]/g, "") || "Rider";
+    const now = new Date();
+    const pad = value => String(value).padStart(2, "0");
+    setRideInviteRouteName(`${username}_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`);
+    setRideInviteStartTime(proposedStart.toLocaleString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }));
+    setShowRideInviteModal(true);
+  }
+
+  async function handleSendRideInvitation() {
+    if (sendingRideInvite || !rideInviteGroupId || !user?.uid || routeCoords.length < 2 || !routeMeta) return;
+    const eligibleMembers = rideInviteMembers.filter(member => member.uid !== user.uid && member.status !== "left" && member.status !== "kicked");
+    const recipientIds = rideInviteRecipientMode === "group"
+      ? eligibleMembers.map(member => member.uid)
+      : eligibleMembers.filter(member => member.uid === rideInviteRecipientId).map(member => member.uid);
+    if (recipientIds.length === 0) {
+      Alert.alert("Choose recipients", "Select a group with other active members, or choose a group member.");
+      return;
+    }
+    const routeName = rideInviteRouteName.trim();
+    if (!routeName) {
+      Alert.alert("Route name required", "Enter a name for this shared route.");
+      return;
+    }
+    setSendingRideInvite(true);
+    let createdRouteId = null;
+    try {
+      const destination = getFinalDestination();
+      const savedRoute = await saveRoute({
+        user,
+        capabilities,
+        visibility: "private",
+        name: routeName,
+        origin: {
+          lat: routeCoords[0].latitude ?? routeCoords[0].lat,
+          lng: routeCoords[0].longitude ?? routeCoords[0].lng,
+        },
+        destination: destination ? {
+          lat: destination.latitude ?? destination.lat,
+          lng: destination.longitude ?? destination.lng,
+          title: destination.title ?? null,
+          placeId: destination.id ?? null,
+        } : null,
+        waypoints: waypoints.map(point => ({
+          lat: point.latitude ?? point.lat,
+          lng: point.longitude ?? point.lng,
+          title: point.title ?? null,
+          source: point.source ?? "manual",
+        })),
+        routeMeta,
+        polyline: lastEncodedPolyline || routeCoords,
+        routingPreferences: {
+          theme: currentTheme,
+          travelMode: userTravelMode,
+          routeType: userRouteType,
+          customHilliness,
+          customWindingness,
+          avoidOptions,
+        },
+        tomtomSteps: routeSteps,
+      });
+      createdRouteId = savedRoute.id;
+
+      const selectedGroup = rideInviteGroups.find(group => group.id === rideInviteGroupId);
+      if (!selectedGroup) throw new Error("Selected group is no longer available");
+      await shareRoute({ routeId: createdRouteId, visibility: "group", groupId: rideInviteGroupId, capabilities });
+      await activateSharedRoute({ routeId: createdRouteId, userId: user.uid });
+      await sendRideInvites({
+        routeId: createdRouteId,
+        groupId: rideInviteGroupId,
+        senderId: user.uid,
+        senderName: auth?.profile?.displayName || user.displayName || "A rider",
+        routeName,
+        distanceMeters: routeMeta.distanceMeters,
+        durationSeconds: routeMeta.durationSeconds,
+        startTime: rideInviteStartTime.trim() || null,
+        routePreview: routeCoords,
+        recipients: recipientIds,
+      });
+
+      setPreserveLoadedRouteForNextRide(true);
+      const rideStarted = await startActiveRide(createdRouteId, rideInviteGroupId, routeName);
+      if (!rideStarted) {
+        setPreserveLoadedRouteForNextRide(false);
+        throw new Error("Invitations were sent, but location sharing could not start. Start the ride again from Groups.");
+      }
+      setCurrentLoadedRouteId(createdRouteId);
+      setShowRideInviteModal(false);
+      setPostbox({ type: "success", message: `Join Ride invitation sent for ${routeName}. Starting your shared ride.` });
+      await activateFollowMe({ reason: "ride-invitation-sent" });
+    } catch (error) {
+      console.error("[RideInvite] Unable to create shared ride invitation:", error?.message || error);
+      if (createdRouteId) {
+        setPostbox({ type: "warning", message: `The route was saved (${createdRouteId}), but the invitation could not be completed: ${error?.message || "Please try again."}` });
+      } else {
+        Alert.alert("Couldn't send ride invitation", error?.message || "Please try again.");
+      }
+    } finally {
+      setSendingRideInvite(false);
+    }
   }
 
 function getStepIndexForProgress(steps = [], progressMeters = 0) {
@@ -3104,7 +3432,8 @@ function getStepCompletionThresholds(step = null) {
   function getFinalDestination() {
     if (routeDestination) return routeDestination;
     if (waypoints.length > 0) return waypoints[waypoints.length - 1];
-    return null;
+    const endpoint = routeCoords[routeCoords.length - 1];
+    return endpoint ? { ...endpoint, title: "Route destination" } : null;
   }
 
   async function handleSaveRide(rideName) {
@@ -3454,6 +3783,20 @@ function getStepCompletionThresholds(step = null) {
   }
 
   async function recenterOnUser({ zoom = null, heading = null, pitch = null, followMode = false, preserveZoom = false } = {}) {
+    if (useTomTomMap) {
+      if (followMode) return;
+      const coords = await ensureUserLocation();
+      if (!coords) return;
+      setTomTomCameraTarget(previous => ({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        zoom: zoom ?? RECENTER_ZOOM,
+        heading: heading ?? 0,
+        pitch: pitch ?? 0,
+        requestId: (previous?.requestId || 0) + 1,
+      }));
+      return;
+    }
     if (!mapRef.current) return;
 
     const coords = await ensureUserLocation();
@@ -3607,6 +3950,11 @@ function getStepCompletionThresholds(step = null) {
       skipNextRegionChangeRef.current = true;
       skipRegionChangeUntilRef.current = Date.now() + 2000;
       preferredFollowZoomRef.current = nextZoom;
+      setTomTomFollowZoom(nextZoom);
+      if (useTomTomMap) {
+        resetFollowMeInactivityTimeout();
+        return;
+      }
       await recenterOnUser({ zoom: nextZoom, pitch: 35, followMode: true });
       resetFollowMeInactivityTimeout();
     } catch (error) {
@@ -3653,6 +4001,7 @@ function getStepCompletionThresholds(step = null) {
       skipNextRegionChangeRef.current = true;
       skipRegionChangeUntilRef.current = Date.now() + 2000;
       preferredFollowZoomRef.current = FOLLOW_ZOOM;
+      setTomTomFollowZoom(FOLLOW_ZOOM);
       await recenterOnUser({ zoom: FOLLOW_ZOOM, pitch: 35, followMode: true });
     } catch (error) {
       console.warn(`[FollowMe] Recenter failed during activation (${reason}):`, error?.message || error);
@@ -3665,9 +4014,12 @@ function getStepCompletionThresholds(step = null) {
   /* FOLLOW MODE                                                  */
   /* ------------------------------------------------------------ */
   async function toggleFollowMe() {
+    setSimulateSdkNavigation(false);
     // Turning OFF: clear inactivity timeout and revert camera
     if (followUser) {
       followActivationInFlightRef.current = false;
+      pendingFollowActivationTimersRef.current.forEach(clearTimeout);
+      pendingFollowActivationTimersRef.current = [];
       setFollowUser(false);
       followUserStateRef.current = false;
       clearFollowMeInactivityTimeout();
@@ -3772,6 +4124,7 @@ function getStepCompletionThresholds(step = null) {
       skipNextFollowTickRef.current = true;
       skipNextRegionChangeRef.current = true;
       preferredFollowZoomRef.current = FOLLOW_ZOOM;
+      setTomTomFollowZoom(FOLLOW_ZOOM);
       await recenterOnUser({ zoom: FOLLOW_ZOOM, followMode: true });
       setFollowUser(true);
       
@@ -3870,6 +4223,7 @@ function getStepCompletionThresholds(step = null) {
   // Unified route progress tracking: determine current step based on location projection
   // onto the polyline, then display next junction and track progression
   useEffect(() => {
+    if (sdkNavigationEnabled) return;
     if (!isNavigationMode) return;
     if (!userLocation) return;
     if (!routeSteps || routeSteps.length === 0) return;
@@ -3955,6 +4309,9 @@ function getStepCompletionThresholds(step = null) {
     }
     const lastInstructionIdx = Math.max(routeSteps.length - 2, 0);
     const isPotentialFinish = nextStepIdx >= routeSteps.length - 1 && routeSteps.length > 1;
+    const distToDestination = routeDestination
+      ? distanceBetweenMeters(navigationPosition, routeDestination)
+      : Infinity;
 
     if (isPotentialFinish) {
       let hasNearbyJunction = false;
@@ -3970,9 +4327,6 @@ function getStepCompletionThresholds(step = null) {
         }
       }
 
-      const distToDestination = routeDestination
-        ? distanceBetweenMeters(navigationPosition, routeDestination)
-        : Infinity;
       const isCloseToDestination = distToDestination <= 12; // require tight lock before Finish
 
       if (!isCloseToDestination || hasNearbyJunction) {
@@ -4075,7 +4429,7 @@ function getStepCompletionThresholds(step = null) {
     stepProgressRef.current.closestStepEndDistance = nextStepIdx === previousStepIdx
       ? closestStepEndDistance
       : Infinity;
-  }, [userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex, routeDestination]);
+  }, [sdkNavigationEnabled, userLocation, isNavigationMode, routeSteps, routeCoords, currentStepIndex, routeDestination]);
 
   useEffect(() => {
     if (!isNavigationMode) {
@@ -4083,7 +4437,8 @@ function getStepCompletionThresholds(step = null) {
       return;
     }
     if (routeSteps.length === 0) return;
-    const step = routeSteps[currentStepIndex];
+    const plannedStep = routeSteps[currentStepIndex];
+    const step = sdkNavigationEnabled && sdkInstruction ? { ...plannedStep, ...sdkInstruction } : plannedStep;
     if (!step) return;
     const maneuver = (step.nextManeuver || 'STRAIGHT').trim().toUpperCase();
     const distance = nextJunctionDistance != null ? formatDistanceForUnit(nextJunctionDistance, distanceUnits) : '--';
@@ -4098,7 +4453,7 @@ function getStepCompletionThresholds(step = null) {
       roundaboutAngle,
       roundaboutExitNumber: step?.nextRoundaboutExitNumber,
     });
-  }, [isNavigationMode, currentStepIndex, nextJunctionDistance, routeSteps, distanceUnits]);
+  }, [sdkNavigationEnabled, sdkInstruction, isNavigationMode, currentStepIndex, nextJunctionDistance, routeSteps, distanceUnits]);
 
   useEffect(() => {
     if (!isNavigationMode || routeSteps.length === 0) return;
@@ -4114,7 +4469,7 @@ function getStepCompletionThresholds(step = null) {
   }, [isNavigationMode, routeSteps]);
 
   useEffect(() => {
-    if (!isNavigationMode || !isTtsEnabled) return;
+    if (sdkNavigationEnabled || !isNavigationMode || !isTtsEnabled) return;
     if (!routeSteps || routeSteps.length === 0) return;
     if (currentStepIndex >= routeSteps.length) return;
 
@@ -4314,6 +4669,7 @@ function getStepCompletionThresholds(step = null) {
   }, [
     currentStepIndex,
     routeSteps,
+    sdkNavigationEnabled,
     isNavigationMode,
     isTtsEnabled,
     nextJunctionDistance,
@@ -4324,6 +4680,7 @@ function getStepCompletionThresholds(step = null) {
 
   // Track waypoint arrivals and mark them as visited
   useEffect(() => {
+    if (sdkNavigationEnabled) return;
     if (!isNavigationMode || !userLocation || waypoints.length === 0) return;
     const waypointSpeechMeters = SPEECH_DISTANCE_STAGES[SPEECH_DISTANCE_STAGES.length - 1]?.triggerMeters ?? 55;
     
@@ -4364,10 +4721,11 @@ function getStepCompletionThresholds(step = null) {
         }
       }
     });
-  }, [isNavigationMode, userLocation, waypoints, visitedWaypointIndices, markWaypointVisited, isTtsEnabled]);
+  }, [sdkNavigationEnabled, isNavigationMode, userLocation, waypoints, visitedWaypointIndices, markWaypointVisited, isTtsEnabled]);
 
   // Detect when user reaches destination and capture traveled polyline for saving
   useEffect(() => {
+    if (sdkNavigationEnabled) return;
     const hasRouteIntent = routeDestination || waypoints.length > 0;
     if (!hasRouteIntent) {
       if (hasArrivedAtDestination) {
@@ -4653,6 +5011,8 @@ function getStepCompletionThresholds(step = null) {
     const justEnabledFollowMe = !followUserPrevRef.current && followUser;
     followUserPrevRef.current = followUser;
 
+    if (sdkNavigationEnabled) return;
+
     if (hasArrivedAtDestination) {
       return;
     }
@@ -4861,6 +5221,7 @@ function getStepCompletionThresholds(step = null) {
     });
   }, [
     consumeAutoRerouteBudget,
+    sdkNavigationEnabled,
     getAutoRerouteCooldownSeconds,
     maybeShowAutoRerouteNotice,
     userLocation,
@@ -4922,6 +5283,12 @@ function getStepCompletionThresholds(step = null) {
     }
   }, [followUser]);
 
+  const tomTomTravelledCoordinates = useMemo(() => {
+    if (persistentTravelledPath.length <= 4000) return persistentTravelledPath;
+    const stride = Math.ceil((persistentTravelledPath.length - 1) / 3999);
+    return persistentTravelledPath.filter((_, index) => index % stride === 0 || index === persistentTravelledPath.length - 1);
+  }, [persistentTravelledPath]);
+
   // Compute traveled and remaining polyline portions for Follow Me mode
   const { traveledPolyline, remainingPolyline } = useMemo(() => {
     if (!followUser || !routeCoords || routeCoords.length === 0 || !userLocation) {
@@ -4981,6 +5348,9 @@ function getStepCompletionThresholds(step = null) {
 
   // Calculate remaining distance and ETA during navigation using live progress on the route.
   const { remainingDistanceMeters, remainingDurationSeconds } = useMemo(() => {
+    if (sdkNavigationEnabled && sdkProgress) {
+      return { remainingDistanceMeters: sdkProgress.remainingDistance, remainingDurationSeconds: sdkProgress.remainingTime };
+    }
     const totalDistanceMeters = Number(routeDistanceMeters ?? routeMeta?.distanceMeters);
     const totalDurationSeconds = Number(routeMeta?.durationSeconds);
 
@@ -5033,7 +5403,7 @@ function getStepCompletionThresholds(step = null) {
       remainingDistanceMeters: remainingDist,
       remainingDurationSeconds: remainingTime,
     };
-  }, [isNavigationMode, userLocation, routeCoords, routeDistanceMeters, routeMeta?.distanceMeters, routeMeta?.durationSeconds]);
+  }, [sdkNavigationEnabled, sdkProgress, isNavigationMode, userLocation, routeCoords, routeDistanceMeters, routeMeta?.distanceMeters, routeMeta?.durationSeconds]);
 
   // Detect when Follow Me is turned off with a tracked ride
   useEffect(() => {
@@ -5108,7 +5478,7 @@ function getStepCompletionThresholds(step = null) {
     return () => {
       setMapActions(null);
     };
-  }, [followUser, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress, endRide, selectedPlace, selectedPlaceId]);
+  }, [useTomTomMap, followUser, userLocation, waypoints, routeDestination, auth?.profile?.homeAddress, endRide, selectedPlace, selectedPlaceId]);
 
   useEffect(() => {
     let subscription;
@@ -5457,6 +5827,11 @@ function getStepCompletionThresholds(step = null) {
 
   function clearRoute() {
     console.log('[clearRoute] Clearing route');
+    setRouteAlternatives([]);
+    setNativeRouteId(null);
+    setSdkProgress(null);
+    setSdkInstruction(null);
+    setSimulateSdkNavigation(false);
     
     // Cancel any pending operations
     if (pendingFlushRef.current) {
@@ -5713,6 +6088,7 @@ function getStepCompletionThresholds(step = null) {
   useEffect(() => {
     if (!activeQuery || !searchOrigin) return;
 
+    let cancelled = false;
     const restrictedToCrSearch = !canUseGooglePlacesApi;
     const crSearchResults = crPlaces.filter((p) => p.source === "cr" && matchesQuery(p, activeQuery));
     const exactCrMatch = crSearchResults.find((p) => isExactMatch(p, activeQuery));
@@ -5727,15 +6103,27 @@ function getStepCompletionThresholds(step = null) {
         exactMatch = results.find((p) => isExactMatch(p, activeQuery));
       }
 
-      if (exactMatch && mapRef.current) {
-        if (exactMatch.source === "cr" || exactMatch.source === "google") {
-          setSelectedPlaceId(exactMatch.id);
+      const focusMatch = exactMatch || crSearchResults[0];
+      if (focusMatch && (useTomTomMap || mapRef.current)) {
+        if (focusMatch.source === "cr" || focusMatch.source === "google") {
+          setSelectedPlaceId(focusMatch.id);
+        }
+        if (useTomTomMap) {
+          setTomTomCameraTarget(previous => ({
+            latitude: focusMatch.latitude,
+            longitude: focusMatch.longitude,
+            zoom: RECENTER_ZOOM,
+            heading: 0,
+            pitch: 0,
+            requestId: (previous?.requestId || 0) + 1,
+          }));
+          return true;
         }
         mapRef.current.animateCamera(
           {
             center: {
-              latitude: exactMatch.latitude,
-              longitude: exactMatch.longitude,
+              latitude: focusMatch.latitude,
+              longitude: focusMatch.longitude,
             },
           },
           { duration: 600 }
@@ -5783,8 +6171,6 @@ function getStepCompletionThresholds(step = null) {
         queryLength: String(activeQuery || "").length,
       },
     });
-
-    let cancelled = false;
 
     async function run() {
       const { latitude, longitude, latitudeDelta } = searchOrigin;
@@ -5870,8 +6256,13 @@ function getStepCompletionThresholds(step = null) {
       return;
     }
 
-    // If route type changed, always rebuild (ignore distance threshold)
-    const routeTypeChanged = userRouteType !== lastRouteTypeRef.current;
+    const routePreferencesSignature = JSON.stringify({
+      routeType: userRouteType,
+      hilliness: customHilliness,
+      windingness: customWindingness,
+      avoids: avoidOptions,
+    });
+    const routePreferencesChanged = routePreferencesSignature !== lastRoutePreferencesRef.current;
     
     // Helper to safely get lat/lng from waypoint (handles both naming conventions)
     const getWpCoords = (wp) => ({
@@ -5911,7 +6302,7 @@ function getStepCompletionThresholds(step = null) {
     
     // GUARD: If user is still on the existing polyline heading the correct direction, don't rebuild
     // This prevents unnecessary reroutes when GPS accuracy changes slightly but user is still on track
-    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && routeCoords.length > 0) {
+    if (!routePreferencesChanged && !waypointsChanged && !manualStartPointCleared && routeCoords.length > 0) {
       // Check if user is within 50m of any point on the polyline and heading forward
       let nearestDistance = Infinity;
       let nearestIndex = -1;
@@ -5935,8 +6326,8 @@ function getStepCompletionThresholds(step = null) {
     
     // Check if user has moved far enough to warrant a route rebuild
     // This prevents excessive API calls from GPS noise (small accuracy variations)
-    // But we skip this check if the route type, waypoints, or manual start point have changed
-    if (!routeTypeChanged && !waypointsChanged && !manualStartPointCleared && lastRouteBuildLocationRef.current) {
+    // Skip the movement threshold when any route preference, stop, or origin changed.
+    if (!routePreferencesChanged && !waypointsChanged && !manualStartPointCleared && lastRouteBuildLocationRef.current) {
       const distanceMoved = distanceBetween(lastRouteBuildLocationRef.current, userLocation);
       if (distanceMoved < MIN_ROUTE_REBUILD_DISTANCE_METERS) {
         return; // Skip rebuild if movement is less than threshold
@@ -5948,7 +6339,7 @@ function getStepCompletionThresholds(step = null) {
       console.warn('[MAP_EFFECT] buildRoute error:', error);
       // Error already handled as toast in buildRoute, no need to display again
     });
-  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, manualStartPoint]);
+  }, [routeDestination, waypoints, routeClearedByUser, userLocation, userRouteType, customHilliness, customWindingness, avoidOptions, manualStartPoint]);
 
   /* ------------------------------------------------------------ */
   /* TOP 20 SELECTOR                                               */
@@ -6060,8 +6451,80 @@ function getStepCompletionThresholds(step = null) {
     }
 
     return combined;
-  }, [googlePois, crPlaces, paddedRegion, activeQuery, appliedFilters.visited, visitedPlaceIds]);
+  }, [googlePois, crPlaces, paddedRegion, activeQuery, appliedFilters, visitedPlaceIds]);
 
+  const tomTomMapPlaces = useMemo(() => {
+    const visiblePlaces = activeQuery ? searchMarkers : crMarkers;
+    const markers = visiblePlaces.map((place) => {
+      const category = place.category || "unknown";
+      const isCr = place.source === "cr" && !place._temp;
+      const isTemp = Boolean(place._temp);
+      const isSponsor = sponsoredPlaceIds.has(place.id);
+      const exactMatch = Boolean(activeQuery && isExactMatch(place, activeQuery));
+      const markerMode = exactMatch
+        ? (isCr ? "searchCRExact" : "searchGoogleExact")
+        : activeQuery
+          ? (isCr ? "searchCRPartial" : "searchGooglePartial")
+          : isSponsor
+            ? "sponsor"
+            : isCr
+              ? "cr"
+              : isTemp
+                ? "temp"
+                : "default";
+      const stylesByMode = {
+        sponsor: { fill: theme.colors.accentMid, circle: theme.colors.accentLight, stroke: "#A855F7" },
+        searchCRExact: { fill: "#FFD700", circle: "#FFA500", stroke: theme.colors.danger },
+        searchCRPartial: { fill: theme.colors.accentMid, circle: theme.colors.accentLight, stroke: theme.colors.accentDark },
+        searchGoogleExact: { fill: theme.colors.primaryMid, circle: theme.colors.accentMid, stroke: theme.colors.danger },
+        searchGooglePartial: { fill: theme.colors.primaryMid, circle: theme.colors.primaryLight, stroke: theme.colors.accentDark },
+        cr: { fill: theme.colors.accentMid, circle: theme.colors.accentLight, stroke: theme.colors.accentDark },
+        temp: { fill: theme.colors.primaryMid, circle: theme.colors.accentDark, stroke: theme.colors.primaryDark },
+        default: { fill: theme.colors.primaryMid, circle: theme.colors.accentDark, stroke: theme.colors.primaryDark },
+      };
+      const markerStyle = stylesByMode[markerMode];
+      const iconName = getIconForCategory(category);
+      return {
+        id: String(place.id),
+        title: place.title || place.name || "Coffee Rider place",
+        latitude: Number(place.latitude),
+        longitude: Number(place.longitude),
+        iconGlyph: MaterialCommunityIcons.glyphMap[iconName] || MaterialCommunityIcons.glyphMap["map-marker"],
+        iconColor: "#000000",
+        fillColor: markerStyle.fill,
+        circleColor: markerStyle.circle,
+        strokeColor: markerStyle.stroke,
+        visited: visitedPlaceIds.has(place.id),
+      };
+    });
+    if (routeDestination?.latitude != null && routeDestination?.longitude != null) {
+      markers.push({
+        id: `route-destination-${routeDestination.id || "active"}`,
+        title: routeDestination.title || routeDestination.name || "Destination",
+        latitude: Number(routeDestination.latitude),
+        longitude: Number(routeDestination.longitude),
+        iconGlyph: MaterialCommunityIcons.glyphMap["flag-checkered"],
+        iconColor: "#000000",
+        fillColor: theme.colors.primary,
+        circleColor: theme.colors.accentMid,
+        strokeColor: theme.colors.danger,
+      });
+    }
+    waypoints.forEach((waypoint, index) => {
+      markers.push({
+        id: `route-waypoint-${index}`,
+        title: waypoint.title || waypoint.name || `Waypoint ${index + 1}`,
+        latitude: Number(waypoint.latitude),
+        longitude: Number(waypoint.longitude),
+        iconGlyph: MaterialCommunityIcons.glyphMap["map-marker-star"],
+        iconColor: "#000000",
+        fillColor: theme.colors.accentMid,
+        circleColor: theme.colors.accentLight,
+        strokeColor: theme.colors.accentDark,
+      });
+    });
+    return markers.filter((marker) => Number.isFinite(marker.latitude) && Number.isFinite(marker.longitude));
+  }, [activeQuery, searchMarkers, crMarkers, routeDestination, waypoints, theme, sponsoredPlaceIds, visitedPlaceIds]);
 
   const selectedPlace = useMemo(() => {
     if (!selectedPlaceId) {
@@ -6220,6 +6683,7 @@ function getStepCompletionThresholds(step = null) {
     travelMode,
     routeType,
     avoidMotorways: avoidMotorwaysOverride = avoidMotorways,
+    avoidOptions: avoidOptionsOverride = avoidOptions,
     requestId,
     skipFitToView = false, // Don't auto-center when in Follow Me mode
     vehicleHeading = null, // User's current heading in degrees (0-359), used for rerouting
@@ -6289,14 +6753,22 @@ function getStepCompletionThresholds(step = null) {
         routeType,
         routeTypeMap,
         useCache,
+        includeAlternatives: !skipFitToView && !isNavigationMode,
         customHilliness,
         customWindingness,
         avoidMotorways: avoidMotorwaysOverride,
+        avoidOptions: avoidOptionsOverride,
         vehicleHeading, // Pass heading to prevent backward rerouting
       });
     } catch (error) {
       console.warn('[mapRoute] Error fetching route:', error.message);
-      const routeErrorMessage = `Unable to fetch route: ${error.message}`;
+      const isUnauthorized = /\b401\b|unauthorized/i.test(error.message || "");
+      const routeProvider = travelMode === "pedestrian" || travelMode === "bike" ? "Google Directions" : "TomTom Routing";
+      const routeErrorMessage = isUnauthorized
+        ? routeProvider === "TomTom Routing"
+          ? "TomTom Navigation SDK route planning failed with 401. Confirm this Android build was compiled with TOMTOM_NAVIGATION_SDK_KEY_ANDROID."
+          : "Google Directions rejected its platform API key (401). Check the Android Google Maps key restrictions and confirm the Directions API is enabled."
+        : `Unable to fetch route: ${error.message}`;
       setPostbox({
         type: 'error',
         title: 'Routing error',
@@ -6365,8 +6837,23 @@ function getStepCompletionThresholds(step = null) {
     
     // Get distance value
     const distance = result.distanceMeters ?? result.distance;
+    const alternatives = Array.isArray(result.alternatives) && result.nativeRouteId
+      ? [
+          {
+            nativeRouteId: result.nativeRouteId,
+            label: result.label || 'Route 1',
+            distance,
+            duration: result.durationSeconds ?? result.duration,
+            routeFingerprint: result.routeFingerprint,
+          },
+          ...result.alternatives,
+        ]
+      : [];
+    setRouteAlternatives(alternatives);
     
     // Use flush mechanism to prevent Android polyline ghosting
+    setNativeRouteId(result.nativeRouteId || null);
+    setHasArrivedAtDestination(false);
     setRouteCoordsWithFlush(simplified, {
       distance: distance,
       steps: result.steps ?? [],
@@ -6394,6 +6881,46 @@ function getStepCompletionThresholds(step = null) {
     await debugLog("ROUTE_BUILT", `Route built: ${simplified.length} points, ${(distance / 1000).toFixed(1)}km`, { points: simplified.length, distanceKm: (distance / 1000).toFixed(1) });
     
     return true;
+  }
+
+  async function selectTomTomAlternative(alternative) {
+    if (!alternative?.nativeRouteId || alternative.nativeRouteId === nativeRouteId || isSelectingAlternative) return;
+    setIsSelectingAlternative(true);
+    try {
+      const result = await getNativeTomTomRoute(alternative.nativeRouteId);
+      const simplified = simplifyPolyline(result.polyline || [], 0.00001).filter(
+        point => point && Number.isFinite(point.latitude) && Number.isFinite(point.longitude),
+      );
+      if (simplified.length < 2) throw new Error('TomTom returned incomplete geometry for this route');
+      const distance = result.distanceMeters ?? result.distance;
+      setNativeRouteId(result.nativeRouteId);
+      setRouteCoordsWithFlush(simplified, { distance, steps: result.steps ?? [] });
+      setRouteMeta({
+        distanceMeters: distance,
+        durationSeconds: result.durationSeconds ?? result.duration,
+        speedLimits: result.speedLimits ?? [],
+      });
+      setLastEncodedPolyline(result.polyline);
+      setCurrentStepIndex(0);
+      setSdkProgress(null);
+      setSdkInstruction(null);
+      stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0, closestStepEndDistance: Infinity };
+      setRouteAlternatives(current => current.map(item => ({
+        ...item,
+        selected: item.nativeRouteId === result.nativeRouteId,
+      })));
+      if (!followUser) {
+        mapRef.current?.fitToCoordinates(simplified, {
+          edgePadding: { top: 80, right: 80, bottom: 150, left: 80 },
+          animated: true,
+        });
+      }
+    } catch (error) {
+      console.warn('[TomTomRoutes] Unable to select route alternative:', error?.message || error);
+      showPlatformToast(error?.message || 'Unable to select that route', 'LONG');
+    } finally {
+      setIsSelectingAlternative(false);
+    }
   }
 
   async function buildRoute({ 
@@ -6433,6 +6960,12 @@ function getStepCompletionThresholds(step = null) {
       const startCoord = normalizeCoord(manualStartPoint || userLocation);
       lastRouteBuildLocationRef.current = startCoord;
       lastRouteTypeRef.current = userRouteType;
+      lastRoutePreferencesRef.current = JSON.stringify({
+        routeType: userRouteType,
+        hilliness: customHilliness,
+        windingness: customWindingness,
+        avoids: avoidOptions,
+      });
       lastWaypoints.current = effectiveWaypoints;
       lastManualStartPointRef.current = manualStartPoint;
     }
@@ -6557,6 +7090,10 @@ function getStepCompletionThresholds(step = null) {
     clearWaypoints();
     isLoadingSavedRouteRef.current = true;
 
+    const restoredPreferences = route.routingPreferences && typeof route.routingPreferences === "object"
+      ? restoreRoutingPreferences(route.routingPreferences)
+      : null;
+
     // Waypoints (normalise + rebuild)
     // ALWAYS load waypoints for display, regardless of distance from origin
     let actualOrigin = route.origin;
@@ -6576,6 +7113,9 @@ function getStepCompletionThresholds(step = null) {
       normalisedWaypoints.forEach((wp) => {
         addFromPlace(wp);
       });
+      lastWaypoints.current = normalisedWaypoints;
+    } else {
+      lastWaypoints.current = [];
     }
     
     // Do not set manualStartPoint when loading saved routes.
@@ -6584,6 +7124,7 @@ function getStepCompletionThresholds(step = null) {
     if (manualStartPoint) {
       setManualStartPoint(null);
     }
+    lastManualStartPointRef.current = null;
     
     if (route.destination) {
       setRouteDestination({
@@ -6593,6 +7134,20 @@ function getStepCompletionThresholds(step = null) {
         id: route.destination.placeId ?? null,
       });
     }
+
+    const savedPreferences = restoredPreferences || route.routingPreferences;
+    const routeTypeForLoadedRoute = savedPreferences?.routeType ?? userRouteType;
+    const hillinessForLoadedRoute = savedPreferences?.customHilliness ?? customHilliness;
+    const windingnessForLoadedRoute = savedPreferences?.customWindingness ?? customWindingness;
+    const avoidsForLoadedRoute = savedPreferences?.avoidOptions ?? avoidOptions;
+    lastRoutePreferencesRef.current = JSON.stringify({
+      routeType: routeTypeForLoadedRoute,
+      hilliness: hillinessForLoadedRoute,
+      windingness: windingnessForLoadedRoute,
+      avoids: avoidsForLoadedRoute,
+    });
+    lastRouteTypeRef.current = routeTypeForLoadedRoute;
+    lastRouteBuildLocationRef.current = userLocation;
 
 
     if (route.routePolyline) {
@@ -6620,6 +7175,14 @@ function getStepCompletionThresholds(step = null) {
       const routeDistance = typeof route.distanceMeters === 'number' && route.distanceMeters > 0 
         ? route.distanceMeters 
         : (typeof route.distance === 'number' && route.distance > 0 ? route.distance : null);
+      const restoredDistance = routeDistance ?? decoded.reduce((total, point, index) => (
+        index === 0 ? total : total + distanceBetweenMeters(decoded[index - 1], point)
+      ), 0);
+      setRouteMeta({
+        distanceMeters: restoredDistance,
+        durationSeconds: route.durationSeconds ?? route.duration ?? null,
+        speedLimits: [],
+      });
       
       // LOG: Check if polyline first point matches manualStartPoint
       if (decoded.length > 0 && actualOrigin) {
@@ -6756,9 +7319,34 @@ function getStepCompletionThresholds(step = null) {
     }
   }
 
-  function handleNavigate(placeOverride = null) {
+  async function handleNavigate(placeOverride = null) {
     const destination = placeOverride || routeDestination;
     if (!userLocation) return;
+
+    if (useTomTomMap && userTravelMode !== "bike" && userTravelMode !== "pedestrian") {
+      if (!destination && !waypoints.length) return;
+      setSimulateSdkNavigation(false);
+      if (!networkStatus.isOnline && !placeOverride && routeCoords.length > 1 && routeSteps.length > 0) {
+        setNativeRouteId(null);
+        await activateFollowMe({ reason: "offline-cached-route" });
+        return;
+      }
+      const requestId = ++routeRequestId.current;
+      const built = await mapRoute({
+        origin: userLocation,
+        destination,
+        waypoints,
+        travelMode: userTravelMode,
+        routeType: userRouteType,
+        avoidMotorways,
+        requestId,
+        skipFitToView: true,
+      });
+      if (!built) return;
+      if (destination) setRouteDestination(destination);
+      await activateFollowMe({ reason: "sdk-navigate" });
+      return;
+    }
 
     // Build navigation waypoints starting with saved origin if present
     const navWaypoints = [];
@@ -6853,6 +7441,23 @@ function getStepCompletionThresholds(step = null) {
       const distanceMeters = Math.sqrt(dLat * dLat + dLng * dLng) * 111_000;
       return distanceMeters <= thresholdMeters;
     }) || null;
+  }
+
+  async function handleMapLongPressAt(latitude, longitude) {
+    if (!capabilities.canCreateRoutes) return;
+    const nearbyCrPlace = findNearbyCrPlace(latitude, longitude, crPlaces);
+    let label = nearbyCrPlace?.title || nearbyCrPlace?.name || null;
+    if (!nearbyCrPlace && canUseGooglePlacesApi) {
+      try {
+        label = await getPlaceLabel(latitude, longitude, { allowExternalLookup: true });
+      } catch (error) {
+        console.warn("[MAP] getPlaceLabel failed", error);
+      }
+    } else if (!nearbyCrPlace) {
+      label = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+    }
+    setPendingMapPoint({ latitude, longitude, geocodeResult: label });
+    setShowAddPointMenu(true);
   }
 
   // Category → outline color map for markers
@@ -7029,12 +7634,24 @@ function getStepCompletionThresholds(step = null) {
   };
 
   const renderDirectionsPanel = () => {
-    if (!isNavigationMode || !hasRoute || !routeSteps || routeSteps.length === 0) {
+    if (!isNavigationMode || !hasRoute || (!routeSteps.length && !sdkInstruction)) {
       return null;
     }
 
     let step = routeSteps[currentStepIndex];
-    if (!step) return null;
+    const sdkInstructionType = sdkInstruction?.instructionType;
+    const sdkRoundaboutExit = sdkNavigationEnabled && sdkInstructionType === "ExitRoundaboutGuidanceInstruction";
+    const sdkRoundaboutEntry = sdkNavigationEnabled && sdkInstructionType === "RoundaboutGuidanceInstruction";
+    const sdkRoundaboutPanel = sdkNavigationEnabled ? getSdkRoundaboutPanel(sdkInstruction) : null;
+    if (!step && !sdkRoundaboutExit && !sdkRoundaboutEntry) return null;
+    step ||= {};
+    if (sdkRoundaboutPanel) {
+      step = {
+        ...step,
+        nextRoundaboutExitNumber: sdkRoundaboutPanel.exitNumber,
+        nextRoundaboutTurnAngle: sdkRoundaboutPanel.turnAngle,
+      };
+    }
 
     const hasRouteIntent = routeDestination || waypoints.length > 0;
     const hasValidRouteSteps = routeSteps && routeSteps.length >= 1;
@@ -7104,9 +7721,15 @@ function getStepCompletionThresholds(step = null) {
       );
     }
 
-    const nextManeuver = (step?.nextManeuver || "STRAIGHT").trim().toUpperCase();
-    const rawNextInstruction = step?.nextInstruction || "Continue";
-    const normalizedNextInstruction = getEffectiveInstructionText(step);
+    const nextManeuver = sdkRoundaboutExit
+      ? "ROUNDABOUT_EXIT"
+      : sdkRoundaboutEntry
+        ? "ROUNDABOUT_ENTER"
+        : (step?.nextManeuver || "STRAIGHT").trim().toUpperCase();
+    const sdkExitNumber = sdkRoundaboutPanel?.exitNumber;
+    const sdkRoundaboutText = sdkRoundaboutPanel?.text;
+    const rawNextInstruction = sdkRoundaboutText || step?.nextInstruction || "Continue";
+    const normalizedNextInstruction = sdkRoundaboutText || getEffectiveInstructionText(step);
     const effectiveInstruction = normalizedNextInstruction || rawNextInstruction;
     let meta = MANEUVER_ICON_MAP[nextManeuver];
 
@@ -7144,14 +7767,14 @@ function getStepCompletionThresholds(step = null) {
     }
 
     if (!label) {
-      if (nextManeuver.includes("ROUNDABOUT_EXIT") && step?.nextRoundaboutExitNumber) {
-        label = `Take Exit ${step.nextRoundaboutExitNumber}`;
+      if (nextManeuver.includes("ROUNDABOUT_EXIT") && (sdkExitNumber || step?.nextRoundaboutExitNumber)) {
+        label = `Take Exit ${sdkExitNumber || step.nextRoundaboutExitNumber}`;
       } else {
         label = effectiveInstruction || displayMeta?.label || rawNextInstruction;
       }
     }
 
-    if (nextManeuver === "STRAIGHT" && step?.start && step?.end && currentStepIndex > 0) {
+    if (!sdkNavigationEnabled && nextManeuver === "STRAIGHT" && step?.start && step?.end && currentStepIndex > 0) {
       const prevStep = routeSteps[currentStepIndex - 1];
       if (prevStep?.end) {
         const arrivalBearing = calculateBearing(prevStep.end, step.start);
@@ -7555,6 +8178,48 @@ function getStepCompletionThresholds(step = null) {
   return (
     <View style={styles.container}>
       {userLocation ? (
+        useTomTomMap ? (
+          <TomTomEmbeddedMap
+            key="coffee-rider-tomtom-map"
+            style={StyleSheet.absoluteFill}
+            centerLatitude={mapRegion?.latitude ?? userLocation.latitude}
+            centerLongitude={mapRegion?.longitude ?? userLocation.longitude}
+            cameraTarget={tomTomCameraTarget}
+            followZoom={tomTomFollowZoom}
+            places={tomTomMapPlaces}
+            routeCoordinates={hidePolylines ? [] : routeCoords}
+            traveledRouteCoordinates={hidePolylines || !followUser ? [] : tomTomTravelledCoordinates}
+            routeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
+            fitRoute={!isNavigationMode}
+            followNavigation={sdkNavigationEnabled && !hasArrivedAtDestination}
+            onPlacePress={(event) => {
+              const placeId = event.nativeEvent?.placeId;
+              if (placeId) setSelectedPlaceId(placeId);
+            }}
+            onPlaceLongPress={(event) => {
+              const placeId = event.nativeEvent?.placeId;
+              console.log("[TomTomMap] Place long press", { placeId, canCreateRoutes: capabilities.canCreateRoutes });
+              const place = [...crMarkers, ...searchMarkers].find(marker => String(marker.id) === placeId);
+              if (place) {
+                setPendingMarker(place);
+                setShowMarkerMenu(true);
+                return;
+              }
+              const { latitude, longitude } = event.nativeEvent || {};
+              if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+                handleMapLongPressAt(latitude, longitude);
+              }
+            }}
+            onMapLongPress={(event) => {
+              const { latitude, longitude } = event.nativeEvent || {};
+              console.log("[TomTomMap] Map long press", { latitude, longitude, canCreateRoutes: capabilities.canCreateRoutes });
+              if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+                handleMapLongPressAt(latitude, longitude);
+              }
+            }}
+            onCameraChange={(event) => handleRegionChangeComplete(event.nativeEvent)}
+          />
+        ) : (
         <MapView
           ref={mapRef}
           key={mapKey}
@@ -7581,41 +8246,9 @@ function getStepCompletionThresholds(step = null) {
               clearTempIfSafe();
             }
           }}
-          onLongPress={async (e) => {
-            if (!capabilities.canCreateRoutes) return;
-
-            const { latitude, longitude } = e.nativeEvent.coordinate;
-
-            const nearbyCrPlace = findNearbyCrPlace(
-              latitude,
-              longitude,
-              crPlaces
-            );
-
-            let label = null;
-
-            if (nearbyCrPlace) {
-              label = nearbyCrPlace.title || nearbyCrPlace.name;
-            } else {
-              if (canUseGooglePlacesApi) {
-                try {
-                  label = await getPlaceLabel(latitude, longitude, { allowExternalLookup: true });
-                } catch (err) {
-                  console.warn("[MAP] getPlaceLabel failed", err);
-                }
-              } else {
-                label = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-              }
-            }
-
-            const payload = {
-              latitude,
-              longitude,
-              geocodeResult: label,
-            };
-
-            setPendingMapPoint(payload);
-            setShowAddPointMenu(true);
+          onLongPress={(event) => {
+            const { latitude, longitude } = event.nativeEvent.coordinate;
+            handleMapLongPressAt(latitude, longitude);
           }}
 
           initialRegion={{
@@ -7815,6 +8448,7 @@ function getStepCompletionThresholds(step = null) {
               />
 
         </MapView>
+        )
       ) : (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.primaryDark }}>
           <MaterialCommunityIcons name="map-marker-radius" size={48} color={theme.colors.primaryLight} />
@@ -7859,6 +8493,37 @@ function getStepCompletionThresholds(step = null) {
       )}
 
       {/* Mini map showing group members when riding */}
+      {(__DEV__ || isTesterBuild) && useTomTomMap && nativeRouteId && userTravelMode !== "bike" && userTravelMode !== "pedestrian" && !activeRide && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={simulateSdkNavigation && followUser && !hasArrivedAtDestination ? "Stop SDK simulation" : "Simulate SDK route"}
+          onLongPress={() => {
+            if (!simulateSdkNavigation || !followUser || hasArrivedAtDestination) return;
+            simulateTomTomDetour()
+              .then(() => console.log("[TomTomNavigation] Simulated detour started"))
+              .catch(error => showPlatformToast(error.message, "LONG"));
+          }}
+          onPress={() => {
+            if (simulateSdkNavigation && followUser && !hasArrivedAtDestination) {
+              setFollowUser(false);
+              setSimulateSdkNavigation(false);
+            } else {
+              setHasArrivedAtDestination(false);
+              preferredFollowZoomRef.current = FOLLOW_ZOOM;
+              setTomTomFollowZoom(FOLLOW_ZOOM);
+              setSimulateSdkNavigation(true);
+              setFollowUser(true);
+            }
+          }}
+          style={{ position: "absolute", bottom: 244, left: 16, zIndex: 1200, elevation: 12, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, backgroundColor: theme.colors.primaryDark }}
+        >
+          <MaterialCommunityIcons name={simulateSdkNavigation && followUser && !hasArrivedAtDestination ? "stop" : "play"} size={18} color={theme.colors.text} />
+          <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: "700" }}>
+            {simulateSdkNavigation && followUser && !hasArrivedAtDestination ? "Stop SDK simulation" : "Simulate SDK route"}
+          </Text>
+        </Pressable>
+      )}
+
       {activeRide && riderLocations.length > 0 && (
         <MiniMapWithResponsivePosition
           riderLocations={riderLocations}
@@ -7914,11 +8579,13 @@ function getStepCompletionThresholds(step = null) {
             showsVerticalScrollIndicator={false}
           >
            
-            {/* SUITABILITY */}
-            <Text style={styles.filterSection}>Meet-ups / Suitability</Text>
+            {/* MEET-UPS */}
+            <Text style={styles.filterSection}>Meet-ups</Text>
             <View style={styles.iconGrid}>
-              {FILTER_SUITABILITIES.map((a) => {
-                const active = draftFilters.suitability.has(a.key);
+              {FILTER_MEETUPS.map((a) => {
+                const active = a.filter === "bikeBrew"
+                  ? draftFilters.bikeBrew
+                  : draftFilters.suitability.has(a.key);
 
                 return (
                   <TouchableOpacity
@@ -7930,14 +8597,16 @@ function getStepCompletionThresholds(step = null) {
                     onPress={() =>
                       setDraftFilters((prev) => ({
                         ...prev,
-                        suitability: toggleFilter(prev.suitability, a.key),
+                        ...(a.filter === "bikeBrew"
+                          ? { bikeBrew: !prev.bikeBrew }
+                          : { suitability: toggleFilter(prev.suitability, a.key) }),
                       })
                     )}
                   >
                   <MaterialCommunityIcons
                       name={a.icon || "check"}
                       size={22}
-                      color={active ? theme.colors.accentMid : theme.colors.background}
+                      color={active ? theme.colors.accentMid : theme.colors.tabBarInactive}
                     />
                     <Text
                       style={[
@@ -7950,66 +8619,67 @@ function getStepCompletionThresholds(step = null) {
                   </TouchableOpacity>
                 );
               })}
+              <TouchableOpacity
+                key="openNow"
+                style={[styles.iconButton, draftFilters.openNow && styles.iconButtonActive]}
+                onPress={() => setDraftFilters((prev) => ({ ...prev, openNow: !prev.openNow }))}
+              >
+                <MaterialCommunityIcons name="clock-check-outline" size={22} color={draftFilters.openNow ? theme.colors.accentMid : theme.colors.tabBarInactive} />
+                <Text style={[styles.iconLabel, draftFilters.openNow && styles.iconLabelActive]}>Open Now</Text>
+              </TouchableOpacity>
 
               {/* VISITED */}
-              {user && (
-                (() => {
-                  const visitedMode = draftFilters.visited || 'any';
-                  const isShowVisited = visitedMode === 'show';
-                  const isHideVisited = visitedMode === 'hide';
-                  const visitedIcon = isHideVisited ? 'map-marker-remove' : 'map-marker-check';
-                  const visitedColor = isShowVisited
-                    ? '#10b981'
-                    : isHideVisited
-                      ? '#ef4444'
-                      : theme.colors.primaryLight;
-                  const visitedLabel = isShowVisited
-                    ? 'Visited (Show)'
-                    : isHideVisited
-                      ? 'Visited (Hide)'
-                      : 'Visited';
+              {user && (() => {
+                const visitedMode = draftFilters.visited || 'any';
+                const isShowVisited = visitedMode === 'show';
+                const isHideVisited = visitedMode === 'hide';
+                const visitedColor = isShowVisited
+                  ? '#10b981'
+                  : isHideVisited
+                    ? '#ef4444'
+                    : theme.colors.tabBarInactive;
+                const visitedLabel = isShowVisited
+                  ? 'Visited (Show)'
+                  : isHideVisited
+                    ? 'Visited (Hide)'
+                    : 'Visited';
 
-                  return (
-                <TouchableOpacity
-                  key="visited"
-                  style={[
-                    styles.iconButton,
-                    (isShowVisited || isHideVisited) && styles.iconButtonActive,
-                    isShowVisited && { borderColor: '#10b981' },
-                    isHideVisited && { borderColor: '#ef4444' },
-                  ]}
-                  onPress={() =>
-                    setDraftFilters((prev) => ({
-                      ...prev,
-                      visited:
-                        prev.visited === 'any'
-                          ? 'show'
-                          : prev.visited === 'show'
-                            ? 'hide'
-                            : 'any',
-                    }))
-                  }
-                >
-                  <MaterialCommunityIcons
-                    name={visitedIcon}
-                    size={26}
-                    color={visitedColor}
-                  />
-                  <Text
+                return (
+                  <TouchableOpacity
+                    key="visited"
                     style={[
-                      styles.iconLabel,
-                      (isShowVisited || isHideVisited) && styles.iconLabelActive,
-                      isShowVisited && { color: '#10b981' },
-                      isHideVisited && { color: '#ef4444' },
+                      styles.iconButton,
+                      (isShowVisited || isHideVisited) && styles.iconButtonActive,
                     ]}
+                    onPress={() =>
+                      setDraftFilters((prev) => ({
+                        ...prev,
+                        visited:
+                          prev.visited === 'any'
+                            ? 'show'
+                            : prev.visited === 'show'
+                              ? 'hide'
+                              : 'any',
+                      }))
+                    }
                   >
-                    {visitedLabel}
-                  </Text>
-                </TouchableOpacity>
-                  );
-                })()
-              )}
-
+                    <MaterialCommunityIcons
+                      name={isHideVisited ? 'map-marker-remove' : 'map-marker-check'}
+                      size={22}
+                      color={visitedColor}
+                    />
+                    <Text
+                      style={[
+                        styles.iconLabel,
+                        (isShowVisited || isHideVisited) && styles.iconLabelActive,
+                        (isShowVisited || isHideVisited) && { color: visitedColor },
+                      ]}
+                    >
+                      {visitedLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
             
 
@@ -8036,8 +8706,8 @@ function getStepCompletionThresholds(step = null) {
                     <SvgPin
                       icon={c.icon}
                       size={32}
-                      fill={active ? theme.colors.accentMid : '#635021'}
-                      circle={active ? theme.colors.accentMid : '#635021'}
+                      fill={active ? theme.colors.accentMid : theme.colors.tabBarInactive}
+                      circle={active ? theme.colors.accentMid : theme.colors.tabBarInactive}
                       stroke={active ? theme.colors.primaryDark : theme.colors.primaryDark}
                     />
 
@@ -8077,7 +8747,7 @@ function getStepCompletionThresholds(step = null) {
                     <MaterialCommunityIcons
                       name={AMENITY_ICON_MAP[a.key] || "check"}
                       size={22}
-                      color={active ? theme.colors.accentMid : theme.colors.background}
+                      color={active ? theme.colors.accentMid : theme.colors.tabBarInactive}
                     />
                     <Text
                       style={[
@@ -8090,34 +8760,6 @@ function getStepCompletionThresholds(step = null) {
                   </TouchableOpacity>
                 );
               })}
-
-              <TouchableOpacity
-                key="openNow"
-                style={[
-                  styles.iconButton,
-                  draftFilters.openNow && styles.iconButtonActive,
-                ]}
-                onPress={() =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    openNow: !prev.openNow,
-                  }))
-                }
-              >
-                <MaterialCommunityIcons
-                  name="clock-check-outline"
-                  size={22}
-                  color={draftFilters.openNow ? theme.colors.accentMid : theme.colors.background}
-                />
-                <Text
-                  style={[
-                    styles.iconLabel,
-                    draftFilters.openNow && styles.iconLabelActive,
-                  ]}
-                >
-                  Open Now
-                </Text>
-              </TouchableOpacity>
 
               {/* SPONSORS (ADMIN ONLY) */}
               {role === "admin" && (
@@ -8339,6 +8981,66 @@ function getStepCompletionThresholds(step = null) {
           />
           <Text style={styles.saveRouteButtonText}>Save</Text>
         </TouchableOpacity>
+      )}
+
+      {routeCoords.length >= 2 && routeMeta && !followUser && !activeRide && capabilities.canSaveRoutes && capabilities.canShareRoutes && (
+        <TouchableOpacity
+          style={[styles.inviteRideButton, { bottom: saveButtonBottom }]}
+          onPress={openRideInviteModal}
+          disabled={isStartingActiveRide}
+          accessibilityRole="button"
+          accessibilityLabel="Invite people to join this ride"
+        >
+          <MaterialCommunityIcons name="account-multiple-plus" size={20} color={theme.colors.text} />
+          <Text style={styles.inviteRideButtonText}>Invite</Text>
+        </TouchableOpacity>
+      )}
+
+      {routeAlternatives.length > 1 && hasRouteIntent && !followUser && !activeRide && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
+          style={{ position: "absolute", left: 0, right: 0, bottom: saveButtonBottom + 56, zIndex: 2400 }}
+        >
+          {routeAlternatives.map((alternative) => {
+            const selected = alternative.nativeRouteId === nativeRouteId;
+            const minutes = Number.isFinite(Number(alternative.duration))
+              ? `${Math.round(Number(alternative.duration) / 60)} min`
+              : "ETA unavailable";
+            const distance = Number.isFinite(Number(alternative.distance))
+              ? formatDistanceForUnit(Number(alternative.distance), distanceUnits)
+              : "Distance unavailable";
+            return (
+              <Pressable
+                key={alternative.nativeRouteId}
+                accessibilityRole="button"
+                accessibilityState={{ selected, disabled: isSelectingAlternative }}
+                accessibilityLabel={`${alternative.label}, ${distance}, ${minutes}${selected ? ', selected' : ''}`}
+                disabled={isSelectingAlternative}
+                onPress={() => selectTomTomAlternative(alternative)}
+                style={{
+                  minWidth: 132,
+                  paddingHorizontal: 12,
+                  paddingVertical: 9,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: selected ? theme.colors.accentMid : theme.colors.inputBorder,
+                  backgroundColor: selected ? theme.colors.primaryDark : theme.colors.surface,
+                  opacity: isSelectingAlternative ? 0.7 : 1,
+                  elevation: 6,
+                }}
+              >
+                <Text numberOfLines={1} style={{ color: theme.colors.text, fontSize: 12, fontWeight: "700" }}>
+                  {alternative.label || "Alternative"}{selected ? " · Selected" : ""}
+                </Text>
+                <Text numberOfLines={1} style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 3 }}>
+                  {distance} · {minutes}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       )}
 
       {!followUser && !activeRide && (
@@ -8666,6 +9368,126 @@ function getStepCompletionThresholds(step = null) {
       </Modal>
 
       {/* Save Route Modal */}
+      <Modal
+        visible={showRideInviteModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { if (!sendingRideInvite) setShowRideInviteModal(false); }}
+      >
+        <View style={styles.saveRouteModalOverlay}>
+          <View style={[styles.saveRouteModalContent, { maxHeight: "84%" }]}>
+            <Text style={styles.saveRouteModalTitle}>Invite to ride</Text>
+            <Text style={{ color: theme.colors.textMuted, marginBottom: 12 }}>
+              Choose a group you share. Only its members can access this route and join live location sharing.
+            </Text>
+            <Text style={{ color: theme.colors.text, fontWeight: "600", marginBottom: 6 }}>Route Name</Text>
+            <TextInput
+              style={[styles.saveRouteInput, { marginBottom: 12 }]}
+              placeholder="Route name"
+              placeholderTextColor={theme.colors.primaryLight}
+              value={rideInviteRouteName}
+              onChangeText={setRideInviteRouteName}
+              autoCapitalize="words"
+              returnKeyType="done"
+              editable={!sendingRideInvite}
+            />
+            <TextInput
+              style={styles.saveRouteInput}
+              placeholder={rideInviteGroupId ? "Filter group members" : "Search your groups"}
+              placeholderTextColor={theme.colors.primaryLight}
+              value={rideInviteSearch}
+              onChangeText={setRideInviteSearch}
+              autoCapitalize="none"
+            />
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ flexShrink: 1, marginTop: 10 }}>
+              {!rideInviteGroupId ? (
+                rideInviteGroupsLoading ? (
+                  <Text style={{ color: theme.colors.textMuted, paddingVertical: 12 }}>Loading your groups…</Text>
+                ) : rideInviteGroups.filter(group => String(group.name || "").toLowerCase().includes(rideInviteSearch.trim().toLowerCase())).map(group => (
+                  <TouchableOpacity
+                    key={group.id}
+                    onPress={() => { setRideInviteGroupId(group.id); setRideInviteSearch(""); setRideInviteRecipientId(null); }}
+                    style={{ padding: 12, borderRadius: 7, backgroundColor: theme.colors.primaryDark, marginBottom: 7 }}
+                  >
+                    <Text style={{ color: theme.colors.text, fontWeight: "600" }}>{group.name || "Untitled group"}</Text>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <Text style={{ color: theme.colors.text, fontWeight: "700", flex: 1 }}>
+                      {rideInviteGroups.find(group => group.id === rideInviteGroupId)?.name || "Selected group"}
+                    </Text>
+                    <TouchableOpacity onPress={() => { setRideInviteGroupId(null); setRideInviteRecipientId(null); setRideInviteSearch(""); }}>
+                      <Text style={{ color: theme.colors.tabBarInactive, fontWeight: "700" }}>Change</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 8, marginBottom: 10 }}>
+                    {[{ id: "group", title: "Whole group" }, { id: "person", title: "One person" }].map(option => (
+                      <TouchableOpacity
+                        key={option.id}
+                        onPress={() => { setRideInviteRecipientMode(option.id); setRideInviteRecipientId(null); }}
+                        style={{ flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: 7, backgroundColor: rideInviteRecipientMode === option.id ? theme.colors.accentMid : theme.colors.primaryDark }}
+                      >
+                        <Text style={{ color: rideInviteRecipientMode === option.id ? theme.colors.primaryDark : theme.colors.text, fontWeight: "700" }}>{option.title}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {rideInviteRecipientMode === "person" ? (
+                    rideInviteMembersLoading ? (
+                      <Text style={{ color: theme.colors.textMuted, paddingVertical: 12 }}>Loading group members…</Text>
+                    ) : rideInviteMembers
+                      .filter(member => member.uid !== user?.uid && member.status !== "left" && member.status !== "kicked")
+                      .filter(member => `${member.displayName || ""} ${member.email || ""}`.toLowerCase().includes(rideInviteSearch.trim().toLowerCase()))
+                      .map(member => (
+                        <TouchableOpacity
+                          key={member.uid}
+                          onPress={() => setRideInviteRecipientId(member.uid)}
+                          style={{ padding: 12, borderRadius: 7, borderWidth: 1, borderColor: rideInviteRecipientId === member.uid ? theme.colors.accentMid : theme.colors.inputBorder, backgroundColor: theme.colors.primaryDark, marginBottom: 7 }}
+                        >
+                          <Text style={{ color: theme.colors.text }}>{member.displayName || member.email || "Group member"}{rideInviteRecipientId === member.uid ? " · Selected" : ""}</Text>
+                        </TouchableOpacity>
+                      ))
+                  ) : (
+                    <Text style={{ color: theme.colors.textMuted, paddingVertical: 8 }}>
+                      {rideInviteMembers.filter(member => member.uid !== user?.uid && member.status !== "left" && member.status !== "kicked").length} group members will be invited.
+                    </Text>
+                  )}
+                </>
+              )}
+            </ScrollView>
+            {rideInviteGroupId ? (
+              <>
+                <Text style={{ color: theme.colors.text, fontWeight: "600", marginTop: 12, marginBottom: 6 }}>Proposed start time</Text>
+                <TextInput
+                  style={styles.saveRouteInput}
+                  placeholder="e.g. Today, 6:30 PM"
+                  placeholderTextColor={theme.colors.primaryLight}
+                  value={rideInviteStartTime}
+                  onChangeText={setRideInviteStartTime}
+                />
+              </>
+            ) : null}
+            <View style={styles.saveRouteModalButtons}>
+              <TouchableOpacity
+                style={[styles.saveRouteModalButton, styles.saveRouteModalButtonSave, { opacity: sendingRideInvite || isStartingActiveRide ? 0.65 : 1 }]}
+                onPress={handleSendRideInvitation}
+                disabled={sendingRideInvite || isStartingActiveRide || !rideInviteGroupId || (rideInviteRecipientMode === "person" && !rideInviteRecipientId)}
+              >
+                <Text style={styles.saveRouteModalButtonText}>{sendingRideInvite || isStartingActiveRide ? "Starting…" : "Send Join Ride"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveRouteModalButton, styles.saveRouteModalButtonCancel]}
+                onPress={() => setShowRideInviteModal(false)}
+                disabled={sendingRideInvite}
+              >
+                <Text style={styles.saveRouteModalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={showSaveRouteModal}
         transparent
@@ -9479,18 +10301,6 @@ const styles = StyleSheet.create({
     color: "#e5e7eb",
   },
 
-  postboxTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 2,
-  },
-
-  postboxText: {
-    fontSize: 13,
-    color: "#ffffff",
-  },
-
   offlineBanner: {
     position: "absolute",
     bottom: 70,
@@ -9598,13 +10408,13 @@ const styles = StyleSheet.create({
   iconLabel: {
     marginTop: 4,
     fontSize: 11,
-    color: theme.colors.accentDark,
+    color: theme.colors.tabBarInactive,
     textAlign: "center",
   },
 
   iconLabelActive: {
     color: theme.colors.accentMid,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
   navigateButton: {
@@ -9638,6 +10448,28 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.accentMid,
     elevation: 6,
     zIndex: 2500,
+  },
+
+  inviteRideButton: {
+    position: "absolute",
+    left: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: 1,
+    borderColor: theme.colors.tabBarInactive,
+    elevation: 6,
+    zIndex: 2500,
+  },
+
+  inviteRideButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: theme.colors.text,
   },
 
   saveRouteButtonText: {

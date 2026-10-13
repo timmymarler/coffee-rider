@@ -15,7 +15,7 @@ const CACHE_EXPIRY_DAYS = 7; // Routes expire after 7 days
  * @param {Boolean} avoidMotorways - Whether motorway avoidance is enabled
  * @returns {String} Cache key
  */
-function generateCacheKey(startPoint, endPoint, waypoints, routeType, travelMode, avoidMotorways = false) {
+function generateCacheKey(startPoint, endPoint, waypoints, routeType, travelMode, avoidMotorways = false, routeOptions = {}) {
   // Round coordinates to 5 decimal places (~1m precision) to handle variations while distinguishing different routes
   const roundCoord = (coord) => {
     if (!coord) return '0,0';
@@ -31,7 +31,11 @@ function generateCacheKey(startPoint, endPoint, waypoints, routeType, travelMode
   // Create key without Buffer (not available in React Native)
   // Use a simple hash-like key combining all parameters
   // Include travelMode to ensure different vehicle types don't share cached routes
-  const key = `${roundCoord(startPoint)}_${roundCoord(endPoint)}_wp${waypoints?.length || 0}_${waypointStr}_${routeType || 'default'}_${travelMode || 'car'}_avoidMotorways${avoidMotorways ? '1' : '0'}`;
+  const avoids = routeOptions.avoidOptions || {};
+  const avoidBits = ["motorways", "tollRoads", "unpavedRoads", "ferries"]
+    .map((key, index) => (avoids[key] ?? (key === "motorways" && avoidMotorways)) ? 1 << index : 0)
+    .reduce((value, bit) => value | bit, 0);
+  const key = `${roundCoord(startPoint)}_${roundCoord(endPoint)}_${routeType || 'default'}_${travelMode || 'car'}_hill${routeOptions.customHilliness || 'normal'}_wind${routeOptions.customWindingness || 'normal'}_avoid${avoidBits}_wp${waypoints?.length || 0}_${waypointStr}`;
   return CACHE_KEY_PREFIX + key.replace(/[.,\-;:]/g, '_').substring(0, 150);
 }
 
@@ -45,19 +49,19 @@ function generateCacheKey(startPoint, endPoint, waypoints, routeType, travelMode
  * @param {Boolean} avoidMotorways - Whether motorway avoidance is enabled
  * @param {Object} routeData - The complete route response from TomTom
  */
-export async function cacheRoute(startPoint, endPoint, waypoints, routeType, travelMode, avoidMotorways, routeData) {
+export async function cacheRoute(startPoint, endPoint, waypoints, routeType, travelMode, avoidMotorways, routeData, routeOptions = {}) {
   try {
     if (!routeData || !routeData.polyline) {
       console.warn('[RouteCache] Refusing to cache - no polyline in route data');
       return false;
     }
 
-    const cacheKey = generateCacheKey(startPoint, endPoint, waypoints, routeType, travelMode, avoidMotorways);
+    const cacheKey = generateCacheKey(startPoint, endPoint, waypoints, routeType, travelMode, avoidMotorways, routeOptions);
     const timestamp = Date.now();
 
     // Only cache essential route metadata, not the full polyline
     // (polyline can be re-fetched if needed, but metadata is lightweight)
-    const cacheEntry = {
+      const cacheEntry = {
       key: cacheKey,
       timestamp,
       startPoint,
@@ -66,8 +70,12 @@ export async function cacheRoute(startPoint, endPoint, waypoints, routeType, tra
       routeType,
       travelMode,
       avoidMotorways: Boolean(avoidMotorways),
+      avoidOptions: routeOptions.avoidOptions || { motorways: Boolean(avoidMotorways) },
+      customHilliness: routeOptions.customHilliness || "normal",
+      customWindingness: routeOptions.customWindingness || "normal",
       distanceMeters: routeData.distanceMeters,
       durationSeconds: routeData.durationSeconds,
+        routeData,
       expiresAt: timestamp + CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
     };
 
@@ -84,6 +92,7 @@ export async function cacheRoute(startPoint, endPoint, waypoints, routeType, tra
         timestamp,
         distanceMeters: routeData.distanceMeters,
         durationSeconds: routeData.durationSeconds,
+          expiresAt: cacheEntry.expiresAt,
       };
     } else {
       metadata.routes.push({
@@ -91,6 +100,7 @@ export async function cacheRoute(startPoint, endPoint, waypoints, routeType, tra
         timestamp,
         distanceMeters: routeData.distanceMeters,
         durationSeconds: routeData.durationSeconds,
+          expiresAt: cacheEntry.expiresAt,
       });
     }
 
@@ -127,9 +137,9 @@ export async function cacheRoute(startPoint, endPoint, waypoints, routeType, tra
  * @param {Boolean} avoidMotorways - Whether motorway avoidance is enabled
  * @returns {Object|null} Cached route data or null if not found/expired
  */
-export async function getCachedRoute(startPoint, endPoint, waypoints, routeType, travelMode, avoidMotorways = false) {
+export async function getCachedRoute(startPoint, endPoint, waypoints, routeType, travelMode, avoidMotorways = false, routeOptions = {}) {
   try {
-    const cacheKey = generateCacheKey(startPoint, endPoint, waypoints, routeType, travelMode, avoidMotorways);
+    const cacheKey = generateCacheKey(startPoint, endPoint, waypoints, routeType, travelMode, avoidMotorways, routeOptions);
     const cached = await AsyncStorage.getItem(cacheKey);
 
     if (!cached) {
@@ -163,12 +173,12 @@ export async function getCachedRoutes() {
     const now = Date.now();
 
     // Filter out expired routes
-    const validRoutes = metadata.routes.filter(r => !r.expiryTime || r.expiryTime > now);
+      const validRoutes = metadata.routes.filter(r => !r.expiresAt || r.expiresAt > now);
 
     if (validRoutes.length !== metadata.routes.length) {
       // Clean up expired routes
       const expiredKeys = metadata.routes
-        .filter(r => r.expiryTime && r.expiryTime <= now)
+          .filter(r => r.expiresAt && r.expiresAt <= now)
         .map(r => r.key);
 
       for (const key of expiredKeys) {

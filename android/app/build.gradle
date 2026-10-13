@@ -3,7 +3,22 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
-def tomtomNavigationSdkKey = findProperty("tomtomNavigationSdkKey") ?: System.getenv("TOMTOM_NAVIGATION_SDK_KEY_ANDROID") ?: ""
+def readDotenvValue = { String fileName, String key ->
+    def envFile = new File(projectRoot, fileName)
+    if (!envFile.isFile()) return null
+    def prefix = "${key}="
+    def line = envFile.readLines("UTF-8").find { it.startsWith(prefix) }
+    if (line == null) return null
+    def value = line.substring(prefix.length()).trim()
+    if (value.length() >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
+        value = value.substring(1, value.length() - 1)
+    }
+    return value
+}
+def tomtomNavigationSdkKey = findProperty("tomtomNavigationSdkKey") ?:
+    System.getenv("TOMTOM_NAVIGATION_SDK_KEY_ANDROID") ?:
+    readDotenvValue(".env.local", "TOMTOM_NAVIGATION_SDK_KEY_ANDROID") ?:
+    readDotenvValue(".env", "TOMTOM_NAVIGATION_SDK_KEY_ANDROID") ?: ""
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -103,6 +118,7 @@ versionCode 145
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
         buildConfigField "String", "TOMTOM_NAVIGATION_SDK_KEY", "\"${tomtomNavigationSdkKey}\""
+        buildConfigField "boolean", "TOMTOM_TESTER_BUILD", "false"
     }
     signingConfigs {
         debug {
@@ -128,6 +144,16 @@ versionCode 145
             def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true'
             crunchPngs enablePngCrunchInRelease.toBoolean()
         }
+        pocTester {
+            initWith release
+            applicationIdSuffix ".tomtom.poc"
+            versionNameSuffix "-tomtom-poc"
+            matchingFallbacks = ['release']
+            debuggable false
+            signingConfig signingConfigs.debug
+            buildConfigField "boolean", "TOMTOM_TESTER_BUILD", "true"
+            resValue "string", "app_name", "Coffee Rider POC"
+        }
     }
     packagingOptions {
         jniLibs {
@@ -137,6 +163,11 @@ versionCode 145
     }
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
+    }
+    sourceSets {
+        main {
+            assets.srcDir(file("$projectRoot/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts"))
+        }
     }
 }
 

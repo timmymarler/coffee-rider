@@ -2,6 +2,7 @@ import * as Location from 'expo-location';
 import { deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { db } from '../../../config/firebase';
+import { createActiveRide } from './activeRideService';
 import { incMetric } from '../../utils/devMetrics';
 import { trackUsageEventSafe } from '@core/utils/usageTelemetry';
 
@@ -259,37 +260,8 @@ export default function useActiveRide(user) {
       endingRideRef.current = false;
 
       try {
-        const profileSnapshot = await getDoc(doc(db, 'users', user.uid));
-        const profileData = profileSnapshot.exists() ? profileSnapshot.data() : {};
-              const userName = profileData.displayName?.trim() || user.displayName || user.email || 'Rider';
-              const userAvatar = normalizeAvatarUrl(profileData.photoURL || profileData.avatarUrl || user.photoURL || null);
-
-        // Get current location
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        if (!location?.coords || !Number.isFinite(location.coords.latitude) || !Number.isFinite(location.coords.longitude)) {
-          throw new Error('Unable to get a valid GPS fix. Please wait for signal and try again.');
-        }
-
-        const activeRideRef = doc(db, 'activeRides', user.uid);
-        const payload = {
-          userId: user.uid,
-          rideId,
-          groupId,
-          routeName,
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          startedAt: serverTimestamp(),
-          lastLocationUpdate: serverTimestamp(),
-          lastUpdated: serverTimestamp(),
-        };
-
-        if (userName) payload.userName = userName;
-        if (userAvatar) payload.userAvatar = userAvatar;
-
+        const payload = await createActiveRide({ user, rideId, groupId, routeName });
         console.log('[useActiveRide] Writing activeRide document:', payload);
-        await setDoc(activeRideRef, payload, { merge: true });
         console.log('[useActiveRide] Successfully wrote activeRide document');
 
         trackUsageEventSafe('navigation', 'group_ride_started', {
@@ -301,9 +273,11 @@ export default function useActiveRide(user) {
       } catch (err) {
         console.error('[useActiveRide] Error starting ride:', err);
         setError(err.message);
+        return false;
       } finally {
         setIsStarting(false);
       }
+      return true;
     },
     [user]
   );

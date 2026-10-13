@@ -47,9 +47,12 @@ export function applyFilters(poi, filters, options = {}) {
     }
   }
 
-  // Bike & Brew filter (CR only)
+  // Bike & Brew filter (CR only); PlaceCard edits store it in suitability, creation sets the top-level flag
   if (poi.source === "cr" && filters.bikeBrew) {
-    activeChecks.push(Boolean(poi.bikeBrew));
+    activeChecks.push(
+      Boolean(poi.bikeBrew) ||
+      (Array.isArray(poi.suitability) && poi.suitability.includes("bikeBrew"))
+    );
   }
 
   // Open now filter (CR + Google)

@@ -12,8 +12,8 @@ const googlePlacesApiKey = isIOS
   : process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID || process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
 const tomtomApiKey = isIOS
-  ? process.env.EXPO_PUBLIC_TOMTOM_API_KEY_IOS || process.env.EXPO_PUBLIC_TOMTOM_API_KEY
-  : process.env.EXPO_PUBLIC_TOMTOM_API_KEY_ANDROID || process.env.EXPO_PUBLIC_TOMTOM_API_KEY;
+  ? process.env.TOMTOM_NAVIGATION_SDK_KEY_IOS?.trim() || process.env.EXPO_PUBLIC_TOMTOM_API_KEY_IOS?.trim() || process.env.EXPO_PUBLIC_TOMTOM_API_KEY?.trim()
+  : process.env.TOMTOM_NAVIGATION_SDK_KEY_ANDROID?.trim() || process.env.EXPO_PUBLIC_TOMTOM_API_KEY_ANDROID?.trim() || process.env.EXPO_PUBLIC_TOMTOM_API_KEY?.trim();
 
 const stripePublishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || null;
 const stripePublishableKeyLive = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY_LIVE || null;

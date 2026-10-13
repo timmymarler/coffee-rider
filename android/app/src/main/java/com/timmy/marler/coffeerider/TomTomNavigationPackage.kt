@@ -10,5 +10,5 @@ class TomTomNavigationPackage : ReactPackage {
     listOf(TomTomNavigationModule(reactContext))
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
-    emptyList()
+    listOf(CoffeeRiderTomTomMapViewManager())
 }

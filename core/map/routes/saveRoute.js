@@ -12,6 +12,7 @@ export async function saveRoute({
   waypoints,
   routeMeta,
   polyline,
+  routingPreferences,
   routeId, // if provided, will update instead of create
   tomtomSteps,
   tomtomGuidance,
@@ -27,6 +28,7 @@ export async function saveRoute({
     destination,
     waypoints,
     routePolyline: polyline,
+    routingPreferences: routingPreferences ?? null,
     distanceMeters: routeMeta?.distanceMeters ?? null,
     durationSeconds: routeMeta?.durationSeconds ?? null,
     updatedAt: serverTimestamp(),

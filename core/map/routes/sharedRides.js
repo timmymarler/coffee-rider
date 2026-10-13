@@ -113,7 +113,7 @@ export async function joinRide({ routeId, userId }) {
   // Check if user already participated
   const existingParticipant = route.participants?.find(p => p.userId === userId);
   if (existingParticipant && existingParticipant.status === PARTICIPANT_STATUS.ACTIVE) {
-    throw new Error("You are already in this ride");
+    return;
   }
 
   // Add or re-add participant

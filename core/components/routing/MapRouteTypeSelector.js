@@ -1,371 +1,219 @@
 import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import theme from "@themes";
-import { useContext, useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useContext } from "react";
+import { Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+
+const ROUTE_OPTIONS = [
+  { id: "fastest", label: "Fastest" },
+  { id: "shortest", label: "Shortest" },
+  { id: "curvy", label: "Curvy" },
+];
+const LEVEL_OPTIONS = [
+  { id: "low", label: "Low" },
+  { id: "normal", label: "Medium" },
+  { id: "high", label: "High" },
+];
+const AVOID_OPTIONS = [
+  { id: "motorways", label: "Motorways" },
+  { id: "tollRoads", label: "Toll roads" },
+  { id: "unpavedRoads", label: "Unpaved roads" },
+  { id: "ferries", label: "Ferries" },
+];
 
 export default function MapRouteTypeSelector({ visible, onClose }) {
-  const { 
-    routeType, 
-    setRouteType, 
-    avoidMotorways,
-    setAvoidMotorways,
-    availableRouteTypes,
+  const {
+    routeType,
+    setRouteType,
+    avoidOptions,
+    setAvoidOption,
     customHilliness,
     setCustomHilliness,
     customWindingness,
     setCustomWindingness,
   } = useContext(RoutingPreferencesContext);
 
-  const [showCustomConfigurator, setShowCustomConfigurator] = useState(false);
-
-  if (!visible) return null;
-
-  const levelOptions = ["low", "normal", "high"];
-
-  const handleSelectRouteType = (id) => {
-    if (id === "custom") {
-      // Only show custom configurator if explicitly tapping Custom
-      setRouteType(id);
-      setShowCustomConfigurator(true);
-    } else {
-      // For other route types, select and close immediately
-      setRouteType(id);
-      onClose();
-    }
-  };
-
-  const handleDoneCustom = () => {
-    // Close the entire modal when Done is pressed from custom configurator
-    setShowCustomConfigurator(false);
-    onClose();
-  };
-
   return (
-    <Modal
-      transparent
-      visible={visible}
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <View style={styles.container}>
-          {!showCustomConfigurator ? (
-            <>
-              <Text style={styles.title}>Route Optimization</Text>
-              <TouchableOpacity
-                style={styles.toggleRow}
-                onPress={() => setAvoidMotorways(!avoidMotorways)}
-              >
-                <View>
-                  <Text style={styles.toggleLabel}>Avoid motorways</Text>
-                  <Text style={styles.toggleDescription}>Keep route type, but avoid motorway segments</Text>
-                </View>
-                <View style={[styles.togglePill, avoidMotorways && styles.togglePillActive]}>
-                  <Text style={[styles.togglePillText, avoidMotorways && styles.togglePillTextActive]}>
-                    {avoidMotorways ? "ON" : "OFF"}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-              <ScrollView
-                style={styles.optionsScroll}
-                showsVerticalScrollIndicator={false}
-              >
-                {availableRouteTypes.map((option) => (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} accessibilityLabel="Close route options" />
+        <View style={styles.sheet}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Route options</Text>
+            <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel="Close route options">
+              <Text style={styles.doneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={styles.sectionTitle}>Route type</Text>
+            <View style={styles.segmentRow}>
+              {ROUTE_OPTIONS.map(option => {
+                const selected = routeType === option.id;
+                return (
                   <TouchableOpacity
                     key={option.id}
-                    style={[
-                      styles.optionButton,
-                      routeType === option.id && styles.optionButtonActive,
-                    ]}
-                    onPress={() => handleSelectRouteType(option.id)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    style={[styles.segment, selected && styles.segmentSelected]}
+                    onPress={() => setRouteType(option.id)}
                   >
-                    <Text
-                      style={[
-                        styles.optionLabel,
-                        routeType === option.id && styles.optionLabelActive,
-                      ]}
-                    >
+                    <Text numberOfLines={1} style={[styles.segmentText, selected && styles.segmentTextSelected]}>
                       {option.label}
                     </Text>
-                    <Text
-                      style={[
-                        styles.optionDescription,
-                        routeType === option.id && styles.optionDescriptionActive,
-                      ]}
-                    >
-                      {option.description}
-                    </Text>
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={onClose}
-              >
-                <Text style={styles.closeButtonText}>Done</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <Text style={styles.title}>Custom Route</Text>
-              <ScrollView style={styles.optionsScroll}>
-                <Text style={styles.configuratorLabel}>Windingness (how many turns)</Text>
-                <View style={styles.levelButtonsRow}>
-                  {levelOptions.map((level) => (
-                    <TouchableOpacity
-                      key={`wind-${level}`}
-                      style={[
-                        styles.levelButton,
-                        customWindingness === level && styles.levelButtonActive,
-                      ]}
-                      onPress={() => setCustomWindingness(level)}
-                    >
-                      <Text
-                        style={[
-                          styles.levelButtonText,
-                          customWindingness === level && styles.levelButtonTextActive,
-                        ]}
-                      >
-                        {level.charAt(0).toUpperCase() + level.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                );
+              })}
+            </View>
 
-                <Text style={[styles.configuratorLabel, { marginTop: theme.spacing.lg }]}>
-                  Hilliness (elevation changes)
-                </Text>
-                <View style={styles.levelButtonsRow}>
-                  {levelOptions.map((level) => (
-                    <TouchableOpacity
-                      key={`hill-${level}`}
-                      style={[
-                        styles.levelButton,
-                        customHilliness === level && styles.levelButtonActive,
-                      ]}
-                      onPress={() => setCustomHilliness(level)}
-                    >
-                      <Text
-                        style={[
-                          styles.levelButtonText,
-                          customHilliness === level && styles.levelButtonTextActive,
-                        ]}
-                      >
-                        {level.charAt(0).toUpperCase() + level.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+            <View style={styles.divider} />
+            <Text style={styles.sectionTitle}>Avoid</Text>
+            <View style={styles.avoidGrid}>
+              {AVOID_OPTIONS.map(option => (
+                <View key={option.id} style={styles.avoidRow}>
+                  <Text style={styles.avoidText}>{option.label}</Text>
+                  <Switch
+                    value={Boolean(avoidOptions[option.id])}
+                    onValueChange={value => setAvoidOption(option.id, value)}
+                    trackColor={{ false: theme.colors.surfaceMuted, true: theme.colors.accentMid }}
+                  />
                 </View>
+              ))}
+            </View>
 
-                <View style={styles.previewBox}>
-                  <Text style={styles.previewTitle}>Your Route:</Text>
-                  <Text style={styles.previewText}>
-                    {customWindingness.charAt(0).toUpperCase() + customWindingness.slice(1)} Windingness, {customHilliness.charAt(0).toUpperCase() + customHilliness.slice(1)} Hilliness
-                  </Text>
-                </View>
-              </ScrollView>
-              <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  style={styles.backButton}
-                  onPress={() => setShowCustomConfigurator(false)}
-                >
-                  <Text style={styles.backButtonText}>← Back</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={handleDoneCustom}
-                >
-                  <Text style={styles.closeButtonText}>Done</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
+            <View style={styles.divider} />
+            <LevelSelector title="Twisty" value={customWindingness} onChange={setCustomWindingness} />
+            <LevelSelector title="Undulating" value={customHilliness} onChange={setCustomHilliness} />
+          </ScrollView>
         </View>
-      </TouchableOpacity>
+      </View>
     </Modal>
+  );
+}
+
+function LevelSelector({ title, value, onChange }) {
+  return (
+    <View style={styles.levelSection}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.segmentRow}>
+        {LEVEL_OPTIONS.map(option => {
+          const selected = value === option.id;
+          return (
+            <TouchableOpacity
+              key={`${title}-${option.id}`}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              style={[styles.levelSegment, selected && styles.segmentSelected]}
+              onPress={() => onChange(option.id)}
+            >
+              <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
-  container: {
-    backgroundColor: theme.colors.cardBg,
-    borderTopLeftRadius: theme.radius.xl,
-    borderTopRightRadius: theme.radius.xl,
+  sheet: {
+    maxHeight: "82%",
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.lg,
-    maxHeight: "80%",
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: theme.radius.xl,
+    borderTopRightRadius: theme.radius.xl,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: theme.colors.text,
+  header: {
+    minHeight: 42,
     marginBottom: theme.spacing.md,
-  },
-  optionsScroll: {
-    marginHorizontal: -theme.spacing.lg,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  toggleRow: {
-    marginBottom: theme.spacing.md,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.inputBg,
-    borderWidth: 2,
-    borderColor: theme.colors.inputBorder,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  toggleLabel: {
+  title: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  doneText: {
+    padding: 8,
+    color: theme.colors.accentMid,
     fontSize: 15,
     fontWeight: "700",
+  },
+  sectionTitle: {
+    marginBottom: theme.spacing.sm,
     color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
+    fontSize: 14,
+    fontWeight: "700",
   },
-  toggleDescription: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
+  segmentRow: {
+    flexDirection: "row",
+    gap: 6,
+    padding: 4,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.primaryDark,
   },
-  togglePill: {
-    minWidth: 52,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: theme.colors.surfaceMuted,
+  segment: {
+    flex: 1,
+    minHeight: 42,
+    paddingHorizontal: 6,
+    borderRadius: theme.radius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
-  togglePillActive: {
+  levelSegment: {
+    flex: 1,
+    minHeight: 38,
+    paddingHorizontal: 6,
+    borderRadius: theme.radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentSelected: {
     backgroundColor: theme.colors.accentMid,
   },
-  togglePillText: {
-    fontSize: 12,
+  segmentText: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  segmentTextSelected: {
+    color: theme.colors.primaryDark,
     fontWeight: "700",
-    color: theme.colors.textMuted,
   },
-  togglePillTextActive: {
-    color: theme.colors.primaryDark,
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: theme.spacing.md,
+    backgroundColor: theme.colors.border,
   },
-  optionButton: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.inputBg,
-    borderWidth: 2,
-    borderColor: theme.colors.inputBorder,
-  },
-  optionButtonActive: {
-    backgroundColor: theme.colors.accentLight || theme.colors.accentMid,
-    borderColor: theme.colors.accentMid,
-  },
-  optionLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
-  },
-  optionLabelActive: {
-    color: theme.colors.accentMid,
-  },
-  optionDescription: {
-    fontSize: 13,
-    color: theme.colors.textMuted,
-  },
-  optionDescriptionActive: {
-    color: theme.colors.accentDark || theme.colors.accentMid,
-  },
-  configuratorLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: theme.colors.text,
-    marginBottom: theme.spacing.md,
-  },
-  levelButtonsRow: {
+  avoidGrid: {
     flexDirection: "row",
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
+    flexWrap: "wrap",
+    columnGap: theme.spacing.md,
   },
-  levelButton: {
-    flex: 1,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.inputBg,
-    borderWidth: 2,
-    borderColor: theme.colors.inputBorder,
-    alignItems: "center",
-  },
-  levelButtonActive: {
-    backgroundColor: theme.colors.accentLight || theme.colors.accentMid,
-    borderColor: theme.colors.accentMid,
-  },
-  levelButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: theme.colors.text,
-  },
-  levelButtonTextActive: {
-    color: theme.colors.accentMid,
-  },
-  previewBox: {
-    marginTop: theme.spacing.lg,
-    padding: theme.spacing.md,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.accentMid,
-  },
-  previewTitle: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: theme.colors.textMuted,
-    marginBottom: theme.spacing.xs,
-  },
-  previewText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: theme.colors.accentMid,
-  },
-  buttonRow: {
+  avoidRow: {
+    width: "47%",
+    minHeight: 46,
     flexDirection: "row",
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.md,
-  },
-  backButton: {
-    flex: 0.35,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.inputBg,
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: theme.colors.inputBorder,
+    justifyContent: "space-between",
   },
-  backButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
+  avoidText: {
+    flexShrink: 1,
     color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: "500",
   },
-  closeButton: {
-    flex: 1,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.accentMid,
-    alignItems: "center",
-  },
-  closeButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: theme.colors.primaryDark,
+  levelSection: {
+    marginBottom: theme.spacing.md,
   },
 });

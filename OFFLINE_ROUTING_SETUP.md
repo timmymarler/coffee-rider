@@ -1,7 +1,7 @@
 # Offline Route Caching Implementation
 
 ## Overview
-Coffee Rider now supports offline navigation by caching route data locally. When internet connectivity is lost, users can continue navigating with previously cached routes without API charges.
+Coffee Rider supports navigation on previously cached routes when internet connectivity is lost. This does not calculate arbitrary new routes offline.
 
 ## Key Features
 
@@ -19,9 +19,18 @@ Coffee Rider now supports offline navigation by caching route data locally. When
 
 ### 3. **Smart Routing**
 - **Online**: Try cache first (fast), then fetch fresh from TomTom
-- **Offline**: Use cached route or show error message
+- **Offline**: Use a matching cached route or show an error message
+- Cached route geometry and maneuver steps are persisted locally
+- On Android, cached routes without a live TomTom SDK route handle use Coffee Rider's JavaScript turn-by-turn guidance
 - No extra API charges for cache hits
 - Graceful degradation when cache unavailable
+
+### Limitations
+- A route must have been successfully planned and cached on this device first
+- Cache matching includes endpoints, waypoints, route type, travel mode, and route preferences
+- Automatic rerouting and planning a different route require connectivity
+- Map tiles are not explicitly downloaded or guaranteed to be available offline
+- Native TomTom route alternatives are unavailable offline when their in-memory SDK handles have expired
 
 ### 4. **User Experience**
 - Visual offline indicator at bottom of map
@@ -89,7 +98,7 @@ await cacheRoute(start, end, waypoints, type, result);
 ### User Perspective
 1. **Normal Online Use**: Routes are cached automatically in background
 2. **Connection Loss**: App detects offline and shows banner
-3. **Offline Navigation**: Can navigate cached routes without internet
+3. **Offline Navigation**: Can navigate a matching cached route without internet
 4. **Reconnection**: Continues normally when online
 
 ### Developer Integration
@@ -143,6 +152,7 @@ Message: "Route not in cache. Unable to fetch new route without internet."
 - [ ] Route caches after successful API call
 - [ ] Offline indicator shows when disconnected
 - [ ] Cached route loads when offline
+- [ ] Android follows cached geometry with app turn-by-turn guidance after app restart
 - [ ] Error shown if offline with no cache
 - [ ] Routes are removed after 7 days
 - [ ] Cache limit enforces 50-route maximum

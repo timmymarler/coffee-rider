@@ -8,6 +8,8 @@
 
 import { fetchGoogleRoute, fetchTomTomRoute } from "@core/map/utils/tomtomRouting";
 import { cacheRoute, getCachedRoute } from "@core/utils/routeCache";
+import { Platform } from "react-native";
+import { hasNativeTomTomRoute, planTomTomRoute } from "@core/map/tomtomNavigationSdk";
 
 /**
  * Central route fetching function
@@ -38,7 +40,9 @@ export async function fetchRoute({
   customHilliness = null,
   customWindingness = null,
   avoidMotorways = false,
+  avoidOptions = null,
   vehicleHeading = null,
+  includeAlternatives = true,
 }) {
   if (!origin || !destination) {
     throw new Error('Origin and destination are required');
@@ -47,10 +51,21 @@ export async function fetchRoute({
   // Check cache first if enabled
   if (useCache) {
     try {
-      const cached = await getCachedRoute(origin, destination, waypoints, routeType, travelMode, avoidMotorways);
+      const cached = await getCachedRoute(origin, destination, waypoints, routeType, travelMode, avoidMotorways, {
+        avoidOptions,
+        customHilliness,
+        customWindingness,
+      });
+      const needsNativeRoute = Platform.OS === 'android' && travelMode !== 'pedestrian' && travelMode !== 'bike';
       if (cached) {
-        console.log('[routingEngine] Using cached route');
-        return cached;
+        if (!needsNativeRoute || await hasNativeTomTomRoute(cached.nativeRouteId)) {
+          console.log('[routingEngine] Using cached route');
+          return cached;
+        }
+        if (Array.isArray(cached.polyline) && cached.polyline.length > 1) {
+          console.log('[routingEngine] Using cached route geometry without a live TomTom route handle');
+          return { ...cached, nativeRouteId: null, alternatives: [] };
+        }
       }
     } catch (error) {
       console.warn('[routingEngine] Cache lookup failed, continuing with fresh fetch:', error.message);
@@ -70,8 +85,22 @@ export async function fetchRoute({
     // Convert travelMode to Google mode
     const googleMode = travelMode === 'bike' ? 'bicycling' : 'walking';
     result = await fetchGoogleRoute(origin, destination, waypoints, googleMode);
+  } else if (Platform.OS === 'android') {
+    result = await planTomTomRoute({
+      origin,
+      destination,
+      waypoints,
+      travelMode,
+      routeType,
+      routeTypeMap,
+      customHilliness,
+      customWindingness,
+      avoidMotorways,
+      avoidOptions,
+      includeAlternatives,
+    });
   } else {
-    // Use TomTom for car and motorcycle
+    // The native Navigation SDK bridge currently exists on Android only.
     result = await fetchTomTomRoute(
       origin,
       destination,
@@ -93,7 +122,11 @@ export async function fetchRoute({
   // Cache the fresh result
   if (useCache) {
     try {
-      await cacheRoute(origin, destination, waypoints, routeType, travelMode, avoidMotorways, result);
+      await cacheRoute(origin, destination, waypoints, routeType, travelMode, avoidMotorways, result, {
+        avoidOptions,
+        customHilliness,
+        customWindingness,
+      });
     } catch (error) {
       console.warn('[routingEngine] Failed to cache route:', error.message);
       // Continue anyway - caching is optimization, not critical

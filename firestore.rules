@@ -48,6 +48,12 @@ service cloud.firestore {
       return isAuthed() &&
         exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
     }
+
+    function isGroupMemberForUser(groupId, userId) {
+      return exists(/databases/$(database)/documents/groups/$(groupId)/members/$(userId)) &&
+        get(/databases/$(database)/documents/groups/$(groupId)/members/$(userId)).data.status != 'left' &&
+        get(/databases/$(database)/documents/groups/$(groupId)/members/$(userId)).data.status != 'kicked';
+    }
     
     function isGroupOwner(groupId) {
       return isAuthed() &&
@@ -256,6 +262,30 @@ service cloud.firestore {
       );
       
       allow delete: if isProOrAdmin();
+    }
+
+    /* RIDE INVITES - private in-app invitations to join a shared group route */
+    match /rideInvites/{inviteId} {
+      allow create: if isAuthed() &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.recipientId is string &&
+        request.resource.data.routeId is string &&
+        request.resource.data.groupId is string &&
+        isGroupMember(request.resource.data.groupId) &&
+        isGroupMemberForUser(request.resource.data.groupId, request.resource.data.recipientId);
+
+      allow get, list: if isAuthed() && (
+        resource.data.recipientId == request.auth.uid ||
+        resource.data.senderId == request.auth.uid
+      );
+
+      allow update: if isAuthed() &&
+        resource.data.recipientId == request.auth.uid &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status in ['accepted', 'declined'] &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt']);
+
+      allow delete: if false;
     }
 
     /* ACTIVE RIDES - REAL-TIME LOCATION SHARING */

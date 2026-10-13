@@ -46,6 +46,7 @@ export function WaypointsProvider({ children }) {
   const [visitedWaypointIndices, setVisitedWaypointIndices] = useState([]); // Track which waypoints we've reached
   const [pendingSavedRouteId, setPendingSavedRouteId] = useState(null);
   const [enableFollowMeAfterLoad, setEnableFollowMeAfterLoad] = useState(false);
+  const [preserveLoadedRouteForNextRide, setPreserveLoadedRouteForNextRide] = useState(false);
 
   function addWaypoint(waypoint) {
     setWaypoints((prev) => [...prev, ensureWaypointId(waypoint)]);
@@ -125,6 +126,8 @@ export function WaypointsProvider({ children }) {
         setPendingSavedRouteId,
         enableFollowMeAfterLoad,
         setEnableFollowMeAfterLoad,
+        preserveLoadedRouteForNextRide,
+        setPreserveLoadedRouteForNextRide,
       }}
     >
       {children}

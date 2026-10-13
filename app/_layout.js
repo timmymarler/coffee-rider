@@ -8,6 +8,7 @@ import { ThemeProvider } from "@context/ThemeContext";
 import { destroyBleTransport, initBleTransport } from "@core/ble/bleTransport";
 import { getBleDirectionsConfig } from "@core/ble/directionsTransmitter";
 import AppHeader from "@core/components/layout/AppHeader";
+import RideInvitePrompt from "@core/components/rides/RideInvitePrompt";
 import SplashScreen from "@core/components/ui/SplashScreen";
 import { VersionUpgradeModal } from "@core/components/ui/VersionUpgradeModal";
 import { WaypointsProvider } from "@core/map/waypoints/WaypointsContext";
@@ -73,7 +74,7 @@ function FloatingTabBar({ state }) {
   }, [hidden]);
 
   const activeColor = theme.colors.accentDark;
-  const inactiveColor = '#635021';
+  const inactiveColor = theme.colors.tabBarInactive;
 
   const tabs = [
     { name: "map", icon: "map", disabled: !canAccessMap },
@@ -370,6 +371,8 @@ function LayoutContent() {
     <>
       {mainContent}
 
+      {user && !showLoginScreen && !requiresSubscription ? <RideInvitePrompt /> : null}
+
       {versionStatus && versionStatus.hasUpdate && (
         <VersionUpgradeModal
           visible={showVersionModal}
@@ -474,7 +477,7 @@ export default function Layout() {
     setShowSplash(false);
   };
 
-  if (__DEV__) {
+  if (__DEV__ && process.env.EXPO_PUBLIC_TOMTOM_POC_ONLY === "true") {
     return <TomTomPocScreen />;
   }
 
