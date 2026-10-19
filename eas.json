@@ -72,6 +72,14 @@
       }
     },
 
+    "store-test": {
+      "extends": "production",
+      "environment": "production",
+      "credentialsSource": "remote",
+      "distribution": "store",
+      "android": { "buildType": "app-bundle" }
+    },
+
     "driver": {
       "env": { "APP_NAME": "driver" }
     },
@@ -105,6 +113,9 @@
     /* ----------------------------- PRODUCTION -------------------------- */
 
     "production": {
+      "environment": "production",
+      "credentialsSource": "remote",
+      "android": { "buildType": "app-bundle" },
       "env": {
           "EAS_BUILD_BRANCH": "main",
           "APP_NAME": "rider",

@@ -29,6 +29,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
+          <string>com.googleusercontent.apps.1001945286149-vkem3dmdu6p4mld7vp5j2atncvv97uct</string>
           <string>coffee-rider-v2</string>
           <string>com.timmy.marler.coffeerider</string>
         </array>

@@ -1459,17 +1459,20 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [tomTomFollowZoom, setTomTomFollowZoom] = useState(FOLLOW_ZOOM);
 
   useEffect(() => {
+    if (Platform.OS !== 'android') return;
     let cancelled = false;
-    isTomTomTesterBuild().then(async testerBuild => {
-      if (!testerBuild || cancelled) return;
-      setIsTesterBuild(true);
+    const initializeMap = async () => {
       try {
+        const testerBuild = await isTomTomTesterBuild();
+        if (cancelled) return;
+        setIsTesterBuild(testerBuild);
         await initializeTomTomNavigation({ telemetryEnabled: false });
         if (!cancelled) setUseTomTomMap(true);
       } catch (error) {
         if (!cancelled) Alert.alert("TomTom map unavailable", error.message);
       }
-    });
+    };
+    initializeMap();
     return () => { cancelled = true; };
   }, []);
 
