@@ -3,20 +3,20 @@ import { RoutingPreferencesContext } from "@context/RoutingPreferencesContext";
 import { TabBarContext } from "@context/TabBarContext";
 import { useTheme } from "@context/ThemeContext";
 import { sendBleDirectionsFrame } from "@core/ble/directionsTransmitter";
+import {
+    GOOGLE_PLACES_LIVE_SEARCH_ENABLED,
+    GOOGLE_TEXT_SEARCH_DAILY_LIMIT,
+    GOOGLE_TEXT_SEARCH_DAILY_LIMIT_ENABLED,
+} from "@core/config/launchFlags";
 import { canUseGooglePlacesAccess } from "@core/google/googlePlacesAccess";
 import MapView, { Marker, Polyline } from "@core/map/nativeMaps";
-import TomTomEmbeddedMap from "@core/map/tomtomEmbeddedMap";
 import { getSdkRoundaboutPanel } from "@core/map/sdkRoundaboutPanel";
+import TomTomEmbeddedMap from "@core/map/tomtomEmbeddedMap";
 import { getNativeTomTomRoute, initializeTomTomNavigation, isTomTomTesterBuild, simulateTomTomDetour, startTomTomNavigation, stopTomTomNavigation, subscribeTomTomNavigation } from "@core/map/tomtomNavigationSdk";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
-import {
-  GOOGLE_PLACES_LIVE_SEARCH_ENABLED,
-  GOOGLE_TEXT_SEARCH_DAILY_LIMIT,
-  GOOGLE_TEXT_SEARCH_DAILY_LIMIT_ENABLED,
-} from "@core/config/launchFlags";
 import { arrayUnion, collection, doc, getDoc, getDocs, onSnapshot, updateDoc } from "firebase/firestore";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, Dimensions, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, useColorScheme, useWindowDimensions, View } from "react-native";
@@ -305,8 +305,6 @@ import { SearchBar } from "../map/components/SearchBar";
 
 import { saveRide } from "@/core/map/routes/saveRide";
 import { saveRoute } from "@/core/map/routes/saveRoute";
-import { shareRoute, startRide as activateSharedRoute } from "@core/map/routes/sharedRides";
-import { sendRideInvites } from "@core/map/routes/rideInvites";
 import { openNavigationWithWaypoints } from "@/core/map/utils/navigation";
 import { AuthContext } from "@context/AuthContext";
 import {
@@ -315,10 +313,11 @@ import {
     IOS_SUBSCRIPTIONS_TEMP_DISABLED,
 } from "@core/config/launchFlags";
 import { GOOGLE_PHOTO_LIMITS } from "@core/config/photoPolicy";
-import { useNetworkStatus } from "@core/hooks/useNetworkStatus";
-import useActiveRide from "@core/map/routes/useActiveRide";
 import { useAllUserGroups, useGroupMembers } from "@core/groups/hooks";
-import { searchUsersByNameOrEmail } from "@firebaseLocal/users";
+import { useNetworkStatus } from "@core/hooks/useNetworkStatus";
+import { sendRideInvites } from "@core/map/routes/rideInvites";
+import { startRide as activateSharedRoute, shareRoute } from "@core/map/routes/sharedRides";
+import useActiveRide from "@core/map/routes/useActiveRide";
 import useActiveRideLocations from "@core/map/routes/useActiveRideLocations";
 import { fetchRoute, getRouteStyle, shouldRenderOutline } from "@core/map/routingEngine";
 import useWaypoints from "@core/map/waypoints/useWaypoints";
@@ -1895,6 +1894,9 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
   const [showWaypointSummaryLine, setShowWaypointSummaryLine] = useState(false);
   const lastKnownDistanceRef = useRef(null);
   const routeFittedRef = useRef(false);
+  // Incremented when a newly built route should be fitted; shared with the
+  // TomTom native map so both providers use the same explicit fit signal.
+  const [routeFitRequestId, setRouteFitRequestId] = useState(0);
   const arrivalPolylineLockRef = useRef(false);
   const waypointAnnouncedRef = useRef(new Set());
   
@@ -6338,7 +6340,9 @@ function getStepCompletionThresholds(step = null) {
     }
 
     const requestId = ++routeRequestId.current;
-    buildRoute({ requestId }).catch(error => {
+    // Background rebuild from a new location: refresh the polyline without
+    // re-fitting the camera, so the user can keep browsing the map.
+    buildRoute({ requestId, skipCameraFit: true }).catch(error => {
       console.warn('[MAP_EFFECT] buildRoute error:', error);
       // Error already handled as toast in buildRoute, no need to display again
     });
@@ -6612,6 +6616,10 @@ function getStepCompletionThresholds(step = null) {
     // Update UI state for persistence
     updateRouteUIState(structure);
     
+    // Fit the newly chosen route immediately, even when it replaces an
+    // existing polyline (background location rebuilds must not re-fit).
+    routeFittedRef.current = false;
+
     // Build route with explicit structure (don't rely on state being updated)
     console.log('[handleRoute] Building with explicit structure');
     const routeMapped = await buildRoute({ 
@@ -6619,8 +6627,6 @@ function getStepCompletionThresholds(step = null) {
       destinationOverride: structure.destination,
       requestId 
     });
-
-    routeFittedRef.current = false;
   }
 
   function getActiveDestination() {
@@ -6689,6 +6695,7 @@ function getStepCompletionThresholds(step = null) {
     avoidOptions: avoidOptionsOverride = avoidOptions,
     requestId,
     skipFitToView = false, // Don't auto-center when in Follow Me mode
+    skipCameraFit = false, // Background rebuilds: update the polyline without moving the camera
     vehicleHeading = null, // User's current heading in degrees (0-359), used for rerouting
   } = {}) {
     if (!origin) {
@@ -6872,8 +6879,9 @@ function getStepCompletionThresholds(step = null) {
     stepProgressRef.current = { lastStepIdx: 0, lastDistToEnd: Infinity, lastProgressMeters: 0, closestStepEndDistance: Infinity };
 
     // Auto-fit view if not in Follow Me and not already fitted
-    if (!skipFitToView && !routeFittedRef.current && !followUser) {
+    if (!skipFitToView && !skipCameraFit && !routeFittedRef.current && !followUser) {
       routeFittedRef.current = true;
+      setRouteFitRequestId((id) => id + 1);
       mapRef.current?.fitToCoordinates(simplified, {
         edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
         animated: true,
@@ -6930,6 +6938,7 @@ function getStepCompletionThresholds(step = null) {
     destinationOverride = null, 
     requestId,
     waypointsOverride = null,
+    skipCameraFit = false,
   } = {}) {
     const finalRequestId = requestId || routeRequestId.current;
     
@@ -7033,6 +7042,7 @@ function getStepCompletionThresholds(step = null) {
       avoidMotorways,
       requestId: finalRequestId,
       skipFitToView: skipFit,
+      skipCameraFit,
     });
 
     // Count user planning reroutes (including waypoint updates) once per distinct
@@ -8194,6 +8204,7 @@ function getStepCompletionThresholds(step = null) {
             traveledRouteCoordinates={hidePolylines || !followUser ? [] : tomTomTravelledCoordinates}
             routeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
             fitRoute={!isNavigationMode}
+            fitRequestId={routeFitRequestId}
             followNavigation={sdkNavigationEnabled && !hasArrivedAtDestination}
             onPlacePress={(event) => {
               const placeId = event.nativeEvent?.placeId;

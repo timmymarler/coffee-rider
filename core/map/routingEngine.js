@@ -6,10 +6,10 @@
  * - Route state management
  */
 
+import { hasNativeTomTomRoute, planTomTomRoute } from "@core/map/tomtomNavigationSdk";
 import { fetchGoogleRoute, fetchTomTomRoute } from "@core/map/utils/tomtomRouting";
 import { cacheRoute, getCachedRoute } from "@core/utils/routeCache";
 import { Platform } from "react-native";
-import { hasNativeTomTomRoute, planTomTomRoute } from "@core/map/tomtomNavigationSdk";
 
 /**
  * Central route fetching function

@@ -9,8 +9,8 @@ import { GOOGLE_PLACE_PHOTOS_ENABLED } from "@core/config/launchFlags";
 import { canUseGooglePlacesAccess, isInBlockedGoogleRegion } from "@core/google/googlePlacesAccess";
 import { getCapabilities } from "@core/roles/capabilities";
 import { incMetric } from "@core/utils/devMetrics";
-import { trackUsageEventSafe } from "@core/utils/usageTelemetry";
 import { uploadImage } from "@core/utils/uploadImage";
+import { trackUsageEventSafe } from "@core/utils/usageTelemetry";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Constants from 'expo-constants';
 import * as ImagePicker from "expo-image-picker";
@@ -101,7 +101,6 @@ export default function PlaceCard({
   onPlaceCreated,
   onClearRoute = null,
   onShowRouteOptions = null,
-  onRoute,
   onNavigate,
   isLandscape = false,
   isVisited = false,
@@ -1358,23 +1357,15 @@ export default function PlaceCard({
 
           {canPreviewSingleRoute && (
             <TouchableOpacity
-              /* Route / Clear Route */
+              /* Route options */
               style={styles.photoActionButton}
               onPress={() => {
-                if (hasRoute) {
-                  // Route exists: show the same route action options used by marker long press.
-                  try {
-                    onShowRouteOptions?.(safePlace);
-                  } catch (error) {
-                    console.error('[PlaceCard] Error opening route options:', error);
-                  }
-                } else {
-                  // Create new route
-                  try {
-                    onRoute?.(safePlace);
-                  } catch (error) {
-                    console.error('[PlaceCard] Error creating route:', error);
-                  }
+                // Always show the same route action options used by marker long
+                // press, whether or not a route is currently built.
+                try {
+                  onShowRouteOptions?.(safePlace);
+                } catch (error) {
+                  console.error('[PlaceCard] Error opening route options:', error);
                 }
                 // Close the card after handling the route action
                 onClose();

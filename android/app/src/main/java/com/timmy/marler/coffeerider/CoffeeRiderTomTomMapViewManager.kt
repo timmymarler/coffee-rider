@@ -55,6 +55,7 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
   private var followZoom = DEFAULT_FOLLOW_ZOOM
   private var traveledRouteOverlay: com.tomtom.sdk.map.display.route.Route? = null
   private var fitRoute = false
+  private var fitRequestId = -1
   private var followNavigation = false
   private var cameraTarget: CameraOptions? = null
   private var mapReady = false
@@ -232,11 +233,13 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
         }
       }
     }
-    val routeChanged = updatedRoute != routeCoordinates
-    if (!routeChanged) return
+    val routeAppeared = routeCoordinates.size <= 1 && updatedRoute.size > 1
+    if (updatedRoute == routeCoordinates) return
     routeCoordinates = updatedRoute
     renderRoute()
-    if (routeChanged && fitRoute && !followNavigation && routeCoordinates.size > 1) tomTomMap?.zoomToRoutes(72)
+    // Fit only when a route first appears; background rebuilds of an existing
+    // polyline must not move the camera while the user is browsing.
+    if (routeAppeared && fitRoute && !followNavigation) tomTomMap?.zoomToRoutes(72)
   }
 
   fun setRouteColor(value: String?) {
@@ -272,6 +275,15 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
     val shouldFit = value && !fitRoute
     fitRoute = value
     if (shouldFit && !followNavigation && routeCoordinates.size > 1) tomTomMap?.zoomToRoutes(72)
+  }
+
+  fun setFitRequestId(value: Int) {
+    if (value == fitRequestId) return
+    fitRequestId = value
+    // Post so a routeCoordinates update from the same JS commit is applied first.
+    cameraEventHandler.post {
+      if (!disposed && !followNavigation && routeCoordinates.size > 1) tomTomMap?.zoomToRoutes(72)
+    }
   }
 
   fun setFollowNavigation(value: Boolean) {
@@ -544,6 +556,9 @@ class CoffeeRiderTomTomMapViewManager : SimpleViewManager<CoffeeRiderTomTomMapVi
 
   @ReactProp(name = "fitRoute", defaultBoolean = false)
   fun setFitRoute(view: CoffeeRiderTomTomMapView, value: Boolean) = view.setFitRoute(value)
+
+  @ReactProp(name = "fitRequestId", defaultInt = -1)
+  fun setFitRequestId(view: CoffeeRiderTomTomMapView, value: Int) = view.setFitRequestId(value)
 
   @ReactProp(name = "followNavigation", defaultBoolean = false)
   fun setFollowNavigation(view: CoffeeRiderTomTomMapView, value: Boolean) = view.setFollowNavigation(value)
