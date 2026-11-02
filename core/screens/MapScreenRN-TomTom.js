@@ -1114,12 +1114,30 @@ function matchesQuery(place, query) {
   return title.includes(q) || address.includes(q);
 }
 
+const SEARCH_SMALL_WORDS = new Set(["the", "a", "an"]);
+
+function normalizeForSearchMatch(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word && !SEARCH_SMALL_WORDS.has(word))
+    .join(" ");
+}
+
+// Exact match ignoring small words (e.g. "John Bunyan" matches "The John Bunyan")
 function isExactMatch(place, query) {
+  const normalizedQuery = normalizeForSearchMatch(query);
+  const normalizedTitle = normalizeForSearchMatch(place?.title);
+  if (!normalizedQuery || !normalizedTitle) return false;
+  return normalizedTitle === normalizedQuery || normalizedTitle.startsWith(normalizedQuery);
+}
+
+// Raw title match without normalization; a raw exact match needs no Google prompt
+function isRawExactMatch(place, query) {
   if (!query) return false;
   const q = query.toLowerCase();
   const title = place.title?.toLowerCase() || "";
-
-  // Exact match if title starts with query or is exact word match
   return title.startsWith(q);
 }
 
@@ -6098,6 +6116,52 @@ function getStepCompletionThresholds(step = null) {
     const crSearchResults = crPlaces.filter((p) => p.source === "cr" && matchesQuery(p, activeQuery));
     const exactCrMatch = crSearchResults.find((p) => isExactMatch(p, activeQuery));
 
+    const focusSearchResultsOnMap = (points) => {
+      const coords = points
+        .map((p) => ({ latitude: Number(p.latitude ?? p.lat), longitude: Number(p.longitude ?? p.lng) }))
+        .filter((c) => Number.isFinite(c.latitude) && Number.isFinite(c.longitude));
+      if (!coords.length) return;
+
+      if (coords.length === 1) {
+        if (useTomTomMap) {
+          setTomTomCameraTarget(previous => ({
+            latitude: coords[0].latitude,
+            longitude: coords[0].longitude,
+            zoom: RECENTER_ZOOM,
+            heading: 0,
+            pitch: 0,
+            requestId: (previous?.requestId || 0) + 1,
+          }));
+        } else {
+          mapRef.current?.animateCamera({ center: coords[0] }, { duration: 600 });
+        }
+        return;
+      }
+
+      if (useTomTomMap) {
+        const latitudes = coords.map((c) => c.latitude);
+        const longitudes = coords.map((c) => c.longitude);
+        const minLat = Math.min(...latitudes), maxLat = Math.max(...latitudes);
+        const minLng = Math.min(...longitudes), maxLng = Math.max(...longitudes);
+        // span = 360 / 2^zoom (mirrors the native camera-change zoom math)
+        const span = Math.max(maxLat - minLat, maxLng - minLng, 0.005);
+        const zoom = Math.max(3, Math.min(16, Math.log2(360 / span) - 1.2));
+        setTomTomCameraTarget(previous => ({
+          latitude: (minLat + maxLat) / 2,
+          longitude: (minLng + maxLng) / 2,
+          zoom,
+          heading: 0,
+          pitch: 0,
+          requestId: (previous?.requestId || 0) + 1,
+        }));
+      } else if (mapRef.current) {
+        mapRef.current.fitToCoordinates(coords, {
+          edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
+          animated: true,
+        });
+      }
+    };
+
     const finishWithResults = (results) => {
       if (cancelled) return;
 
@@ -6108,15 +6172,14 @@ function getStepCompletionThresholds(step = null) {
         exactMatch = results.find((p) => isExactMatch(p, activeQuery));
       }
 
-      const focusMatch = exactMatch || crSearchResults[0];
-      if (focusMatch && (useTomTomMap || mapRef.current)) {
-        if (focusMatch.source === "cr" || focusMatch.source === "google") {
-          setSelectedPlaceId(focusMatch.id);
+      if (exactMatch && (useTomTomMap || mapRef.current)) {
+        if (exactMatch.source === "cr" || exactMatch.source === "google") {
+          setSelectedPlaceId(exactMatch.id);
         }
         if (useTomTomMap) {
           setTomTomCameraTarget(previous => ({
-            latitude: focusMatch.latitude,
-            longitude: focusMatch.longitude,
+            latitude: exactMatch.latitude,
+            longitude: exactMatch.longitude,
             zoom: RECENTER_ZOOM,
             heading: 0,
             pitch: 0,
@@ -6127,8 +6190,8 @@ function getStepCompletionThresholds(step = null) {
         mapRef.current.animateCamera(
           {
             center: {
-              latitude: focusMatch.latitude,
-              longitude: focusMatch.longitude,
+              latitude: exactMatch.latitude,
+              longitude: exactMatch.longitude,
             },
           },
           { duration: 600 }
@@ -6136,19 +6199,8 @@ function getStepCompletionThresholds(step = null) {
         return true;
       }
 
-      const fitResults = [...crSearchResults, ...results];
-      if (fitResults.length && mapRef.current) {
-        mapRef.current.fitToCoordinates(
-          fitResults.map(p => ({
-            latitude: p.latitude,
-            longitude: p.longitude,
-          })),
-          {
-            edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
-            animated: true,
-          }
-        );
-      }
+      // No exact match: zoom out to show all near matches without opening a card.
+      focusSearchResultsOnMap([...crSearchResults, ...results]);
 
       return false;
     };
@@ -6185,7 +6237,9 @@ function getStepCompletionThresholds(step = null) {
         latitudeDelta < 0.08 ? 30000 :
         50000;
 
-      if (exactCrMatch) {
+      // A raw exact title match is enough on its own; no Google prompt.
+      const rawExactCrMatch = crSearchResults.find((p) => isRawExactMatch(p, activeQuery));
+      if (rawExactCrMatch) {
         finishWithResults([]);
         return;
       }
@@ -6217,9 +6271,21 @@ function getStepCompletionThresholds(step = null) {
         }
       };
 
+      // Small-word and partial matches are shown on the map, but Google
+      // search is still offered for wider coverage.
+      if (exactCrMatch || crSearchResults.length) {
+        finishWithResults([]);
+      }
+
+      const nearMatchNote = exactCrMatch
+        ? `Found “${exactCrMatch.title || exactCrMatch.name}” on Coffee Rider.`
+        : crSearchResults.length
+          ? `Coffee Rider has ${crSearchResults.length} near match${crSearchResults.length === 1 ? "" : "es"} on the map.`
+          : `No exact Coffee Rider match was found for “${activeQuery}”.`;
+
       Alert.alert(
         "Search Google too?",
-        `No exact Coffee Rider match was found for “${activeQuery}”. Search Google places as well?`,
+        `${nearMatchNote} Search Google places as well?`,
         [
           { text: "Not now", style: "cancel", onPress: () => finishWithResults([]) },
           { text: "Search Google", onPress: runGoogleSearch },
