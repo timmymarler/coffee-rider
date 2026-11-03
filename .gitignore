@@ -81,6 +81,7 @@ android/app/src/main/java/com/timmy/marler/coffeerider/*
 !android/app/src/main/java/com/timmy/marler/coffeerider/TomTomNavigationModule.kt
 !android/app/src/main/java/com/timmy/marler/coffeerider/TomTomNavigationPackage.kt
 !android/app/src/main/java/com/timmy/marler/coffeerider/TomTomMapActivity.kt
+!android/app/src/main/java/com/timmy/marler/coffeerider/NavigationForegroundService.kt
 !android/app/src/main/AndroidManifest.xml
 
 !ios/
