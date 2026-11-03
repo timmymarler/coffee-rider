@@ -12,7 +12,7 @@ import { canUseGooglePlacesAccess } from "@core/google/googlePlacesAccess";
 import MapView, { Marker, Polyline } from "@core/map/nativeMaps";
 import { getSdkRoundaboutPanel } from "@core/map/sdkRoundaboutPanel";
 import TomTomEmbeddedMap from "@core/map/tomtomEmbeddedMap";
-import { getNativeTomTomRoute, initializeTomTomNavigation, isTomTomTesterBuild, simulateTomTomDetour, startTomTomNavigation, stopTomTomNavigation, subscribeTomTomNavigation } from "@core/map/tomtomNavigationSdk";
+import { getNativeTomTomRoute, initializeTomTomNavigation, isTomTomTesterBuild, setTomTomVoiceEnabled, simulateTomTomDetour, startTomTomNavigation, stopTomTomNavigation, subscribeTomTomNavigation } from "@core/map/tomtomNavigationSdk";
 import { debugLog } from "@core/utils/debugLog";
 import { incMetric } from "@core/utils/devMetrics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -296,6 +296,8 @@ import SvgPin from "../map/components/SvgPin";
 import * as KeepAwake from "expo-keep-awake";
 import * as Location from "expo-location";
 import * as Speech from "expo-speech";
+import { Audio, InterruptionModeIOS } from "expo-av";
+import { addBackgroundNavigationListener, startBackgroundNavigationLocation, stopBackgroundNavigationLocation } from "@core/map/backgroundNavigation";
 import { classifyPoi } from "../map/classify/classifyPois";
 import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
@@ -2048,7 +2050,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         receivedSdkDistance = true;
         setNextJunctionDistance(event.distanceToNextInstruction);
       }
-      if (event.type === "announcement" && sdkVoiceEnabledRef.current) {
+      if (event.type === "announcement" && sdkVoiceEnabledRef.current && !event.playedNatively) {
         console.log("[TomTomNavigation] SDK announcement received");
         Speech.stop();
         Speech.speak(formatSdkAnnouncementForUnits(event.message, sdkDistanceUnitsRef.current), { language: "en-GB", pitch: 1, rate: 0.95 });
@@ -2064,6 +2066,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
         console.log("[TomTomNavigation] SDK session started", { simulated: event.simulated });
       }
     });
+    setTomTomVoiceEnabled(sdkVoiceEnabledRef.current);
     startTomTomNavigation(nativeRouteId, { simulate: simulateSdkNavigation }).catch((error) => {
       if (disposed) return;
       console.warn("[TomTomNavigation] Start failed:", error.message);
@@ -2142,9 +2145,48 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     }
   }, [routeCoords.length, routeDestination, waypoints.length, userLocation, followUser]);
 
+  // iOS: keep voice guidance, location and BLE pod updates running when the
+  // phone is locked or the app is backgrounded during Follow Me.
+  useEffect(() => {
+    if (Platform.OS !== "ios" || !followUser) return undefined;
+    let cancelled = false;
+
+    Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      interruptionModeIOS: InterruptionModeIOS.DuckOthers,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    }).catch((error) => console.warn("[BackgroundNav] Audio mode failed:", error?.message || error));
+
+    startBackgroundNavigationLocation().then((started) => {
+      if (cancelled && started) stopBackgroundNavigationLocation();
+    });
+
+    const removeListener = addBackgroundNavigationListener((location) => {
+      const coords = location?.coords;
+      if (!coords || !Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) return;
+      if (Number.isFinite(coords.accuracy) && coords.accuracy > MAX_LOCATION_ACCURACY) return;
+      setUserLocation(coords);
+    });
+
+    return () => {
+      cancelled = true;
+      removeListener();
+      stopBackgroundNavigationLocation();
+      Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: false,
+        staysActiveInBackground: false,
+      }).catch(() => {});
+    };
+  }, [followUser]);
+
   const handleTtsToggle = useCallback(() => {
     setIsTtsEnabled((prev) => {
       const next = !prev;
+      setTomTomVoiceEnabled(next);
       if (!next) {
         Speech.stop();
       } else {

@@ -7,7 +7,12 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.tomtom.sdk.location.GeoLocation
 import com.tomtom.sdk.location.LocationProvider
@@ -26,6 +31,7 @@ import com.tomtom.sdk.navigation.WaypointArrivalListener
 import com.tomtom.sdk.routing.route.RouteStop
 import com.tomtom.sdk.navigation.replanning.DeviationReplanningMode
 import com.tomtom.sdk.navigation.guidance.GuidanceAnnouncement
+import android.media.AudioAttributes
 import com.tomtom.sdk.navigation.guidance.InstructionPhase
 import com.tomtom.sdk.navigation.guidance.instruction.GuidanceInstruction
 import com.tomtom.sdk.navigation.guidance.instruction.ExitRoundaboutGuidanceInstruction
@@ -85,6 +91,10 @@ class TomTomNavigationModule(
   private var roundaboutExitNumber: Int? = null
   private var roundaboutTurnAngle: Double? = null
   private val sessionRoutePlans = mutableMapOf<String, RoutePlan>()
+  private var androidTts: android.speech.tts.TextToSpeech? = null
+  @Volatile private var ttsReady = false
+  @Volatile private var guidanceVoiceEnabled = true
+  private var pendingAnnouncement: String? = null
 
   override fun getName(): String = NAME
 
@@ -312,8 +322,11 @@ class TomTomNavigationModule(
             ) {
               pendingRoundaboutExitText = message
             }
+            val playedNatively = guidanceVoiceEnabled
+            if (playedNatively) speakGuidanceAnnouncement(message)
             emitNavigationEvent("announcement", Arguments.createMap().apply {
               putString("message", message)
+              putBoolean("playedNatively", playedNatively)
             })
           }
 
@@ -334,6 +347,9 @@ class TomTomNavigationModule(
           emitNavigationEvent("arrived", Arguments.createMap())
           reactApplicationContext.runOnUiQueueThread { stopNavigationSession() }
         }.also(navigation::addDestinationArrivalListener)
+        ensureAnnouncementTts()
+        requestNotificationPermissionIfNeeded()
+        NavigationForegroundService.start(reactApplicationContext.applicationContext)
         navigation.configuration.update { guidanceAnnouncementsEnabled = true }
         navigation.start(NavigationOptions(plan))
         emitNavigationEvent("started", Arguments.createMap().apply { putBoolean("simulated", simulate) })
@@ -400,6 +416,56 @@ class TomTomNavigationModule(
   }
 
   @ReactMethod
+  fun setVoiceEnabled(enabled: Boolean, promise: Promise) {
+    guidanceVoiceEnabled = enabled
+    if (!enabled) {
+      androidTts?.stop()
+      pendingAnnouncement = null
+    }
+    promise.resolve(null)
+  }
+
+  private fun requestNotificationPermissionIfNeeded() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    val activity = reactApplicationContext.currentActivity ?: return
+    if (ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+    ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
+  }
+
+  private fun ensureAnnouncementTts() {
+    if (androidTts != null) return
+    androidTts = android.speech.tts.TextToSpeech(reactApplicationContext.applicationContext) { status ->
+      ttsReady = status == android.speech.tts.TextToSpeech.SUCCESS
+      if (ttsReady) {
+        androidTts?.setAudioAttributes(
+          AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+        )
+        androidTts?.language = Locale.UK
+        val pending = pendingAnnouncement
+        pendingAnnouncement = null
+        if (pending != null) speakGuidanceAnnouncement(pending)
+      }
+    }
+  }
+
+  private fun speakGuidanceAnnouncement(message: String) {
+    val tts = androidTts ?: return
+    if (!ttsReady) {
+      pendingAnnouncement = message
+      return
+    }
+    tts.speak(
+      message,
+      android.speech.tts.TextToSpeech.QUEUE_FLUSH,
+      null,
+      "cr-guidance-${System.currentTimeMillis()}",
+    )
+  }
+
+  @ReactMethod
   fun addListener(eventName: String) = Unit
 
   @ReactMethod
@@ -414,6 +480,9 @@ class TomTomNavigationModule(
   }
 
   private fun stopNavigationSession() {
+    NavigationForegroundService.stop(reactApplicationContext.applicationContext)
+    androidTts?.stop()
+    pendingAnnouncement = null
     if (!TomTomSdk.isInitialized || activeRouteId == null) return
     val navigation = TomTomSdk.navigation
     progressListener?.let(navigation::removeProgressUpdatedListener)
@@ -473,6 +542,11 @@ class TomTomNavigationModule(
   }
 
   override fun invalidate() {
+    androidTts?.stop()
+    androidTts?.shutdown()
+    androidTts = null
+    ttsReady = false
+    pendingAnnouncement = null
     reactApplicationContext.runOnUiQueueThread { stopNavigationSession() }
     plannedRoutes.clear()
     super.invalidate()

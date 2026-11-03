@@ -6,6 +6,9 @@
   <uses-permission android:name="android.permission.CAMERA" tools:node="remove"/>
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
   <uses-permission android:name="android.permission.INTERNET"/>
   <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove"/>
@@ -42,6 +45,7 @@
       </intent-filter>
     </activity>
     <activity android:name=".TomTomMapActivity" android:exported="false" android:label="TomTom Map Proof" />
+    <service android:name=".NavigationForegroundService" android:exported="false" android:foregroundServiceType="location" />
     <uses-library android:name="org.apache.http.legacy" android:required="false"/>
   </application>
 </manifest>

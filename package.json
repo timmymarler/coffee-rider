@@ -1,8 +1,8 @@
 {
   "name": "coffee-rider-v2",
   "main": "expo-router/entry",
-  "version": "2.31.91",
-  "buildNumber": "148",
+  "version": "2.31.92",
+  "buildNumber": "149",
   "scripts": {
     "start": "expo start --dev-client",
     "start:go": "expo start",
@@ -44,6 +44,7 @@
     "expo-status-bar": "~3.0.8",
     "expo-symbols": "~1.0.7",
     "expo-system-ui": "~6.0.8",
+    "expo-task-manager": "~14.0.9",
     "expo-web-browser": "~15.0.9",
     "firebase-admin": "^13.6.0",
     "react": "19.1.0",

@@ -1,7 +1,7 @@
 # Background BLE While Screen Is Locked - Deferred Plan
 
 Date: 2026-04-15
-Status: Deferred intentionally for release safety
+Status: Implemented 2026-11-03 (Android foreground service + native TTS via TomTom module; iOS background location task + background audio session). Field testing still required per the matrix below.
 Owner: Coffee Rider app team
 
 ## Decision Summary

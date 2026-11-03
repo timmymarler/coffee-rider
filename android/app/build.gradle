@@ -108,8 +108,8 @@ android {
         applicationId 'com.timmy.marler.coffeerider'
         minSdkVersion 26
         targetSdkVersion rootProject.ext.targetSdkVersion
-versionCode 148
-        versionName "2.31.91"
+versionCode 149
+        versionName "2.31.92"
 
         ndk {
             abiFilters 'arm64-v8a', 'x86_64'

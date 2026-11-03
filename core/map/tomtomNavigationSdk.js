@@ -161,6 +161,15 @@ export async function stopTomTomNavigation() {
   return nativeModule.stopNavigation();
 }
 
+export async function setTomTomVoiceEnabled(enabled) {
+  try {
+    if (!nativeModule?.setVoiceEnabled) return;
+    await nativeModule.setVoiceEnabled(Boolean(enabled));
+  } catch (error) {
+    console.warn("[TomTomNavigation] Voice toggle failed:", error?.message || error);
+  }
+}
+
 export async function simulateTomTomDetour() {
   if (!nativeModule?.simulateOffRoute) throw new Error('Rebuild the Android POC to enable detour simulation');
   return nativeModule.simulateOffRoute();
