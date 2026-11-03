@@ -69,7 +69,11 @@ const defaultSuitability = {
   cars: false,
   evDrivers: false,
   bikeBrew: false,
+  chatable: false,
 };
+
+// Only Admin users may edit these suitability options
+const ADMIN_ONLY_SUITABILITY_KEYS = new Set(["bikeBrew", "chatable"]);
 
 const defaultAmenities = {
   parking: false,
@@ -312,9 +316,14 @@ export default function PlaceCard({
 
   useEffect(() => {
     const state = { ...defaultSuitability };
-    if (Array.isArray(safePlace?.suitability)) {
-      safePlace.suitability.forEach(key => {
+    const stored = safePlace?.suitability;
+    if (Array.isArray(stored)) {
+      stored.forEach(key => {
         if (key in state) state[key] = true;
+      });
+    } else if (stored && typeof stored === "object") {
+      Object.keys(state).forEach((key) => {
+        if (stored[key] === true) state[key] = true;
       });
     }
     setSuitabilityState(state);
@@ -747,6 +756,7 @@ export default function PlaceCard({
   
   const toggleSuitability = async (key) => {
     if (!safePlace?.id) return;
+    if (ADMIN_ONLY_SUITABILITY_KEYS.has(key) && !capabilities.isAdmin) return;
 
     const next = {
       ...suitabilityState,
@@ -1610,10 +1620,15 @@ export default function PlaceCard({
                 {Object.keys(defaultSuitability).map((key) => (
                   <TouchableOpacity
                     key={key}
-                    disabled={!capabilities.canUpdatePlaces}
+                    disabled={
+                      !capabilities.canUpdatePlaces ||
+                      (ADMIN_ONLY_SUITABILITY_KEYS.has(key) && !capabilities.isAdmin)
+                    }
                     onPress={() => toggleSuitability(key)}
                     style={{
                       opacity:
+                        !capabilities.canUpdatePlaces ||
+                        (ADMIN_ONLY_SUITABILITY_KEYS.has(key) && !capabilities.isAdmin) ||
                         !capabilities.canCreateRoutes ||
                         (!capabilities.isAdmin && suitabilityState[key])
                           ? 0.6
@@ -1636,6 +1651,8 @@ export default function PlaceCard({
                         ? "car-electric"
                         : key === "bikeBrew"
                         ? "handshake"
+                        : key === "chatable"
+                        ? "chat"
                         : undefined
                     )}
                   </TouchableOpacity>

@@ -687,6 +687,7 @@ const FILTER_MEETUPS = [
   { key: "cars", label: "Cars", icon: "car", filter: "suitability" },
   { key: "cyclists", label: "Cyclists", icon: "bike", filter: "suitability" },
   { key: "bikeBrew", label: "Bike & Brew", icon: "handshake", filter: "bikeBrew" },
+  { key: "chatable", label: "chat'able", icon: "chat", filter: "chatable" },
 ];
 const FILTER_CATEGORIES = RIDER_CATEGORIES;
 const FILTER_AMENITIES = RIDER_AMENITIES;
@@ -703,6 +704,7 @@ const EMPTY_FILTERS = {
   openNow: false,
   sponsor: false,
   bikeBrew: false,
+  chatable: false,
   visited: 'any',
 };
 
@@ -713,6 +715,7 @@ const DEFAULT_FILTERS = {
   openNow: false,
   sponsor: false,
   bikeBrew: false,
+  chatable: false,
   visited: 'any',
 };
 
@@ -1464,6 +1467,7 @@ export default function MapScreenRN({ placeId, openPlaceCard }) {
     appliedFilters.amenities.size > 0 ||
     appliedFilters.openNow ||
     appliedFilters.bikeBrew ||
+    appliedFilters.chatable ||
     appliedFilters.sponsor ||
     appliedFilters.visited === 'show' ||
     appliedFilters.visited === 'hide';
@@ -6443,6 +6447,7 @@ function getStepCompletionThresholds(step = null) {
       appliedFilters.amenities.size ||
       appliedFilters.openNow ||
       appliedFilters.bikeBrew ||
+      appliedFilters.chatable ||
       appliedFilters.sponsor
     ) {
       console.log("[SPONSOR_FILTER] Filter active - sponsored places in list:", Array.from(sponsoredPlaceIds));
@@ -8663,9 +8668,9 @@ function getStepCompletionThresholds(step = null) {
             <Text style={styles.filterSection}>Meet-ups</Text>
             <View style={styles.iconGrid}>
               {FILTER_MEETUPS.map((a) => {
-                const active = a.filter === "bikeBrew"
-                  ? draftFilters.bikeBrew
-                  : draftFilters.suitability.has(a.key);
+                const active = a.filter === "suitability"
+                  ? draftFilters.suitability.has(a.key)
+                  : Boolean(draftFilters[a.filter]);
 
                 return (
                   <TouchableOpacity
@@ -8677,9 +8682,9 @@ function getStepCompletionThresholds(step = null) {
                     onPress={() =>
                       setDraftFilters((prev) => ({
                         ...prev,
-                        ...(a.filter === "bikeBrew"
-                          ? { bikeBrew: !prev.bikeBrew }
-                          : { suitability: toggleFilter(prev.suitability, a.key) }),
+                        ...(a.filter === "suitability"
+                          ? { suitability: toggleFilter(prev.suitability, a.key) }
+                          : { [a.filter]: !prev[a.filter] }),
                       })
                     )}
                   >

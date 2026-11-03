@@ -51,7 +51,17 @@ export function applyFilters(poi, filters, options = {}) {
   if (poi.source === "cr" && filters.bikeBrew) {
     activeChecks.push(
       Boolean(poi.bikeBrew) ||
-      (Array.isArray(poi.suitability) && poi.suitability.includes("bikeBrew"))
+      (Array.isArray(poi.suitability) && poi.suitability.includes("bikeBrew")) ||
+      poi.suitability?.bikeBrew === true
+    );
+  }
+
+  // chat'able filter (CR only); same storage forms as Bike & Brew
+  if (poi.source === "cr" && filters.chatable) {
+    activeChecks.push(
+      Boolean(poi.chatable) ||
+      (Array.isArray(poi.suitability) && poi.suitability.includes("chatable")) ||
+      poi.suitability?.chatable === true
     );
   }
 
