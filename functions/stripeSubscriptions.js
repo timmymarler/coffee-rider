@@ -83,8 +83,9 @@ const userHasExistingSubscription = async (uid) => {
     }
 
     const data = subSnap.data();
-    // User has existing subscription if they have a stripeSubscriptionId
-    return Boolean(data?.stripeSubscriptionId);
+    // 'pending' means the payment sheet was opened but never completed, so it
+    // must not block first-time subscriber offers (e.g. the free trial).
+    return Boolean(data?.stripeSubscriptionId) && data?.status !== 'pending';
   } catch (err) {
     functions.logger.error('Failed to check for existing subscription', { uid, err: err?.message });
     return false;

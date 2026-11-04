@@ -293,11 +293,11 @@ import MiniMap from "../map/components/MiniMap";
 import PlaceCard from "../map/components/PlaceCard";
 import SvgPin from "../map/components/SvgPin";
 
+import { addBackgroundNavigationListener, startBackgroundNavigationLocation, stopBackgroundNavigationLocation } from "@core/map/backgroundNavigation";
+import { Audio, InterruptionModeIOS } from "expo-av";
 import * as KeepAwake from "expo-keep-awake";
 import * as Location from "expo-location";
 import * as Speech from "expo-speech";
-import { Audio, InterruptionModeIOS } from "expo-av";
-import { addBackgroundNavigationListener, startBackgroundNavigationLocation, stopBackgroundNavigationLocation } from "@core/map/backgroundNavigation";
 import { classifyPoi } from "../map/classify/classifyPois";
 import { applyFilters } from "../map/filters/applyFilters";
 /* Ready for routing */
