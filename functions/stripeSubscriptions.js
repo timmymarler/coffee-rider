@@ -307,6 +307,7 @@ const handleSubscriptionSync = async (subscription) => {
   const renewalDate = currentPeriodEnd
     ? currentPeriodEnd * 1000
     : null; // Stripe sometimes nests period info on the item
+  const trialEndsAt = subscription.trial_end ? subscription.trial_end * 1000 : null;
   const cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
   const cancellationEffectiveDate = cancelAtPeriodEnd && renewalDate ? renewalDate : null;
   const status = mapStripeStatus(subscription.status);
@@ -378,6 +379,7 @@ const handleSubscriptionSync = async (subscription) => {
     provider: 'stripe',
     stripeSubscriptionId: subscription.id,
     renewalDate,
+    trialEndsAt,
     cancelAtPeriodEnd,
     cancellationEffectiveDate,
   };
