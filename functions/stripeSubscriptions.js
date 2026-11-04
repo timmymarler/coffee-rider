@@ -508,25 +508,32 @@ export const createSubscriptionPaymentSheet = functions
 
     // Check if this is a first-time subscription for the user
     const isFirstSubscription = !(await userHasExistingSubscription(context.auth.uid));
+    // Older clients can't handle SetupIntent-based trials; they keep the
+    // existing immediate-charge flow until they upgrade.
+    const clientSupportsTrialSetup = data?.collectWithSetupIntent === true;
+    const useTrialSetup = isFirstSubscription && clientSupportsTrialSetup;
     
     functions.logger.info('createSubscriptionPaymentSheet invoked', {
       uid: context.auth.uid,
       planId,
       isFirstSubscription,
+      clientSupportsTrialSetup,
       secretKeyPrefix,
       hasLiveSecretKey: Boolean(liveSecretKey),
     });
 
-    // Use trial price for first-time subscribers, regular price otherwise
-    const priceId = getPriceId(planId, isFirstSubscription);
+    // Always use the regular price. First-time subscribers on clients that
+    // support it get a real 30-day trial on the subscription (card collected
+    // now, charged after the trial), matching the 'First 30 days free' offer.
+    const priceId = getPriceId(planId, false);
     if (!priceId) {
-      throw new functions.https.HttpsError('invalid-argument', 'Unknown plan selected or trial price not configured.');
+      throw new functions.https.HttpsError('invalid-argument', 'Unknown plan selected.');
     }
     functions.logger.info('Stripe price resolved', {
       planId,
       priceId,
       isFirstSubscription,
-      priceSuffix: isFirstSubscription ? 'TRIAL' : 'REGULAR',
+      priceSuffix: useTrialSetup ? 'TRIAL_PERIOD' : 'REGULAR',
     });
 
     const customerId = await ensureCustomerForUid(context.auth.uid);
@@ -548,11 +555,33 @@ export const createSubscriptionPaymentSheet = functions
         firebaseUID: context.auth.uid,
         planId,
       },
+      ...(useTrialSetup ? { trial_period_days: 30 } : {}),
     });
 
-    const paymentIntent = subscription.latest_invoice?.payment_intent;
-    if (!paymentIntent?.client_secret) {
-      throw new functions.https.HttpsError('internal', 'Failed to create a payment intent.');
+    // A trialing subscription has no payable invoice yet, so collect the card
+    // with a SetupIntent instead of a PaymentIntent.
+    let setupIntentClientSecret = null;
+    let paymentIntentClientSecret = null;
+    if (useTrialSetup) {
+      const setupIntent = await stripe.setupIntents.create({
+        customer: customerId,
+        usage: 'off_session',
+        metadata: {
+          firebaseUID: context.auth.uid,
+          planId,
+          subscriptionId: subscription.id,
+        },
+      });
+      setupIntentClientSecret = setupIntent.client_secret;
+      if (!setupIntentClientSecret) {
+        throw new functions.https.HttpsError('internal', 'Failed to create a setup intent.');
+      }
+    } else {
+      const paymentIntent = subscription.latest_invoice?.payment_intent;
+      if (!paymentIntent?.client_secret) {
+        throw new functions.https.HttpsError('internal', 'Failed to create a payment intent.');
+      }
+      paymentIntentClientSecret = paymentIntent.client_secret;
     }
 
     await upsertSubscriptionDocument(context.auth.uid, {
@@ -575,7 +604,8 @@ export const createSubscriptionPaymentSheet = functions
     return {
       customerId,
       ephemeralKeySecret: ephemeralKey.secret,
-      paymentIntentClientSecret: paymentIntent.client_secret,
+      paymentIntentClientSecret,
+      setupIntentClientSecret,
       subscriptionId: subscription.id,
     };
   });

@@ -36,22 +36,29 @@ export function useStripeSubscription() {
         setError(null);
         await ensureStripeCustomerCallable({});
 
-        const paymentSheetResponse = await createPaymentSheetCallable({ planId: normalizedPlanId });
+        const paymentSheetResponse = await createPaymentSheetCallable({
+          planId: normalizedPlanId,
+          collectWithSetupIntent: true,
+        });
         const {
           customerId,
           ephemeralKeySecret,
           paymentIntentClientSecret,
+          setupIntentClientSecret,
           subscriptionId,
         } = paymentSheetResponse.data || {};
 
-        if (!paymentIntentClientSecret || !customerId || !ephemeralKeySecret) {
+        if ((!paymentIntentClientSecret && !setupIntentClientSecret) || !customerId || !ephemeralKeySecret) {
           throw new Error('Stripe payment sheet configuration is incomplete.');
         }
 
+        const intentSecret = paymentIntentClientSecret || setupIntentClientSecret;
         const initResult = await initPaymentSheet({
           customerId,
           customerEphemeralKeySecret: ephemeralKeySecret,
-          paymentIntentClientSecret,
+          ...(paymentIntentClientSecret
+            ? { paymentIntentClientSecret }
+            : { setupIntentClientSecret }),
           merchantDisplayName: 'Coffee Rider',
           returnURL: paymentSheetReturnUrl,
         });
@@ -62,7 +69,7 @@ export function useStripeSubscription() {
 
         setStatus('ready');
 
-        const presentResult = await presentPaymentSheet({ clientSecret: paymentIntentClientSecret });
+        const presentResult = await presentPaymentSheet({ clientSecret: intentSecret });
         if (presentResult.error) {
           const wasCancelled = presentResult.error.code === 'Canceled' || presentResult.error.code === 'CanceledByUser';
           if (wasCancelled) {
