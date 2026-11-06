@@ -561,6 +561,8 @@ export const createSubscriptionPaymentSheet = functions
       ...(useTrialSetup ? { trial_period_days: 30 } : {}),
     });
 
+    const stripePrice = await stripe.prices.retrieve(priceId).catch(() => null);
+
     // A trialing subscription has no payable invoice yet, so collect the card
     // with a SetupIntent instead of a PaymentIntent.
     let setupIntentClientSecret = null;
@@ -610,6 +612,12 @@ export const createSubscriptionPaymentSheet = functions
       paymentIntentClientSecret,
       setupIntentClientSecret,
       subscriptionId: subscription.id,
+      trialApplied: useTrialSetup,
+      trialDays: useTrialSetup ? 30 : 0,
+      trialEndsAt: useTrialSetup && subscription.trial_end ? subscription.trial_end * 1000 : null,
+      priceAmount: stripePrice?.unit_amount ?? null,
+      priceCurrency: stripePrice?.currency || 'gbp',
+      priceInterval: stripePrice?.recurring?.interval || null,
     };
   });
 

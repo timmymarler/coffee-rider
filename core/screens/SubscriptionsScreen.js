@@ -560,7 +560,7 @@ function PricingCard({ plan, isSelected, onPress, processing, isPopular, theme, 
           {plan.period}
         </Text>
       </View>
-      <Text style={[styles.trialNote, { color: theme.colors.textLight, marginBottom: 12 }]}>Then auto-renews at full price</Text>
+      <Text style={[styles.trialNote, { color: theme.colors.textLight, marginBottom: 12 }]}>New subscribers pay £0.00 today, then {plan.price} {plan.period} after the free trial</Text>
 
       <Pressable
         style={[
