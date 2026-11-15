@@ -178,7 +178,7 @@ function RoundaboutManeuverIcon({ size = 80, exitAngleDegrees = null, exitNumber
   const arrowRightY = lineEndY - (Math.sin(angleRad + arrowSpread) * arrowLength);
 
   return (
-    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <Svg key={`${safeExit ?? "unknown"}:${angle}`} width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <Path
         d={`M ${cx} ${size * 0.96} L ${cx} ${entryEndY}`}
         stroke={color}

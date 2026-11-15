@@ -286,28 +286,20 @@ static void drawArrowRight(int cx, int cy, int color) {
 
 static void drawArrowBearLeft(int cx, int cy, int color) {
 	const int thickness = 12;
-	const int jointX = cx;
-	const int jointY = cy - 8;
-	const int tipX = cx - 34;
-	const int tipY = cy - 42;
+	const int tipX = cx - 40;
+	const int tipY = cy - 40;
 
-	drawThickLine(cx, cy + 22, jointX, jointY + 10, thickness, color);
-	drawThickLine(jointX, jointY, tipX + 10, tipY + 10, thickness, color);
-	tft.fillCircle(jointX, jointY + 2, thickness / 2, color);
-	tft.fillTriangle(tipX, tipY, tipX + 32, tipY + 10, tipX + 12, tipY + 30, color);
+	drawThickLine(cx + 24, cy + 24, tipX + 22, tipY + 22, thickness, color);
+	tft.fillTriangle(tipX, tipY, tipX + 34, tipY + 10, tipX + 10, tipY + 34, color);
 }
 
 static void drawArrowBearRight(int cx, int cy, int color) {
 	const int thickness = 12;
-	const int jointX = cx;
-	const int jointY = cy - 8;
-	const int tipX = cx + 34;
-	const int tipY = cy - 42;
+	const int tipX = cx + 40;
+	const int tipY = cy - 40;
 
-	drawThickLine(cx, cy + 22, jointX, jointY + 10, thickness, color);
-	drawThickLine(jointX, jointY, tipX - 10, tipY + 10, thickness, color);
-	tft.fillCircle(jointX, jointY + 2, thickness / 2, color);
-	tft.fillTriangle(tipX, tipY, tipX - 32, tipY + 10, tipX - 12, tipY + 30, color);
+	drawThickLine(cx - 24, cy + 24, tipX - 22, tipY + 22, thickness, color);
+	tft.fillTriangle(tipX, tipY, tipX - 34, tipY + 10, tipX - 10, tipY + 34, color);
 }
 
 static void drawUTurnLeft(int cx, int cy, int color) {

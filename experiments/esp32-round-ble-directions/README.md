@@ -53,6 +53,8 @@ Supported maneuvers:
 
 - `LEFT`
 - `RIGHT`
+- `BEAR_LEFT` / `KEEP_LEFT` (diagonal up-left arrow)
+- `BEAR_RIGHT` / `KEEP_RIGHT` (diagonal up-right arrow)
 - `STRAIGHT`
 - `UTURN`
 - `ROUNDABOUT`
@@ -68,6 +70,12 @@ Unknown maneuver values fall back to straight arrow.
 4. Find service `...90ab` and characteristic `...90ac`.
 5. Write payload text like:
    - `RIGHT|0.2 mi|Turn right onto Oak Lane`
+  - `KEEP_LEFT|300 ft|Keep left`
+  - `KEEP_RIGHT|300 ft|Keep right`
+
+Icon changes require reflashing the ESP32 sketch; updating the phone app alone
+does not update the display firmware. Run `node scripts/test-ble-maneuver-icons.mjs`
+from the repository root for the host-side geometry and BLE mapping checks.
 
 ## Optional RN Integration Path (Later)
 

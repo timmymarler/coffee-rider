@@ -68,14 +68,15 @@ const extractStreetLabel = (instruction = {}) => {
 
 const extractRoundaboutTurnAngle = (instruction = {}) => {
   const candidates = [
-    instruction?.turnAngleInDecimalDegrees,
-    instruction?.turnAngle,
     instruction?.roundaboutTurnAngleInDecimalDegrees,
     instruction?.roundaboutTurnAngle,
     instruction?.exitAngle,
+    instruction?.turnAngleInDecimalDegrees,
+    instruction?.turnAngle,
   ];
 
   for (const value of candidates) {
+    if (value == null || (typeof value === 'string' && !value.trim())) continue;
     const angle = Number(value);
     if (Number.isFinite(angle)) {
       return angle;

@@ -25,4 +25,31 @@ const absent = getSdkRoundaboutPanel({ instructionType: 'RoundaboutGuidanceInstr
 assert.equal(absent.exitNumber, null);
 assert.equal(absent.turnAngle, null);
 assert.equal(absent.text, 'Enter roundabout');
-console.log('Passed: SDK third exit, angle, approach/exit phase, non-roundabout, and absent metadata');
+
+const routingSource = fs.readFileSync(new URL('../core/map/utils/tomtomRouting.js', import.meta.url), 'utf8');
+const extractAngleSource = routingSource.match(/const extractRoundaboutTurnAngle = \(instruction = \{\}\) => \{[\s\S]*?\n\};/);
+assert.ok(extractAngleSource, 'REST roundabout angle extractor exists');
+const extractAngle = new Function(`${extractAngleSource[0]}; return extractRoundaboutTurnAngle;`)();
+const consecutiveRoundabouts = [
+  { turnAngle: 90, roundaboutTurnAngle: 90 },
+  { turnAngle: 90, roundaboutTurnAngle: 0 },
+  { turnAngle: 90, roundaboutTurnAngle: -90 },
+  { turnAngle: 90, roundaboutTurnAngleInDecimalDegrees: 137 },
+];
+assert.deepEqual(consecutiveRoundabouts.map(extractAngle), [90, 0, -90, 137]);
+assert.equal(extractAngle({ turnAngleInDecimalDegrees: null, roundaboutTurnAngle: -45 }), -45);
+assert.equal(extractAngle({ turnAngle: null, exitAngle: '' }), null);
+assert.equal(extractAngle({ turnAngleInDecimalDegrees: 0 }), 0);
+
+const screenSource = fs.readFileSync(new URL('../core/screens/MapScreenRN-TomTom.js', import.meta.url), 'utf8');
+const displayAngleSource = screenSource.match(/function getRoundaboutExitAngleDegrees\([\s\S]*?\n\}/);
+assert.ok(displayAngleSource, 'Roundabout display angle helper exists');
+const displayAngle = new Function(`${displayAngleSource[0]}; return getRoundaboutExitAngleDegrees;`)();
+assert.deepEqual(
+  consecutiveRoundabouts.map((instruction) => displayAngle('ROUNDABOUT_ENTER', 2, extractAngle(instruction))),
+  [0, 270, 180, 47],
+);
+assert.equal(displayAngle('ROUNDABOUT_ENTER', 2, 179), 89);
+assert.equal(displayAngle('ROUNDABOUT_ENTER', 2, -179), 91);
+assert.match(screenSource, /<Svg key=\{`\$\{safeExit \?\? "unknown"\}:\$\{angle\}`\}/);
+console.log('Passed: SDK roundabouts, consecutive REST angles, missing metadata, full-circle display angles, and SVG refresh identity');
