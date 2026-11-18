@@ -8318,7 +8318,7 @@ function getStepCompletionThresholds(step = null) {
             routeColor={getRouteStyle(userTravelMode, theme, isNavigationMode).mainColor}
             fitRoute={!isNavigationMode}
             fitRequestId={routeFitRequestId}
-            followNavigation={sdkNavigationEnabled && !hasArrivedAtDestination}
+            followNavigation={followUser && !hasArrivedAtDestination}
             onPlacePress={(event) => {
               const placeId = event.nativeEvent?.placeId;
               if (placeId) setSelectedPlaceId(placeId);

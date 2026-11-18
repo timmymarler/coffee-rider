@@ -295,7 +295,7 @@ function ThemeAwareLayoutContent() {
   return (
     <ThemeProvider userProfile={profile} userId={user?.uid}>
       <SubscriptionProvider userId={user?.uid}>
-        <RoutingPreferencesProvider brand="rider">
+        <RoutingPreferencesProvider brand="rider" profileRoutingTheme={profile?.routingTheme}>
           <TabBarProvider>
             <WaypointsProvider>
               <AppHeader />

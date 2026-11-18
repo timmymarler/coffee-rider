@@ -86,7 +86,7 @@ const ROUTE_TYPE_MAP = {
   shortest: { tomtomRouteType: "shortest", hilliness: null, windingness: null }, // Minimize distance
 };
 
-export function RoutingPreferencesProvider({ children, brand = "rider" }) {
+export function RoutingPreferencesProvider({ children, brand = "rider", profileRoutingTheme = null }) {
   const [theme, setThemeState] = useState("rider");
   const [routeType, setRouteTypeState] = useState("curvy");
   const [avoidMotorways, setAvoidMotorwaysState] = useState(false);
@@ -118,8 +118,10 @@ export function RoutingPreferencesProvider({ children, brand = "rider" }) {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const defaults = getDefaultsForBrand("rider");
         const stored = JSON.parse(await AsyncStorage.getItem(ROUTING_PREFERENCES_KEY) || "null") || {};
+        const storedTheme = THEME_CONFIGS[stored.theme] ? stored.theme : "rider";
+        const defaults = getDefaultsForBrand(storedTheme);
+        const allowedRouteTypes = THEME_CONFIGS[storedTheme].routeTypes.map(option => option.id);
         const legacyRouteType = stored.routeType;
         const migratedRouteType = ["twisty", "adventure", "custom"].includes(legacyRouteType)
           ? "curvy"
@@ -136,16 +138,16 @@ export function RoutingPreferencesProvider({ children, brand = "rider" }) {
           unpavedRoads: Boolean(storedAvoids.unpavedRoads),
           ferries: Boolean(storedAvoids.ferries),
         };
-        setThemeState("rider");
-        setRouteTypeState(["fastest", "shortest", "curvy"].includes(migratedRouteType) ? migratedRouteType : defaults.routeType);
-        setTravelModeState("motorcycle");
+        const nextRouteType = allowedRouteTypes.includes(migratedRouteType) ? migratedRouteType : defaults.routeType;
+        setThemeState(storedTheme);
+        setRouteTypeState(nextRouteType);
+        setTravelModeState(defaults.travelMode);
         setCustomHillinessState(migratedLevels.customHilliness);
         setCustomWindingnessState(migratedLevels.customWindingness);
         setAvoidOptionsState(nextAvoidOptions);
-        const nextRouteType = ["fastest", "shortest", "curvy"].includes(migratedRouteType) ? migratedRouteType : defaults.routeType;
         setAvoidMotorwaysState(nextAvoidOptions.motorways);
         await AsyncStorage.setItem(ROUTING_PREFERENCES_KEY, JSON.stringify({
-          theme: "rider",
+          theme: storedTheme,
           routeType: nextRouteType,
           ...migratedLevels,
           avoidOptions: nextAvoidOptions,
@@ -167,6 +169,19 @@ export function RoutingPreferencesProvider({ children, brand = "rider" }) {
 
     loadPreferences();
   }, []);
+
+  // The account's saved travel profile wins over this device's last local choice.
+  useEffect(() => {
+    if (!isLoaded || !THEME_CONFIGS[profileRoutingTheme]) return;
+    const config = THEME_CONFIGS[profileRoutingTheme];
+    const allowedRouteTypes = config.routeTypes.map(option => option.id);
+    const nextRouteType = allowedRouteTypes.includes(routeType) ? routeType : config.defaultRouteType;
+    setThemeState(profileRoutingTheme);
+    setTravelModeState(config.travelMode);
+    setRouteTypeState(nextRouteType);
+    persistPreferences({ theme: profileRoutingTheme, routeType: nextRouteType, customHilliness, customWindingness, avoidOptions });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, profileRoutingTheme]);
 
   // Set theme (vehicle type)
   const handleSetTheme = useCallback((newTheme) => {
