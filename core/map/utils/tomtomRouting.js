@@ -182,6 +182,35 @@ const extractSpeedLimitSections = (route = {}, legs = [], routePoints = []) => {
   return legSections.sort((a, b) => a.startPointIndex - b.startPointIndex);
 };
 
+const MAJOR_ROAD_PATTERN = /\b[AM]\d+(\(M\))?\b|motorway|dual carriageway/i;
+
+const sumLegs = (route, field) => (route?.legs || []).reduce((sum, leg) => sum + (leg?.[field]?.value || 0), 0);
+
+// Metres travelled on A-roads, motorways and dual carriageways.
+const majorRoadMeters = (route) => (route?.legs || []).reduce((sum, leg) => sum + (leg.steps || []).reduce(
+  (stepSum, step) => stepSum + (MAJOR_ROAD_PATTERN.test(step.html_instructions || '') ? (step.distance?.value || 0) : 0),
+  0,
+), 0);
+
+// Google lists its recommended route first; only leave it for a meaningfully better alternative.
+const MIN_IMPROVEMENT_METERS = 200;
+
+export function selectGoogleRouteIndex(routes = [], routeType = 'recommended') {
+  if (routes.length < 2) return 0;
+  const scoreFor = {
+    fastest: route => sumLegs(route, 'duration'),
+    shortest: route => sumLegs(route, 'distance'),
+    quietest: route => majorRoadMeters(route),
+  }[routeType];
+  if (!scoreFor) return 0;
+  const threshold = routeType === 'fastest' ? 0 : MIN_IMPROVEMENT_METERS;
+  let best = 0;
+  routes.forEach((route, index) => {
+    if (scoreFor(route) < scoreFor(routes[best]) - threshold) best = index;
+  });
+  return best;
+}
+
 /**
  * Fetch route from Google Directions API (best for pedestrian and cycling routing)
  * @param {Object} origin - {latitude, longitude}
@@ -190,7 +219,7 @@ const extractSpeedLimitSections = (route = {}, legs = [], routePoints = []) => {
  * @param {string} mode - 'walking' or 'bicycling' (default: 'walking')
  * @returns {Promise<Object>} Route data with polyline, distance, duration
  */
-export async function fetchGoogleRoute(origin, destination, waypoints = [], mode = 'walking') {
+export async function fetchGoogleRoute(origin, destination, waypoints = [], mode = 'walking', { routeType = 'recommended', avoidFerries = false } = {}) {
   const googleMapsApiKey = Constants.expoConfig?.extra?.googleMapsApiKey;
 
   if (!googleMapsApiKey) {
@@ -210,7 +239,8 @@ export async function fetchGoogleRoute(origin, destination, waypoints = [], mode
     }
 
     // For pedestrians, avoid highways to prioritize footpaths and local roads
-    const avoidParam = mode === 'walking' ? '&avoid=highways&region=GB' : '';
+    const avoids = [mode === 'walking' ? 'highways' : null, avoidFerries ? 'ferries' : null].filter(Boolean);
+    const avoidParam = `${avoids.length ? `&avoid=${avoids.join('|')}` : ''}${mode === 'walking' ? '&region=GB' : ''}`;
     const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${destStr}${waypointsStr}&mode=${mode}${avoidParam}&alternatives=true&key=${googleMapsApiKey}`;
 
     const modeLabel = mode === 'walking' ? 'pedestrian' : 'cycling';
@@ -234,31 +264,8 @@ export async function fetchGoogleRoute(origin, destination, waypoints = [], mode
       throw new Error(`Google Directions API: ${data.status}`);
     }
 
-    // For pedestrian routes, pick the best alternative that avoids major roads
-    let selectedRouteIndex = 0;
-    if (mode === 'walking' && data.routes.length > 1) {
-      // Score routes by checking for major road keywords in instructions
-      let bestScore = Infinity;
-      data.routes.forEach((route, idx) => {
-        let score = route.legs.reduce((sum, leg) => {
-          return sum + (leg.steps || []).reduce((stepSum, step) => {
-            const instruction = (step.html_instructions || '').toLowerCase();
-            // Penalize routes mentioning A-roads, motorways, highways
-            let penalty = 0;
-            if (instruction.includes('a ') || instruction.match(/\ba\d/)) penalty += 100;
-            if (instruction.includes('motorway') || instruction.includes('m ')) penalty += 200;
-            if (instruction.includes('highway')) penalty += 50;
-            return stepSum + penalty;
-          }, 0);
-        }, 0);
-        console.log(`[googleRouting] Route ${idx}: major road score ${score}`);
-        if (score < bestScore) {
-          bestScore = score;
-          selectedRouteIndex = idx;
-        }
-      });
-      console.log(`[googleRouting] Selected route ${selectedRouteIndex} (score: ${bestScore})`);
-    }
+    const selectedRouteIndex = selectGoogleRouteIndex(data.routes, routeType);
+    console.log(`[googleRouting] Selected route ${selectedRouteIndex} of ${data.routes.length} (${routeType})`);
 
     const route = data.routes[selectedRouteIndex];
     const legs = route.legs || [];
@@ -384,13 +391,13 @@ export async function fetchTomTomRoute(origin, destination, waypoints = [], vehi
   // Use Google Maps API for pedestrian routing (better depth of routing)
   if (GOOGLE_DIRECTIONS_API_ENABLED && vehicleType === "pedestrian") {
     console.log('[tomtomRouting] Delegating pedestrian routing to Google Maps API');
-    return fetchGoogleRoute(origin, destination, waypoints, 'walking');
+    return fetchGoogleRoute(origin, destination, waypoints, 'walking', { routeType: routeTypeId || 'quietest' });
   }
   
-  // Use Google Maps for scenic cycling routes (better at finding dedicated cycle paths)
-  if (GOOGLE_DIRECTIONS_API_ENABLED && vehicleType === "bike" && (routeTypeId === "curvy" || routeTypeId === "scenic")) {
-    console.log('[tomtomRouting] Using Google Maps for scenic cycling route');
-    return fetchGoogleRoute(origin, destination, waypoints, 'bicycling');
+  // Use Google Maps for cycling routes (better at finding dedicated cycle paths)
+  if (GOOGLE_DIRECTIONS_API_ENABLED && vehicleType === "bike") {
+    console.log('[tomtomRouting] Using Google Maps for cycling route');
+    return fetchGoogleRoute(origin, destination, waypoints, 'bicycling', { routeType: routeTypeId || 'recommended' });
   }
 
   // Map vehicle types to appropriate TomTom travelMode and avoid preferences

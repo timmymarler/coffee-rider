@@ -36,6 +36,7 @@ const THEME_CONFIGS = {
   rider: {
     travelMode: "motorcycle",
     defaultRouteType: "curvy",
+    avoidKeys: AVOID_KEYS,
     routeTypes: [
       { id: "fastest", label: "⚡ Fastest", description: "Minimize travel time" },
       { id: "shortest", label: "📏 Shortest", description: "Minimize distance" },
@@ -45,6 +46,7 @@ const THEME_CONFIGS = {
   driver: {
     travelMode: "car",
     defaultRouteType: "fastest",
+    avoidKeys: AVOID_KEYS,
     routeTypes: [
       { id: "fastest", label: "⚡ Fastest", description: "Minimize travel time" },
       { id: "shortest", label: "📏 Shortest", description: "Minimize distance" },
@@ -53,19 +55,21 @@ const THEME_CONFIGS = {
   },
   strider: {
     travelMode: "pedestrian",
-    defaultRouteType: "shortest",
+    defaultRouteType: "quietest",
+    avoidKeys: ["ferries"],
     routeTypes: [
       { id: "shortest", label: "📏 Shortest", description: "Minimize distance" },
-      { id: "scenic", label: "🎢 Scenic", description: "Interesting pedestrian routes" },
+      { id: "quietest", label: "🌳 Quietest", description: "Fewest main roads" },
     ],
   },
   cyclist: {
     travelMode: "bike",
-    defaultRouteType: "curvy",
+    defaultRouteType: "recommended",
+    avoidKeys: ["ferries"],
     routeTypes: [
-      { id: "fastest", label: "⚡ Fastest", description: "Minimize travel time" },
+      { id: "recommended", label: "🚲 Recommended", description: "Google's cycling route via bike paths and preferred streets" },
+      { id: "quietest", label: "🌳 Quietest", description: "Fewest main roads" },
       { id: "shortest", label: "📏 Shortest", description: "Minimize distance" },
-      { id: "curvy", label: "🎢 Scenic", description: "Scenic cycling routes with bike paths" },
     ],
   },
 };
@@ -199,9 +203,11 @@ export function RoutingPreferencesProvider({ children, brand = "rider", profileR
   }, [getDefaultsForBrand, persistPreferences]);
 
   const handleSetRouteType = useCallback((newRouteType) => {
-    const routeTypeValue = newRouteType === "curvy" || newRouteType === "fastest" || newRouteType === "shortest"
-      ? newRouteType
-      : ["twisty", "adventure", "custom"].includes(newRouteType) ? "curvy" : "fastest";
+    const allowedRouteTypes = THEME_CONFIGS[theme]?.routeTypes.map(option => option.id) || [];
+    const migratedRouteType = ["twisty", "adventure", "custom"].includes(newRouteType) ? "curvy" : newRouteType;
+    const routeTypeValue = allowedRouteTypes.includes(migratedRouteType)
+      ? migratedRouteType
+      : THEME_CONFIGS[theme]?.defaultRouteType || "fastest";
     setRouteTypeState(routeTypeValue);
     persistPreferences({ theme, routeType: routeTypeValue, customHilliness, customWindingness, avoidOptions });
   }, [theme, customHilliness, customWindingness, avoidOptions, persistPreferences]);
@@ -297,6 +303,7 @@ export function RoutingPreferencesProvider({ children, brand = "rider", profileR
     setCustomWindingness: handleSetCustomWindingness,
     restorePreferences,
     availableRouteTypes: getAvailableRouteTypes(),
+    availableAvoidKeys: THEME_CONFIGS[theme]?.avoidKeys || AVOID_KEYS,
     resetToDefaults,
     getDefaultsForBrand,
     routeTypeMap: ROUTE_TYPE_MAP,

@@ -84,7 +84,10 @@ export async function fetchRoute({
   if (useGoogleAPI) {
     // Convert travelMode to Google mode
     const googleMode = travelMode === 'bike' ? 'bicycling' : 'walking';
-    result = await fetchGoogleRoute(origin, destination, waypoints, googleMode);
+    result = await fetchGoogleRoute(origin, destination, waypoints, googleMode, {
+      routeType,
+      avoidFerries: Boolean(avoidOptions?.ferries),
+    });
   } else if (Platform.OS === 'android') {
     result = await planTomTomRoute({
       origin,

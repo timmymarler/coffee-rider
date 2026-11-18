@@ -3,11 +3,13 @@ import theme from "@themes";
 import { useContext } from "react";
 import { Modal, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 
-const ROUTE_OPTIONS = [
-  { id: "fastest", label: "Fastest" },
-  { id: "shortest", label: "Shortest" },
-  { id: "curvy", label: "Curvy" },
-];
+const ROUTE_TYPE_LABELS = {
+  recommended: "Recommended",
+  fastest: "Fastest",
+  shortest: "Shortest",
+  curvy: "Curvy",
+  quietest: "Quietest",
+};
 const LEVEL_OPTIONS = [
   { id: "low", label: "Low" },
   { id: "normal", label: "Medium" },
@@ -30,7 +32,12 @@ export default function MapRouteTypeSelector({ visible, onClose }) {
     setCustomHilliness,
     customWindingness,
     setCustomWindingness,
+    availableRouteTypes,
+    availableAvoidKeys,
   } = useContext(RoutingPreferencesContext);
+  const routeOptions = availableRouteTypes.map(option => ({ id: option.id, label: ROUTE_TYPE_LABELS[option.id] || option.id }));
+  const avoidOptionsForMode = AVOID_OPTIONS.filter(option => availableAvoidKeys.includes(option.id));
+  const supportsCurvy = availableRouteTypes.some(option => option.id === "curvy");
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -47,7 +54,7 @@ export default function MapRouteTypeSelector({ visible, onClose }) {
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={styles.sectionTitle}>Route type</Text>
             <View style={styles.segmentRow}>
-              {ROUTE_OPTIONS.map(option => {
+              {routeOptions.map(option => {
                 const selected = routeType === option.id;
                 return (
                   <TouchableOpacity
@@ -68,7 +75,7 @@ export default function MapRouteTypeSelector({ visible, onClose }) {
             <View style={styles.divider} />
             <Text style={styles.sectionTitle}>Avoid</Text>
             <View style={styles.avoidGrid}>
-              {AVOID_OPTIONS.map(option => (
+              {avoidOptionsForMode.map(option => (
                 <View key={option.id} style={styles.avoidRow}>
                   <Text style={styles.avoidText}>{option.label}</Text>
                   <Switch
@@ -80,9 +87,13 @@ export default function MapRouteTypeSelector({ visible, onClose }) {
               ))}
             </View>
 
-            <View style={styles.divider} />
-            <LevelSelector title="Twisty" value={customWindingness} onChange={setCustomWindingness} />
-            <LevelSelector title="Undulating" value={customHilliness} onChange={setCustomHilliness} />
+            {supportsCurvy ? (
+              <>
+                <View style={styles.divider} />
+                <LevelSelector title="Twisty" value={customWindingness} onChange={setCustomWindingness} />
+                <LevelSelector title="Undulating" value={customHilliness} onChange={setCustomHilliness} />
+              </>
+            ) : null}
           </ScrollView>
         </View>
       </View>
