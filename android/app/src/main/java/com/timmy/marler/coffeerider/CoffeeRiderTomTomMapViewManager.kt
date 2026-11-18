@@ -35,6 +35,7 @@ import com.tomtom.sdk.map.display.camera.InitialCameraOptions
 import com.tomtom.sdk.map.display.image.ImageFactory
 import com.tomtom.sdk.map.display.image.Image
 import com.tomtom.sdk.map.display.gesture.MapLongClickListener
+import com.tomtom.sdk.map.display.gesture.MapPanningListener
 import com.tomtom.sdk.map.display.marker.Label
 import com.tomtom.sdk.map.display.marker.MarkerClickListener
 import com.tomtom.sdk.map.display.marker.MarkerLongClickListener
@@ -57,6 +58,7 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
   private var fitRoute = false
   private var fitRequestId = -1
   private var followNavigation = false
+  private var followPausedByUser = false
   private var cameraTarget: CameraOptions? = null
   private var mapReady = false
   private var disposed = false
@@ -121,6 +123,25 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
     cameraEventHandler.removeCallbacks(dispatchCameraChange)
     cameraEventHandler.postDelayed(dispatchCameraChange, CAMERA_EVENT_DEBOUNCE_MS)
   }
+  private val resumeFollow = Runnable {
+    followPausedByUser = false
+    if (!disposed && followNavigation) applyFollowCamera()
+  }
+  // Follow tracking pins the camera to the user, so a drag must suspend it.
+  private val mapPanningListener = object : MapPanningListener {
+    override fun onMapPanningStarted() {
+      if (!followNavigation) return
+      cameraEventHandler.removeCallbacks(resumeFollow)
+      followPausedByUser = true
+      tomTomMap?.cameraTrackingMode = CameraTrackingMode.None
+    }
+
+    override fun onMapPanningOngoing() = Unit
+
+    override fun onMapPanningEnded() {
+      if (followPausedByUser) cameraEventHandler.postDelayed(resumeFollow, FOLLOW_RESUME_DELAY_MS)
+    }
+  }
 
   init {
     check(TomTomSdk.isInitialized) { "Initialize the TomTom SDK before rendering its map" }
@@ -147,6 +168,7 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
       map.addMarkerLongClickListener(markerLongClickListener)
       map.addMapLongClickListener(mapLongClickListener)
       map.addCameraChangeListener(cameraChangeListener)
+      map.addMapPanningListener(mapPanningListener)
       TomTomNavigationModule.registerMap(map)
       map.enableLocationMarker(LocationMarkerOptions(type = LocationMarkerOptions.Type.Pointer))
       applyFollowCamera()
@@ -178,6 +200,7 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
       tilt = value.getDouble("pitch"),
       rotation = value.getDouble("heading"),
     )
+    clearFollowPause()
     tomTomMap?.let { map ->
       map.cameraTrackingMode = CameraTrackingMode.None
       animateToCameraTarget()
@@ -268,6 +291,7 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
   fun setFollowZoom(value: Double) {
     if (!value.isFinite()) return
     followZoom = value.coerceIn(0.0, 18.0)
+    clearFollowPause()
     if (followNavigation) applyFollowCamera()
   }
 
@@ -289,8 +313,14 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
   fun setFollowNavigation(value: Boolean) {
     if (followNavigation == value) return
     followNavigation = value
+    clearFollowPause()
     if (value) tomTomMap?.moveCamera(CameraOptions(zoom = followZoom, tilt = 35.0))
     applyFollowCamera()
+  }
+
+  private fun clearFollowPause() {
+    cameraEventHandler.removeCallbacks(resumeFollow)
+    followPausedByUser = false
   }
 
   private fun applyFollowCamera() {
@@ -300,7 +330,7 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
     ))
     val density = resources.displayMetrics.density
     map.setPadding(if (followNavigation) Padding(0, (200 * density).toInt(), 0, (120 * density).toInt()) else Padding(0))
-    map.cameraTrackingMode = if (followNavigation) {
+    map.cameraTrackingMode = if (followNavigation && !followPausedByUser) {
       CameraTrackingMode.FollowDirection(FollowCameraOperatorConfig(defaultZoom = followZoom, defaultTilt = 35.0))
     } else {
       CameraTrackingMode.None
@@ -311,11 +341,13 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
     if (disposed) return
     disposed = true
     cameraEventHandler.removeCallbacks(dispatchCameraChange)
+    cameraEventHandler.removeCallbacks(resumeFollow)
     reactContext.removeLifecycleEventListener(this)
     tomTomMap?.removeMarkerClickListener(markerClickListener)
     tomTomMap?.removeMarkerLongClickListener(markerLongClickListener)
     tomTomMap?.removeMapLongClickListener(mapLongClickListener)
     tomTomMap?.removeCameraChangeListener(cameraChangeListener)
+    tomTomMap?.removeMapPanningListener(mapPanningListener)
     tomTomMap?.let(TomTomNavigationModule::unregisterMap)
     renderedPlaces.clear()
     pinImages.evictAll()
@@ -504,6 +536,7 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
     private const val DEFAULT_LONGITUDE = -0.1276
     private const val DEFAULT_ZOOM = 12.0
     private const val DEFAULT_FOLLOW_ZOOM = 16.0
+    private const val FOLLOW_RESUME_DELAY_MS = 10_000L
     private const val CAMERA_EVENT_DEBOUNCE_MS = 120L
     private const val PLACE_LONG_PRESS_RADIUS_METERS = 35.0
     private const val MATERIAL_COMMUNITY_FONT = "MaterialCommunityIcons.ttf"
