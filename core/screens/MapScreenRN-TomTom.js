@@ -3968,18 +3968,19 @@ function getStepCompletionThresholds(step = null) {
       ? offsetCoordinateByHeadingMeters(coords, effectiveHeading, aheadMeters)
       : { latitude: coords.latitude, longitude: coords.longitude };
     
+    const preserveIosCamera = Platform.OS === "ios" && followMode && preserveZoom;
     // Build camera config with platform-specific zoom handling
     let cameraConfig = {
       center: { latitude: centerPoint.latitude, longitude: centerPoint.longitude },
       ...(Number.isFinite(effectiveHeading) ? { heading: effectiveHeading } : {}),
-      ...(pitch !== null ? { pitch } : {}),
+      ...(!preserveIosCamera && pitch !== null ? { pitch } : {}),
     };
 
     if (followMode && effectiveZoom !== null) {
       preferredFollowZoomRef.current = effectiveZoom;
     }
 
-    if (effectiveZoom !== null) {
+    if (!preserveIosCamera && effectiveZoom !== null) {
       if (Platform.OS === "ios") {
         cameraConfig.zoom = effectiveZoom;
         // Convert zoom level to altitude for iOS
@@ -4024,7 +4025,7 @@ function getStepCompletionThresholds(step = null) {
         resetFollowMeInactivityTimeout();
         return;
       }
-      await recenterOnUser({ zoom: nextZoom, pitch: 35, followMode: true });
+      await recenterOnUser({ zoom: nextZoom, pitch: Platform.OS === "ios" ? null : 35, followMode: true });
       resetFollowMeInactivityTimeout();
     } catch (error) {
       console.warn("[FollowMe] Unable to adjust zoom:", error?.message || error);

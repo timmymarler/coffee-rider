@@ -54,6 +54,7 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
   private var center = GeoPoint(DEFAULT_LATITUDE, DEFAULT_LONGITUDE)
   private var routeColor = DEFAULT_ROUTE_COLOR
   private var followZoom = DEFAULT_FOLLOW_ZOOM
+  private var followTilt = DEFAULT_FOLLOW_TILT
   private var traveledRouteOverlay: com.tomtom.sdk.map.display.route.Route? = null
   private var fitRoute = false
   private var fitRequestId = -1
@@ -124,6 +125,11 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
     cameraEventHandler.postDelayed(dispatchCameraChange, CAMERA_EVENT_DEBOUNCE_MS)
   }
   private val resumeFollow = Runnable {
+    val camera = tomTomMap?.cameraPosition
+    if (camera != null && followPausedByUser) {
+      followZoom = camera.zoom
+      followTilt = camera.tilt
+    }
     followPausedByUser = false
     if (!disposed && followNavigation) applyFollowCamera()
   }
@@ -291,6 +297,7 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
   fun setFollowZoom(value: Double) {
     if (!value.isFinite()) return
     followZoom = value.coerceIn(0.0, 18.0)
+    if (followPausedByUser) tomTomMap?.cameraPosition?.tilt?.let { followTilt = it }
     clearFollowPause()
     if (followNavigation) applyFollowCamera()
   }
@@ -314,7 +321,10 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
     if (followNavigation == value) return
     followNavigation = value
     clearFollowPause()
-    if (value) tomTomMap?.moveCamera(CameraOptions(zoom = followZoom, tilt = 35.0))
+    if (value) {
+      followTilt = DEFAULT_FOLLOW_TILT
+      tomTomMap?.moveCamera(CameraOptions(zoom = followZoom, tilt = followTilt))
+    }
     applyFollowCamera()
   }
 
@@ -331,7 +341,7 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
     val density = resources.displayMetrics.density
     map.setPadding(if (followNavigation) Padding(0, (200 * density).toInt(), 0, (120 * density).toInt()) else Padding(0))
     map.cameraTrackingMode = if (followNavigation && !followPausedByUser) {
-      CameraTrackingMode.FollowDirection(FollowCameraOperatorConfig(defaultZoom = followZoom, defaultTilt = 35.0))
+      CameraTrackingMode.FollowDirection(FollowCameraOperatorConfig(defaultZoom = followZoom, defaultTilt = followTilt))
     } else {
       CameraTrackingMode.None
     }
@@ -536,6 +546,7 @@ class CoffeeRiderTomTomMapView(context: ThemedReactContext) : FrameLayout(contex
     private const val DEFAULT_LONGITUDE = -0.1276
     private const val DEFAULT_ZOOM = 12.0
     private const val DEFAULT_FOLLOW_ZOOM = 16.0
+    private const val DEFAULT_FOLLOW_TILT = 35.0
     private const val FOLLOW_RESUME_DELAY_MS = 10_000L
     private const val CAMERA_EVENT_DEBOUNCE_MS = 120L
     private const val PLACE_LONG_PRESS_RADIUS_METERS = 35.0

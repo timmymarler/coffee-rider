@@ -75,7 +75,7 @@ export default {
     name: DISPLAY_NAME[APP_NAME],
     slug: SLUG[APP_NAME],
     scheme: SLUG[APP_NAME],
-    version: "2.32.2",
+    version: "2.32.3",
     icon: `${brandFolder}/icon.png`,
     splash: {
       image: `${brandFolder}/splash.png`,
@@ -126,7 +126,7 @@ export default {
 
     ios: {
       bundleIdentifier: IOS_BUNDLE[APP_NAME],
-      buildNumber: "150",
+      buildNumber: "159",
       googleServicesFile: "./GoogleService-Info.plist",
       infoPlist: {
         NSLocationWhenInUseUsageDescription: "Coffee Rider needs your location to show nearby places and help with group rides.",
@@ -142,7 +142,7 @@ export default {
 
     android: {
       package: ANDROID_PACKAGE[APP_NAME],
-      versionCode: 150,
+      versionCode: 159,
       permissions: [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
