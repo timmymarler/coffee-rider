@@ -40,4 +40,19 @@ for (const name of ['cyclist', 'strider']) assert.ok(ids(name).includes(configs[
 assert.deepEqual(ids('rider'), ['fastest', 'shortest', 'curvy']);
 assert.equal(configs.rider.avoidKeys.length, 4);
 
+const screen = fs.readFileSync(new URL('../core/screens/MapScreenRN-TomTom.js', import.meta.url), 'utf8');
+const followExpression = screen.match(/followNavigation=\{([^\n]+)\}/);
+assert.ok(followExpression, 'Native TomTom map follow prop exists');
+const follows = new Function('sdkNavigationEnabled', 'followUser', 'userTravelMode', 'hasArrivedAtDestination', `return ${followExpression[1]};`);
+for (const mode of ['bike', 'pedestrian']) {
+  assert.equal(follows(false, true, mode, false), true, `${mode} follows without native route guidance`);
+  assert.equal(follows(false, false, mode, false), false, `${mode} browsing does not follow`);
+  assert.equal(follows(false, true, mode, true), false, `${mode} arrival stops following`);
+}
+for (const mode of ['car', 'motorcycle']) {
+  assert.equal(follows(false, true, mode, false), false, `${mode} retains SDK-ready gate`);
+  assert.equal(follows(true, true, mode, false), true, `${mode} native guidance follows`);
+  assert.equal(follows(true, true, mode, true), false, `${mode} arrival stops following`);
+}
+
 console.log('Passed: cycling/walking route options, avoid options, and Google fastest/shortest/quietest selection');
