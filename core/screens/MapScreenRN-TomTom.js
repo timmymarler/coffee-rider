@@ -337,7 +337,7 @@ import { RIDER_CATEGORIES } from "../config/categories/rider";
 import { geocodeAddress, getPlaceLabel } from "../lib/geocode";
 
 const RECENTER_ZOOM = Platform.OS === "ios" ? 2.5 : 13; // Android: 13, iOS: 2.5
-const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17; // Android: 17, iOS: 7 - More zoomed in for better detail
+const FOLLOW_ZOOM = Platform.OS === "ios" ? 7 : 17;
 const FOLLOW_CENTER_AHEAD_METERS_PORTRAIT = 120;
 const FOLLOW_CENTER_AHEAD_METERS_LANDSCAPE = 66;
 const ENABLE_GOOGLE_AUTO_FETCH = false;
@@ -3871,6 +3871,7 @@ function getStepCompletionThresholds(step = null) {
     const coords = await ensureUserLocation();
     if (!coords) return;
 
+    if (Platform.OS === "ios" && followMode && preserveZoom && isAnimatingRef.current) return;
     isAnimatingRef.current = true;
 
     const hasExplicitHeading = Number.isFinite(heading) && heading !== -1;
